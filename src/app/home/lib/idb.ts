@@ -1,18 +1,21 @@
 // 极简 IndexedDB 封装 —— Home 模块本地优先存储的底层。
-// 不引入额外依赖, 用 Promise 包装原生 API。四个对象仓库:
+// 不引入额外依赖, 用 Promise 包装原生 API。对象仓库:
 //   files          —— 文件 (含 Blob), keyPath = id
 //   bookmarks      —— 链接收藏, keyPath = id
 //   bookmarkFolders—— 收藏夹分组, keyPath = id
 //   subscriptions  —— 「发现」订阅 (发布者等), keyPath = id
+//   agentThreads   —— AI 助手对话线程 (消息内联存于线程文档), keyPath = id
 
 const DB_NAME = "wonita-home"
-// v2: 新增 subscriptions 仓库 (「发现」的来源订阅回流到 home); 升级时旧仓库原样保留。
-const DB_VERSION = 2
+// v2: 新增 subscriptions 仓库 (「发现」的来源订阅回流到 home)。
+// v3: 新增 agentThreads 仓库 (AI 助手对话, 本地优先)。升级时旧仓库原样保留。
+const DB_VERSION = 3
 
 export const STORE_FILES = "files"
 export const STORE_BOOKMARKS = "bookmarks"
 export const STORE_FOLDERS = "bookmarkFolders"
 export const STORE_SUBSCRIPTIONS = "subscriptions"
+export const STORE_AGENT_THREADS = "agentThreads"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -20,6 +23,7 @@ function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
   dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
+      dbPromise = null // 允许后续重试 (如 SSR 后客户端再调)
       reject(new Error("当前环境不支持 IndexedDB"))
       return
     }
@@ -38,9 +42,15 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_SUBSCRIPTIONS)) {
         db.createObjectStore(STORE_SUBSCRIPTIONS, { keyPath: "id" })
       }
+      if (!db.objectStoreNames.contains(STORE_AGENT_THREADS)) {
+        db.createObjectStore(STORE_AGENT_THREADS, { keyPath: "id" })
+      }
     }
     req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    req.onerror = () => {
+      dbPromise = null // 打开失败 (配额 / 损坏 / 拒绝) 时清空单例, 允许后续重试恢复
+      reject(req.error)
+    }
   })
   return dbPromise
 }

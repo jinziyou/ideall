@@ -65,3 +65,27 @@ export interface Subscription {
   searchDomain?: string
   createdAt: number
 }
+
+/** AI 助手消息角色 (与 OpenAI 兼容接口一致) */
+export type AgentRole = "system" | "user" | "assistant"
+
+/** 一条对话消息 */
+export interface AgentMessage {
+  id: string
+  role: AgentRole
+  content: string
+  createdAt: number
+}
+
+/**
+ * AI 助手对话线程 —— 本地优先, 消息内联存于线程文档 (IndexedDB `agentThreads` 仓库)。
+ * 对话内容只存本机浏览器; 发送时才把消息 + home 上下文经本节点代理转发给模型厂商。
+ */
+export interface AgentThread {
+  id: string
+  /** 线程标题 (默认取首条用户消息, 可重命名) */
+  title: string
+  messages: AgentMessage[]
+  createdAt: number
+  updatedAt: number
+}

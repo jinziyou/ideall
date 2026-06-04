@@ -3,11 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bookmark, FolderOpen, HardDrive, Megaphone, Rss } from "lucide-react"
+import { Bookmark, Bot, FolderOpen, HardDrive, Megaphone, Rss } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { listFiles } from "./lib/files-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listSubscriptions } from "./lib/subscriptions-store"
+import { listThreads } from "./lib/agent-store"
 import { formatBytes } from "./lib/format"
 
 type NavEntry = {
@@ -18,6 +19,7 @@ type NavEntry = {
 
 const ENTRIES: NavEntry[] = [
   { href: "/home/subscriptions", label: "订阅", icon: Rss },
+  { href: "/home/agent", label: "AI 助手", icon: Bot },
   { href: "/home/publications", label: "我的发布", icon: Megaphone },
   { href: "/home/resources", label: "资源管理", icon: FolderOpen },
   { href: "/home/bookmarks", label: "书签管理", icon: Bookmark },
@@ -32,6 +34,7 @@ export default function HomeNav() {
   const [subCount, setSubCount] = React.useState<number | null>(null)
   const [fileCount, setFileCount] = React.useState<number | null>(null)
   const [bookmarkCount, setBookmarkCount] = React.useState<number | null>(null)
+  const [threadCount, setThreadCount] = React.useState<number | null>(null)
   const [usage, setUsage] = React.useState(0)
   const [quota, setQuota] = React.useState(0)
 
@@ -39,15 +42,17 @@ export default function HomeNav() {
     let alive = true
     async function load() {
       try {
-        const [files, bookmarks, subs] = await Promise.all([
+        const [files, bookmarks, subs, threads] = await Promise.all([
           listFiles(),
           listBookmarks(),
           listSubscriptions(),
+          listThreads(),
         ])
         if (!alive) return
         setFileCount(files.length)
         setBookmarkCount(bookmarks.length)
         setSubCount(subs.length)
+        setThreadCount(threads.length)
       } catch {
         /* 本地读取失败时静默, 不影响导航 */
       }
@@ -69,6 +74,7 @@ export default function HomeNav() {
 
   const counts: Record<string, number | null> = {
     "/home/subscriptions": subCount,
+    "/home/agent": threadCount,
     "/home/publications": null,
     "/home/resources": fileCount,
     "/home/bookmarks": bookmarkCount,
