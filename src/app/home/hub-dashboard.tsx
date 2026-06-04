@@ -49,7 +49,7 @@ function buildFlow(subs: Subscription[], bookmarks: { id: string; title: string;
 
 const SPOKES = [
   { href: "/info", label: "资讯", dot: "bg-spoke-info", icon: Newspaper, hint: "订阅发布者 / 实体 · 收藏文章" },
-  { href: "/community", label: "社区", dot: "bg-spoke-community", icon: Map, hint: "订阅 peer · 收藏分享回流" },
+  { href: "/community", label: "社区", dot: "bg-spoke-community", icon: Map, hint: "订阅 peer · 接收他人发布" },
   { href: "/tool", label: "工具", dot: "bg-spoke-tool", icon: Wrench, hint: "钉工具 · 存搜索为订阅" },
 ] as const
 

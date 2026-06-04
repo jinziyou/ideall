@@ -66,16 +66,14 @@ src/app/
     ├── layout.tsx             [改] 顶部分区导航统一; 每 spoke 顶边 hue; 右上「↩ 回流去向: 我的空间」
     ├── discover-nav.tsx       [改] pill 带 spoke-hue dot + icon tint
     ├── info/                  [留+回流] 列表/搜索/实体/发布者/analysis; 复活 disabled actions dropdown
-    ├── community/             [留+回流] 地图 popover 就地订阅; peer 卡增强
-    │   ├── library/           [新] 文库 (PLANNED 落位: IA + content-carrying 回流契约 + 诚实空态)
-    │   └── shared/            [新] 分享 (PLANNED 落位: 只读 + 回流契约)
+    ├── community/             [留+回流] 地图 popover 就地订阅; peer 卡增强 (文库/分享占位路由已移除)
     └── tool/
         ├── layout.tsx         [改] 取消二级 pill 套娃 → 页内 segmented control
         ├── search/ ai/ navigation/  [留+回流] 结果回流; rainbow → --spoke-tool token
 ```
 
-**净新增路由**：`/community/library`、`/community/shared`（PLANNED 文库/分享落地——仅 IA + 回流契约 + 诚实「规划中」空态，**不**承诺全功能，避免与 dashboard 争预算）。
-**净移除**：throwaway `/` 卡（重写为 dashboard）；`tool` 的第二层 pill 套娃。
+**净新增路由**：无（原 PLANNED 的 `/community/library`、`/community/shared` 文库/分享占位路由已**移出本次范围**——community 回流暂以「订阅 peer」为唯一路径；文库/分享待后续单独立项再议）。
+**净移除**：throwaway `/` 卡（重写为 dashboard）；`tool` 的第二层 pill 套娃；文库/分享占位路由（不做）。
 **合并**：`/` 与 `/home` 共用 `<HubDashboard>`；404 / 退出默认目标 `/` → `/home`。
 **URL/契约不动**：三 spoke 仍为 `/info`、`/community`、`/tool`；info→super/server 契约不变。
 
@@ -140,7 +138,6 @@ active 态：`bg-primary/10 text-foreground` + 2px amber 左轨（替换平 `bg-
        │ (蓝)    │        │ (绿)    │        │ (紫)    │
        └─────────┘        └─────────┘        └─────────┘
    唯一消费 super/server   发布者地图+peer    搜索/AI/导航
-                          +文库/分享(PLANNED)
 
    箭头全部指向 home。回流 = <SaveToHub> 把 spoke 对象落进本地 store 的一次动作。
    任何让箭头看起来双向平级的设计 = 违背模型。
@@ -185,7 +182,7 @@ active 态：`bg-primary/10 text-foreground` + 2px amber 左轨（替换平 `bg-
 │ ⑤ 已钉工具 (chip launcher, 复用)   🔍 浏览器  🤖 Perplexity  📚 ...                     │
 ├───────────────────────────────────────────────────────────────────────────────────────┤
 │ ⑥ 去发现，带东西回家 (spoke entry, 框定为「回流入口」, 非平级 tab)                       │
-│   ⬤蓝 资讯 → 订阅发布者/实体 · 保存文章   ⬤绿 社区 → 订阅 peer · 收藏文库               │
+│   ⬤蓝 资讯 → 订阅发布者/实体 · 保存文章   ⬤绿 社区 → 订阅 peer · 接收他人发布            │
 │   ⬤紫 工具 → 钉工具 · 存搜索              三条进料口, 箭头都指向上方中枢                 │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -254,12 +251,11 @@ active 态：`bg-primary/10 text-foreground` + 2px amber 左轨（替换平 `bg-
 
 ### 4.2 community · 社区（绿 spoke）
 
-**框架**：spoke-community 绿 accent；顶部分段 `地图 · 社区发布者 · 文库 · 分享`。
+**框架**：spoke-community 绿 accent；顶部分段 `地图 · 社区发布者`。
 
 - **地图回流**（今天地图只是路由跳转，非回流）：点地图点 → popover 直接「**订阅此发布者**」+「收藏此城市的发布者集为搜索订阅」，无需再跳目标页点订阅。
 - **peer 卡升级**：加 avatar（需 `avatar` 原语）+ 最近 3 条发布预览（订阅前先看 `/peer/{id}/publications` 摘要）+「订阅 peer」「将其最新发布收藏到书签」「让助手对比这几位发布者」。
-- **`/community/library` 文库**（net-new 表面，PLANNED 落位）：community 回流语义目标态——**content-carrying 回流**：文库 item 可「收入中枢」直接落成 home resource（文档）或 bookmark（链接），不只订一个 peer feed。诚实「规划中」空态 + 明确回流契约文案，IA 与契约先立住，**不建后端**。
-- **`/community/shared` 分享**（net-new，PLANNED）：先做只读浏览 + 回流（我把 home 的 bookmark/resource 分享出去 = hub→community 出向回流，复用 publications 出口思路；收到的分享落回 home）；评论/关注等交互层留下一阶段。
+- **文库 / 分享（已移出本次范围）**：原 PLANNED 的 `/community/library`、`/community/shared` 占位路由不做；community 回流暂以「订阅 peer」为唯一路径。content-carrying 回流（文库 item 直接落成 home resource/bookmark）、hub→community 出向分享等语义，待后续单独立项再议，不在本次重设计内立占位。
 
 ### 4.3 tool · 工具（紫 spoke）
 
@@ -470,7 +466,6 @@ home agent 每次调用本地工具，对话内联一枚 chip：图标 + summary
 | `<EmptyState>` | `src/components/empty-state.tsx` | 可复用空态（含 hub-spoke 迷你图变体） |
 | `<SpokeFrame>` | `src/components/spoke-frame.tsx` | spoke 页统一框架（顶边 hue + 回流去向锚点 + 联网芯片） |
 | `nav-config` | `src/app/nav-config.ts` | 单一 nav 真相源（桌面 + 移动） |
-| `/community/library`、`/community/shared` | `src/app/(discover)/community/library|shared/page.tsx` | PLANNED 落位（IA + 回流契约 + 诚实空态） |
 
 ### 7.3 需新增的 shadcn 原语
 
@@ -525,11 +520,11 @@ home agent 每次调用本地工具，对话内联一枚 chip：图标 + summary
 - **风险**：首屏 N 并发 fetch——只取前 3–4 来源 + 异步带次。agent 未配 key → 退化「配置助手」引导（dashboard 不依赖 agent 也完整）。
 - **产出**：脊柱接活内容流 + agent 成为可解释的增强层。
 
-### Phase 5 — PLANNED 落位 + 打磨（effort M–L，risk 低-中）
-- `/community/library` + `/community/shared`（IA + content-carrying 回流契约 + 诚实空态，**不建后端**）。
-- 品牌 glyph two-tone dark-safe + wordmark + amber favicon；tagline 露出。
-- 全局空态 → `<EmptyState>`；mono 标识符巡检；WCAG AA 复核（ember-on-warm-white 双主题）；mobile Sheet 由 nav-config 驱动收口。
-- **产出**：PLANNED 范围有落点；打磨收口。
+### Phase 5 — 打磨（effort M，risk 低）
+- 文库/分享占位路由**不做**（已移出范围，见 §4.2）。
+- 品牌 glyph two-tone dark-safe + wordmark + favicon；tagline 露出。
+- 全局空态 → `<EmptyState>`；mono 标识符巡检；WCAG AA 复核（双主题）；mobile Sheet 由 nav-config 驱动收口。
+- **产出**：打磨收口。
 
 ---
 
@@ -539,7 +534,7 @@ home agent 每次调用本地工具，对话内联一枚 chip：图标 + summary
 
 2. **`/` 与 `/home` 完全合一，还是 `/` 做「未登录/营销」轻着陆？** 本稿决定**完全合一**（同 `<HubDashboard>`，最强 hub 首位表达）。若产品需要一个面向新访客/未登录的差异化首屏（讲产品故事、引导注册），可让 `/` 在无 session 时渲染 onboarding 变体、有 session 渲染 dashboard。**确认是否需要营销态。**
 
-3. **community 文库/分享本期范围**：本稿决定**只交付 IA（两条路由）+ content-carrying 回流契约 + 诚实「规划中」空态**，不建后端（保护 dashboard 这个真正判分核心）。若要本期就让文库 item 真能存进 home（需定义内容来源/端点），是一次范围扩张。**确认本期到「契约 + 空态」为止，还是要真数据。**
+3. **community 文库/分享**：~~本期范围~~ **已决定移出本次重设计**——`/community/library`、`/community/shared` 占位路由不做，community 回流暂以「订阅 peer」为唯一路径（见 §4.2）。文库/分享待后续单独立项再议。
 
 4. **dashboard 是否默认内联 agent composer？** 本稿决定**内联但作为可降级增强**（未配 key → 退化为「配置助手」引导，dashboard 不依赖 agent）。若希望 dashboard 保持纯数据、不在首屏推 AI，可把 composer 收进 `/home/agent` 仅留入口。**确认 agent 在首屏的存在感强度。**
 
