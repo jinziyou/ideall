@@ -14,7 +14,6 @@ import {
 import { cn } from "@/lib/utils"
 import { addBookmark, listBookmarks } from "./lib/bookmarks-store"
 import { addSubscription } from "./lib/subscriptions-store"
-import { notifyHubUpdated } from "./lib/flowback"
 
 /**
  * 统一回流原语「收入中枢」—— 把 spoke 上的任意条目 (文章 / 事件 / 链接) 落进本地中枢。
@@ -52,7 +51,6 @@ export function SaveToHub({
         return
       }
       await addBookmark({ title: bookmark.title, url: bookmark.url })
-      notifyHubUpdated()
       pop()
       toast.success("已收藏到书签")
     } catch {
@@ -68,7 +66,6 @@ export function SaveToHub({
         key: publisher.domain,
         title: publisher.name || publisher.domain,
       })
-      notifyHubUpdated()
       pop()
       toast.success(`已订阅 ${publisher.name || publisher.domain}`)
     } catch {

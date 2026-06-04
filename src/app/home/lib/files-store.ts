@@ -2,6 +2,7 @@
 import { FileMeta, StoredFile } from "../model"
 import { genId } from "@/lib/id"
 import { idbDelete, idbGet, idbGetAll, idbPut, STORE_FILES } from "./idb"
+import { notifyHubUpdated } from "./flowback"
 
 /** 剥离 Blob, 只回元数据 —— 列表与返回值不带原始内容, 避免把所有大文件整块读入内存。 */
 function toMeta(f: StoredFile): FileMeta {
@@ -38,6 +39,7 @@ export async function addFile(file: File, tags: string[] = []): Promise<FileMeta
     tags,
   }
   await idbPut(STORE_FILES, stored)
+  notifyHubUpdated()
   return toMeta(stored)
 }
 
@@ -53,4 +55,5 @@ export async function updateFileMeta(
 
 export async function deleteFile(id: string): Promise<void> {
   await idbDelete(STORE_FILES, id)
+  notifyHubUpdated()
 }

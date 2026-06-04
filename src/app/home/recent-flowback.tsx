@@ -18,10 +18,15 @@ const GROUP_ORDER = ["今天", "本周", "更早"] as const
 type GroupName = (typeof GROUP_ORDER)[number]
 
 function groupOf(ts: number): GroupName {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  if (ts >= start.getTime()) return "今天"
-  if (ts >= Date.now() - 7 * 24 * 3600 * 1000) return "本周"
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  if (ts >= startOfToday.getTime()) return "今天"
+  // 本周一 00:00 (周日 getDay()===0 视为本周末, 回退 6 天)；按日历周而非滚动 7 天
+  const weekday = startOfToday.getDay()
+  const mondayOffset = weekday === 0 ? 6 : weekday - 1
+  const startOfWeek = new Date(startOfToday)
+  startOfWeek.setDate(startOfToday.getDate() - mondayOffset)
+  if (ts >= startOfWeek.getTime()) return "本周"
   return "更早"
 }
 

@@ -11,7 +11,6 @@ import {
   removeSubscription,
   type NewSubscription,
 } from "./lib/subscriptions-store"
-import { notifyHubUpdated } from "./lib/flowback"
 
 /**
  * 订阅开关 —— 把「发现」里的来源 (发布者 / 实体) 订阅回 home 中枢。
@@ -50,12 +49,10 @@ export function SubscribeButton({
         await removeSubscription(type, key)
         setSubscribed(false)
         toast.success(`已取消订阅 ${title}`)
-        notifyHubUpdated()
       } else {
         await addSubscription(sub)
         setSubscribed(true)
         toast.success(`已订阅 ${title}`)
-        notifyHubUpdated()
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }

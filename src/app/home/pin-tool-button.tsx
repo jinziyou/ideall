@@ -5,7 +5,6 @@ import { Loader2, Pin } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { addSubscription, isSubscribed, removeSubscription } from "./lib/subscriptions-store"
-import { notifyHubUpdated } from "./lib/flowback"
 
 /**
  * 「钉到 home」开关 —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
@@ -46,12 +45,10 @@ export function PinToolButton({
         await removeSubscription("tool", url)
         setPinned(false)
         toast.success(`已取消钉住 ${name}`)
-        notifyHubUpdated()
       } else {
         await addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
         toast.success(`已钉到 home · ${name}`)
-        notifyHubUpdated()
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { listSubscriptions } from "./home/lib/subscriptions-store"
 import { listBookmarks } from "./home/lib/bookmarks-store"
+import { listFiles } from "./home/lib/files-store"
 import { HUB_UPDATED } from "./home/lib/flowback"
 import { HUB_HREF, HUB_LABEL } from "./nav-config"
 
@@ -24,9 +25,13 @@ export default function HubNavLink() {
     let alive = true
     async function load() {
       try {
-        const [subs, bms] = await Promise.all([listSubscriptions(), listBookmarks()])
+        const [subs, bms, files] = await Promise.all([
+          listSubscriptions(),
+          listBookmarks(),
+          listFiles(),
+        ])
         if (!alive) return
-        const n = subs.length + bms.length
+        const n = subs.length + bms.length + files.length
         if (prev.current !== null && n > prev.current) {
           setFlash(true)
           setTimeout(() => {

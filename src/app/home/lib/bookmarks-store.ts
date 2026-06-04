@@ -2,6 +2,7 @@
 import { Bookmark, BookmarkFolder } from "../model"
 import { genId } from "@/lib/id"
 import { idbBulkPut, idbDelete, idbGetAll, idbPut, STORE_BOOKMARKS, STORE_FOLDERS } from "./idb"
+import { notifyHubUpdated } from "./flowback"
 
 /** 从 URL 推断 favicon (Google s2 服务), 失败时图标位降级为占位 */
 export function faviconFor(url: string): string {
@@ -73,6 +74,7 @@ export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
     createdAt: Date.now(),
   }
   await idbPut(STORE_BOOKMARKS, bookmark)
+  notifyHubUpdated()
   return bookmark
 }
 
@@ -93,6 +95,7 @@ export async function bulkAddBookmarks(inputs: NewBookmark[]): Promise<Bookmark[
     createdAt: now + i,
   }))
   await idbBulkPut(STORE_BOOKMARKS, bookmarks)
+  notifyHubUpdated()
   return bookmarks
 }
 
@@ -108,4 +111,5 @@ export async function updateBookmark(
 
 export async function deleteBookmark(id: string): Promise<void> {
   await idbDelete(STORE_BOOKMARKS, id)
+  notifyHubUpdated()
 }
