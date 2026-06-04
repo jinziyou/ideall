@@ -12,7 +12,7 @@ export default function NotFound() {
         </CardHeader>
         <CardContent className="flex justify-end">
           <Button asChild>
-            <Link href="/">返回首页</Link>
+            <Link href="/home">返回首页</Link>
           </Button>
         </CardContent>
       </Card>

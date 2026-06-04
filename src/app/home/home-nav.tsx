@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bookmark, Bot, FolderOpen, HardDrive, Megaphone, Rss } from "lucide-react"
+import { Bookmark, Bot, FolderOpen, HardDrive, LayoutDashboard, Megaphone, Rss } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { listFiles } from "./lib/files-store"
 import { listBookmarks } from "./lib/bookmarks-store"
@@ -18,6 +18,7 @@ type NavEntry = {
 }
 
 const ENTRIES: NavEntry[] = [
+  { href: "/home", label: "概览", icon: LayoutDashboard },
   { href: "/home/subscriptions", label: "订阅", icon: Rss },
   { href: "/home/agent", label: "AI 助手", icon: Bot },
   { href: "/home/publications", label: "我的发布", icon: Megaphone },
@@ -73,6 +74,7 @@ export default function HomeNav() {
   }, [pathname])
 
   const counts: Record<string, number | null> = {
+    "/home": null,
     "/home/subscriptions": subCount,
     "/home/agent": threadCount,
     "/home/publications": null,
@@ -85,7 +87,9 @@ export default function HomeNav() {
     <aside className="md:w-56 md:shrink-0">
       <nav className="flex gap-1 md:flex-col">
         {ENTRIES.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/")
+          // 概览 (/home) 仅精确匹配, 否则会被所有 /home/* 子页命中
+          const active =
+            href === "/home" ? pathname === "/home" : pathname === href || pathname.startsWith(href + "/")
           const count = counts[href]
           return (
             <Link
@@ -93,7 +97,9 @@ export default function HomeNav() {
               href={href}
               className={cn(
                 "flex flex-1 items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors md:flex-none",
-                active ? "bg-accent font-medium" : "hover:bg-accent/60",
+                active
+                  ? "bg-pop/10 font-medium text-foreground md:border-l-2 md:border-pop md:pl-[10px]"
+                  : "hover:bg-accent/60",
               )}
             >
               <Icon className="h-4 w-4" />

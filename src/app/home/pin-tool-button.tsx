@@ -5,6 +5,7 @@ import { Loader2, Pin } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { addSubscription, isSubscribed, removeSubscription } from "./lib/subscriptions-store"
+import { notifyHubUpdated } from "./lib/flowback"
 
 /**
  * 「钉到 home」开关 —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
@@ -22,6 +23,7 @@ export function PinToolButton({
 }) {
   const [pinned, setPinned] = React.useState<boolean | null>(null)
   const [busy, setBusy] = React.useState(false)
+  const [pulse, setPulse] = React.useState(false)
 
   React.useEffect(() => {
     let alive = true
@@ -44,10 +46,14 @@ export function PinToolButton({
         await removeSubscription("tool", url)
         setPinned(false)
         toast.success(`已取消钉住 ${name}`)
+        notifyHubUpdated()
       } else {
         await addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
         toast.success(`已钉到 home · ${name}`)
+        notifyHubUpdated()
+        setPulse(true)
+        setTimeout(() => setPulse(false), 600)
       }
     } catch {
       toast.error("操作失败, 请重试")
@@ -65,7 +71,8 @@ export function PinToolButton({
       aria-label={pinned ? `取消钉住 ${name}` : `钉到 home ${name}`}
       className={cn(
         "rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
-        pinned && "text-primary",
+        pinned && "text-pop",
+        pulse && "animate-flowback motion-reduce:animate-none",
         className,
       )}
     >

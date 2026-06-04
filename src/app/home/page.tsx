@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation"
+import HubDashboard from "./hub-dashboard"
 
-// 我的空间默认进入「订阅」流 (信息中枢首页)。订阅 / 资源 / 书签各自独立路由, 由 home/layout 提供分区导航。
+// 我的空间首页 = 中枢仪表盘 (活的概览, 数据全部来自本机 IndexedDB)。
+// 子区 (订阅 / AI 助手 / 我的发布 / 资源 / 书签) 各自独立路由, 由 home/layout 提供分区导航。
 export default function HomePage() {
-  redirect("/home/subscriptions")
+  return <HubDashboard />
 }

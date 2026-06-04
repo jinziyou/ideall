@@ -11,6 +11,7 @@ import {
   removeSubscription,
   type NewSubscription,
 } from "./lib/subscriptions-store"
+import { notifyHubUpdated } from "./lib/flowback"
 
 /**
  * 订阅开关 —— 把「发现」里的来源 (发布者 / 实体) 订阅回 home 中枢。
@@ -29,6 +30,7 @@ export function SubscribeButton({
   // null = 尚未读出本地订阅状态 (按钮先禁用, 避免误判已/未订阅)
   const [subscribed, setSubscribed] = React.useState<boolean | null>(null)
   const [busy, setBusy] = React.useState(false)
+  const [pulse, setPulse] = React.useState(false)
 
   React.useEffect(() => {
     let alive = true
@@ -48,10 +50,14 @@ export function SubscribeButton({
         await removeSubscription(type, key)
         setSubscribed(false)
         toast.success(`已取消订阅 ${title}`)
+        notifyHubUpdated()
       } else {
         await addSubscription(sub)
         setSubscribed(true)
         toast.success(`已订阅 ${title}`)
+        notifyHubUpdated()
+        setPulse(true)
+        setTimeout(() => setPulse(false), 600)
       }
     } catch {
       toast.error("订阅操作失败, 请重试")
@@ -67,7 +73,7 @@ export function SubscribeButton({
       variant={subscribed ? "secondary" : "default"}
       disabled={subscribed === null || busy}
       onClick={toggle}
-      className={cn("shrink-0", className)}
+      className={cn("shrink-0", pulse && "animate-flowback motion-reduce:animate-none", className)}
     >
       {busy ? (
         <Loader2 className="h-4 w-4 animate-spin" />

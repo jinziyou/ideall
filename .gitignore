@@ -34,3 +34,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# redesign 设计探索 / 截图 scratch (本地参考, 不入库; 方案见 REDESIGN.md)
+/redesign-mockups/

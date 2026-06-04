@@ -24,7 +24,7 @@ export default function AccountMenu() {
   function logout() {
     clearSession()
     toast.success("已退出登录")
-    router.push("/")
+    router.push("/home")
   }
 
   return (

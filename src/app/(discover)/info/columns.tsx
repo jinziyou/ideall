@@ -1,16 +1,15 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { MoreHorizontal } from "lucide-react"
 import { Info, InfoEvent } from "./model"
 import { EntityCell, PublisherHoverCell, TimeCell, TitleCell } from "./cells"
+import { SaveToHub } from "@/app/home/save-to-hub"
+
+/** Info.publisher → SaveToHub 的 publisher 入参 (domain 缺失时不提供订阅项)。 */
+function pubOf(info: Info): { domain: string; name?: string } | undefined {
+  const domain = info.publisher?.domain
+  return domain ? { domain, name: info.publisher?.name ?? undefined } : undefined
+}
 
 type ColumnMeta = { headerClassName?: string; cellClassName?: string }
 
@@ -68,15 +67,22 @@ export const getInfoColumns = (): ColumnDef<Info>[] => [
   },
   {
     id: "actions",
-    header: () => <span className="sr-only">详情</span>,
+    header: () => <span className="sr-only">操作</span>,
     cell: ({ row }) => (
-      <Button
-        className="h-auto p-0 text-xs"
-        variant="link"
-        onClick={() => window.open(analysisLink(row.original.url), "_blank")}
-      >
-        全面报道
-      </Button>
+      <div className="flex items-center justify-end gap-1">
+        <Button
+          className="h-auto p-0 text-xs"
+          variant="link"
+          onClick={() => window.open(analysisLink(row.original.url), "_blank")}
+        >
+          全面报道
+        </Button>
+        <SaveToHub
+          variant="icon"
+          bookmark={{ title: row.original.title ?? row.original.url, url: row.original.url }}
+          publisher={pubOf(row.original)}
+        />
+      </div>
     ),
   },
 ]
@@ -165,20 +171,30 @@ export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
   },
   {
     id: "actions",
-    header: () => <span className="sr-only">详情</span>,
-    cell: ({ row }) => (
-      <Button
-        className="h-auto p-0 text-xs"
-        variant="link"
-        onClick={() => window.open(analysisLink(row.original.lead.url), "_blank")}
-      >
-        全面报道
-      </Button>
-    ),
+    header: () => <span className="sr-only">操作</span>,
+    cell: ({ row }) => {
+      const lead = row.original.lead
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            className="h-auto p-0 text-xs"
+            variant="link"
+            onClick={() => window.open(analysisLink(lead.url), "_blank")}
+          >
+            全面报道
+          </Button>
+          <SaveToHub
+            variant="icon"
+            bookmark={{ title: lead.title ?? lead.url, url: lead.url }}
+            publisher={pubOf(lead)}
+          />
+        </div>
+      )
+    },
   },
 ]
 
-/** 搜索结果表格列 (/info/search): 发布者只显示域名, 行操作菜单为待实现占位。 */
+/** 搜索结果表格列 (/info/search): 行操作菜单 = 收入中枢 (收藏 / 订阅 / 原文 / 全面报道)。 */
 export const getSearchColumns = (): ColumnDef<Info>[] => [
   {
     accessorKey: "title",
@@ -214,26 +230,16 @@ export const getSearchColumns = (): ColumnDef<Info>[] => [
   {
     id: "actions",
     header: () => <span className="sr-only">操作</span>,
-    // TODO: 行级操作 (分析/原文/分类/主题/关键词/命名实体) 尚未接线 —— 暂全部 disabled。
-    //   原实现靠 e.target.innerText 派发, 改文案即断, 接线时应给每项绑定具体 onSelect, 勿依赖 innerText。
-    cell: () => (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">打开操作菜单</span>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem disabled>分析</DropdownMenuItem>
-          <DropdownMenuItem disabled>原文</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled>分类</DropdownMenuItem>
-          <DropdownMenuItem disabled>主题</DropdownMenuItem>
-          <DropdownMenuItem disabled>关键词</DropdownMenuItem>
-          <DropdownMenuItem disabled>命名实体</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    cell: ({ row }) => (
+      <div className="flex justify-end">
+        <SaveToHub
+          variant="icon"
+          bookmark={{ title: row.original.title ?? row.original.url, url: row.original.url }}
+          publisher={pubOf(row.original)}
+          openUrl={row.original.url}
+          analysisUrl={analysisLink(row.original.url)}
+        />
+      </div>
     ),
   },
 ]

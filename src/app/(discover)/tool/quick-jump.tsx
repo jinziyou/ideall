@@ -253,11 +253,8 @@ export default function QuickJump({
               onClick={() => jump(provider)}
               className="group flex w-full items-start gap-3 rounded-lg border bg-card p-3 pr-8 text-left text-card-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-accent"
             >
-              <span
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm font-semibold text-white ${
-                  provider.accent ?? "bg-primary"
-                }`}
-              >
+              {/* 单色: 提供方首字母用中性方块, 不再用彩色 (尊重纯墨灰主题) */}
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold text-foreground">
                 {provider.name.slice(0, 1)}
               </span>
               <span className="min-w-0 flex-1">
