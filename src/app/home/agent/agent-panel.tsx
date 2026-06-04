@@ -2,11 +2,11 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { Bot, Loader2, Send, Settings, SquarePen, Trash2, X } from "lucide-react"
+import { Bot, Loader2, Send, Settings, SquarePen, Trash2, Wrench, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import type { AgentMessage, AgentThread } from "../model"
+import type { AgentMessage, AgentThread, AgentToolEvent } from "../model"
 import {
   createThread,
   deleteThread,
@@ -19,6 +19,7 @@ import {
 import { getAgentSettings, isConfigured, subscribeAgentSettings } from "../lib/agent-settings"
 import { buildSystemPrompt, gatherHomeContext } from "../lib/agent-context"
 import { streamChat } from "../lib/agent-chat"
+import { runAgent } from "../lib/agent-run"
 import ChatMessage from "./chat-message"
 import AgentSettingsDialog from "./agent-settings-dialog"
 
@@ -46,6 +47,8 @@ export default function AgentPanel() {
   const [sending, setSending] = React.useState(false)
   const [streamingId, setStreamingId] = React.useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  // 智能体模式: 开启后模型可调用工具读写 home 数据 (非流式); 默认关 (普通流式对话)
+  const [agentMode, setAgentMode] = React.useState(false)
 
   const abortRef = React.useRef<AbortController | null>(null)
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
@@ -163,20 +166,20 @@ export default function AgentPanel() {
       return
     }
 
-    // 组装发送给模型的消息: 系统提示 (可选 home 上下文) + 截断后的历史
+    // 组装发送给模型的消息: 系统提示 (可选 home 上下文 + 是否开放工具) + 截断后的历史
     let system = ""
     try {
       const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""
-      system = buildSystemPrompt(ctx)
+      system = buildSystemPrompt(ctx, { tools: agentMode })
     } catch {
-      system = buildSystemPrompt("")
+      system = buildSystemPrompt("", { tools: agentMode })
     }
     const apiMessages = [
       { role: "system", content: system },
       ...convo.slice(-HISTORY_LIMIT).map((m) => ({ role: m.role, content: m.content })),
     ]
 
-    // 助手占位消息, 流式填充
+    // 助手占位消息
     const asst = makeMessage("assistant", "")
     setMessages((prev) => [...prev, asst])
     setStreamingId(asst.id)
@@ -185,24 +188,54 @@ export default function AgentPanel() {
     abortRef.current = controller
 
     let acc = ""
+    let toolEvents: AgentToolEvent[] = []
     try {
-      await streamChat({
-        baseURL: cfg.baseURL,
-        model: cfg.model,
-        apiKey: cfg.apiKey,
-        messages: apiMessages,
-        signal: controller.signal,
-        onDelta: (d) => {
-          acc += d
-          setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, content: acc } : m)))
-        },
-      })
+      if (agentMode) {
+        // 智能体: 工具调用循环 (非流式), 工具事件实时回填到该助手消息
+        const res = await runAgent({
+          baseURL: cfg.baseURL,
+          model: cfg.model,
+          apiKey: cfg.apiKey,
+          messages: apiMessages,
+          signal: controller.signal,
+          onToolEvent: (ev) => {
+            toolEvents = [...toolEvents, ev]
+            setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, toolEvents } : m)))
+          },
+        })
+        acc = res.content
+        toolEvents = res.toolEvents
+      } else {
+        // 普通对话: 流式
+        await streamChat({
+          baseURL: cfg.baseURL,
+          model: cfg.model,
+          apiKey: cfg.apiKey,
+          messages: apiMessages,
+          signal: controller.signal,
+          onDelta: (d) => {
+            acc += d
+            setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, content: acc } : m)))
+          },
+        })
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      toast.error("对话出错", { description: msg })
-      if (!acc) acc = `（请求出错：${msg}）`
-      setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, content: acc } : m)))
+      // 智能体中止会抛 AbortError —— 视为「停止」, 保留已生成内容, 不报错。
+      if (!(e instanceof DOMException && e.name === "AbortError") && !controller.signal.aborted) {
+        const msg = e instanceof Error ? e.message : String(e)
+        toast.error(agentMode ? "智能体出错" : "对话出错", { description: msg })
+        if (!acc) acc = `（请求出错：${msg}）`
+      }
     } finally {
+      // 智能体若没产出文本 (纯工具轮 / 中途停止), 用工具结果合成一句, 避免空助手消息
+      if (agentMode && !acc.trim()) {
+        acc = toolEvents.length
+          ? `已执行 ${toolEvents.length} 个操作：${toolEvents.map((t) => t.summary).join("；")}`
+          : "（助手没有返回内容）"
+      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === asst.id ? { ...m, content: acc, toolEvents } : m)),
+      )
       setSending(false)
       setStreamingId(null)
       abortRef.current = null
@@ -210,8 +243,12 @@ export default function AgentPanel() {
 
     // 落库最终对话
     try {
-      const finalMsgs = [...convo, { ...asst, content: acc }]
-      await saveThread({ ...thread, messages: finalMsgs })
+      const finalAsst: AgentMessage = {
+        ...asst,
+        content: acc,
+        ...(toolEvents.length ? { toolEvents } : {}),
+      }
+      await saveThread({ ...thread, messages: [...convo, finalAsst] })
       refreshThreads()
     } catch {
       /* 落库失败不阻塞 UI */
@@ -332,27 +369,57 @@ export default function AgentPanel() {
         </div>
 
         {/* 输入区 */}
-        <div className="mt-3 flex items-end gap-2">
-          <Textarea
-            ref={inputRef}
-            rows={2}
-            value={input}
-            placeholder="输入消息，Enter 发送，Shift+Enter 换行"
-            className="max-h-40 min-h-[2.75rem] resize-none"
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onComposerKeyDown}
-          />
-          {sending ? (
-            <Button variant="outline" className="gap-1.5" onClick={stop}>
-              <X className="h-4 w-4" />
-              停止
-            </Button>
-          ) : (
-            <Button className="gap-1.5" onClick={send} disabled={!input.trim()}>
-              {streamingId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              发送
-            </Button>
-          )}
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAgentMode((v) => !v)}
+              disabled={sending}
+              title="开启后模型可调用工具读写你的 home 数据"
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50",
+                agentMode
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent",
+              )}
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              智能体模式
+            </button>
+            {agentMode && (
+              <span className="text-xs text-muted-foreground">模型可读写你的书签 / 订阅 / 资源</span>
+            )}
+          </div>
+          <div className="flex items-end gap-2">
+            <Textarea
+              ref={inputRef}
+              rows={2}
+              value={input}
+              placeholder={
+                agentMode
+                  ? "让助手帮你整理书签 / 订阅 / 资源…（Enter 发送）"
+                  : "输入消息，Enter 发送，Shift+Enter 换行"
+              }
+              className="max-h-40 min-h-[2.75rem] resize-none"
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onComposerKeyDown}
+            />
+            {sending ? (
+              <Button variant="outline" className="gap-1.5" onClick={stop}>
+                <X className="h-4 w-4" />
+                停止
+              </Button>
+            ) : (
+              <Button className="gap-1.5" onClick={send} disabled={!input.trim()}>
+                {streamingId ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                发送
+              </Button>
+            )}
+          </div>
         </div>
       </section>
 

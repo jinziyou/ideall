@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Bot } from "lucide-react"
+import { Bot, Check, Wrench, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { AgentMessage } from "../model"
 
@@ -63,6 +63,26 @@ export default function ChatMessage({
           isUser ? "bg-primary text-primary-foreground" : "border bg-card",
         )}
       >
+        {!isUser && message.toolEvents && message.toolEvents.length > 0 && (
+          <div className="mb-2 space-y-1">
+            {message.toolEvents.map((ev, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-1.5 rounded-md bg-muted/60 px-2 py-1 text-xs"
+              >
+                {ev.ok ? (
+                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />
+                ) : (
+                  <X className="mt-0.5 h-3 w-3 shrink-0 text-destructive" />
+                )}
+                <span className="min-w-0 text-muted-foreground">
+                  <Wrench className="mr-1 inline h-3 w-3 align-[-1px]" />
+                  <span className="font-mono">{ev.name}</span> · {ev.summary}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         {message.content ? (
           renderContent(message.content)
         ) : streaming ? (

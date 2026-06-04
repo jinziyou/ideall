@@ -69,12 +69,26 @@ export interface Subscription {
 /** AI 助手消息角色 (与 OpenAI 兼容接口一致) */
 export type AgentRole = "system" | "user" | "assistant"
 
+/** 智能体一次工具调用的展示记录 (仅前端展示与存档, 不回传给模型) */
+export interface AgentToolEvent {
+  /** 工具名 (如 add_bookmark) */
+  name: string
+  /** 入参的简短文本 */
+  argsText: string
+  /** 是否成功 */
+  ok: boolean
+  /** 结果摘要 (供用户查看做了什么) */
+  summary: string
+}
+
 /** 一条对话消息 */
 export interface AgentMessage {
   id: string
   role: AgentRole
   content: string
   createdAt: number
+  /** 智能体模式下该条助手消息执行过的工具调用 (展示用, 不回传模型) */
+  toolEvents?: AgentToolEvent[]
 }
 
 /**

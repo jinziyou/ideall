@@ -67,14 +67,23 @@ export async function gatherHomeContext(): Promise<string> {
   return blocks.filter(Boolean).join("\n\n")
 }
 
-/** 拼装系统提示: 助手人设 + (可选) home 快照。 */
-export function buildSystemPrompt(homeContext: string): string {
-  const base = [
+/** 拼装系统提示: 助手人设 + (可选) home 快照。tools 模式下允许调用工具改动数据。 */
+export function buildSystemPrompt(homeContext: string, opts?: { tools?: boolean }): string {
+  const lines = [
     "你是 Wonita「我的空间」(home) 里的 AI 助手。Wonita 是一个本地优先的个人信息总控终端，",
     "home 是用户聚合信息、资源、工具与社区的中枢。请用简体中文、简洁专业地回答。",
     "排版用纯文本与短横线列表即可，代码用三反引号包裹；不要使用 # 标题或 ** 加粗等 Markdown 记号（前端按纯文本显示）。",
-    "你无法直接改动用户数据，需要操作时请给出清晰的步骤建议。",
-  ].join("")
+  ]
+  if (opts?.tools) {
+    lines.push(
+      "你可调用工具读取或修改用户的书签、收藏夹、订阅、资源（改动直接生效于本机）。",
+      "需要最新或精确数据时优先用工具查询，而不是只依赖下方快照；修改类工具用完后在最终答复里说明你做了哪些改动。",
+      "破坏性操作（删除、取消订阅）要谨慎，仅在用户明确要求时执行。",
+    )
+  } else {
+    lines.push("你无法直接改动用户数据，需要操作时请给出清晰的步骤建议。")
+  }
+  const base = lines.join("")
   // 未带 home 上下文 (用户关闭 或 暂无数据) 时, 不提「快照」, 避免空指引。
   if (!homeContext) return base
   return (
