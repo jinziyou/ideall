@@ -1,0 +1,28 @@
+# 自包含：peer/inode。在 peer/inode 下: docker compose up --build
+name: peer-inode
+
+services:
+  inode:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${INODE_PORT:-3000}:3000"
+    environment:
+      - APISERVER_ADDR=${INODE_APISERVER_ADDR:-http://server:3001}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://127.0.0.1:3000'', (res) => process.exit(res.statusCode < 500 ? 0 : 1)).on(''error'', () => process.exit(1));"',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+networks:
+  default:
+    name: ${WONITA_NETWORK:-wonita_net}
+    external: true
