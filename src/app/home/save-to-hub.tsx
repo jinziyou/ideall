@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { addBookmark } from "./lib/bookmarks-store"
+import { addBookmark, listBookmarks } from "./lib/bookmarks-store"
 import { addSubscription } from "./lib/subscriptions-store"
 import { notifyHubUpdated } from "./lib/flowback"
 
@@ -45,6 +45,12 @@ export function SaveToHub({
   async function doBookmark() {
     if (!bookmark) return
     try {
+      // 去重: addBookmark 非幂等 (每次新 id), 同一 url 重复点会产生重复书签
+      const existing = await listBookmarks()
+      if (existing.some((b) => b.url === bookmark.url)) {
+        toast.info("已在书签中")
+        return
+      }
       await addBookmark({ title: bookmark.title, url: bookmark.url })
       notifyHubUpdated()
       pop()

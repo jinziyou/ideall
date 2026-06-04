@@ -8,6 +8,7 @@ import { listSubscriptions } from "./lib/subscriptions-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listFiles } from "./lib/files-store"
 import { listThreads } from "./lib/agent-store"
+import { HUB_UPDATED } from "./lib/flowback"
 import type { Subscription } from "./model"
 import { HubStatTiles } from "./hub-stat-tiles"
 import { RecentFlowback, type FlowItem } from "./recent-flowback"
@@ -59,43 +60,45 @@ export default function HubDashboard() {
   React.useEffect(() => {
     let alive = true
     async function load() {
+      // 每个 store 各自兜底: 单个仓库失败不应把整个中枢清空成「空态」(否则有数据的用户会误见 onboarding)
+      const [subs, bookmarks, files, threads] = await Promise.all([
+        listSubscriptions().catch(() => [] as Subscription[]),
+        listBookmarks().catch(() => []),
+        listFiles().catch(() => []),
+        listThreads().catch(() => []),
+      ])
+      let usage = 0
+      let quota = 0
       try {
-        const [subs, bookmarks, files, threads] = await Promise.all([
-          listSubscriptions(),
-          listBookmarks(),
-          listFiles(),
-          listThreads(),
-        ])
-        let usage = 0
-        let quota = 0
-        try {
-          const est = await navigator.storage?.estimate?.()
-          if (est) {
-            usage = est.usage ?? 0
-            quota = est.quota ?? 0
-          }
-        } catch {
-          /* StorageManager 不可用时省略用量 */
+        const est = await navigator.storage?.estimate?.()
+        if (est) {
+          usage = est.usage ?? 0
+          quota = est.quota ?? 0
         }
-        if (!alive) return
-        setData({
-          subs,
-          bookmarks: bookmarks.length,
-          files: files.length,
-          threads: threads.length,
-          flow: buildFlow(subs, bookmarks, files),
-          pinnedTools: subs.filter((s) => s.type === "tool"),
-          usage,
-          quota,
-        })
       } catch {
-        if (alive)
-          setData({ subs: [], bookmarks: 0, files: 0, threads: 0, flow: [], pinnedTools: [], usage: 0, quota: 0 })
+        /* StorageManager 不可用时省略用量 */
       }
+      if (!alive) return
+      setData({
+        subs,
+        bookmarks: bookmarks.length,
+        files: files.length,
+        threads: threads.length,
+        flow: buildFlow(subs, bookmarks, files),
+        pinnedTools: subs.filter((s) => s.type === "tool"),
+        usage,
+        quota,
+      })
     }
     load()
+    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (与头部计数同源)
+    const onUpdate = () => load()
+    window.addEventListener(HUB_UPDATED, onUpdate)
+    window.addEventListener("wonita:subscriptions-synced", onUpdate)
     return () => {
       alive = false
+      window.removeEventListener(HUB_UPDATED, onUpdate)
+      window.removeEventListener("wonita:subscriptions-synced", onUpdate)
     }
   }, [])
 
@@ -119,7 +122,7 @@ export default function HubDashboard() {
   return (
     <div className="flex flex-col gap-6">
       <HubStatTiles
-        subs={data.subs.length}
+        subs={data.subs.length - data.pinnedTools.length}
         bookmarks={data.bookmarks}
         files={data.files}
         threads={data.threads}

@@ -1,14 +1,22 @@
 "use client"
 
 import * as React from "react"
-import { Bot, Eye, Lock, Wrench, X } from "lucide-react"
+import { Bot, Eye, Lock, Trash2, Wrench, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { AgentMessage } from "../model"
 
-/** 由工具名推断是否「写本地」(落库) ——透明展示 local-first 的所有权 / 隐私。 */
-function isWriteTool(name: string): boolean {
-  return /^(add_|save_|create_|update_|remove_|delete_|publish|set_|put_)/.test(name)
+/** 由工具名推断本地操作类型 —— 透明展示 local-first 的所有权 / 隐私 (删除 ≠ 写入)。 */
+function toolKind(name: string): "write" | "delete" | "read" {
+  if (/^(remove_|delete_)/.test(name)) return "delete"
+  if (/^(add_|save_|create_|update_|set_|put_|publish)/.test(name)) return "write"
+  return "read"
 }
+
+const TOOL_BADGE = {
+  write: { Icon: Lock, label: "已写入本机", cls: "bg-pop/10 text-pop" },
+  delete: { Icon: Trash2, label: "已从本机删除", cls: "bg-destructive/10 text-destructive" },
+  read: { Icon: Eye, label: "仅读取", cls: "bg-muted text-muted-foreground" },
+} as const
 
 // 轻量富文本: 仅把三反引号代码块单独样式化, 其余按纯文本 (保留换行) 渲染。
 // 不引入 markdown 依赖; 系统提示已要求模型避免 # / ** 等记号。
@@ -71,7 +79,7 @@ export default function ChatMessage({
         {!isUser && message.toolEvents && message.toolEvents.length > 0 && (
           <div className="mb-2 space-y-1">
             {message.toolEvents.map((ev, i) => {
-              const write = isWriteTool(ev.name)
+              const badge = TOOL_BADGE[toolKind(ev.name)]
               return (
                 <div
                   key={i}
@@ -85,20 +93,11 @@ export default function ChatMessage({
                     <span
                       className={cn(
                         "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
-                        write ? "bg-pop/10 text-pop" : "bg-muted text-muted-foreground",
+                        badge.cls,
                       )}
                     >
-                      {write ? (
-                        <>
-                          <Lock className="h-2.5 w-2.5" />
-                          已写入本机
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="h-2.5 w-2.5" />
-                          仅读取
-                        </>
-                      )}
+                      <badge.Icon className="h-2.5 w-2.5" />
+                      {badge.label}
                     </span>
                   ) : (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">

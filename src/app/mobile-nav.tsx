@@ -15,31 +15,32 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/")
 }
 
+/** 单个导航链接 (模块级, 避免在 MobileNav 渲染体内重建组件类型 → 每次渲染都卸载重挂)。 */
+function MLink({ link, active, onNavigate }: { link: NavLink; active: boolean; onNavigate: () => void }) {
+  return (
+    <Link
+      href={link.href}
+      onClick={onNavigate}
+      className={cn(
+        "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
+        active ? "bg-pop/10 font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+    >
+      {link.dot ? (
+        <span className={cn("h-2 w-2 rounded-full", link.dot)} />
+      ) : (
+        <link.icon className="h-4 w-4" />
+      )}
+      {link.label}
+    </Link>
+  )
+}
+
 /** 移动端导航 (Sheet), 与桌面共用 nav-config 单一真相源。 */
 export default function MobileNav() {
   const [open, setOpen] = React.useState(false)
   const pathname = usePathname()
-
-  function MLink({ link }: { link: NavLink }) {
-    const active = isActive(pathname, link.href)
-    return (
-      <Link
-        href={link.href}
-        onClick={() => setOpen(false)}
-        className={cn(
-          "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
-          active ? "bg-pop/10 font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        )}
-      >
-        {link.dot ? (
-          <span className={cn("h-2 w-2 rounded-full", link.dot)} />
-        ) : (
-          <link.icon className="h-4 w-4" />
-        )}
-        {link.label}
-      </Link>
-    )
-  }
+  const close = () => setOpen(false)
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -57,11 +58,11 @@ export default function MobileNav() {
         <nav className="mt-6 flex flex-col gap-1">
           <span className="px-3 pb-1 text-xs font-medium text-muted-foreground">我的空间 · 中枢</span>
           {HOME_SUBPAGES.map((p) => (
-            <MLink key={p.href} link={p} />
+            <MLink key={p.href} link={p} active={isActive(pathname, p.href)} onNavigate={close} />
           ))}
           <span className="px-3 pb-1 pt-4 text-xs font-medium text-muted-foreground">发现</span>
           {SPOKES.map((s) => (
-            <MLink key={s.href} link={s} />
+            <MLink key={s.href} link={s} active={isActive(pathname, s.href)} onNavigate={close} />
           ))}
         </nav>
       </SheetContent>
