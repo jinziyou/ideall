@@ -169,6 +169,38 @@
         }
       }
     },
+    "/info/geoip": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "GET /info/geoip?ip= — 定位访问者 IP 所在城市 (peer/inode community 地图默认聚焦)",
+        "operationId": "get_ip_location",
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "query",
+            "description": "访问者 IP (由 peer/inode 从 x-forwarded-for 提取后透传; 服务端不直接读 client IP, 因调用方为 inode)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP 地理定位结果; 定位失败 (非法/私网/网络) 时经纬度为 0",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpLocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/info/latest": {
       "get": {
         "tags": [
@@ -654,6 +686,32 @@
             "format": "int32",
             "description": "报道总数 (含 lead)",
             "minimum": 0
+          }
+        }
+      },
+      "IpLocation": {
+        "type": "object",
+        "description": "访问者 IP 地理定位结果 (供 peer/inode community 地图默认聚焦访问者所在城市)。\n经纬度由 super/server 对访问者 IP 做地理定位得到 (ip-api.com); 定位失败时经纬度为 0。",
+        "required": [
+          "latitude",
+          "longitude",
+          "city",
+          "country"
+        ],
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
           }
         }
       },

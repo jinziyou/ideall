@@ -4,9 +4,10 @@
 import type { components } from "@/lib/api/server"
 
 export type PublisherLocation = components["schemas"]["PublisherLocation"]
+export type IpLocation = components["schemas"]["IpLocation"]
 
-/** 是否成功定位: 经纬度为有限值且非 (0,0) 占位。page 计数与地图绘制共用此判定, 保证口径一致。 */
-export function isLocated(l: PublisherLocation): boolean {
+/** 是否成功定位: 经纬度为有限值且非 (0,0) 占位。发布者计数、地图绘制、访问者定位共用此判定, 保证口径一致。 */
+export function isLocated(l: { longitude: number; latitude: number }): boolean {
   return (
     Number.isFinite(l.longitude) &&
     Number.isFinite(l.latitude) &&

@@ -68,6 +68,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/info/geoip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /info/geoip?ip= — 定位访问者 IP 所在城市 (peer/inode community 地图默认聚焦) */
+        get: operations["get_ip_location"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/info/latest": {
         parameters: {
             query?: never;
@@ -297,6 +314,18 @@ export interface components {
              * @description 报道总数 (含 lead)
              */
             source_count: number;
+        };
+        /**
+         * @description 访问者 IP 地理定位结果 (供 peer/inode community 地图默认聚焦访问者所在城市)。
+         *     经纬度由 super/server 对访问者 IP 做地理定位得到 (ip-api.com); 定位失败时经纬度为 0。
+         */
+        IpLocation: {
+            city: string;
+            country: string;
+            /** Format: double */
+            latitude: number;
+            /** Format: double */
+            longitude: number;
         };
         /**
          * @description 命名实体 (NER 结果)。`label` 取值见 super/form 的 NER schema:
@@ -530,6 +559,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InfoEvent"][];
+                };
+            };
+        };
+    };
+    get_ip_location: {
+        parameters: {
+            query: {
+                /** @description 访问者 IP (由 peer/inode 从 x-forwarded-for 提取后透传; 服务端不直接读 client IP, 因调用方为 inode) */
+                ip: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description IP 地理定位结果; 定位失败 (非法/私网/网络) 时经纬度为 0 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpLocation"];
                 };
             };
         };
