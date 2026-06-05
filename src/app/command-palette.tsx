@@ -16,7 +16,7 @@ import {
 import { HOME_SUBPAGES, SPOKES } from "./nav-config"
 
 /**
- * ⌘K 中枢命令台 —— 接管原先死掉的搜索框。统一入口: 跳 spoke / 跳我的空间子区。
+ * ⌘K 中枢命令台: 全站统一跳转入口 —— 跳 spoke (发现下的资讯/社区/工具) 或我的空间各子区。
  * 触发器形如搜索框, 点它或按 ⌘K / Ctrl+K 打开。
  */
 export default function CommandPalette() {

@@ -47,9 +47,9 @@ curl -I -sS http://localhost:3000
 
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
-| `APISERVER_ADDR` | 后端 API 地址 | `http://127.0.0.1:3001` (本地) / `http://server:3001` (容器) |
+| `SERVER_ADDR` | super/server 地址 | `http://127.0.0.1:3001` (本地) / `http://server:3001` (容器) |
 | `INODE_PORT` | Docker 宿主机映射端口 | `3000` |
-| `INODE_APISERVER_ADDR` | compose 注入的后端地址 | `http://server:3001` |
+| `INODE_SERVER_ADDR` | compose 注入的 super/server 地址 | `http://server:3001` |
 | `WONITA_NETWORK` | Docker 共享网络名 | `wonita_net` |
 
 ## API 类型同步 (codegen)

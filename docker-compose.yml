@@ -9,7 +9,7 @@ services:
     ports:
       - "${INODE_PORT:-3000}:3000"
     environment:
-      - APISERVER_ADDR=${INODE_APISERVER_ADDR:-http://server:3001}
+      - SERVER_ADDR=${INODE_SERVER_ADDR:-http://server:3001}
     healthcheck:
       test:
         [

@@ -1,39 +1,24 @@
 "use client"
 
-import React, { use } from "react"
-import { toast } from "sonner"
+import { use } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { fetchLatestInfo } from "../../action"
 import { getInfoColumns } from "../../columns"
 import { DataTable } from "../../table"
 import { Info } from "../../model"
 import { SubscribeButton } from "@/app/home/subscribe-button"
+import { useApiResult } from "@/lib/use-api-result"
 
 export default function InfoPublisherPage({ params }: { params: Promise<{ domain: string }> }) {
   const { domain: rawDomain } = use(params)
   const domain = decodeURIComponent(rawDomain)
 
-  const [data, setData] = React.useState<Info[]>([])
-  const [loading, setLoading] = React.useState(true)
   const columns = getInfoColumns()
-
-  React.useEffect(() => {
-    let active = true
-    async function fetchInfo() {
-      const result = await fetchLatestInfo({ publisher_domain: domain })
-      if (!active) return
-      if (!result.ok) {
-        toast.error(result.message)
-      } else {
-        setData(result.data)
-      }
-      setLoading(false)
-    }
-    fetchInfo()
-    return () => {
-      active = false
-    }
-  }, [domain])
+  const { data, loading } = useApiResult<Info[]>(
+    () => fetchLatestInfo({ publisher_domain: domain }),
+    [],
+    [domain],
+  )
 
   return (
     <main className="m-2 sm:m-4">

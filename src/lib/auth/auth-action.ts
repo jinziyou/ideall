@@ -3,10 +3,10 @@
 // 鉴权中转 (Server Action): 把浏览器算好的密文/请求转发到 super/server /authorize。
 // 中转只过密文 (密码在浏览器已 X25519 加密), 看不到明文密码。
 
-import { APISERVER_ADDR } from "@/lib/env"
+import { SERVER_ADDR } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
 
-const AUTH = `${APISERVER_ADDR}/authorize`
+const AUTH = `${SERVER_ADDR}/authorize`
 
 export type AuthBody = { token: string; token_type: string }
 export type AuthPayload = {

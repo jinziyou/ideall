@@ -4,6 +4,78 @@
  */
 
 export interface paths {
+    "/authorize/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /authorize/authorize — 校验 JWT 并回显当前用户 claims 数据。 */
+        get: operations["authorize"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/authorize/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** POST /authorize/login — 登录并签发 JWT。 */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/authorize/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** POST /authorize/register — 注册账号并签发 JWT。 */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/authorize/secret/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /authorize/secret/{client_id} — 下发服务端临时 X25519 公钥 (hex 明文串)。
+         * @description 注意: 响应体是裸 hex 字符串, **不可** 包成 `Json<String>` —— 否则会被加上引号,
+         *     破坏 inode 端按裸串解析的 wire 格式。
+         */
+        get: operations["get_server_public_key"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/info": {
         parameters: {
             query?: never;
@@ -291,6 +363,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuthBody: {
+            token: string;
+            token_type: string;
+        };
+        /**
+         * @description 注册 / 登录请求体。密码经客户端公钥与服务端临时密钥协商出的共享密钥
+         *     AEAD 加密后, 以 hex 字符串传输。
+         */
+        AuthPayload: {
+            /** @description 用户(浏览器)指纹, 用作 SessionID */
+            client_id: string;
+            /** @description 客户端 X25519 公钥 (hex) */
+            client_secret: string;
+            email: string;
+            /** @description 加密后的密码 (hex): 前 24 字节为 nonce, 末 16 字节为 Poly1305 标签, 中间为密文 */
+            encrypted_password: string;
+        };
         Info: {
             /** Format: int64 */
             collect_time: number;
@@ -437,6 +526,13 @@ export interface components {
              */
             updated_at: number;
         };
+        UserClaimsData: {
+            avatar?: string | null;
+            email: string;
+            /** Format: int64 */
+            id: number;
+            name: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -446,6 +542,139 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    authorize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前用户 claims 数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserClaimsData"];
+                };
+            };
+            /** @description 缺失或非法的 JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPayload"];
+            };
+        };
+        responses: {
+            /** @description 登录成功, 返回 JWT */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthBody"];
+                };
+            };
+            /** @description 密码或密钥 hex 格式非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 登录失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPayload"];
+            };
+        };
+        responses: {
+            /** @description 注册成功, 返回 JWT */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthBody"];
+                };
+            };
+            /** @description 密码或密钥 hex 格式非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 创建失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_server_public_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 客户端(浏览器)指纹, 用作 SessionID */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 服务端临时公钥 (hex 明文串) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description 获取密钥失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_info: {
         parameters: {
             query: {

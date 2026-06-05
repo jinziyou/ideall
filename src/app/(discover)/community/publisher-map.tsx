@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import * as echarts from "echarts"
-import { PublisherLocation, IpLocation, isLocated } from "./model"
+import { PublisherLocation, IpLocation } from "./model"
 import { CityGroup, cityKey, groupByCity, pickDefaultCity } from "./cities"
 import {
   Select,
@@ -47,8 +48,8 @@ export default function PublisherMap({
   const chartRef = useRef<echarts.ECharts | null>(null)
   const router = useRouter()
 
-  const located = useMemo(() => locations.filter(isLocated), [locations])
-  const cities = useMemo(() => groupByCity(located), [located])
+  // locations 已由调用方 (community/page.tsx) 经 isLocated 过滤, 此处不再二次过滤。
+  const cities = useMemo(() => groupByCity(locations), [locations])
 
   // 默认聚焦访问者城市 (无定位 / 该城市无数据 → 全国); 惰性初始化, 仅首渲染算一次。
   const [selected, setSelected] = useState<string>(() => pickDefaultCity(cities, visitor)?.city ?? ALL)
@@ -64,6 +65,8 @@ export default function PublisherMap({
 
   // 图表就绪后视图 effect 才能 setOption (geoJSON 异步加载, 初始化在 await 之后)。
   const [ready, setReady] = useState(false)
+  // 底图 (china.json) 加载失败时显占位, 不再继续初始化图表。
+  const [loadFailed, setLoadFailed] = useState(false)
 
   // 1) 初始化图表: 底图 + 散点 + 点击/缩放交互。城市切换不重建 (见 effect 2)。
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function PublisherMap({
     let chart: echarts.ECharts | null = null
     let disposed = false
 
-    const points = located.map((l) => ({
+    const points = locations.map((l) => ({
       name: l.name || l.domain,
       value: [l.longitude, l.latitude, l.count],
       domain: l.domain,
@@ -82,7 +85,18 @@ export default function PublisherMap({
     const maxCount = points.reduce((m, p) => Math.max(m, p.count), 1)
 
     async function init() {
-      const geo = await fetch("/geo/china.json").then((r) => r.json())
+      let geo: Parameters<typeof echarts.registerMap>[1]
+      try {
+        const res = await fetch("/geo/china.json")
+        if (!res.ok) throw new Error(`geo ${res.status}`)
+        geo = await res.json()
+      } catch {
+        // 底图加载失败: 提示用户并显占位, 不抛出未捕获的 promise rejection。
+        if (disposed) return
+        toast.error("地图底图加载失败, 请刷新重试")
+        setLoadFailed(true)
+        return
+      }
       if (disposed || !ref.current) return
       echarts.registerMap("china", geo)
       chart = echarts.init(ref.current)
@@ -141,8 +155,9 @@ export default function PublisherMap({
       chart?.dispose()
       chartRef.current = null
       setReady(false)
+      setLoadFailed(false)
     }
-  }, [located, cities, router])
+  }, [locations, cities, router])
 
   // 2) 切换聚焦城市 → 仅更新 geo 中心/缩放 (带动画), 不重建图表。
   useEffect(() => {
@@ -171,7 +186,14 @@ export default function PublisherMap({
           </Select>
         </div>
       )}
-      <div ref={ref} className="h-[480px] w-full sm:h-[600px]" />
+      <div className="relative h-[480px] w-full sm:h-[600px]">
+        <div ref={ref} className="h-full w-full" />
+        {loadFailed && (
+          <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground">
+            底图加载失败，请刷新重试。
+          </div>
+        )}
+      </div>
     </div>
   )
 }

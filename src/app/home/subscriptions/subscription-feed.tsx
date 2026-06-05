@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatTimestamp } from "@/lib/format"
+import { entityLabelText } from "@/lib/ner-labels"
 import { fetchLatestInfo } from "@/app/(discover)/info/action"
 import { getPeerPublications } from "@/lib/peer-action"
 import type { Subscription } from "../model"
@@ -21,20 +22,6 @@ const SEARCH_WINDOW = 200
 type FeedItem = { key: string; title: string; url?: string; body?: string; time: number }
 type SourceFeed = { sub: Subscription; items: FeedItem[]; error: boolean }
 type Loaded = { tools: Subscription[]; feeds: SourceFeed[] }
-
-/** NER label → 中文 (与 info EntityCell 口径一致); 未知则原样。 */
-function entityLabelText(label: string | undefined): string {
-  switch (label) {
-    case "PER":
-      return "人物"
-    case "ORG":
-      return "组织"
-    case "LOC":
-      return "地区"
-    default:
-      return label ?? "实体"
-  }
-}
 
 /** info 支撑的来源 (发布者/实体/搜索) 拉取最新文章 (复用 info 的 fetchLatestInfo)。 */
 async function fetchInfoSource(sub: Subscription) {

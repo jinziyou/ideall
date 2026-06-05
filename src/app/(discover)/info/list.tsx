@@ -1,36 +1,16 @@
 "use client"
 
-import React from "react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { toast } from "sonner"
 import { DataTable } from "./table"
 import { getEventColumns } from "./columns"
 import { fetchInfoEvents } from "./action"
 import { InfoEvent } from "./model"
+import { useApiResult } from "@/lib/use-api-result"
 
 /** /info 首页的事件列表 (按同一事件聚类)。本地优先: 数据在客户端按需拉取。 */
 export default function InfoList() {
-  const [data, setData] = React.useState<InfoEvent[]>([])
-  const [loading, setLoading] = React.useState(true)
-
-  React.useEffect(() => {
-    let active = true
-    async function fetchInfo() {
-      const result = await fetchInfoEvents({})
-      if (!active) return
-      if (!result.ok) {
-        toast.error(result.message)
-      } else {
-        setData(result.data)
-      }
-      setLoading(false)
-    }
-    fetchInfo()
-    return () => {
-      active = false
-    }
-  }, [])
+  const { data, loading } = useApiResult<InfoEvent[]>(() => fetchInfoEvents({}), [], [])
 
   return (
     <div className="flex flex-col gap-3 px-2 pt-4 sm:px-4 sm:pt-6">

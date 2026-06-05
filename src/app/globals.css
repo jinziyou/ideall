@@ -118,12 +118,6 @@
   --spoke-info: 224 68% 58%;
   --spoke-community: 150 46% 42%;
   --spoke-tool: 270 50% 60%;
-  /* 图表调色板 (hsl 分量) —— 供 recharts / ChartContainer 主题按 hsl(var(--chart-N)) 引用 */
-  --chart-1: 215 18% 28%;
-  --chart-2: 224 68% 58%;
-  --chart-3: 150 46% 42%;
-  --chart-4: 270 50% 60%;
-  --chart-5: 215 10% 60%;
 }
 
 .dark {
@@ -152,11 +146,6 @@
   --spoke-info: 224 62% 66%;
   --spoke-community: 150 46% 52%;
   --spoke-tool: 270 52% 70%;
-  --chart-1: 210 12% 84%;
-  --chart-2: 224 62% 66%;
-  --chart-3: 150 46% 52%;
-  --chart-4: 270 52% 70%;
-  --chart-5: 215 10% 55%;
 }
 
 @layer base {

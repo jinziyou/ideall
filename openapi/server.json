@@ -9,6 +9,140 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/authorize/authorize": {
+      "get": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "GET /authorize/authorize — 校验 JWT 并回显当前用户 claims 数据。",
+        "operationId": "authorize",
+        "responses": {
+          "200": {
+            "description": "当前用户 claims 数据",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserClaimsData"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺失或非法的 JWT"
+          }
+        }
+      }
+    },
+    "/authorize/login": {
+      "post": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "POST /authorize/login — 登录并签发 JWT。",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功, 返回 JWT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "密码或密钥 hex 格式非法"
+          },
+          "500": {
+            "description": "登录失败"
+          }
+        }
+      }
+    },
+    "/authorize/register": {
+      "post": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "POST /authorize/register — 注册账号并签发 JWT。",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "注册成功, 返回 JWT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "密码或密钥 hex 格式非法"
+          },
+          "500": {
+            "description": "创建失败"
+          }
+        }
+      }
+    },
+    "/authorize/secret/{client_id}": {
+      "get": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "GET /authorize/secret/{client_id} — 下发服务端临时 X25519 公钥 (hex 明文串)。",
+        "description": "注意: 响应体是裸 hex 字符串, **不可** 包成 `Json<String>` —— 否则会被加上引号,\n破坏 inode 端按裸串解析的 wire 格式。",
+        "operationId": "get_server_public_key",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "description": "客户端(浏览器)指纹, 用作 SessionID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "服务端临时公钥 (hex 明文串)",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "获取密钥失败"
+          }
+        }
+      }
+    },
     "/info": {
       "get": {
         "tags": [
@@ -617,6 +751,48 @@
   },
   "components": {
     "schemas": {
+      "AuthBody": {
+        "type": "object",
+        "required": [
+          "token",
+          "token_type"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        }
+      },
+      "AuthPayload": {
+        "type": "object",
+        "description": "注册 / 登录请求体。密码经客户端公钥与服务端临时密钥协商出的共享密钥\nAEAD 加密后, 以 hex 字符串传输。",
+        "required": [
+          "client_id",
+          "client_secret",
+          "email",
+          "encrypted_password"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "用户(浏览器)指纹, 用作 SessionID"
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "客户端 X25519 公钥 (hex)"
+          },
+          "email": {
+            "type": "string"
+          },
+          "encrypted_password": {
+            "type": "string",
+            "description": "加密后的密码 (hex): 前 24 字节为 nonce, 末 16 字节为 Poly1305 标签, 中间为密文"
+          }
+        }
+      },
       "Info": {
         "type": "object",
         "required": [
@@ -990,6 +1166,32 @@
             "description": "客户端写入时间戳 (毫秒), 由客户端提供"
           }
         }
+      },
+      "UserClaimsData": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "properties": {
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       }
     }
   },
@@ -1009,6 +1211,10 @@
     {
       "name": "peer",
       "description": "用户发布层 (community 发布者/订阅)"
+    },
+    {
+      "name": "authorize",
+      "description": "注册 / 登录 / X25519 密钥交换"
     }
   ]
 }

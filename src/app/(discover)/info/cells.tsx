@@ -40,8 +40,8 @@ export function TitleCell({ title, url, max = 30 }: { title: string; url: string
   )
 }
 
-/** 实体是否有可展示的百科词条 (has_entry 且至少一个词条链接)。 */
-export function hasEncyclopediaEntry(e: NameEntity): boolean {
+/** 实体是否有可展示的百科词条 (has_entry 且至少一个词条链接)。仅本文件 partitionEntities 用。 */
+function hasEncyclopediaEntry(e: NameEntity): boolean {
   return Boolean(e.has_entry && (e.baike_url || e.wikipedia_url))
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react"
 import { Graph, type GraphData } from "@antv/g6"
+import { NER_LABEL_TEXT } from "@/lib/ner-labels"
 import { Info, NameEntity } from "../model"
 
 /**
@@ -14,15 +15,7 @@ import { Info, NameEntity } from "../model"
 
 type Props = { info: Info; related: Info[] }
 
-// 命名实体 label → 中文分类
-const LABEL_CATEGORY: Record<string, string> = {
-  PER: "人物",
-  LOC: "地区",
-  ORG: "组织",
-  TIME: "时间",
-  PRODUCT: "产品",
-  EVENT: "事件",
-}
+// 命名实体 label → 中文分类 (文案复用全站统一口径; 此处分类还用于映射节点填充色)
 const OTHER_ENTITY = "其他实体"
 
 // 分类 → 颜色 (节点填充 + 图例一致)
@@ -39,7 +32,7 @@ const CATEGORY_COLOR: Record<string, string> = {
 }
 
 const entityKey = (e: NameEntity) => `${e.label}:${e.name}`
-const entityCat = (label: string) => LABEL_CATEGORY[label] ?? OTHER_ENTITY
+const entityCat = (label: string) => NER_LABEL_TEXT[label] ?? OTHER_ENTITY
 const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s)
 
 type Built = { data: GraphData; categories: string[] }
