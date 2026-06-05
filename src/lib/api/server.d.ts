@@ -301,12 +301,18 @@ export interface components {
         /**
          * @description 命名实体 (NER 结果)。`label` 取值见 super/form 的 NER schema:
          *     `PER` / `ORG` / `LOC` / `TIME` / `PRODUCT` / `EVENT`。`period` 为所属周 (周一 0 点) 的 epoch 毫秒。
+         *
+         *     词条富化字段 (super/form 查百度百科 + 维基百科后写入): `has_entry` 标记该实体是否有百科词条,
+         *     `baike_url` / `wikipedia_url` 为对应词条链接。`#[serde(default)]` 保证旧数据 (无这些字段) 反序列化安全。
          */
         NameEntity: {
+            baike_url?: string | null;
+            has_entry?: boolean;
             label: string;
             name: string;
             /** Format: int64 */
             period: number;
+            wikipedia_url?: string | null;
         };
         /** @description 发布请求体 (POST /me/publications)。 */
         NewPublication: {

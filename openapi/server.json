@@ -659,13 +659,22 @@
       },
       "NameEntity": {
         "type": "object",
-        "description": "命名实体 (NER 结果)。`label` 取值见 super/form 的 NER schema:\n`PER` / `ORG` / `LOC` / `TIME` / `PRODUCT` / `EVENT`。`period` 为所属周 (周一 0 点) 的 epoch 毫秒。",
+        "description": "命名实体 (NER 结果)。`label` 取值见 super/form 的 NER schema:\n`PER` / `ORG` / `LOC` / `TIME` / `PRODUCT` / `EVENT`。`period` 为所属周 (周一 0 点) 的 epoch 毫秒。\n\n词条富化字段 (super/form 查百度百科 + 维基百科后写入): `has_entry` 标记该实体是否有百科词条,\n`baike_url` / `wikipedia_url` 为对应词条链接。`#[serde(default)]` 保证旧数据 (无这些字段) 反序列化安全。",
         "required": [
           "name",
           "label",
           "period"
         ],
         "properties": {
+          "baike_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_entry": {
+            "type": "boolean"
+          },
           "label": {
             "type": "string"
           },
@@ -675,6 +684,12 @@
           "period": {
             "type": "integer",
             "format": "int64"
+          },
+          "wikipedia_url": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

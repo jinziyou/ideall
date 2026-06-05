@@ -2,6 +2,7 @@
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { formatTimestamp } from "@/lib/format"
 import { SubscribeButton } from "@/app/home/subscribe-button"
 import type { NameEntity, Publisher } from "./model"
@@ -39,23 +40,91 @@ export function TitleCell({ title, url, max = 30 }: { title: string; url: string
   )
 }
 
-/** 命名实体单元格: 按 人物(PER)/组织(ORG)/地区(LOC) 分组展示。 */
-export function EntityCell({ entities }: { entities: NameEntity[] | undefined }) {
-  const per: string[] = []
-  const org: string[] = []
-  const loc: string[] = []
+/** 实体是否有可展示的百科词条 (has_entry 且至少一个词条链接)。 */
+export function hasEncyclopediaEntry(e: NameEntity): boolean {
+  return Boolean(e.has_entry && (e.baike_url || e.wikipedia_url))
+}
+
+/**
+ * 把实体分为「有词条」(突出展示) 与「其余」(可能性低或不重要) 两组。
+ * 分层维度按「是否有百科词条」而非实体类型 —— 故 EVENT/PRODUCT 不再被丢弃, 有词条即显眼。
+ * TIME 实体无展示价值, 过滤掉 (写图时本就跳过)。
+ */
+export function partitionEntities(entities: NameEntity[] | undefined): {
+  withEntry: NameEntity[]
+  others: NameEntity[]
+} {
+  const withEntry: NameEntity[] = []
+  const others: NameEntity[] = []
   for (const e of entities ?? []) {
-    if (e.label === "PER") per.push(e.name)
-    else if (e.label === "ORG") org.push(e.name)
-    else if (e.label === "LOC") loc.push(e.name)
+    if (e.label === "TIME") continue
+    if (hasEncyclopediaEntry(e)) withEntry.push(e)
+    else others.push(e)
   }
-  const empty = per.length + org.length + loc.length === 0
+  return { withEntry, others }
+}
+
+/** 实体的百科外链: 百度百科为主链接、维基百科为次链接。无链接则不渲染。 */
+export function EntityEntryLinks({ entity }: { entity: NameEntity }) {
   return (
-    <div className="min-w-[160px] space-y-0.5 text-xs">
-      {per.length > 0 && <div>人物: {per.join(", ")}</div>}
-      {org.length > 0 && <div>组织: {org.join(", ")}</div>}
-      {loc.length > 0 && <div>地区: {loc.join(", ")}</div>}
-      {empty && <span className="text-muted-foreground">-</span>}
+    <>
+      {entity.baike_url && (
+        <a
+          href={entity.baike_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="百度百科"
+          className="text-primary underline-offset-2 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          百科
+        </a>
+      )}
+      {entity.wikipedia_url && (
+        <a
+          href={entity.wikipedia_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="维基百科"
+          className="text-muted-foreground underline-offset-2 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          维基
+        </a>
+      )}
+    </>
+  )
+}
+
+/**
+ * 命名实体单元格: 有词条实体作 Badge 突出展示 (附百科/维基链接),
+ * 其余归到可折叠的「可能性低或不重要的实体」组。旧数据无 has_entry 时全部落入「其余」。
+ */
+export function EntityCell({ entities }: { entities: NameEntity[] | undefined }) {
+  const { withEntry, others } = partitionEntities(entities)
+  if (withEntry.length === 0 && others.length === 0) {
+    return <span className="text-muted-foreground">-</span>
+  }
+  return (
+    <div className="min-w-[180px] space-y-1 text-xs">
+      {withEntry.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {withEntry.map((e, i) => (
+            <Badge key={`${e.label}-${e.name}-${i}`} variant="secondary" className="gap-1 font-normal">
+              <span>{e.name}</span>
+              <EntityEntryLinks entity={e} />
+            </Badge>
+          ))}
+        </div>
+      )}
+      {others.length > 0 && (
+        <details className="text-muted-foreground">
+          <summary className="cursor-pointer select-none">
+            可能性低或不重要的实体 ({others.length})
+          </summary>
+          <div className="mt-1">{others.map((e) => e.name).join(", ")}</div>
+        </details>
+      )}
     </div>
   )
 }
