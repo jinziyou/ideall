@@ -42,7 +42,7 @@ export default function MyPublications() {
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <p className="max-w-sm text-sm text-muted-foreground">
-          登录后即可发布内容、成为社区发布者被他人订阅。
+          登录后即可在社区发布内容，成为社区发布者，被他人订阅。
         </p>
         <Button asChild size="sm">
           <Link href="/auth">登录 / 注册</Link>
@@ -124,7 +124,7 @@ export default function MyPublications() {
         {pubs === null ? (
           <p className="text-sm text-muted-foreground">加载中…</p>
         ) : pubs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">还没有发布。</p>
+          <p className="text-sm text-muted-foreground">还没有发布过内容。</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {pubs.map((p) => (

@@ -2,7 +2,7 @@ import AuthForm from "./auth-form"
 
 export const metadata = {
   title: "登录 | wonita",
-  description: "登录或注册 —— 用于发布内容、被他人订阅。",
+  description: "登录或注册账号 —— 用于在「我的发布」发布内容、成为可被订阅的社区发布者。",
 }
 
 export default function AuthPage() {

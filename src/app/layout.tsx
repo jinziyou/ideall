@@ -6,8 +6,8 @@ import { THEME_INIT } from "@/lib/theme"
 import ThemeApplier from "./theme-applier"
 
 export const metadata: Metadata = {
-  title: "wonita | 链接我你TA",
-  description: "链接彼此",
+  title: "wonita | 个人信息总控终端",
+  description: "本地优先的个人信息总控终端，从个人视角聚合并掌控信息、资源、工具与社区。",
 }
 
 export const viewport: Viewport = {

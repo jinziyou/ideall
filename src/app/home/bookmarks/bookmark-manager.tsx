@@ -250,7 +250,7 @@ export default function BookmarkManager() {
         {filtered.length === 0 ? (
           <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
             {bookmarks.length === 0
-              ? "还没有收藏链接, 新增或导入浏览器书签试试。"
+              ? "还没有收藏链接，新增一条或导入浏览器书签试试。"
               : "没有匹配的链接。"}
           </div>
         ) : (

@@ -32,7 +32,7 @@ export default function PeerPublishers() {
   if (peers.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
-        还没有社区发布者。登录后在「我的空间 · 我的发布」发布内容, 即可成为发布者被他人订阅。
+        还没有社区发布者。登录后在「我的空间 · 我的发布」发布内容，即可成为社区发布者被他人订阅。
       </p>
     )
   }

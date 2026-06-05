@@ -4,7 +4,7 @@ import DiscoverNav from "./discover-nav"
 
 export const metadata = {
   title: "发现 | wonita",
-  description: "资讯、社区与工具的聚合入口 —— 浏览并(后续)订阅, 回流服务于「我的空间」。",
+  description: "资讯、社区与工具的聚合入口 —— 浏览、订阅，把发现里的来源回流到「我的空间」中枢。",
 }
 
 /**

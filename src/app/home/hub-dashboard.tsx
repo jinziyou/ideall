@@ -147,7 +147,7 @@ export default function HubDashboard() {
         {/* 去发现, 带东西回家 */}
         <div className="rounded-xl border bg-card p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
-          <p className="mb-4 text-xs text-muted-foreground">三条进料口, 都回流到这个中枢</p>
+          <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都把东西回流进这个中枢</p>
           <div className="flex flex-col gap-2.5">
             {SPOKES.map((s) => (
               <Link
@@ -211,7 +211,7 @@ function EmptyHub() {
             <Hexagon className="h-4 w-4" />
             我的空间
           </span>
-          <span className="text-xs text-muted-foreground">你的数据会落在这里 🔒</span>
+          <span className="text-xs text-muted-foreground">数据落在这里，本地恒在</span>
         </div>
         <div className="my-1 text-muted-foreground">↑</div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

@@ -55,7 +55,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
               {others.length > 0 && (
                 <details>
                   <summary className="cursor-pointer select-none text-xs text-muted-foreground">
-                    可能性低或不重要的实体 ({others.length})
+                    次要实体 ({others.length})
                   </summary>
                   <div className="mt-1 flex flex-wrap gap-2">
                     {others.map((entity, index) => (

@@ -17,7 +17,7 @@ export default async function Community() {
         <CardHeader>
           <CardTitle>发布者地图</CardTitle>
           <CardDescription>
-            信息发布者的地理分布，点越大代表该来源的信息越多（已定位 {locations.length} 个来源）。
+            信息来源的地理分布（联网才有，来自共享节点的 IP 定位），点越大代表该来源的信息越多（已定位 {locations.length} 个来源）。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -33,7 +33,7 @@ export default async function Community() {
         <CardHeader>
           <CardTitle>社区发布者</CardTitle>
           <CardDescription>
-            订阅社区里的发布者（用户），其发布的内容会出现在「我的空间 · 订阅」。
+            订阅社区里的发布者（其他用户），其发布的内容会回流到「我的空间」的订阅流。
           </CardDescription>
         </CardHeader>
         <CardContent>

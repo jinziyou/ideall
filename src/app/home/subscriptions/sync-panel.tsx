@@ -67,7 +67,7 @@ export default function SyncPanel() {
   function disable() {
     clearSyncCode()
     setReveal(false)
-    toast.success("已关闭本机同步 (云端数据保留)")
+    toast.success("已关闭本机同步，服务端密文仍保留")
   }
 
   function copyCode() {
@@ -85,7 +85,7 @@ export default function SyncPanel() {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-medium">跨端同步</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            用同步码在多设备间同步订阅 · 端到端加密, 服务端读不到内容 · 删除可能不跨端生效。
+            用同步码在多设备间同步订阅 · 端到端加密，服务端只存密文、读不到内容 · 取消订阅为尽力，可能被另一端带回。
           </p>
 
           {code ? (
@@ -124,7 +124,7 @@ export default function SyncPanel() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    在其它设备的「我的空间 · 订阅」里粘贴这串同步码即可同步。请妥善保管 —— 它能读写你的订阅。
+                    在其它设备的「我的空间 · 订阅」里粘贴这串同步码即可同步。请妥善保管 —— 同步码即能力凭证，谁拿到都能读写你的订阅。
                   </p>
                 </>
               )}

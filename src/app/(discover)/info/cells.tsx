@@ -120,7 +120,7 @@ export function EntityCell({ entities }: { entities: NameEntity[] | undefined })
       {others.length > 0 && (
         <details className="text-muted-foreground">
           <summary className="cursor-pointer select-none">
-            可能性低或不重要的实体 ({others.length})
+            次要实体 ({others.length})
           </summary>
           <div className="mt-1">{others.map((e) => e.name).join(", ")}</div>
         </details>

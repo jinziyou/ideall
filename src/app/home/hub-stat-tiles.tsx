@@ -15,7 +15,7 @@ export function HubStatTiles({ subs, bookmarks, files, threads, usage, quota }: 
   const tiles = [
     { label: "订阅", value: subs, icon: Rss },
     { label: "书签", value: bookmarks, icon: Bookmark },
-    { label: "文件", value: files, icon: FolderOpen },
+    { label: "资源", value: files, icon: FolderOpen },
     { label: "对话", value: threads, icon: Bot },
   ]
   const pct = quota > 0 ? Math.min(100, (usage / quota) * 100) : 0

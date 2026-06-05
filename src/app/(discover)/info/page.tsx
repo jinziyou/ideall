@@ -25,7 +25,7 @@ export default function Info() {
         {/* TODO: 时间段筛选未接线 —— 选中值应转成 timestamp_from_to 传入 fetchInfoEvents, 暂禁用。 */}
         <Select disabled>
           <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="时间段(最近24h)" />
+            <SelectValue placeholder="时间段（默认最近24h）" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="1h">最近1h</SelectItem>

@@ -163,7 +163,7 @@ export default function SubscriptionFeed() {
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <Rss className="h-8 w-8 text-muted-foreground" />
         <p className="max-w-sm text-sm text-muted-foreground">
-          还没有订阅。去「发现」订阅发布者 / 实体 / 保存搜索 / 社区发布者, 或把常用工具钉到 home, 都会汇聚到这里。
+          还没有订阅。去「发现」订阅发布者 / 实体 / 存搜索 / 社区发布者，或把常用工具钉到「我的空间」，都会回流到这里。
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           <Button asChild size="sm">
@@ -273,7 +273,7 @@ export default function SubscriptionFeed() {
               </CardHeader>
               <CardContent className="flex-1">
                 {error ? (
-                  <p className="text-xs text-muted-foreground">内容加载失败</p>
+                  <p className="text-xs text-muted-foreground">联网内容加载失败</p>
                 ) : items.length === 0 ? (
                   <p className="text-xs text-muted-foreground">暂无最新内容</p>
                 ) : (

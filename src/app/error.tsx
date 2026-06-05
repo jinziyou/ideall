@@ -24,7 +24,7 @@ export default function AppError({
           <AlertTriangle className="h-6 w-6 shrink-0 text-destructive" />
           <div className="space-y-1.5">
             <CardTitle>页面加载出错</CardTitle>
-            <CardDescription>请稍后重试, 若问题持续存在, 请联系管理员。</CardDescription>
+            <CardDescription>请稍后重试，若问题持续存在，可返回首页重新进入。</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">

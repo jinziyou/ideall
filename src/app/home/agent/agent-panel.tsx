@@ -315,7 +315,7 @@ export default function AgentPanel() {
               AI 助手
             </h2>
             <p className="truncate text-xs text-muted-foreground">
-              懂你的 home —— 结合订阅 / 书签 / 资源作答，对话只存本机
+              懂你的「我的空间」—— 结合订阅 / 书签 / 资源作答，对话只存本机
             </p>
           </div>
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
@@ -326,7 +326,7 @@ export default function AgentPanel() {
 
         {!configured && (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-            <span>尚未配置模型。请填写你的 API Key（默认 DeepSeek，仅存本机）。</span>
+            <span>尚未配置模型。填一个你自己的 API Key 即可（默认 DeepSeek，密钥只存本机）。</span>
             <Button size="sm" onClick={() => setSettingsOpen(true)}>
               去设置
             </Button>
@@ -343,8 +343,8 @@ export default function AgentPanel() {
                 <Bot className="h-6 w-6" />
               </div>
               <div className="space-y-1">
-                <p className="font-medium">问问关于你 home 的事</p>
-                <p className="text-sm text-muted-foreground">助手会结合你的订阅、书签与资源作答</p>
+                <p className="font-medium">问问关于「我的空间」的事</p>
+                <p className="text-sm text-muted-foreground">助手会结合本机的订阅、书签与资源作答</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (
@@ -375,7 +375,7 @@ export default function AgentPanel() {
               type="button"
               onClick={() => setAgentMode((v) => !v)}
               disabled={sending}
-              title="开启后模型可调用工具读写你的 home 数据"
+              title="开启后模型可调用工具读写「我的空间」的数据"
               className={cn(
                 "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50",
                 agentMode
@@ -397,7 +397,7 @@ export default function AgentPanel() {
               value={input}
               placeholder={
                 agentMode
-                  ? "让助手帮你整理书签 / 订阅 / 资源…（Enter 发送）"
+                  ? "让助手整理本机的书签 / 订阅 / 资源…（Enter 发送）"
                   : "输入消息，Enter 发送，Shift+Enter 换行"
               }
               className="max-h-40 min-h-[2.75rem] resize-none"

@@ -8,7 +8,7 @@ export default function NotFound() {
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>404 — 页面未找到</CardTitle>
-          <CardDescription>您访问的页面不存在或已被移除。</CardDescription>
+          <CardDescription>你访问的页面不存在或已被移除。</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-end">
           <Button asChild>
