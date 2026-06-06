@@ -636,6 +636,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 邮箱已被注册 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description 创建失败 */
             500: {
                 headers: {

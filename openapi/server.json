@@ -101,6 +101,9 @@
           "400": {
             "description": "密码或密钥 hex 格式非法"
           },
+          "409": {
+            "description": "邮箱已被注册"
+          },
           "500": {
             "description": "创建失败"
           }
