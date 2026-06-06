@@ -71,6 +71,7 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
       ? { searchKeyword: input.searchKeyword, searchDomain: input.searchDomain }
       : {}),
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   }
   await idbPut(STORE_SUBSCRIPTIONS, sub)
   notifyHubUpdated()

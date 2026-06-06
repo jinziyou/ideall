@@ -64,6 +64,8 @@ export interface Subscription {
   searchKeyword?: string
   searchDomain?: string
   createdAt: number
+  /** 最后更新时间 (跨端 LWW 合并用; 缺省视为 createdAt, 兼容无此字段的存量数据)。 */
+  updatedAt?: number
 }
 
 /** AI 助手消息角色 (与 OpenAI 兼容接口一致) */

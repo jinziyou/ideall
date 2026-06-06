@@ -3,6 +3,7 @@
 // 合并按 id 取并集 (本地优先), 删除为尽力 (并集会从另一端重新带回已删项)。
 
 import type { Subscription } from "../model"
+import { unionMerge, subsEqual } from "./subscription-merge"
 import { bulkPutSubscriptions, listSubscriptions } from "./subscriptions-store"
 import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "./sync"
 import { getSyncBlob, putSyncBlob } from "./sync-action"
@@ -44,14 +45,6 @@ export function clearSyncCode(): void {
   codeListeners.forEach((l) => l())
 }
 
-/** 按 id 取并集 (同 id 本地优先), 保证两端最终趋于一致。 */
-function unionMerge(local: Subscription[], remote: Subscription[]): Subscription[] {
-  const map = new Map<string, Subscription>()
-  for (const s of remote) map.set(s.id, s)
-  for (const s of local) map.set(s.id, s) // 本地优先
-  return [...map.values()]
-}
-
 export type SyncResult = { total: number; added: number }
 
 /** 执行一次同步。失败抛 Error (含可展示消息)。 */
@@ -74,7 +67,8 @@ export async function syncNow(code: string): Promise<SyncResult> {
   }
 
   const merged = unionMerge(local, remote)
-  if (merged.length > local.length) {
+  // LWW 下即使长度不变也可能有字段更新, 故按"非等价就写回"判定 (旧版只比长度会漏写更新)。
+  if (!subsEqual(merged, local)) {
     await bulkPutSubscriptions(merged)
   }
 
@@ -86,5 +80,8 @@ export async function syncNow(code: string): Promise<SyncResult> {
   })
   if (!put.ok) throw new Error(put.message)
 
-  return { total: merged.length, added: Math.max(0, merged.length - local.length) }
+  // 精确统计"本地原本不存在的新 id 数"(LWW 下字段更新不算 added)。
+  const localIds = new Set(local.map((s) => s.id))
+  const added = merged.filter((s) => !localIds.has(s.id)).length
+  return { total: merged.length, added }
 }
