@@ -4,6 +4,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatTimestamp } from "@/lib/format"
+import { safeHref, openExternal } from "@/lib/safe-url"
 import { SubscribeButton } from "@/app/home/subscribe-button"
 import type { NameEntity, Publisher } from "./model"
 
@@ -26,7 +27,7 @@ export function TitleCell({ title, url, max = 30 }: { title: string; url: string
     <Button
       className="h-auto max-w-[260px] justify-start p-0 text-left"
       variant="link"
-      onClick={() => window.open(url, "_blank")}
+      onClick={() => openExternal(url)}
     >
       <span className="truncate">{truncate(title, max)}</span>
     </Button>
@@ -66,11 +67,14 @@ export function partitionEntities(entities: NameEntity[] | undefined): {
 
 /** 实体的百科外链: 百度百科为主链接、维基百科为次链接。无链接则不渲染。 */
 export function EntityEntryLinks({ entity }: { entity: NameEntity }) {
+  // 词条链接来自 form 的百科/维基查询 (外部派生), 渲染前过协议白名单防伪协议注入。
+  const baikeHref = safeHref(entity.baike_url)
+  const wikiHref = safeHref(entity.wikipedia_url)
   return (
     <>
-      {entity.baike_url && (
+      {baikeHref && (
         <a
-          href={entity.baike_url}
+          href={baikeHref}
           target="_blank"
           rel="noopener noreferrer"
           title="百度百科"
@@ -80,9 +84,9 @@ export function EntityEntryLinks({ entity }: { entity: NameEntity }) {
           百科
         </a>
       )}
-      {entity.wikipedia_url && (
+      {wikiHref && (
         <a
-          href={entity.wikipedia_url}
+          href={wikiHref}
           target="_blank"
           rel="noopener noreferrer"
           title="维基百科"

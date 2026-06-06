@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Info, InfoEvent } from "./model"
 import { EntityCell, PublisherHoverCell, TimeCell, TitleCell } from "./cells"
 import { SaveToHub } from "@/app/home/save-to-hub"
+import { openExternal } from "@/lib/safe-url"
 
 /** Info.publisher → SaveToHub 的 publisher 入参 (domain 缺失时不提供订阅项)。 */
 function pubOf(info: Info): { domain: string; name?: string } | undefined {
@@ -101,7 +102,7 @@ export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
           <Button
             className="h-auto justify-start p-0 text-left"
             variant="link"
-            onClick={() => window.open(url, "_blank")}
+            onClick={() => openExternal(url)}
           >
             <span className="line-clamp-2 whitespace-normal">{title || url}</span>
           </Button>

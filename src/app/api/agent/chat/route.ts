@@ -37,6 +37,20 @@ export async function POST(req: Request): Promise<Response> {
   const model = (body.model ?? "").trim()
   const messages = body.messages
   if (!baseURL || !/^https?:\/\//i.test(baseURL)) return bad("模型 baseURL 无效", 400)
+  // 本地优先: 刻意允许 localhost / 私网 (用户指向自建的本地模型, 如 Ollama)。
+  // 但云厂商元数据端点无任何合法用途且会泄露 IAM 凭证, 精准封堵。
+  try {
+    const host = new URL(baseURL).hostname.replace(/^\[|\]$/g, "").toLowerCase()
+    if (
+      host === "169.254.169.254" ||
+      host === "metadata.google.internal" ||
+      host === "fd00:ec2::254"
+    ) {
+      return bad("禁止访问云元数据端点", 400)
+    }
+  } catch {
+    return bad("模型 baseURL 无效", 400)
+  }
   if (!model) return bad("未指定模型", 400)
   if (!Array.isArray(messages) || messages.length === 0) return bad("消息为空", 400)
 

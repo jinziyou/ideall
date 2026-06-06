@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatTimestamp } from "@/lib/format"
+import { safeHref } from "@/lib/safe-url"
 import { getSession, subscribeSession } from "@/lib/auth/auth-store"
 import { deletePublication, getPeerPublications, publish, type Publication } from "@/lib/peer-action"
 
@@ -133,11 +134,11 @@ export default function MyPublications() {
                 className="flex items-start justify-between gap-2 rounded-lg border p-3"
               >
                 <div className="min-w-0 flex-1">
-                  {p.url ? (
+                  {safeHref(p.url) ? (
                     <a
-                      href={p.url}
+                      href={safeHref(p.url)}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noreferrer noopener"
                       className="text-sm font-medium hover:underline"
                     >
                       {p.title}

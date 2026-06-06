@@ -3,6 +3,7 @@
 import { ExternalLink, Newspaper } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatTimestamp } from "@/lib/format"
+import { openExternal } from "@/lib/safe-url"
 import { Info } from "../model"
 
 /**
@@ -28,7 +29,7 @@ export default function CoverageList({ items }: { items: Info[] }) {
             <Button
               variant="link"
               className="h-auto justify-start whitespace-normal p-0 text-left text-sm font-medium"
-              onClick={() => window.open(info.url, "_blank")}
+              onClick={() => openExternal(info.url)}
             >
               {info.title || info.url}
               <ExternalLink className="ml-1 inline h-3 w-3 shrink-0" />

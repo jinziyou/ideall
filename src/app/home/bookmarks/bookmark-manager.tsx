@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { safeHref, openExternal } from "@/lib/safe-url"
 import { Bookmark, BookmarkFolder } from "../model"
 import {
   addFolder,
@@ -382,7 +383,7 @@ function BookmarkCard({
             <Globe className="h-4 w-4 text-muted-foreground" />
           )}
         </div>
-        <a href={b.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1">
+        <a href={safeHref(b.url)} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium hover:underline" title={b.title}>
             {b.title}
           </div>
@@ -398,7 +399,7 @@ function BookmarkCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => window.open(b.url, "_blank", "noopener,noreferrer")}>
+            <DropdownMenuItem onClick={() => openExternal(b.url)}>
               <ExternalLink className="mr-2 h-4 w-4" />
               打开
             </DropdownMenuItem>

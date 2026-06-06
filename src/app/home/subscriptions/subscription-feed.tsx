@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatTimestamp } from "@/lib/format"
+import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { fetchLatestInfo } from "@/app/(discover)/info/action"
 import { getPeerPublications } from "@/lib/peer-action"
@@ -267,11 +268,12 @@ export default function SubscriptionFeed() {
                   <ul className="space-y-2.5">
                     {items.map((it) => (
                       <li key={it.key} className="flex flex-col gap-0.5">
-                        {it.url ? (
+                        {/* it.url 来自他人 peer 发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
+                        {safeHref(it.url) ? (
                           <a
-                            href={it.url}
+                            href={safeHref(it.url)}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noreferrer noopener"
                             className="line-clamp-2 text-sm hover:underline"
                           >
                             {it.title}

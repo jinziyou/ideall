@@ -10,6 +10,7 @@ import {
 } from "./bookmarks-store"
 import { addSubscription, listSubscriptions, removeSubscription } from "./subscriptions-store"
 import { listFiles, updateFileMeta } from "./files-store"
+import { safeHref } from "@/lib/safe-url"
 import type { SubscriptionType } from "../model"
 
 const SUB_TYPES: SubscriptionType[] = ["publisher", "entity", "tool", "search", "peer"]
@@ -231,6 +232,9 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
       case "add_bookmark": {
         const url = str(args.url)
         if (!url) return { ok: false, summary: "缺少 url", data: { error: "url 必填" } }
+        // 模型给的 url 在写入边界就过协议白名单, 防 javascript: 等伪协议入库后被点击执行。
+        if (!safeHref(url))
+          return { ok: false, summary: "url 协议不合法", data: { error: "仅支持 http/https 链接" } }
         const folderId = await resolveFolderId(str(args.folder))
         const bm = await addBookmark({
           url,
