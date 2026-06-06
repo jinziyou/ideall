@@ -8,11 +8,15 @@ import type { ApiResult } from "@/lib/api"
  * 客户端按需取数的统一 hook —— 收敛 (discover)/info 各页几乎逐字相同的
  * `useState data/loading + useEffect{ active 守卫 + !ok→toast.error + setData + finally setLoading(false) }` 样板。
  *
- * 行为与原各页一致:
+ * 行为:
  *   - 卸载 / 依赖变化时用 `active` 守卫丢弃过期响应;
- *   - `result.ok === false` 时 `toast.error(result.message)`, 不改动 data (保留上次/初始值);
- *   - 成功时 `setData(result.data)`;
- *   - 无论成败 `finally` 都 `setLoading(false)`。
+ *   - `result.ok === false` 时 `setError(message)` + `toast.error`, 不改动 data (保留上次/初始值);
+ *   - 成功时 `setData(result.data ?? initial)` (200/204 空 body data 为 null, 退化为 initial
+ *     避免消费方崩) + 清除 error;
+ *   - 无论成败 `finally` 都 `setLoading(false)`;
+ *   - `reload()` 强制重取 (供失败时"重试"); 调用即 setLoading(true)。
+ *
+ * 返回 `error` 让页面区分"加载失败"(error 非空) 与"真无数据"(error 为空但 data 空)。
  *
  * @param fetcher 返回 `ApiResult<T>` 的取数函数 (通常是 Server Action)。
  * @param initial data 初始值 (与原各页保持一致, 如 `[]`)。
@@ -22,20 +26,30 @@ export function useApiResult<T>(
   fetcher: () => Promise<ApiResult<T>>,
   initial: T,
   deps: unknown[],
-): { data: T; loading: boolean } {
+): { data: T; loading: boolean; error: string | null; reload: () => void } {
   const [data, setData] = React.useState<T>(initial)
   const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [nonce, setNonce] = React.useState(0)
+
+  const reload = React.useCallback(() => setNonce((n) => n + 1), [])
 
   React.useEffect(() => {
     let active = true
     async function run() {
+      // 在 async 函数内 (await 前) 置位, 避免 effect 体内同步 setState 触发级联渲染 lint;
+      // 既覆盖首次挂载 (loading 初值已为 true), 也覆盖 reload/deps 变化时重新进入加载态。
+      setLoading(true)
+      setError(null)
       try {
         const result = await fetcher()
         if (!active) return
         if (!result.ok) {
+          setError(result.message)
           toast.error(result.message)
         } else {
-          setData(result.data)
+          setData(result.data ?? initial)
+          setError(null)
         }
       } finally {
         if (active) setLoading(false)
@@ -45,9 +59,9 @@ export function useApiResult<T>(
     return () => {
       active = false
     }
-    // fetcher 由调用方按 deps 重建; 依赖项透传, 与原各页一致。
+    // fetcher 由调用方按 deps 重建; nonce 用于 reload 强制重取。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [...deps, nonce])
 
-  return { data, loading }
+  return { data, loading, error, reload }
 }

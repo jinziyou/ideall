@@ -46,8 +46,9 @@ export default function InfoToolbar<TData>({
         toast.error(result.message)
         return
       }
-      onResult(result.data)
-      toast.success(`查询到 ${result.data.length} 条记录`)
+      const items = result.data ?? []
+      onResult(items)
+      toast.success(`查询到 ${items.length} 条记录`)
     } finally {
       setQuerying(false)
     }

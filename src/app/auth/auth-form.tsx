@@ -37,6 +37,10 @@ export default function AuthForm() {
         toast.error(sk.message)
         return
       }
+      if (sk.data === null) {
+        toast.error("获取密钥失败, 请重试")
+        return
+      }
       const payload = {
         client_id: clientId,
         client_secret: publicHex,
@@ -48,10 +52,15 @@ export default function AuthForm() {
         toast.error(res.message)
         return
       }
+      if (!res.data) {
+        toast.error(mode === "login" ? "登录响应为空, 请重试" : "注册响应为空, 请重试")
+        return
+      }
       const me = await fetchMe(res.data.token)
-      const user = me.ok
-        ? me.data
-        : { id: 0, email: email.trim(), name: email.trim(), avatar: null }
+      const user =
+        me.ok && me.data
+          ? me.data
+          : { id: 0, email: email.trim(), name: email.trim(), avatar: null }
       setSession(res.data.token, user)
       toast.success(mode === "login" ? "已登录" : "注册成功, 已登录")
       router.push("/home")

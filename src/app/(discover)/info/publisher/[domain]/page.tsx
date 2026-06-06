@@ -14,7 +14,7 @@ export default function InfoPublisherPage({ params }: { params: Promise<{ domain
   const domain = decodeURIComponent(rawDomain)
 
   const columns = getInfoColumns()
-  const { data, loading } = useApiResult<Info[]>(
+  const { data, loading, error, reload } = useApiResult<Info[]>(
     () => fetchLatestInfo({ publisher_domain: domain }),
     [],
     [domain],
@@ -28,7 +28,13 @@ export default function InfoPublisherPage({ params }: { params: Promise<{ domain
           <SubscribeButton sub={{ type: "publisher", key: domain, title: domain }} />
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={data} loading={loading} />
+          <DataTable
+            columns={columns}
+            data={data}
+            loading={loading}
+            error={error}
+            onRetry={reload}
+          />
         </CardContent>
       </Card>
     </main>

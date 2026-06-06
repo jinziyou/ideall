@@ -20,7 +20,7 @@ export default function EntityPage({
   const name = decodeURIComponent(rawName)
 
   const columns = getInfoColumns()
-  const { data, loading } = useApiResult<Info[]>(
+  const { data, loading, error, reload } = useApiResult<Info[]>(
     () => fetchLatestInfo({ entity_label_name: [[label, name]] }),
     [],
     [label, name],
@@ -60,7 +60,13 @@ export default function EntityPage({
           />
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={data} loading={loading} />
+          <DataTable
+            columns={columns}
+            data={data}
+            loading={loading}
+            error={error}
+            onRetry={reload}
+          />
         </CardContent>
       </Card>
     </main>

@@ -57,7 +57,7 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
     if (sub.type === "peer") {
       const res = await getPeerPublications(sub.key)
       if (!res.ok) return { sub, items: [], error: true }
-      const items = [...res.data]
+      const items = [...(res.data ?? [])]
         .sort((a, b) => b.created_at - a.created_at)
         .slice(0, PER_SOURCE)
         .map((p): FeedItem => ({
@@ -71,7 +71,7 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
     }
     const res = await fetchInfoSource(sub)
     if (!res.ok) return { sub, items: [], error: true }
-    let rows = res.data
+    let rows = res.data ?? []
     if (sub.type === "search") {
       const kw = (sub.searchKeyword ?? "").toLowerCase()
       rows = rows.filter((i) => (i.title ?? "").toLowerCase().includes(kw))

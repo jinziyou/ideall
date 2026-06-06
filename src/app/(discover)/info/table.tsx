@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { DataTablePagination } from "@/components/data-table-pagination"
 
 type ColumnMeta = { headerClassName?: string; cellClassName?: string }
@@ -32,6 +33,10 @@ interface DataTableProps<TData, TValue> {
   data: TData[]
   /** true 时表体显示「加载中」占位行 (取数期间)。 */
   loading?: boolean
+  /** 非空时表体显示「加载失败 + 重试」(区别于「暂无数据」的真空态)。 */
+  error?: string | null
+  /** error 时「重试」按钮回调 (通常是 useApiResult 的 reload)。 */
+  onRetry?: () => void
   /** 开启分页 + 排序 + 过滤模型, 并在底部渲染分页器 (用于 /info/search)。 */
   paginated?: boolean
   /** 表格上方的工具栏, 接收 table 实例以驱动过滤/分页 (仅 paginated 时有意义)。 */
@@ -46,6 +51,8 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   loading = false,
+  error = null,
+  onRetry,
   paginated = false,
   toolbar,
 }: DataTableProps<TData, TValue>) {
@@ -101,6 +108,19 @@ export function DataTable<TData, TValue>({
                     <Loader2 className="h-4 w-4 animate-spin" />
                     加载中…
                   </span>
+                </TableCell>
+              </TableRow>
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  <div className="inline-flex flex-col items-center gap-2 text-muted-foreground">
+                    <span>加载失败: {error}</span>
+                    {onRetry && (
+                      <Button variant="outline" size="sm" onClick={onRetry}>
+                        重试
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ) : rows?.length ? (

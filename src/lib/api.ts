@@ -2,13 +2,15 @@
  * 统一 fetch 封装, 供 Server Actions 使用。
  *
  * 约定所有 action 返回 `ApiResult<T>`:
- *   - `ok: true` 时, `data` 为响应体
+ *   - `ok: true` 时, `data` 为响应体; 200/204 空 body 时为 `null` (parseJsonSafe 如实返回)
  *   - `ok: false` 时, `message` 为可展示给用户的错误描述
  *
  * 客户端只需检查 `ok` 字段, 失败时直接 `toast.error(result.message)`。
  */
 
-export type ApiResult<T> = { ok: true; data: T } | { ok: false; message: string; status?: number }
+export type ApiResult<T> =
+  | { ok: true; data: T | null }
+  | { ok: false; message: string; status?: number }
 
 export interface ApiFetchOptions extends RequestInit {
   defaultErrorMessage?: string

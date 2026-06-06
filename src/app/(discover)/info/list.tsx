@@ -10,7 +10,11 @@ import { useApiResult } from "@/lib/use-api-result"
 
 /** /info 首页的事件列表 (按同一事件聚类)。本地优先: 数据在客户端按需拉取。 */
 export default function InfoList() {
-  const { data, loading } = useApiResult<InfoEvent[]>(() => fetchInfoEvents({}), [], [])
+  const { data, loading, error, reload } = useApiResult<InfoEvent[]>(
+    () => fetchInfoEvents({}),
+    [],
+    [],
+  )
 
   return (
     <div className="flex flex-col gap-3 px-2 pt-4 sm:px-4 sm:pt-6">
@@ -31,7 +35,13 @@ export default function InfoList() {
         </Button>
       </div>
 
-      <DataTable columns={getEventColumns()} data={data} loading={loading} />
+      <DataTable
+        columns={getEventColumns()}
+        data={data}
+        loading={loading}
+        error={error}
+        onRetry={reload}
+      />
     </div>
   )
 }

@@ -21,7 +21,7 @@ export function InfoTable() {
       if (!result.ok) {
         toast.error(result.message)
       } else {
-        setData(result.data)
+        setData(result.data ?? [])
       }
       setLoading(false)
     }

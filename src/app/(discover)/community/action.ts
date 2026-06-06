@@ -66,6 +66,6 @@ export async function getVisitorLocation(): Promise<IpLocation | null> {
     console.error("[getVisitorLocation]", result.message)
     return null
   }
-  // 后端定位失败会返回经纬度 0 的占位, 统一收敛为 null
-  return isLocated(result.data) ? result.data : null
+  // 后端定位失败会返回经纬度 0 的占位 (或空 body → null), 统一收敛为 null
+  return result.data && isLocated(result.data) ? result.data : null
 }
