@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Users } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { SubscribeButton } from "@/app/home/subscribe-button"
 import { getPeers, type PeerPublisher } from "@/lib/peer-action"
 
@@ -11,21 +12,47 @@ import { getPeers, type PeerPublisher } from "@/lib/peer-action"
  */
 export default function PeerPublishers() {
   const [peers, setPeers] = React.useState<PeerPublisher[] | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+  const [nonce, setNonce] = React.useState(0)
+
+  // 重试在事件处理器里 reset (非 effect, 不触发同步 setState lint), 再 bump nonce 重取。
+  const reload = () => {
+    setPeers(null)
+    setError(null)
+    setNonce((n) => n + 1)
+  }
 
   React.useEffect(() => {
     let alive = true
     getPeers()
       .then((r) => {
-        if (alive) setPeers(r.ok ? r.data : [])
+        if (!alive) return
+        if (r.ok) {
+          setPeers(r.data ?? [])
+          setError(null)
+        } else {
+          // 失败置 error (而非空数组), 与"真的没有发布者"区分开
+          setError(r.message)
+        }
       })
       .catch(() => {
-        if (alive) setPeers([])
+        if (alive) setError("加载失败, 请重试")
       })
     return () => {
       alive = false
     }
-  }, [])
+  }, [nonce])
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-6 text-center text-sm text-muted-foreground">
+        <span>加载失败: {error}</span>
+        <Button variant="outline" size="sm" onClick={reload}>
+          重试
+        </Button>
+      </div>
+    )
+  }
   if (peers === null) {
     return <p className="py-6 text-center text-sm text-muted-foreground">加载中…</p>
   }

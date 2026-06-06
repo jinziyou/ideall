@@ -23,13 +23,19 @@ export default function MyPublications() {
   const [body, setBody] = React.useState("")
   const [busy, setBusy] = React.useState(false)
   const [pubs, setPubs] = React.useState<Publication[] | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
 
   const uid = session ? String(session.user.id) : null
 
   const reload = React.useCallback(async () => {
     if (!uid) return
     const res = await getPeerPublications(uid)
-    setPubs(res.ok ? res.data : [])
+    if (res.ok) {
+      setPubs(res.data ?? []) // 空 body → 空列表 (而非 null 卡在"加载中")
+      setError(null)
+    } else {
+      setError(res.message) // 失败置 error, 与"还没发布过"区分
+    }
   }, [uid])
 
   React.useEffect(() => {
@@ -122,7 +128,14 @@ export default function MyPublications() {
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-medium text-muted-foreground">我的发布</h2>
-        {pubs === null ? (
+        {error ? (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm text-muted-foreground">加载失败: {error}</p>
+            <Button variant="outline" size="sm" onClick={() => reload()}>
+              重试
+            </Button>
+          </div>
+        ) : pubs === null ? (
           <p className="text-sm text-muted-foreground">加载中…</p>
         ) : pubs.length === 0 ? (
           <p className="text-sm text-muted-foreground">还没有发布过内容。</p>

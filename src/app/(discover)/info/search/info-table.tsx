@@ -12,6 +12,15 @@ import { Info } from "../model"
 export function InfoTable() {
   const [data, setData] = React.useState<Info[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [nonce, setNonce] = React.useState(0)
+
+  // 重试在事件处理器里 reset (非 effect, 不触发同步 setState lint), 再 bump nonce 重取初始列表。
+  const reload = () => {
+    setError(null)
+    setLoading(true)
+    setNonce((n) => n + 1)
+  }
 
   React.useEffect(() => {
     let active = true
@@ -19,9 +28,11 @@ export function InfoTable() {
       const result = await fetchLatestInfo({})
       if (!active) return
       if (!result.ok) {
+        setError(result.message)
         toast.error(result.message)
       } else {
         setData(result.data ?? [])
+        setError(null)
       }
       setLoading(false)
     }
@@ -29,15 +40,26 @@ export function InfoTable() {
     return () => {
       active = false
     }
-  }, [])
+  }, [nonce])
 
   return (
     <DataTable
       columns={getSearchColumns()}
       data={data}
       loading={loading}
+      error={error}
+      onRetry={reload}
       paginated
-      toolbar={(table) => <InfoToolbar table={table} onResult={setData} />}
+      toolbar={(table) => (
+        // 工具栏成功搜索后更新数据并清除初载错误 (否则 error 态会盖住新结果)
+        <InfoToolbar
+          table={table}
+          onResult={(items) => {
+            setData(items)
+            setError(null)
+          }}
+        />
+      )}
     />
   )
 }
