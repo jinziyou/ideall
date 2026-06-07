@@ -1,0 +1,1223 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "wonita-super/server",
+    "description": "Wonita 核心 API: 用户检查、JWT 鉴权、信息查询。\n\n消费方: super/admin (查询) + peer/inode (查询)。",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/authorize/authorize": {
+      "get": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "GET /authorize/authorize — 校验 JWT 并回显当前用户 claims 数据。",
+        "operationId": "authorize",
+        "responses": {
+          "200": {
+            "description": "当前用户 claims 数据",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserClaimsData"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "缺失或非法的 JWT"
+          }
+        }
+      }
+    },
+    "/authorize/login": {
+      "post": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "POST /authorize/login — 登录并签发 JWT。",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功, 返回 JWT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "密码或密钥 hex 格式非法"
+          },
+          "500": {
+            "description": "登录失败"
+          }
+        }
+      }
+    },
+    "/authorize/register": {
+      "post": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "POST /authorize/register — 注册账号并签发 JWT。",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "注册成功, 返回 JWT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthBody"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "密码或密钥 hex 格式非法"
+          },
+          "409": {
+            "description": "邮箱已被注册"
+          },
+          "500": {
+            "description": "创建失败"
+          }
+        }
+      }
+    },
+    "/authorize/secret/{client_id}": {
+      "get": {
+        "tags": [
+          "authorize"
+        ],
+        "summary": "GET /authorize/secret/{client_id} — 下发服务端临时 X25519 公钥 (hex 明文串)。",
+        "description": "注意: 响应体是裸 hex 字符串, **不可** 包成 `Json<String>` —— 否则会被加上引号,\n破坏 inode 端按裸串解析的 wire 格式。",
+        "operationId": "get_server_public_key",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "description": "客户端(浏览器)指纹, 用作 SessionID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "服务端临时公钥 (hex 明文串)",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "获取密钥失败"
+          }
+        }
+      }
+    },
+    "/info": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "operationId": "get_info",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "信息 URL (主键)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "URL 对应的信息, 不存在时返回默认空 Info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Info"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "info"
+        ],
+        "operationId": "get_latest_info",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryInfoParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "命中的信息列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Info"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/analysis": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "operationId": "get_related_info",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "信息 URL (主键)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "与给定 URL 关联的信息列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Info"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/entity/{hour}": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "operationId": "get_entity_stats",
+        "parameters": [
+          {
+            "name": "hour",
+            "in": "path",
+            "description": "回溯小时数",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "三类实体频次 tuple, 固定顺序 `[PER, LOC, ORG]`, 各项为 `{name: count}`",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/events": {
+      "post": {
+        "tags": [
+          "info"
+        ],
+        "operationId": "get_info_events",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryInfoParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "按同一事件聚类后的报道列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InfoEvent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/geoip": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "GET /info/geoip?ip= — 定位访问者 IP 所在城市 (peer/inode community 地图默认聚焦)",
+        "operationId": "get_ip_location",
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "query",
+            "description": "访问者 IP (由 peer/inode 从 x-forwarded-for 提取后透传; 服务端不直接读 client IP, 因调用方为 inode)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "IP 地理定位结果; 定位失败 (非法/私网/网络) 时经纬度为 0",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IpLocation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/latest": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "GET /info/latest — 返回最新 200 条信息（admin 前端调用）",
+        "operationId": "get_latest_info_simple",
+        "responses": {
+          "200": {
+            "description": "最新 200 条信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Info"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/publishers": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "operationId": "get_publishers",
+        "responses": {
+          "200": {
+            "description": "发布者 `{domain: name}` 映射",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/publishers/locations": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "GET /info/publishers/locations — 发布者地理位置 (peer/inode community 地图)",
+        "operationId": "get_publisher_locations",
+        "responses": {
+          "200": {
+            "description": "有坐标的发布者位置列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublisherLocation"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/query": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "operationId": "query_info_by_params",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "description": "发布站点域名筛选 (可选)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "description": "起始时间戳 (毫秒, 可选)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "description": "结束时间戳 (毫秒, 可选)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "命中的信息列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Info"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/profile": {
+      "put": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "PUT /me/profile — 更新自己的展示名 (需登录)。",
+        "operationId": "update_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "已更新"
+          },
+          "400": {
+            "description": "名称为空"
+          },
+          "500": {
+            "description": "更新失败"
+          }
+        }
+      }
+    },
+    "/me/publications": {
+      "post": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "POST /me/publications — 发布一条内容 (需登录)。",
+        "operationId": "create_publication",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPublication"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "已发布",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Publication"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "标题为空"
+          },
+          "500": {
+            "description": "发布失败"
+          }
+        }
+      }
+    },
+    "/me/publications/{id}": {
+      "delete": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "DELETE /me/publications/{id} — 删除自己的一条发布 (需登录)。",
+        "operationId": "delete_publication",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "发布 id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删除"
+          },
+          "500": {
+            "description": "删除失败"
+          }
+        }
+      }
+    },
+    "/peer/{id}": {
+      "get": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "GET /peer/{id} — 某发布者公开档案 (公开)。",
+        "operationId": "get_publisher",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "发布者(用户) id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "发布者档案",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeerPublisher"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在"
+          }
+        }
+      }
+    },
+    "/peer/{id}/publications": {
+      "get": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "GET /peer/{id}/publications — 某发布者的发布列表 (公开)。",
+        "operationId": "list_publications",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "发布者(用户) id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "发布列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Publication"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/peers": {
+      "get": {
+        "tags": [
+          "peer"
+        ],
+        "summary": "GET /peers — 社区发布者列表 (公开, 供 community 浏览订阅)。",
+        "operationId": "list_publishers",
+        "responses": {
+          "200": {
+            "description": "发布者列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PeerPublisher"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync/{id}": {
+      "get": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "GET /sync/{id} — 取回端到端加密的同步块 (服务端不可读内容)。",
+        "operationId": "get_sync_blob",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "同步码派生的存储 id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "加密同步块",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncBlob"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "该 id 尚无同步数据"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "PUT /sync/{id} — 覆盖式上传端到端加密的同步块。",
+        "operationId": "put_sync_blob",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "同步码派生的存储 id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncBlob"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "已保存"
+          },
+          "400": {
+            "description": "id 非法"
+          },
+          "500": {
+            "description": "保存失败"
+          }
+        }
+      }
+    },
+    "/user/has/email/{email}": {
+      "get": {
+        "tags": [
+          "user"
+        ],
+        "operationId": "has_email_exist",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "path",
+            "description": "待校验的邮箱",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "邮箱已存在"
+          },
+          "404": {
+            "description": "邮箱未注册"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthBody": {
+        "type": "object",
+        "required": [
+          "token",
+          "token_type"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        }
+      },
+      "AuthPayload": {
+        "type": "object",
+        "description": "注册 / 登录请求体。密码经客户端公钥与服务端临时密钥协商出的共享密钥\nAEAD 加密后, 以 hex 字符串传输。",
+        "required": [
+          "client_id",
+          "client_secret",
+          "email",
+          "encrypted_password"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "用户(浏览器)指纹, 用作 SessionID"
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "客户端 X25519 公钥 (hex)"
+          },
+          "email": {
+            "type": "string"
+          },
+          "encrypted_password": {
+            "type": "string",
+            "description": "加密后的密码 (hex): 前 24 字节为 nonce, 末 16 字节为 Poly1305 标签, 中间为密文"
+          }
+        }
+      },
+      "Info": {
+        "type": "object",
+        "required": [
+          "title",
+          "url",
+          "data",
+          "language",
+          "publish_time",
+          "collect_time",
+          "labels",
+          "publisher"
+        ],
+        "properties": {
+          "collect_time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "data": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NameEntity"
+            }
+          },
+          "language": {
+            "type": "string"
+          },
+          "publish_time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "publisher": {
+            "$ref": "#/components/schemas/Publisher"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "InfoEvent": {
+        "type": "object",
+        "description": "同一事件的多来源报道聚类 (`POST /info/events`; 共享实体启发式, 分页结果内并查集传递闭包)。",
+        "required": [
+          "lead",
+          "related",
+          "source_count"
+        ],
+        "properties": {
+          "lead": {
+            "$ref": "#/components/schemas/Info",
+            "description": "代表稿: 聚类内最新采集的一篇"
+          },
+          "related": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Info"
+            },
+            "description": "同事件其它来源 (不含 lead, 按采集时间倒序)"
+          },
+          "source_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "报道总数 (含 lead)",
+            "minimum": 0
+          }
+        }
+      },
+      "IpLocation": {
+        "type": "object",
+        "description": "访问者 IP 地理定位结果 (供 peer/inode community 地图默认聚焦访问者所在城市)。\n经纬度由 super/server 对访问者 IP 做地理定位得到 (ip-api.com); 定位失败时经纬度为 0。",
+        "required": [
+          "latitude",
+          "longitude",
+          "city",
+          "country"
+        ],
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "NameEntity": {
+        "type": "object",
+        "description": "命名实体 (NER 结果)。`label` 取值见 super/form 的 NER schema:\n`PER` / `ORG` / `LOC` / `TIME` / `PRODUCT` / `EVENT`。`period` 为所属周 (周一 0 点) 的 epoch 毫秒。\n\n词条富化字段 (super/form 查百度百科 + 维基百科后写入): `has_entry` 标记该实体是否有百科词条,\n`baike_url` / `wikipedia_url` 为对应词条链接。`#[serde(default)]` 保证旧数据 (无这些字段) 反序列化安全。",
+        "required": [
+          "name",
+          "label",
+          "period"
+        ],
+        "properties": {
+          "baike_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_entry": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "period": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "wikipedia_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "NewPublication": {
+        "type": "object",
+        "description": "发布请求体 (POST /me/publications)。",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "PeerPublisher": {
+        "type": "object",
+        "description": "社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (inode `type:\"peer\"` 的 key)。",
+        "required": [
+          "id",
+          "name",
+          "publication_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "用户节点 id (= JWT claims.id)"
+          },
+          "name": {
+            "type": "string"
+          },
+          "publication_count": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ProfileUpdate": {
+        "type": "object",
+        "description": "档案更新请求体 (PUT /me/profile)。MVP 仅改展示名。",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "Publication": {
+        "type": "object",
+        "description": "一条发布内容。",
+        "required": [
+          "id",
+          "title",
+          "url",
+          "body",
+          "created_at"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "正文/笔记 (可空)"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "发布时间 (epoch 毫秒)"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Neo4j Publication 节点 id"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "关联链接 (可空)"
+          }
+        }
+      },
+      "Publisher": {
+        "type": "object",
+        "required": [
+          "name",
+          "domain",
+          "period"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "period": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "PublisherLocation": {
+        "type": "object",
+        "description": "发布者地理位置 (供 peer/inode community 地图展示)。\n经纬度由 super/server 对域名做 IP 地理定位得到, 缓存在 Neo4j `Website` 节点。",
+        "required": [
+          "domain",
+          "name",
+          "latitude",
+          "longitude",
+          "city",
+          "country",
+          "count"
+        ],
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "该发布者的信息条数 (地图点大小依据)",
+            "minimum": 0
+          },
+          "country": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "QueryInfoParams": {
+        "type": "object",
+        "properties": {
+          "entity_label_name": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "array",
+              "items": false,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "实体筛选, 每项为 `(label, name)`"
+          },
+          "page_size_offset": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": false,
+            "prefixItems": [
+              {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            ],
+            "description": "分页 `(page_size, offset)`"
+          },
+          "publisher_domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "限定发布者域名"
+          },
+          "timestamp_from_to": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": false,
+            "prefixItems": [
+              {
+                "type": "integer",
+                "format": "int64"
+              },
+              {
+                "type": "integer",
+                "format": "int64"
+              }
+            ],
+            "description": "`[from, to]` 时间戳毫秒区间, 闭区间 (与存储一致: super/form 存 epoch 毫秒, 查询用 datetime.fromepochmillis)"
+          }
+        }
+      },
+      "SyncBlob": {
+        "type": "object",
+        "required": [
+          "iv",
+          "ciphertext",
+          "updated_at"
+        ],
+        "properties": {
+          "ciphertext": {
+            "type": "string",
+            "description": "密文 (base64); 明文为客户端订阅列表 JSON, 服务端不可读"
+          },
+          "iv": {
+            "type": "string",
+            "description": "AES-GCM 初始向量 (base64)"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "客户端写入时间戳 (毫秒), 由客户端提供"
+          }
+        }
+      },
+      "UserClaimsData": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "properties": {
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "info",
+      "description": "资讯查询"
+    },
+    {
+      "name": "user",
+      "description": "用户存在性检查"
+    },
+    {
+      "name": "sync",
+      "description": "端到端加密同步 (订阅跨端)"
+    },
+    {
+      "name": "peer",
+      "description": "用户发布层 (community 发布者/订阅)"
+    },
+    {
+      "name": "authorize",
+      "description": "注册 / 登录 / X25519 密钥交换"
+    }
+  ]
+}

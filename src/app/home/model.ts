@@ -1,0 +1,107 @@
+// Home 模块域类型 —— 个人资源与信息管理中心 (本地优先, 数据存于浏览器 IndexedDB)
+
+/** 本地存储的文件: 元数据 + 原始 Blob */
+export interface StoredFile {
+  id: string
+  name: string
+  /** MIME 类型, 可能为空字符串 */
+  type: string
+  /** 字节数 */
+  size: number
+  /** 原始文件内容 */
+  blob: Blob
+  /** 创建 (上传) 时间戳, 毫秒 */
+  createdAt: number
+  /** 用户标签 */
+  tags: string[]
+}
+
+/** 不含 blob 的文件元数据, 用于列表展示, 避免一次性把所有大文件读入内存 */
+export type FileMeta = Omit<StoredFile, "blob">
+
+/** 链接收藏夹 (分组), 类似浏览器书签文件夹 */
+export interface BookmarkFolder {
+  id: string
+  name: string
+  createdAt: number
+}
+
+/** 链接收藏 */
+export interface Bookmark {
+  id: string
+  title: string
+  url: string
+  description: string
+  /** 站点图标 URL (favicon), 导入或自动推断 */
+  favicon: string
+  /** 所属收藏夹 id; null 表示未分组 */
+  folderId: string | null
+  /** 用户标签 */
+  tags: string[]
+  createdAt: number
+}
+
+/** 「发现」订阅类型: 发布者 / 实体 / 工具 / 搜索 / 社区发布者(peer)。 */
+export type SubscriptionType = "publisher" | "entity" | "tool" | "search" | "peer"
+
+/**
+ * 「发现」订阅 —— home 从 info / community / tool 订阅的来源。
+ * 本地优先: 仅订阅偏好存于 IndexedDB, 内容 (如最新文章) 实时从 super 拉取。
+ */
+export interface Subscription {
+  id: string
+  type: SubscriptionType
+  /** 去重键: 同类型下唯一 (发布者用 domain; 实体用 `label/name`; 工具用启动 URL) */
+  key: string
+  /** 展示名 */
+  title: string
+  /** 站点图标 URL (实体订阅可为空) */
+  favicon: string
+  /** 实体订阅专用: NER label (PER/ORG/LOC/…) 与 name, 用于查询匹配文章 */
+  entityLabel?: string
+  entityName?: string
+  /** 搜索订阅专用: 标题关键词 + 可选发布者域名 (本地优先, 客户端按标题子串过滤) */
+  searchKeyword?: string
+  searchDomain?: string
+  createdAt: number
+  /** 最后更新时间 (跨端 LWW 合并用; 缺省视为 createdAt, 兼容无此字段的存量数据)。 */
+  updatedAt?: number
+}
+
+/** AI 助手消息角色 (与 OpenAI 兼容接口一致) */
+export type AgentRole = "system" | "user" | "assistant"
+
+/** 智能体一次工具调用的展示记录 (仅前端展示与存档, 不回传给模型) */
+export interface AgentToolEvent {
+  /** 工具名 (如 add_bookmark) */
+  name: string
+  /** 入参的简短文本 */
+  argsText: string
+  /** 是否成功 */
+  ok: boolean
+  /** 结果摘要 (供用户查看做了什么) */
+  summary: string
+}
+
+/** 一条对话消息 */
+export interface AgentMessage {
+  id: string
+  role: AgentRole
+  content: string
+  createdAt: number
+  /** 智能体模式下该条助手消息执行过的工具调用 (展示用, 不回传模型) */
+  toolEvents?: AgentToolEvent[]
+}
+
+/**
+ * AI 助手对话线程 —— 本地优先, 消息内联存于线程文档 (IndexedDB `agentThreads` 仓库)。
+ * 对话内容只存本机浏览器; 发送时才把消息 + home 上下文经本节点代理转发给模型厂商。
+ */
+export interface AgentThread {
+  id: string
+  /** 线程标题 (默认取首条用户消息, 可重命名) */
+  title: string
+  messages: AgentMessage[]
+  createdAt: number
+  updatedAt: number
+}

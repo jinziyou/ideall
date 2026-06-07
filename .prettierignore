@@ -1,0 +1,14 @@
+# 构建产物 / 依赖
+node_modules
+.next
+*.tsbuildinfo
+next-env.d.ts
+
+# 生成文件 (由 openapi-typescript / sync 脚本产出, 勿手动格式化)
+src/lib/api/server.d.ts
+openapi
+pnpm-lock.yaml
+
+# 静态资源与文档 (文档表格/中文段落不参与按宽度 reflow)
+public
+*.md
