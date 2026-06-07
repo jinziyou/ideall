@@ -4,8 +4,8 @@
 import { registerContentResolver } from "@protocol/content"
 import { registerHubData } from "@protocol/hub-data"
 import { hubDataPort } from "@/app/home/lib/hub-data-port"
-import { infoManifest } from "@/app/(discover)/info/manifest"
-import { communityManifest } from "@/app/(discover)/community/manifest"
+import { infoManifest } from "@app/info/manifest"
+import { communityManifest } from "@app/community/manifest"
 
 let booted = false
 

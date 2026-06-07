@@ -1,5 +1,1 @@
-import { redirect } from "next/navigation"
-
-export default function Tool() {
-  redirect("/tool/search")
-}
+export { default } from "@app/tool/page"
