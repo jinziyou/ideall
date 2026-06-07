@@ -54,28 +54,43 @@ curl -I -sS http://localhost:3000
 
 ## API 类型同步 (codegen)
 
-peer/inode 调 `super/server` 的所有 fetch 请求都基于 server 的 OpenAPI schema 生成 TypeScript
-类型, **不再手写 DTO**。monorepo 内维护一份镜像副本作为 codegen 的源:
+inode 调 `super/server` 的所有 fetch 请求都基于 server 的 OpenAPI schema 生成 TypeScript
+类型, **不再手写 DTO**。契约真相源是**私有仓库 [`jinziyou/wonita`](https://github.com/jinziyou/wonita)** 的
+`super/server/openapi.json`；本仓库 (inode 已迁出 wonita monorepo 独立成此仓库) 维护一份镜像副本作为 codegen 的源:
 
 ```
-openapi/server.json          ← 从 super/server/openapi.json 同步的副本
+openapi/server.json          ← 从 wonita 的 super/server/openapi.json 同步的镜像副本
 src/lib/api/server.d.ts      ← openapi-typescript 生成的类型
 scripts/sync-server-openapi.mjs
 ```
 
 ### 日常工作流
 
-1. server 改了 router / domain model → 在 super 那边跑 `cargo run --bin export-openapi`
-2. peer 这边同步 + 重新生成类型:
+1. server 改了 router / domain model → 在 wonita 仓库跑 `cargo run --bin export-openapi`
+2. inode 这边同步 + 重新生成类型:
 
 ```bash
-pnpm sync:api      # 优先用本地 ../../super/server/openapi.json, 找不到时退化到 GitHub raw
+# wonita 与本仓库同级目录时, sync 自动找 ../wonita/super/server/openapi.json
+pnpm sync:api      # 取上游 openapi.json 写入 openapi/server.json
 pnpm gen:api       # openapi/server.json → src/lib/api/server.d.ts
 pnpm gen:api:check # CI 卡点: 校验生成结果与 schema 一致 (改了 schema 忘了重生成会在此失败)
 ```
 
 3. `git add openapi/server.json src/lib/api/server.d.ts && git commit`
 
-环境变量覆盖:
-- `SERVER_REF=feat-x pnpm sync:api` — 拉 super 仓库的特定分支 / tag (远端模式)
-- `SERVER_LOCAL=/abs/path/openapi.json pnpm sync:api` — 强制使用本地路径
+取源优先级 (见 `scripts/sync-server-openapi.mjs`):
+- `SERVER_LOCAL=/abs/path/openapi.json pnpm sync:api` — 强制使用指定本地文件
+- `WONITA_ROOT=/path/to/wonita pnpm sync:api` — 指定本地 wonita 仓库根
+- `../wonita/super/server/openapi.json` — 默认同级目录探测
+- 远端: `WONITA_TOKEN=ghp_xxx pnpm sync:api` (wonita 私有, 需对其有 `contents:read` 的 PAT);
+  `SERVER_REF=feat-x` 可指定分支/tag/commit
+
+### CI
+
+- `.github/workflows/ci.yml` — lint + test + build
+- `.github/workflows/contract-check.yml`:
+  - `inode-codegen` (每 PR): `pnpm gen:api:check`，校验 `server.d.ts` 与本仓库镜像一致 (无需网络)
+  - `openapi-drift` (每周一 + 手动): 检出 wonita 的 `openapi.json` 比对镜像是否落后
+    > 因 wonita 私有，需在本仓库 **Settings → Secrets and variables → Actions** 新增
+    > secret **`WONITA_OPENAPI_TOKEN`** (对 `jinziyou/wonita` 有 `contents:read` 的 fine-grained PAT)。
+    > 未配置时该 job 优雅跳过 (warning)，不阻断。

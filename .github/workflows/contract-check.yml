@@ -1,0 +1,78 @@
+name: contract-check
+
+# API 契约一致性卡点。inode 消费 super/server 的 OpenAPI 契约，真相源在
+# 私有仓库 jinziyou/wonita 的 super/server/openapi.json；本仓库保有镜像副本
+# openapi/server.json，并据其生成 src/lib/api/server.d.ts。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 9 * * 1"     # 每周一 09:00 UTC 检查镜像是否落后 wonita
+  workflow_dispatch:
+
+jobs:
+  # ─── server.d.ts 与本仓库 openapi/server.json 镜像一致 (每 PR 卡) ────────────
+  inode-codegen:
+    name: server.d.ts 与 openapi/server.json 一致
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Check server.d.ts vs openapi/server.json
+        run: pnpm gen:api:check
+
+  # ─── openapi/server.json 镜像是否落后 wonita super/server (定时 + 手动) ───────
+  # wonita 为私有仓库，需在本仓库 Settings → Secrets 配置 WONITA_OPENAPI_TOKEN
+  # (对 jinziyou/wonita 有 contents:read 的 fine-grained PAT 或同等权限)。
+  # 未配置 secret 时本 job 优雅跳过 (warning)，不红。
+  openapi-drift:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: openapi/server.json 镜像漂移检测 (vs wonita)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 探测 secret 是否就绪
+        id: guard
+        env:
+          TOKEN: ${{ secrets.WONITA_OPENAPI_TOKEN }}
+        run: |
+          if [ -z "${TOKEN}" ]; then
+            echo "::warning::未配置 secret WONITA_OPENAPI_TOKEN，跳过漂移检测。"
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "skip=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: 稀疏检出 wonita 的 openapi.json
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: jinziyou/wonita
+          ref: main
+          token: ${{ secrets.WONITA_OPENAPI_TOKEN }}
+          path: _wonita
+          sparse-checkout: super/server/openapi.json
+          sparse-checkout-cone-mode: false
+
+      - name: 比对镜像与上游
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          if diff -q openapi/server.json _wonita/super/server/openapi.json >/dev/null 2>&1; then
+            echo "openapi/server.json 已与 wonita main 一致"
+            exit 0
+          fi
+          echo "::warning::openapi/server.json 落后于 wonita super/server/openapi.json"
+          echo "请跑: SERVER_LOCAL=_wonita/super/server/openapi.json pnpm sync:api && pnpm gen:api"
+          diff --stat openapi/server.json _wonita/super/server/openapi.json || true
+          exit 1
