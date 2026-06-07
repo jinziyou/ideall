@@ -3,7 +3,7 @@
 // 使中枢 (core) 永不直接依赖具体 app/plugin。
 import { registerContentResolver } from "@protocol/content"
 import { registerHubData } from "@protocol/hub-data"
-import { hubDataPort } from "@/app/home/lib/hub-data-port"
+import { hubDataPort } from "@core/hub/lib/hub-data-port"
 import { infoManifest } from "@app/info/manifest"
 import { communityManifest } from "@app/community/manifest"
 import { syncManifest } from "@plugin/sync/manifest"
