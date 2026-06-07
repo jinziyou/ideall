@@ -5,14 +5,9 @@ import { Cloud, Copy, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { generateSyncCode, isValidSyncCode } from "../lib/sync"
-import {
-  clearSyncCode,
-  getSyncCode,
-  setSyncCode,
-  subscribeSyncCode,
-  syncNow,
-} from "../lib/subscription-sync"
+import { generateSyncCode, isValidSyncCode } from "@/lib/sync-crypto"
+import { clearSyncCode, getSyncCode, setSyncCode, subscribeSyncCode } from "@/lib/sync-code"
+import { getSyncPort } from "@protocol/sync"
 
 /**
  * 跨端同步面板 —— 用同步码在多设备间同步订阅 (端到端加密)。
@@ -28,7 +23,9 @@ export default function SyncPanel() {
   const runSync = React.useCallback(async (c: string, silent = false) => {
     setBusy(true)
     try {
-      const r = await syncNow(c)
+      const port = getSyncPort()
+      if (!port) throw new Error("同步功能不可用")
+      const r = await port.syncNow(c)
       window.dispatchEvent(new Event("wonita:subscriptions-synced"))
       if (!silent) toast.success(r.added > 0 ? `同步完成, 合并 ${r.added} 项` : "同步完成")
     } catch (e) {

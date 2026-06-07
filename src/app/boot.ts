@@ -6,6 +6,7 @@ import { registerHubData } from "@protocol/hub-data"
 import { hubDataPort } from "@/app/home/lib/hub-data-port"
 import { infoManifest } from "@app/info/manifest"
 import { communityManifest } from "@app/community/manifest"
+import { syncManifest } from "@plugin/sync/manifest"
 
 let booted = false
 
@@ -18,4 +19,6 @@ export function registerAll(): void {
   for (const m of [infoManifest, communityManifest]) {
     for (const r of m.resolvers ?? []) registerContentResolver(r.types, r.resolve)
   }
+  // 插件能力注册 (如 sync 的 SyncPort)。
+  for (const p of [syncManifest]) p.register?.()
 }

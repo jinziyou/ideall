@@ -2,8 +2,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { unionMerge, subsEqual } from "./subscription-merge"
-import type { Subscription } from "../model"
+import { unionMerge, subsEqual } from "./sync"
+import type { Subscription } from "@protocol/subscription"
 
 function sub(id: string, title: string, updatedAt?: number): Subscription {
   return { id, type: "publisher", key: id, title, favicon: "", createdAt: 1000, updatedAt }

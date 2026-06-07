@@ -4,7 +4,7 @@ import * as React from "react"
 import { Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { getSyncCode, subscribeSyncCode } from "./home/lib/subscription-sync"
+import { getSyncCode, subscribeSyncCode } from "@/lib/sync-code"
 
 function getServerSnapshot(): string | null {
   return null

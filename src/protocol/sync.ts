@@ -5,6 +5,26 @@ import type { Subscription } from "./subscription"
 /** 服务端不透明存储的加密同步块 (PUT/GET /sync/{id})。 */
 export type SyncBlob = { iv: string; ciphertext: string; updated_at: number }
 
+/** 一次同步的结果摘要。 */
+export type SyncResult = { total: number; added: number }
+
+/** 跨端同步端口 —— sync 插件实现 (编排: 拉远端→解密→合并→写本地→加密→推远端)。 */
+export interface SyncPort {
+  syncNow(code: string): Promise<SyncResult>
+}
+
+let syncPort: SyncPort | null = null
+
+/** sync 插件在启动时注册其实现。 */
+export function registerSyncPort(p: SyncPort): void {
+  syncPort = p
+}
+
+/** 取同步端口 (core 的同步面板用); 未注册 (无 sync 插件) 时为 null。 */
+export function getSyncPort(): SyncPort | null {
+  return syncPort
+}
+
 /** 单条订阅的「版本时间」(LWW 比较用; updatedAt 缺省回退 createdAt, 兼容存量)。 */
 function subTs(s: Subscription): number {
   return s.updatedAt ?? s.createdAt

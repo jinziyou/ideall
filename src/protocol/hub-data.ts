@@ -64,6 +64,8 @@ export interface HubDataPort {
   addSubscription(input: NewSubscription): Promise<Subscription>
   removeSubscription(type: SubscriptionType, key: string): Promise<void>
   isSubscribed(type: SubscriptionType, key: string): Promise<boolean>
+  /** 批量写入 (跨端同步合并后整批落本地, 一次事务)。 */
+  bulkPutSubscriptions(subs: Subscription[]): Promise<void>
   // 书签 / 收藏夹
   listBookmarks(): Promise<Bookmark[]>
   addBookmark(input: NewBookmark): Promise<Bookmark>
