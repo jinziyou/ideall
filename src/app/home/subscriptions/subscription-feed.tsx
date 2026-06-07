@@ -9,8 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
-import { fetchLatestInfo } from "@/app/(discover)/info/action"
-import { getPeerPublications } from "@protocol/peer"
+import { resolveSubscription, type FeedItem } from "@protocol/content"
 import type { Subscription } from "../model"
 import { listSubscriptions, removeSubscription } from "../lib/subscriptions-store"
 
@@ -19,27 +18,8 @@ const PER_SOURCE = 5
 /** 搜索订阅本地过滤前先拉取的窗口大小 (服务端无关键词搜索, 故客户端在此窗口内按标题过滤)。 */
 const SEARCH_WINDOW = 200
 
-/** 归一化的订阅流条目 (info 文章 / peer 发布共用一种渲染)。 */
-type FeedItem = { key: string; title: string; url?: string; body?: string; time: number }
 type SourceFeed = { sub: Subscription; items: FeedItem[]; error: boolean }
 type Loaded = { tools: Subscription[]; feeds: SourceFeed[] }
-
-/** info 支撑的来源 (发布者/实体/搜索) 拉取最新文章 (复用 info 的 fetchLatestInfo)。 */
-async function fetchInfoSource(sub: Subscription) {
-  if (sub.type === "publisher") {
-    return fetchLatestInfo({ publisher_domain: sub.key, page_size_offset: [PER_SOURCE, 0] })
-  }
-  if (sub.type === "search") {
-    // 本地优先: 服务端无关键词搜索, 拉一个较大窗口, 客户端按标题子串过滤 (见 load)
-    const params: Record<string, unknown> = { page_size_offset: [SEARCH_WINDOW, 0] }
-    if (sub.searchDomain) params.publisher_domain = sub.searchDomain
-    return fetchLatestInfo(params)
-  }
-  return fetchLatestInfo({
-    entity_label_name: [[sub.entityLabel ?? "", sub.entityName ?? ""]],
-    page_size_offset: [PER_SOURCE, 0],
-  })
-}
 
 /** 订阅来源对应的内链。 */
 function sourceHref(sub: Subscription): string {
@@ -51,40 +31,11 @@ function sourceHref(sub: Subscription): string {
   )}`
 }
 
-/** 拉取并归一化某订阅来源的条目。 */
+/** 来源内容统一经 protocol 内容解析注册表拉取 (info/community 各自注册 resolver), 中枢不直接依赖 app。 */
+const FEED_CTX = { perSource: PER_SOURCE, searchWindow: SEARCH_WINDOW }
 async function loadFeed(sub: Subscription): Promise<SourceFeed> {
-  try {
-    if (sub.type === "peer") {
-      const res = await getPeerPublications(sub.key)
-      if (!res.ok) return { sub, items: [], error: true }
-      const items = [...(res.data ?? [])]
-        .sort((a, b) => b.created_at - a.created_at)
-        .slice(0, PER_SOURCE)
-        .map((p): FeedItem => ({
-          key: String(p.id),
-          title: p.title,
-          url: p.url || undefined,
-          body: p.body || undefined,
-          time: p.created_at,
-        }))
-      return { sub, items, error: false }
-    }
-    const res = await fetchInfoSource(sub)
-    if (!res.ok) return { sub, items: [], error: true }
-    let rows = res.data ?? []
-    if (sub.type === "search") {
-      const kw = (sub.searchKeyword ?? "").toLowerCase()
-      rows = rows.filter((i) => (i.title ?? "").toLowerCase().includes(kw))
-    }
-    const items = [...rows]
-      .sort((a, b) => b.collect_time - a.collect_time)
-      .slice(0, PER_SOURCE)
-      .map((i): FeedItem => ({ key: i.url, title: i.title || i.url, url: i.url, time: i.collect_time }))
-    return { sub, items, error: false }
-  } catch {
-    // 单个来源拉取异常不应拖垮整个订阅流
-    return { sub, items: [], error: true }
-  }
+  const { items, error } = await resolveSubscription(sub, FEED_CTX)
+  return { sub, items, error }
 }
 
 /**

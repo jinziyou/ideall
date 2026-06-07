@@ -4,6 +4,7 @@ import { Header } from "./header"
 import { Toaster } from "@/components/ui/sonner"
 import { THEME_INIT } from "@/lib/theme"
 import ThemeApplier from "./theme-applier"
+import BootGate from "./boot-gate"
 
 export const metadata: Metadata = {
   title: "wonita | 个人信息总控终端",
@@ -29,7 +30,7 @@ export default function RootLayout({
         {/* 水合后兜底重新断言主题 (防根树重渲染抹掉 .dark) */}
         <ThemeApplier />
         <Header />
-        {children}
+        <BootGate>{children}</BootGate>
         <Toaster />
       </body>
     </html>
