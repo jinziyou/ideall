@@ -1,8 +1,10 @@
 // 「发现」订阅本地存储仓库 —— 基于 IndexedDB。
 // home 从 info / community / tool 订阅来源 (发布者 / 实体 / 工具 / 搜索); 仅订阅偏好存本地, 内容实时拉取。
-import { Subscription, SubscriptionType } from "../model"
+import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
 import { idbBulkPut, idbDelete, idbGet, idbGetAll, idbPut, STORE_SUBSCRIPTIONS } from "./idb"
 import { notifyHubUpdated } from "./flowback"
+
+export type { NewSubscription }
 
 /** 由域名推断 favicon (Google s2 服务); 域名为空时降级为空串。 */
 export function faviconForDomain(domain: string): string {
@@ -31,19 +33,6 @@ export async function listSubscriptions(): Promise<Subscription[]> {
 
 export async function isSubscribed(type: SubscriptionType, key: string): Promise<boolean> {
   return Boolean(await idbGet<Subscription>(STORE_SUBSCRIPTIONS, subId(type, key)))
-}
-
-export type NewSubscription = {
-  type: SubscriptionType
-  key: string
-  title: string
-  favicon?: string
-  /** 实体订阅专用 */
-  entityLabel?: string
-  entityName?: string
-  /** 搜索订阅专用 */
-  searchKeyword?: string
-  searchDomain?: string
 }
 
 /** 订阅; 已存在则原样返回 (幂等, 保留原 createdAt)。 */

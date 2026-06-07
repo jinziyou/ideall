@@ -5,8 +5,9 @@
 
 import { SERVER_ADDR } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
+import type { SyncBlob } from "@protocol/sync"
 
-export type SyncBlob = { iv: string; ciphertext: string; updated_at: number }
+export type { SyncBlob }
 
 /** 取回某 id 的加密同步块; 404 (尚无数据) 归一化为 ok=true, data=null。 */
 export async function getSyncBlob(id: string): Promise<ApiResult<SyncBlob | null>> {
