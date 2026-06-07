@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { listSubscriptions } from "./lib/subscriptions-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listFiles } from "./lib/files-store"
-import { listThreads } from "./lib/agent-store"
+import { countAgentThreads } from "./lib/agent-threads-count"
 import { HUB_UPDATED } from "./lib/flowback"
 import type { Subscription } from "./model"
 import { HubStatTiles } from "./hub-stat-tiles"
@@ -61,11 +61,11 @@ export default function HubDashboard() {
     let alive = true
     async function load() {
       // 每个 store 各自兜底: 单个仓库失败不应把整个中枢清空成「空态」(否则有数据的用户会误见 onboarding)
-      const [subs, bookmarks, files, threads] = await Promise.all([
+      const [subs, bookmarks, files, threadCount] = await Promise.all([
         listSubscriptions().catch(() => [] as Subscription[]),
         listBookmarks().catch(() => []),
         listFiles().catch(() => []),
-        listThreads().catch(() => []),
+        countAgentThreads().catch(() => 0),
       ])
       let usage = 0
       let quota = 0
@@ -83,7 +83,7 @@ export default function HubDashboard() {
         subs,
         bookmarks: bookmarks.length,
         files: files.length,
-        threads: threads.length,
+        threads: threadCount,
         flow: buildFlow(subs, bookmarks, files),
         pinnedTools: subs.filter((s) => s.type === "tool"),
         usage,

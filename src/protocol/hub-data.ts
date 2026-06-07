@@ -1,6 +1,7 @@
 // 中枢本地数据契约 —— core 拥有的本地优先实体 (资源 / 书签 / 收藏夹)。
 // 这些类型既是 core 存储模型, 又经 HubDataPort 暴露给 plugin (如 agent), 故属契约。
 // (订阅 Subscription 类型见 ./subscription)。
+import type { Subscription, SubscriptionType, NewSubscription } from "./subscription"
 
 /** 本地存储的文件: 元数据 + 原始 Blob */
 export interface StoredFile {
@@ -41,4 +42,48 @@ export interface Bookmark {
   /** 用户标签 */
   tags: string[]
   createdAt: number
+}
+
+/** 新建书签入参 (id/createdAt 由实现补全)。 */
+export type NewBookmark = {
+  title: string
+  url: string
+  description?: string
+  favicon?: string
+  folderId?: string | null
+  tags?: string[]
+}
+
+/**
+ * 中枢本地数据端口 —— core 实现 (包装 IndexedDB stores), 经 protocol 暴露给 plugin。
+ * agent 插件经此读写用户的订阅 / 书签 / 收藏夹 / 资源, 而非直接依赖 core 存储 (依赖反转)。
+ */
+export interface HubDataPort {
+  // 订阅
+  listSubscriptions(): Promise<Subscription[]>
+  addSubscription(input: NewSubscription): Promise<Subscription>
+  removeSubscription(type: SubscriptionType, key: string): Promise<void>
+  // 书签 / 收藏夹
+  listBookmarks(): Promise<Bookmark[]>
+  addBookmark(input: NewBookmark): Promise<Bookmark>
+  updateBookmark(id: string, patch: Partial<Omit<Bookmark, "id" | "createdAt">>): Promise<void>
+  deleteBookmark(id: string): Promise<void>
+  listFolders(): Promise<BookmarkFolder[]>
+  addFolder(name: string): Promise<BookmarkFolder>
+  // 资源文件
+  listFiles(): Promise<FileMeta[]>
+  updateFileMeta(id: string, patch: Partial<Pick<StoredFile, "name" | "tags">>): Promise<void>
+}
+
+let port: HubDataPort | null = null
+
+/** core 在启动时注册其 HubDataPort 实现。 */
+export function registerHubData(p: HubDataPort): void {
+  port = p
+}
+
+/** 取中枢数据端口 (插件用); 未注册 (BootGate 未挂载) 时抛错。 */
+export function getHubData(): HubDataPort {
+  if (!port) throw new Error("HubDataPort 未注册 (BootGate 未挂载?)")
+  return port
 }

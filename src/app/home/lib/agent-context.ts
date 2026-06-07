@@ -1,8 +1,6 @@
 // 把用户 home 的本地数据 (订阅 / 书签 / 资源 / 收藏夹) 汇成紧凑快照, 作为 AI 助手的上下文。
 // 只读、只取元数据 (文件不含内容 Blob), 全部来自本机 IndexedDB; 发送时随系统提示一并给模型。
-import { listSubscriptions } from "./subscriptions-store"
-import { listBookmarks, listFolders } from "./bookmarks-store"
-import { listFiles } from "./files-store"
+import { getHubData } from "@protocol/hub-data"
 import { formatBytes } from "./format"
 
 // 各类目最多列出的条数 (控制 token; 超出只给计数)
@@ -24,11 +22,12 @@ function section(title: string, total: number, lines: string[]): string {
 
 /** 汇集 home 快照文本; 全空时返回空串。 */
 export async function gatherHomeContext(): Promise<string> {
+  const hub = getHubData()
   const [subs, bookmarks, folders, files] = await Promise.all([
-    listSubscriptions().catch(() => []),
-    listBookmarks().catch(() => []),
-    listFolders().catch(() => []),
-    listFiles().catch(() => []),
+    hub.listSubscriptions().catch(() => []),
+    hub.listBookmarks().catch(() => []),
+    hub.listFolders().catch(() => []),
+    hub.listFiles().catch(() => []),
   ])
 
   const blocks: string[] = []

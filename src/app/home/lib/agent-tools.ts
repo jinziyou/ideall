@@ -1,15 +1,7 @@
 // 智能体工具集 —— 让模型读取/修改用户 home 的本地数据 (书签 / 收藏夹 / 订阅 / 资源)。
-// 全部在浏览器执行 (数据在 IndexedDB), 由客户端 agent 循环按模型的 tool_calls 调度。
-import {
-  addBookmark,
-  addFolder,
-  deleteBookmark,
-  listBookmarks,
-  listFolders,
-  updateBookmark,
-} from "./bookmarks-store"
-import { addSubscription, listSubscriptions, removeSubscription } from "./subscriptions-store"
-import { listFiles, updateFileMeta } from "./files-store"
+// 全部在浏览器执行 (数据在 IndexedDB), 经 protocol 的 HubDataPort 访问中枢数据
+// (插件不直接依赖 core 存储; 由 core 在启动时注册端口实现)。
+import { getHubData, type HubDataPort } from "@protocol/hub-data"
 import { safeHref } from "@/lib/safe-url"
 import type { SubscriptionType } from "../model"
 
@@ -188,13 +180,13 @@ function str(v: unknown): string {
 }
 
 /** 把收藏夹名解析为 id; 不存在则创建。空名返回 null (未分组)。 */
-async function resolveFolderId(name: string): Promise<string | null> {
+async function resolveFolderId(name: string, hub: HubDataPort): Promise<string | null> {
   const n = name.trim()
   if (!n) return null
-  const folders = await listFolders()
+  const folders = await hub.listFolders()
   const hit = folders.find((f) => f.name === n)
   if (hit) return hit.id
-  const created = await addFolder(n)
+  const created = await hub.addFolder(n)
   return created.id
 }
 
@@ -203,6 +195,20 @@ type Args = Record<string, unknown>
 /** 执行一个工具调用; 任何错误都收敛为 ok:false 结果 (不抛, 让 agent 循环继续)。 */
 export async function executeTool(name: string, args: Args): Promise<ToolResult> {
   try {
+    const hub = getHubData()
+    const {
+      addBookmark,
+      addFolder,
+      deleteBookmark,
+      listBookmarks,
+      listFolders,
+      updateBookmark,
+      addSubscription,
+      listSubscriptions,
+      removeSubscription,
+      listFiles,
+      updateFileMeta,
+    } = hub
     switch (name) {
       case "list_bookmarks": {
         const folderName = str(args.folder)
@@ -235,7 +241,7 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
         // 模型给的 url 在写入边界就过协议白名单, 防 javascript: 等伪协议入库后被点击执行。
         if (!safeHref(url))
           return { ok: false, summary: "url 协议不合法", data: { error: "仅支持 http/https 链接" } }
-        const folderId = await resolveFolderId(str(args.folder))
+        const folderId = await resolveFolderId(str(args.folder), hub)
         const bm = await addBookmark({
           url,
           title: str(args.title) || url,
@@ -259,7 +265,7 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
         if (typeof args.title === "string") patch.title = args.title.trim()
         if (typeof args.description === "string") patch.description = args.description.trim()
         if (args.tags !== undefined) patch.tags = asTags(args.tags)
-        if (typeof args.folder === "string") patch.folderId = await resolveFolderId(args.folder)
+        if (typeof args.folder === "string") patch.folderId = await resolveFolderId(args.folder, hub)
         await updateBookmark(id, patch)
         return { ok: true, summary: `已更新书签「${target.title}」`, data: { id } }
       }

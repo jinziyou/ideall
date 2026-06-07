@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { listFiles } from "./lib/files-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listSubscriptions } from "./lib/subscriptions-store"
-import { listThreads } from "./lib/agent-store"
+import { countAgentThreads } from "./lib/agent-threads-count"
 import { formatBytes } from "./lib/format"
 
 type NavEntry = {
@@ -43,17 +43,17 @@ export default function HomeNav() {
     let alive = true
     async function load() {
       try {
-        const [files, bookmarks, subs, threads] = await Promise.all([
+        const [files, bookmarks, subs, threadCount] = await Promise.all([
           listFiles(),
           listBookmarks(),
           listSubscriptions(),
-          listThreads(),
+          countAgentThreads(),
         ])
         if (!alive) return
         setFileCount(files.length)
         setBookmarkCount(bookmarks.length)
         setSubCount(subs.length)
-        setThreadCount(threads.length)
+        setThreadCount(threadCount)
       } catch {
         /* 本地读取失败时静默, 不影响导航 */
       }
