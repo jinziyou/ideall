@@ -10,7 +10,7 @@ import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { fetchLatestInfo } from "@/app/(discover)/info/action"
-import { getPeerPublications } from "@/lib/peer-action"
+import { getPeerPublications } from "@protocol/peer"
 import type { Subscription } from "../model"
 import { listSubscriptions, removeSubscription } from "../lib/subscriptions-store"
 

@@ -7,9 +7,9 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { encryptPassword, newClientId, newKeypair } from "@/lib/auth/crypto"
-import { fetchMe, getServerPublicKey, login, register } from "@/lib/auth/auth-action"
-import { setSession } from "@/lib/auth/auth-store"
+import { encryptPassword, newClientId, newKeypair } from "@protocol/auth"
+import { fetchMe, getServerPublicKey, login, register } from "@protocol/auth"
+import { setSession } from "@protocol/auth"
 
 /**
  * 登录 / 注册表单。密码在浏览器用 X25519 + XChaCha20-Poly1305 加密后才上送 (复刻 server orion 方案),

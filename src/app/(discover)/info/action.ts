@@ -3,7 +3,7 @@
 import { INFO_API_URI } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
 import { Info, InfoEvent } from "./model"
-import type { components } from "@/lib/api/server"
+import type { components } from "@protocol/server"
 
 /** 信息查询参数, 派生自 super/server 的 OpenAPI schema (勿手写, 改后跑 pnpm gen:api)。 */
 export type QueryParams = components["schemas"]["QueryInfoParams"]

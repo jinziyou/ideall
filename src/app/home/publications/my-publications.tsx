@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
-import { getSession, subscribeSession } from "@/lib/auth/auth-store"
-import { deletePublication, getPeerPublications, publish, type Publication } from "@/lib/peer-action"
+import { getSession, subscribeSession } from "@protocol/auth"
+import { deletePublication, getPeerPublications, publish, type Publication } from "@protocol/peer"
 
 /**
  * 「我的发布」: 登录用户发布内容 (供社区订阅) + 管理自己的发布。

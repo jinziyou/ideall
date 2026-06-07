@@ -4,7 +4,7 @@ import * as React from "react"
 import { Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SubscribeButton } from "@/app/home/subscribe-button"
-import { getPeers, type PeerPublisher } from "@/lib/peer-action"
+import { getPeers, type PeerPublisher } from "@protocol/peer"
 
 /**
  * 社区发布者 (用户) 列表 —— community 的核心: 浏览发布过内容的用户并就地订阅 (type:"peer")。
