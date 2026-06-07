@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { formatTime } from "./lib/format"
+import { formatTime } from "@/lib/hub-format"
 
 /** 一条「回流」记录: 把 spoke 对象 / 资源收入中枢的一次动作。 */
 export type FlowItem = {

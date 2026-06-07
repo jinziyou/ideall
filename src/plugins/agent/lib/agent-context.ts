@@ -1,7 +1,7 @@
 // 把用户 home 的本地数据 (订阅 / 书签 / 资源 / 收藏夹) 汇成紧凑快照, 作为 AI 助手的上下文。
 // 只读、只取元数据 (文件不含内容 Blob), 全部来自本机 IndexedDB; 发送时随系统提示一并给模型。
 import { getHubData } from "@protocol/hub-data"
-import { formatBytes } from "./format"
+import { formatBytes } from "@/lib/hub-format"
 
 // 各类目最多列出的条数 (控制 token; 超出只给计数)
 const CAP = 50

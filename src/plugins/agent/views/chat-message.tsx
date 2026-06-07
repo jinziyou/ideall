@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Bot, Eye, Lock, Trash2, Wrench, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { AgentMessage } from "../model"
+import type { AgentMessage } from "../lib/model"
 
 /** 由工具名推断本地操作类型 —— 透明展示 local-first 的所有权 / 隐私 (删除 ≠ 写入)。 */
 function toolKind(name: string): "write" | "delete" | "read" {

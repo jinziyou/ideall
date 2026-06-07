@@ -1,7 +1,7 @@
 // AI 助手对话的本地存储仓库 —— 基于 IndexedDB (`agentThreads` 仓库)。
 // 本地优先: 对话线程与消息只存本机浏览器, 不上传服务器。
-import { AgentMessage, AgentRole, AgentThread } from "../model"
-import { idbDelete, idbGet, idbGetAll, idbPut, STORE_AGENT_THREADS } from "./idb"
+import { AgentMessage, AgentRole, AgentThread } from "./model"
+import { idbDelete, idbGet, idbGetAll, idbPut, STORE_AGENT_THREADS } from "@/lib/idb"
 
 function uid(): string {
   // crypto.randomUUID 仅安全上下文 (localhost / https) 可用; 非安全 HTTP 下退化为时间戳+随机。

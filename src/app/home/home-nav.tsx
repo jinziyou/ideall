@@ -9,7 +9,7 @@ import { listFiles } from "./lib/files-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listSubscriptions } from "./lib/subscriptions-store"
 import { countAgentThreads } from "./lib/agent-threads-count"
-import { formatBytes } from "./lib/format"
+import { formatBytes } from "@/lib/hub-format"
 
 type NavEntry = {
   href: string

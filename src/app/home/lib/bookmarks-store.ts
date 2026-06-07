@@ -1,7 +1,7 @@
 // 链接收藏本地存储仓库 —— 基于 IndexedDB, 管理收藏夹 + 书签。
 import { Bookmark, BookmarkFolder } from "../model"
 import { genId } from "@/lib/id"
-import { idbBulkPut, idbDelete, idbGetAll, idbPut, STORE_BOOKMARKS, STORE_FOLDERS } from "./idb"
+import { idbBulkPut, idbDelete, idbGetAll, idbPut, STORE_BOOKMARKS, STORE_FOLDERS } from "@/lib/idb"
 import { notifyHubUpdated } from "./flowback"
 
 /** 从 URL 推断 favicon (Google s2 服务), 失败时图标位降级为占位 */

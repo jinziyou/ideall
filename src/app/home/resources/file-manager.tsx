@@ -31,7 +31,7 @@ import {
 import { cn } from "@/lib/utils"
 import { FileMeta } from "../model"
 import { addFile, deleteFile, getFile, listFiles, updateFileMeta } from "../lib/files-store"
-import { fileKind, FileKind, formatBytes, formatTime } from "../lib/format"
+import { fileKind, FileKind, formatBytes, formatTime } from "@/lib/hub-format"
 import FilePreviewDialog from "./file-preview-dialog"
 
 const KIND_ICON: Record<FileKind, React.ComponentType<{ className?: string }>> = {

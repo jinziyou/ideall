@@ -6,7 +6,7 @@ import { Bot, Loader2, Send, Settings, SquarePen, Trash2, Wrench, X } from "luci
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import type { AgentMessage, AgentThread, AgentToolEvent } from "../model"
+import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import {
   createThread,
   deleteThread,

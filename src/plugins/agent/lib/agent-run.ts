@@ -2,7 +2,7 @@
 // 智能体模式专用 (非流式)。普通对话仍走 streamChat。
 import { requestCompletion } from "./agent-chat"
 import { AGENT_TOOLS, executeTool } from "./agent-tools"
-import type { AgentToolEvent } from "../model"
+import type { AgentToolEvent } from "./model"
 
 const MAX_ROUNDS = 8
 

@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { StoredFile } from "../model"
 import { getFile } from "../lib/files-store"
-import { fileKind, formatBytes } from "../lib/format"
+import { fileKind, formatBytes } from "@/lib/hub-format"
 
 export default function FilePreviewDialog({
   fileId,

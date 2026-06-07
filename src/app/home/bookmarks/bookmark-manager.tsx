@@ -40,7 +40,7 @@ import {
   renameFolder,
   updateBookmark,
 } from "../lib/bookmarks-store"
-import { formatTime } from "../lib/format"
+import { formatTime } from "@/lib/hub-format"
 import BookmarkDialog from "./bookmark-dialog"
 import ImportDialog from "./import-dialog"
 

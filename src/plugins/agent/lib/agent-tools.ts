@@ -3,7 +3,7 @@
 // (插件不直接依赖 core 存储; 由 core 在启动时注册端口实现)。
 import { getHubData, type HubDataPort } from "@protocol/hub-data"
 import { safeHref } from "@/lib/safe-url"
-import type { SubscriptionType } from "../model"
+import type { SubscriptionType } from "@protocol/subscription"
 
 const SUB_TYPES: SubscriptionType[] = ["publisher", "entity", "tool", "search", "peer"]
 const LIST_CAP = 80

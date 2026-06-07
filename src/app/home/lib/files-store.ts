@@ -1,7 +1,7 @@
 // 文件本地存储仓库 —— 基于 IndexedDB, 存原始 Blob + 元数据。
 import { FileMeta, StoredFile } from "../model"
 import { genId } from "@/lib/id"
-import { idbDelete, idbGet, idbGetAll, idbPut, STORE_FILES } from "./idb"
+import { idbDelete, idbGet, idbGetAll, idbPut, STORE_FILES } from "@/lib/idb"
 import { notifyHubUpdated } from "./flowback"
 
 /** 剥离 Blob, 只回元数据 —— 列表与返回值不带原始内容, 避免把所有大文件整块读入内存。 */

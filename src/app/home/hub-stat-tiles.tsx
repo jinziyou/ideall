@@ -1,5 +1,5 @@
 import { Bookmark, Bot, FolderOpen, HardDrive, Rss } from "lucide-react"
-import { formatBytes } from "./lib/format"
+import { formatBytes } from "@/lib/hub-format"
 
 type Props = {
   subs: number
