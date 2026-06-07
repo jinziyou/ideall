@@ -13,7 +13,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command"
-import { HOME_SUBPAGES, SPOKES } from "./nav-config"
+import { HOME_SUBPAGES, SPOKES } from "@core/nav/nav-config"
 
 /**
  * ⌘K 中枢命令台: 全站统一跳转入口 —— 跳 spoke (发现下的资讯/社区/工具) 或我的空间各子区。

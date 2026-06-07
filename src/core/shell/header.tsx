@@ -6,7 +6,7 @@ import CommandPalette from "./command-palette"
 import LocalDeviceChip from "./local-device-chip"
 import HubNavLink from "./hub-nav-link"
 import MobileNav from "./mobile-nav"
-import { SPOKES } from "./nav-config"
+import { SPOKES } from "@core/nav/nav-config"
 
 /**
  * 全局头部 —— 中枢获视觉首位, 三条 spoke 显式从属。

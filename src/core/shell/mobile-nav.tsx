@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { WonitaMark } from "@/components/wonita-mark"
 import { cn } from "@/lib/utils"
-import { HOME_SUBPAGES, SPOKES, type NavLink } from "./nav-config"
+import { HOME_SUBPAGES, SPOKES, type NavLink } from "@core/nav/nav-config"
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/home") return pathname === "/home"

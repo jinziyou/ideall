@@ -1,4 +1,4 @@
-import AuthForm from "./auth-form"
+import AuthForm from "@core/shell/auth-form"
 
 export const metadata = {
   title: "登录 | wonita",

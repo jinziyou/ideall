@@ -8,7 +8,7 @@ import { listSubscriptions } from "@core/hub/lib/subscriptions-store"
 import { listBookmarks } from "@core/hub/lib/bookmarks-store"
 import { listFiles } from "@core/hub/lib/files-store"
 import { HUB_UPDATED } from "@protocol/flowback"
-import { HUB_HREF, HUB_LABEL } from "./nav-config"
+import { HUB_HREF, HUB_LABEL } from "@core/nav/nav-config"
 
 /**
  * 头部主项「我的空间」—— 中枢的唯一主导航项。
