@@ -1,15 +1,15 @@
-# 自包含：peer/inode。在 peer/inode 下: docker compose up --build
-name: peer-inode
+# 自包含：peer。在 peer 下: docker compose up --build
+name: myos
 
 services:
-  inode:
+  myos:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${INODE_PORT:-3000}:3000"
+      - "${MYOS_PORT:-3000}:3000"
     environment:
-      - SERVER_ADDR=${INODE_SERVER_ADDR:-http://server:3001}
+      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://server:3001}
     healthcheck:
       test:
         [

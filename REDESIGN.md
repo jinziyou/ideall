@@ -1,6 +1,6 @@
-# inode UI 重新设计 (redesign spec)
+# myos UI 重新设计 (redesign spec)
 
-> 本文档由 inode-ui-redesign 多智能体工作流综合产出 (理解定位 → 3 方案设计 → 评审 → 综合)。
+> 本文档由 myos-ui-redesign 多智能体工作流综合产出 (理解定位 → 3 方案设计 → 评审 → 综合)。
 > 脊柱方案: 中枢仪表盘 (Hub-as-living-dashboard) × 身份层 × 透明落库 chip。
 
 > ⚑ **配色已定稿 (覆盖下文 §5 的 ember 方案)**: 经效果图多轮比选, 最终采用 **Ink 纯墨灰 (monochrome)** ——
@@ -19,7 +19,7 @@
 
 ## 1. 设计原则 (Design principles)
 
-**P1 · 中枢即首屏 (Hub is the first screen).** 打开 inode 第一眼 = 你自己的中枢概览，而非欢迎卡。`/` 与 `/home` 渲染同一块**活的 dashboard**。重心从「home vs 发现 平级四 tab」反转为「一个看得见的家 + 三条带东西回家的路」。任何让 spoke 看起来与 hub 同色同权重的设计即违背模型。
+**P1 · 中枢即首屏 (Hub is the first screen).** 打开 myos 第一眼 = 你自己的中枢概览，而非欢迎卡。`/` 与 `/home` 渲染同一块**活的 dashboard**。重心从「home vs 发现 平级四 tab」反转为「一个看得见的家 + 三条带东西回家的路」。任何让 spoke 看起来与 hub 同色同权重的设计即违背模型。
 
 **P2 · 回流必须落到看得见的地方 (Flow-back must land somewhere visible).** 「回流 (收入中枢)」是第一类、贯穿式交互。每个 spoke 的**每一个条目**（不止来源粒度——文章/事件/分析图/搜索词/地图点）都有统一的 `<SaveToHub>` 控件；每次成功都有「飞回家」动效 + header 计数 +1，并**实时落进 dashboard 的「最近回流」时间线**——回流第一次有了肉眼可见的目的地。
 
@@ -27,7 +27,7 @@
 
 **P4 · 墨重拥有感，冷色借来感 (Ink weight = mine, cool hue = borrowed).** 用视觉**重量**表达 hub-and-spoke（配色定稿为 Ink 纯墨灰，**不靠色温**）：hub = 墨色 2px 左轨（`border-pop`）+ 「本地恒在」芯片；spoke = 各自 spoke-hue 2px 顶边 + 较轻的卡 + 「联网才有」芯片。墨色（`--pop` == `--flowback`）同时是「拥有」与「回流」的语义色——「这进了我的中枢」始终是同一抹墨；spoke 三色仅作小圆点/顶边/rail 的功能归类。
 
-**P5 · 不破坏既有能力，复用先于重写 (Reuse over rebuild).** inode 已远超「默认 shadcn 欢迎卡」：IndexedDB 五仓库、E2E 同步、8 轮 agent 工具循环、subscription-feed live fetch 全部已建成。本次是**表达层重塑**：~80% 建立在已有本地查询与组件上，net-new 主要是装配与皮肤，不是新后端能力。
+**P5 · 不破坏既有能力，复用先于重写 (Reuse over rebuild).** myos 已远超「默认 shadcn 欢迎卡」：IndexedDB 五仓库、E2E 同步、8 轮 agent 工具循环、subscription-feed live fetch 全部已建成。本次是**表达层重塑**：~80% 建立在已有本地查询与组件上，net-new 主要是装配与皮肤，不是新后端能力。
 
 ---
 
@@ -299,7 +299,7 @@ active 态（已实现）：`bg-pop/10 font-medium text-foreground` + 2px 墨色
   --border: 212 16% 90%;
   --input: 212 16% 90%;
   --ring: 215 28% 18%;
-  /* 关键动作 / 回流 语义色 (墨) + 其前景 — inode 独有 token */
+  /* 关键动作 / 回流 语义色 (墨) + 其前景 — myos 独有 token */
   --pop: 215 18% 28%;
   --pop-foreground: 0 0% 100%;
   --flowback: 215 18% 28%;
@@ -568,9 +568,9 @@ home agent 每次调用本地工具，对话内联一枚 chip：图标 + summary
 **一句话**：方向 A 的结构（中枢首屏 + 最近回流脊柱 + spoke 进料口）× **Ink 纯墨灰皮肤与所有权签名**（黑白灰 + 墨色填充关键动作 + 本地·此设备 + mono 标识符）× 方向 B 的透明落库 chip（`✓已写入本机/撤销`）= 一块你每天打开就看见、会因你的回流而生长、不可错认是 local-first 的活中枢；每次带东西回家，你都看见它落进时间线。~80% 复用既有本地数据与组件，net-new 主要在表达层，不破坏既有 BUILT 能力与 info→super/server 契约。
 
 相关文件（绝对路径，供实现；仓库根为 `/home/lyping/jinziyou/wonita`）：
-- token/动效/主题：`/home/lyping/jinziyou/wonita/peer/inode/src/app/globals.css`、`/home/lyping/jinziyou/wonita/peer/inode/src/lib/theme.ts`、`/home/lyping/jinziyou/wonita/peer/inode/src/lib/brand.ts`
-- 着陆/dashboard：`/home/lyping/jinziyou/wonita/peer/inode/src/app/page.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/page.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/hub-dashboard.tsx`
-- header/nav：`/home/lyping/jinziyou/wonita/peer/inode/src/app/header.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/command-palette.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/hub-nav-link.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/nav-config.ts`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/home-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/(discover)/discover-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/(discover)/tool/layout.tsx`
-- 回流：`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/save-to-hub.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/lib/flowback.ts`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/subscribe-button.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/pin-tool-button.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/(discover)/info/columns.tsx`
-- agent：`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/agent/chat-message.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/home/lib/agent-tools.ts`
-- 布局/主题：`/home/lyping/jinziyou/wonita/peer/inode/src/app/layout.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/src/app/theme-applier.tsx`、`/home/lyping/jinziyou/wonita/peer/inode/components.json`
+- token/动效/主题：`/home/lyping/jinziyou/wonita/peer/src/app/globals.css`、`/home/lyping/jinziyou/wonita/peer/src/lib/theme.ts`、`/home/lyping/jinziyou/wonita/peer/src/lib/brand.ts`
+- 着陆/dashboard：`/home/lyping/jinziyou/wonita/peer/src/app/page.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/page.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/hub-dashboard.tsx`
+- header/nav：`/home/lyping/jinziyou/wonita/peer/src/app/header.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/command-palette.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/hub-nav-link.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/nav-config.ts`、`/home/lyping/jinziyou/wonita/peer/src/app/home/home-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/(discover)/discover-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/(discover)/tool/layout.tsx`
+- 回流：`/home/lyping/jinziyou/wonita/peer/src/app/home/save-to-hub.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/lib/flowback.ts`、`/home/lyping/jinziyou/wonita/peer/src/app/home/subscribe-button.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/pin-tool-button.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/(discover)/info/columns.tsx`
+- agent：`/home/lyping/jinziyou/wonita/peer/src/app/home/agent/chat-message.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/lib/agent-tools.ts`
+- 布局/主题：`/home/lyping/jinziyou/wonita/peer/src/app/layout.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/theme-applier.tsx`、`/home/lyping/jinziyou/wonita/peer/components.json`

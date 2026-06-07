@@ -2,12 +2,12 @@
 
 ## Repository
 
-`peer/inode` 是 [Wonita](https://github.com/jinziyou/wonita) monorepo 中的用户节点 (Inode) 前端。
+`peer` 是 [Wonita](https://github.com/jinziyou/wonita) monorepo 中的用户节点 (myos) 前端。
 全局布局与 API 契约同步见根目录 [`CLAUDE.md`](../../CLAUDE.md)。
 
 ## Positioning
 
-inode 是 Wonita（**本地优先的个人信息总控终端**）面向用户的**用户界面**: 从个人视角出发,
+myos 是 Wonita（**本地优先的个人信息总控终端**）面向用户的**用户界面**: 从个人视角出发,
 把分散的他人、信息、资源、工具聚合到一处。
 
 **home 是信息中枢, info / community / tool 三个模块都为 home 服务** (hub-and-spoke):
@@ -47,7 +47,7 @@ peer 端点对接 `super/server` 的 `/peers`、`/peer/{id}(+/publications)`、`
 | **community** (社区) | `/community` | 社区发布者 + 地图 | 浏览/订阅社区发布者 (用户/peer, `GET /peers`) + 信息来源地理分布 (IP 定位) |
 | **tool** (工具) | `/tool` | 工具聚合 | 搜索 (`/tool/search`)、AI (`/tool/ai`)、导航 (`/tool/navigation`) |
 
-**本地优先 (local-first) + 混合 P2P** 架构: inode 为对等节点 (peer), super 为超级节点 (super-node)。
+**本地优先 (local-first) + 混合 P2P** 架构: myos 为对等节点 (peer), super 为超级节点 (super-node)。
 个人数据默认留在本机浏览器 (localStorage / 本地存储), 不上传服务器 —— 如「我的空间」的文件/链接、
 `/tool/search` 的「最近搜索」历史; 仅跨节点同步/协调时才经 super 节点。新增个人向聚合功能时,
 默认本地优先、对等视角, 并思考它如何回流服务于 home 中枢。

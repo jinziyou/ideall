@@ -1,4 +1,4 @@
-# peer/inode
+# peer
 
 Wonita（**本地优先的个人信息总控终端**）的**用户界面**。从个人视角聚合信息、资源、工具与社区。
 
@@ -23,7 +23,7 @@ pnpm dev    # http://localhost:3000
 或在仓库根目录：
 
 ```bash
-bash peer/inode/run.sh
+bash peer/run.sh
 ```
 
 ## 构建与 Lint
@@ -48,13 +48,13 @@ curl -I -sS http://localhost:3000
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `SERVER_ADDR` | super/server 地址 | `http://127.0.0.1:3001` (本地) / `http://server:3001` (容器) |
-| `INODE_PORT` | Docker 宿主机映射端口 | `3000` |
-| `INODE_SERVER_ADDR` | compose 注入的 super/server 地址 | `http://server:3001` |
+| `myos_PORT` | Docker 宿主机映射端口 | `3000` |
+| `myos_SERVER_ADDR` | compose 注入的 super/server 地址 | `http://server:3001` |
 | `WONITA_NETWORK` | Docker 共享网络名 | `wonita_net` |
 
 ## API 类型同步 (codegen)
 
-peer/inode 调 `super/server` 的所有 fetch 请求都基于 server 的 OpenAPI schema 生成 TypeScript
+peer 调 `super/server` 的所有 fetch 请求都基于 server 的 OpenAPI schema 生成 TypeScript
 类型, **不再手写 DTO**。monorepo 内维护一份镜像副本作为 codegen 的源:
 
 ```

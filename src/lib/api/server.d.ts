@@ -65,7 +65,7 @@ export interface paths {
         /**
          * GET /authorize/secret/{client_id} — 下发服务端临时 X25519 公钥 (hex 明文串)。
          * @description 注意: 响应体是裸 hex 字符串, **不可** 包成 `Json<String>` —— 否则会被加上引号,
-         *     破坏 inode 端按裸串解析的 wire 格式。
+         *     破坏 myos 端按裸串解析的 wire 格式。
          */
         get: operations["get_server_public_key"];
         put?: never;
@@ -147,7 +147,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /info/geoip?ip= — 定位访问者 IP 所在城市 (peer/inode community 地图默认聚焦) */
+        /** GET /info/geoip?ip= — 定位访问者 IP 所在城市 (peer community 地图默认聚焦) */
         get: operations["get_ip_location"];
         put?: never;
         post?: never;
@@ -197,7 +197,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /info/publishers/locations — 发布者地理位置 (peer/inode community 地图) */
+        /** GET /info/publishers/locations — 发布者地理位置 (peer community 地图) */
         get: operations["get_publisher_locations"];
         put?: never;
         post?: never;
@@ -405,7 +405,7 @@ export interface components {
             source_count: number;
         };
         /**
-         * @description 访问者 IP 地理定位结果 (供 peer/inode community 地图默认聚焦访问者所在城市)。
+         * @description 访问者 IP 地理定位结果 (供 peer community 地图默认聚焦访问者所在城市)。
          *     经纬度由 super/server 对访问者 IP 做地理定位得到 (ip-api.com); 定位失败时经纬度为 0。
          */
         IpLocation: {
@@ -438,7 +438,7 @@ export interface components {
             title: string;
             url?: string;
         };
-        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (inode `type:"peer"` 的 key)。 */
+        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (myos `type:"peer"` 的 key)。 */
         PeerPublisher: {
             /**
              * Format: int64
@@ -478,7 +478,7 @@ export interface components {
             period: number;
         };
         /**
-         * @description 发布者地理位置 (供 peer/inode community 地图展示)。
+         * @description 发布者地理位置 (供 peer community 地图展示)。
          *     经纬度由 super/server 对域名做 IP 地理定位得到, 缓存在 Neo4j `Website` 节点。
          */
         PublisherLocation: {
@@ -802,7 +802,7 @@ export interface operations {
     get_ip_location: {
         parameters: {
             query: {
-                /** @description 访问者 IP (由 peer/inode 从 x-forwarded-for 提取后透传; 服务端不直接读 client IP, 因调用方为 inode) */
+                /** @description 访问者 IP (由 peer 从 x-forwarded-for 提取后透传; 服务端不直接读 client IP, 因调用方为 myos) */
                 ip: string;
             };
             header?: never;

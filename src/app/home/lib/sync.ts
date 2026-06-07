@@ -1,6 +1,6 @@
 // 跨端同步的客户端密码学 (浏览器 WebCrypto)。
 // 由「同步码」(高熵随机串) 派生 storageId + 加密密钥; 明文 (订阅列表) 只在浏览器内 AES-GCM 加密,
-// 上传的只有密文 —— super/server 与 inode 中转都读不到内容 (端到端加密)。
+// 上传的只有密文 —— super/server 与 myos 中转都读不到内容 (端到端加密)。
 
 const SALT = "wonita-sync"
 const INFO_ID = "wonita-sync-id-v1"

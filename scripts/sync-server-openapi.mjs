@@ -1,10 +1,10 @@
 /**
- * 把 super/server/openapi.json 同步到 peer/inode/openapi/server.json。
+ * 把 super/server/openapi.json 同步到 peer/openapi/server.json。
  *
  * 优先用 monorepo 内本地路径:
  *
  *     wonita/
- *       ├── peer/inode/                ← working dir
+ *       ├── peer/                ← working dir
  *       └── super/server/openapi.json     ← 期望的本地源
  *
  * 找不到本地副本时退化到 GitHub raw URL (需联网)。
@@ -24,7 +24,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const APP_ROOT = resolve(__dirname, "..")
 const OUTPUT = resolve(APP_ROOT, "openapi/server.json")
-const DEFAULT_LOCAL = resolve(APP_ROOT, "../../super/server/openapi.json")
+const DEFAULT_LOCAL = resolve(APP_ROOT, "../super/server/openapi.json")
 const REPO = "jinziyou/wonita"
 const REF = process.env.SERVER_REF ?? "main"
 const REMOTE_URL = `https://raw.githubusercontent.com/${REPO}/${REF}/super/server/openapi.json`
