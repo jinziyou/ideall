@@ -11,46 +11,38 @@ myos 是 Wonita（**本地优先的个人信息总控终端**）面向用户的*
 把分散的他人、信息、资源、工具聚合到一处。
 
 **home 是信息中枢, info / community / tool 三个模块都为 home 服务** (hub-and-spoke):
-info / community / tool 在导航上统一归到「**发现**」之下 (Next.js 路由组 `src/app/(discover)/`,
-共享 `(discover)/layout.tsx` 顶部分区导航), 作为面向 home 的聚合/获取入口 ——
-**路由组用括号目录, URL 不含 `/discover`, 三者路由仍为 `/info`、`/community`、`/tool`**。
-
-home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 搜索 / 社区发布者 peer) 回流到 `/home/subscriptions` 订阅流 ——
-订阅偏好本地优先 (IndexedDB `subscriptions` 仓库, 见 `home/lib/subscriptions-store.ts`)。
-发布者/实体内容实时拉取 (复用 `(discover)/info` 的 `fetchLatestInfo`: 发布者按 domain、实体按 label/name);
-**搜索订阅本地优先**: 偏好 (关键词 + 可选域名) 存本地, 拉取窗口后**客户端按标题子串过滤**
-(服务端无关键词搜索, 与 `/info/search` 现有前端过滤口径一致); 工具是快捷启动项 (无内容流, 点开即跳)。
-订阅入口: info 发布者页/实体页的「订阅」按钮 (组件 `home/subscribe-button.tsx`, prop `sub: NewSubscription`)、
-`/info/search` 的「订阅此搜索」、community「社区发布者」列表就地订阅 peer (`GET /peers`)、
-tool 各卡角标「钉到 home」(组件 `home/pin-tool-button.tsx`);
-订阅流 `/home/subscriptions` 顶部为「已钉工具」, 下方为发布者/实体/搜索/社区发布者的最新条目卡
-(peer 拉 `/peer/{id}/publications`)。
-
-**跨端同步 (端到端加密, 无账号)**: 订阅流顶部「跨端同步」面板。用一段高熵「同步码」在浏览器
-(WebCrypto, `home/lib/sync.ts`) 派生 storageId (服务端查找键) + AES-GCM 密钥; 订阅列表只在浏览器内
-加密, 经 server action 中转 (`home/lib/sync-action.ts`) 存到 super/server `PUT/GET /sync/{id}`
-(一个不透明密文键值存储, **服务端读不到内容**, id 即能力凭证, 无需登录)。同步逻辑见
-`home/lib/subscription-sync.ts`: 拉远端→解密→与本地按 id 并集→写本地→加密→推远端;
-同步码存 localStorage; 合并为并集, **删除为尽力** (会被另一端带回)。
-
-**社区 = 用户/peer 发布层 (账号)**: 用户登录后在「我的空间 · 我的发布」(`/home/publications`) 发布内容
-(`Publication`), 成为社区发布者; 他人在 community「社区发布者」订阅 (`type:"peer"`, key=用户 id),
-其发布进订阅流。登录复刻 server 的 X25519 方案 (`lib/auth/*` + `/auth` 页 + header 账户菜单);
-peer 端点对接 `super/server` 的 `/peers`、`/peer/{id}(+/publications)`、`/me/publications` (`lib/peer-action.ts`)。
+home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 搜索 / 社区发布者 peer) 回流到
+`/home/subscriptions` 订阅流; 订阅偏好本地优先 (IndexedDB), 内容实时拉取。
+**跨端同步 (端到端加密, 无账号)**: 同步码在浏览器派生 storageId + AES 密钥, 只上传密文。
+**社区 = 用户/peer 发布层 (账号)**: 登录后发布内容成为社区发布者, 他人订阅其发布进订阅流。
 **账号 (公开发布身份) 与跨端同步的无账号同步码是两套独立身份**。
 
-| 模块 | 路由 | 角色 | 说明 |
-| --- | --- | --- | --- |
-| **home** (我的空间) | `/home` | **信息中枢** | 订阅流 (`/home/subscriptions`, 默认页)、我的发布 (`/home/publications`)、资源 (`/home/resources`)、书签 (`/home/bookmarks`) |
-| **发现** (discover) | — (路由组) | 聚合入口 | `(discover)/layout.tsx` 把下列三者归到「发现」分区导航之下, 不改各自 URL |
-| **info** (资讯) | `/info` | 信息聚合展示 | 消费 super 聚合的资讯/实体/发布者, 喂给 home |
-| **community** (社区) | `/community` | 社区发布者 + 地图 | 浏览/订阅社区发布者 (用户/peer, `GET /peers`) + 信息来源地理分布 (IP 定位) |
-| **tool** (工具) | `/tool` | 工具聚合 | 搜索 (`/tool/search`)、AI (`/tool/ai`)、导航 (`/tool/navigation`) |
+## 架构: OS 式 5 子项目 (src/ 下)
 
-**本地优先 (local-first) + 混合 P2P** 架构: myos 为对等节点 (peer), super 为超级节点 (super-node)。
-个人数据默认留在本机浏览器 (localStorage / 本地存储), 不上传服务器 —— 如「我的空间」的文件/链接、
-`/tool/search` 的「最近搜索」历史; 仅跨节点同步/协调时才经 super 节点。新增个人向聚合功能时,
-默认本地优先、对等视角, 并思考它如何回流服务于 home 中枢。
+借鉴操作系统概念组织, 用 tsconfig 路径别名 + ESLint `no-restricted-imports` **强制**依赖方向:
+
+| 子项目 | 别名 | OS 类比 | 内容 |
+|---|---|---|---|
+| **core** | `@core/*` | 内核 + shell | `hub/` 中枢 (dashboard/订阅/书签/资源/发布 + IndexedDB 数据层 `hub/lib`)、`shell/` 全局壳 (header/nav/命令台/主题/`boot`)、`nav/` |
+| **apps** | `@app/*` | 用户态应用 | `info` / `community` / `tool` —— **三者完全独立**, 互不 import、不碰 core/plugin |
+| **plugins** | `@plugin/*` | 内核模块 | `agent` (AI 助手) + `sync` (跨端同步) —— 经 protocol 挂到 core |
+| **lib** | `@lib/*` / `@/lib/*` | libc | 纯共享叶子: utils/format/id/env/ner-labels/safe-url/idb/hub-format/sync-code/sync-crypto + auth/api/peer-action 实现 |
+| **protocol** | `@protocol/*` | ABI / IPC | 跨子项目契约: subscription/content(解析注册表)/flowback/hub-data(HubDataPort)/sync(SyncPort)/peer/auth/transport/server + feeders |
+
+**依赖方向 (单向)**: `protocol→lib`; `lib→∅`; `app/*→{protocol,lib,components}`;
+`plugin/*→{protocol,lib,components}`; `core→{protocol,lib,components}` (插件经 `@protocol` registry 触达)。
+唯一例外: 组合根 `core/shell/boot.ts` 可 import 各 `@app/*/manifest`、`@plugin/*/manifest`。
+
+**`src/app/` 仅放 Next 路由入口** (薄 re-export, 真实代码在 `@core`/`@app`/`@plugin`)。
+
+### 依赖反转 (app/plugin 经 protocol 而非直连 core)
+
+- **内容 feed**: 中枢订阅流调 `@protocol/content` 的 `resolveSubscription`; info/community 在各自 `manifest.ts`
+  注册 resolver (info 管 publisher/entity/search, community 管 peer)。core 不 import app。
+- **中枢数据**: app 反馈组件 (`@protocol/feeders`) 与 agent 插件经 `@protocol/hub-data` 的 `getHubData()`
+  (HubDataPort, core 在 boot 注册实现) 读写订阅/书签/资源, 不直接依赖 core 存储。
+- **跨端同步**: core 同步面板调 `@protocol/sync` 的 `getSyncPort()`; sync 插件 `manifest.ts` 注册 SyncPort。
+- 启动注册由 `core/shell/boot-gate.tsx` (客户端启动闸, 挂在根 layout) 调 `boot.ts#registerAll()` 完成。
 
 ## Common commands
 
@@ -58,11 +50,12 @@ peer 端点对接 `super/server` 的 `/peers`、`/peer/{id}(+/publications)`、`
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm build
-pnpm lint
+pnpm lint         # 含依赖边界强制 (no-restricted-imports)
+pnpm test         # node --test：protocol/sync (合并) + lib/sync-crypto
 
 # API codegen (改了 super/server 的 schema 后跑)
-pnpm sync:api     # 从 super/server/openapi.json 同步
-pnpm gen:api      # openapi/server.json -> src/lib/api/server.d.ts
+pnpm sync:api     # 从 super/server/openapi.json 同步 → openapi/server.json
+pnpm gen:api      # → src/lib/api/server.d.ts
 pnpm gen:api:check  # CI 卡点
 ```
 
@@ -70,9 +63,10 @@ pnpm gen:api:check  # CI 卡点
 
 - 默认 Server Component, 仅交互组件加 `"use client"`
 - UI 复用 `src/components/ui` 的 shadcn 原语, 禁止引入并行 UI 库
-- TypeScript strict, 跨后端 DTO 一律从 `src/lib/api/server.d.ts` 派生
+- TypeScript strict, 跨后端 DTO 一律从 `@protocol/server` (源 `src/lib/api/server.d.ts`) 派生
 - 所有 fetch / Server Action 必须 `try-catch` + `res.ok` 检查
-- URL 参数构造用 `URLSearchParams`, 客户端跳转用 `encodeURIComponent`
 - 用户可见文案与代码注释均使用简体中文
-- 共享工具放 `src/lib/` (`id.ts` / `format.ts` / `env.ts` 等); 模块内领域类型放 `model.ts`
-- info/community 用 `action.ts` (Server Action) + `model.ts`; 本地优先模块 (home) 无后端 DTO, 用 `model.ts` + `lib/` 本地存储 (IndexedDB)
+- **新增 app / plugin**: 在 `src/apps/<name>` 或 `src/plugins/<name>` 建模块 + `manifest.ts`,
+  在 `core/shell/boot.ts` 注册; 跨子项目交互一律经 `@protocol` (新增契约/端口加到 `src/protocol`)
+- **边界**: app/plugin 不得 import `@core`/其他 app/plugin (`pnpm lint` 强制); 越界请改走 `@protocol`
+- 本地优先模块的数据存 IndexedDB (`@/lib/idb`); 个人数据默认不上传, 仅跨端同步/发布时经 super 节点
