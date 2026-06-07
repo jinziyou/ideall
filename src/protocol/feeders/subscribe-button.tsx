@@ -5,16 +5,13 @@ import { Check, Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import {
-  addSubscription,
-  isSubscribed,
-  removeSubscription,
-  type NewSubscription,
-} from "./lib/subscriptions-store"
+import { getHubData } from "@protocol/hub-data"
+import type { NewSubscription } from "@protocol/subscription"
 
 /**
- * 订阅开关 —— 把「发现」里的来源 (发布者 / 实体) 订阅回 home 中枢。
- * 本地优先: 写浏览器 IndexedDB, 不经服务器。可在 info / community 等模块复用。
+ * 订阅开关 (反馈原语) —— 把「发现」里的来源 (发布者 / 实体 / peer) 订阅回 home 中枢。
+ * 经 protocol 的 HubDataPort 写入 (本地优先, 浏览器 IndexedDB), app 不直接依赖 core 存储。
+ * 可在 info / community 等模块复用。
  */
 export function SubscribeButton({
   sub,
@@ -33,7 +30,8 @@ export function SubscribeButton({
 
   React.useEffect(() => {
     let alive = true
-    isSubscribed(type, key)
+    getHubData()
+      .isSubscribed(type, key)
       .then((v) => alive && setSubscribed(v))
       .catch(() => alive && setSubscribed(false))
     return () => {
@@ -45,12 +43,13 @@ export function SubscribeButton({
     if (subscribed === null || busy) return
     setBusy(true)
     try {
+      const hub = getHubData()
       if (subscribed) {
-        await removeSubscription(type, key)
+        await hub.removeSubscription(type, key)
         setSubscribed(false)
         toast.success(`已取消订阅 ${title}`)
       } else {
-        await addSubscription(sub)
+        await hub.addSubscription(sub)
         setSubscribed(true)
         toast.success(`已订阅 ${title}`)
         setPulse(true)

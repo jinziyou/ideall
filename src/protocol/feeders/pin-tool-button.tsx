@@ -4,11 +4,11 @@ import * as React from "react"
 import { Loader2, Pin } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { addSubscription, isSubscribed, removeSubscription } from "./lib/subscriptions-store"
+import { getHubData } from "@protocol/hub-data"
 
 /**
- * 「钉到 home」开关 —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
- * 本地优先: 写浏览器 IndexedDB。图标按钮形态, 作为工具卡 (button/a) 的角标叠加, 不嵌套于卡内。
+ * 「钉到 home」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
+ * 经 protocol 的 HubDataPort 写入 (本地优先)。图标按钮形态, 作为工具卡的角标叠加。
  */
 export function PinToolButton({
   name,
@@ -26,7 +26,8 @@ export function PinToolButton({
 
   React.useEffect(() => {
     let alive = true
-    isSubscribed("tool", url)
+    getHubData()
+      .isSubscribed("tool", url)
       .then((v) => alive && setPinned(v))
       .catch(() => alive && setPinned(false))
     return () => {
@@ -41,12 +42,13 @@ export function PinToolButton({
     if (pinned === null || busy) return
     setBusy(true)
     try {
+      const hub = getHubData()
       if (pinned) {
-        await removeSubscription("tool", url)
+        await hub.removeSubscription("tool", url)
         setPinned(false)
         toast.success(`已取消钉住 ${name}`)
       } else {
-        await addSubscription({ type: "tool", key: url, title: name })
+        await hub.addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
         toast.success(`已钉到 home · ${name}`)
         setPulse(true)

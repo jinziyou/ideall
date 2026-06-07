@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { SubscribeButton } from "@/app/home/subscribe-button"
+import { SubscribeButton } from "@protocol/feeders"
 import { getPeers, type PeerPublisher } from "@protocol/peer"
 
 /**

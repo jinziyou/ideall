@@ -63,6 +63,7 @@ export interface HubDataPort {
   listSubscriptions(): Promise<Subscription[]>
   addSubscription(input: NewSubscription): Promise<Subscription>
   removeSubscription(type: SubscriptionType, key: string): Promise<void>
+  isSubscribed(type: SubscriptionType, key: string): Promise<boolean>
   // 书签 / 收藏夹
   listBookmarks(): Promise<Bookmark[]>
   addBookmark(input: NewBookmark): Promise<Bookmark>

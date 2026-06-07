@@ -12,13 +12,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { addBookmark, listBookmarks } from "./lib/bookmarks-store"
-import { addSubscription } from "./lib/subscriptions-store"
+import { getHubData } from "@protocol/hub-data"
 
 /**
- * 统一回流原语「收入中枢」—— 把 spoke 上的任意条目 (文章 / 事件 / 链接) 落进本地中枢。
+ * 统一回流原语「收入中枢」(反馈原语) —— 把 spoke 上的任意条目 (文章 / 事件 / 链接) 落进本地中枢。
  * 按传入的能力渲染菜单项: 收藏到书签 / 订阅发布者; 另带原文 / 全面报道 直达。
- * 写入复用既有本地 store, 广播 HUB_UPDATED 让头部计数 +1, 触发器墨色脉冲。
+ * 经 protocol 的 HubDataPort 写入, 广播 HUB_UPDATED 让头部计数 +1。
  */
 export function SaveToHub({
   bookmark,
@@ -44,13 +43,14 @@ export function SaveToHub({
   async function doBookmark() {
     if (!bookmark) return
     try {
+      const hub = getHubData()
       // 去重: addBookmark 非幂等 (每次新 id), 同一 url 重复点会产生重复书签
-      const existing = await listBookmarks()
+      const existing = await hub.listBookmarks()
       if (existing.some((b) => b.url === bookmark.url)) {
         toast.info("已在书签中")
         return
       }
-      await addBookmark({ title: bookmark.title, url: bookmark.url })
+      await hub.addBookmark({ title: bookmark.title, url: bookmark.url })
       pop()
       toast.success("已收藏到书签")
     } catch {
@@ -61,7 +61,7 @@ export function SaveToHub({
   async function doSubscribe() {
     if (!publisher?.domain) return
     try {
-      await addSubscription({
+      await getHubData().addSubscription({
         type: "publisher",
         key: publisher.domain,
         title: publisher.name || publisher.domain,

@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { PinToolButton } from "@/app/home/pin-tool-button"
+import { PinToolButton } from "@protocol/feeders"
 
 export const metadata = {
   title: "导航 | 工具 | wonita",
