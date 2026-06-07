@@ -1,9 +1,60 @@
 import nextConfig from "eslint-config-next"
 
-export default [
+// 依赖边界 (OS 式分层强制): 用 no-restricted-imports 禁止越界 import。
+// 方向: protocol→lib; lib→∅; app/*→{protocol,lib,components}; plugin/*→{protocol,lib,components};
+//       core→{protocol,lib,components} (插件经 @protocol registry); 组合根 core/shell/boot.ts 例外。
+const boundary = (files, deny, message) => ({
+  files,
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      { patterns: deny.map((group) => ({ group: [group], message })) },
+    ],
+  },
+})
+
+const config = [
   ...nextConfig,
   {
     // src/lib/api/server.d.ts 是 openapi-typescript 生成的, 不该被 lint
     ignores: [".next/**", "node_modules/**", "public/**", "src/lib/api/**"],
   },
+
+  // app 完全独立: 只能依赖 @protocol / @lib / @/components；不碰 core / plugin / 其他 app
+  boundary(
+    ["src/apps/**/*.{ts,tsx}"],
+    ["@core/*", "@plugin/*", "@app/*", "@/app/*", "@/lib/peer-action", "@/lib/auth/*", "@/lib/api/server"],
+    "app 必须独立: 只能 import @protocol / @lib / @/components (契约一律走 @protocol)",
+  ),
+
+  // plugin: 只能依赖 @protocol / @lib / @/components；不碰 core / app / 其他 plugin
+  boundary(
+    ["src/plugins/**/*.{ts,tsx}"],
+    ["@core/*", "@app/*", "@plugin/*"],
+    "plugin 经 @protocol 触达 core (HubDataPort / SyncPort 等), 不直接 import core / app",
+  ),
+
+  // core: 不碰 app / plugin (经 @protocol registry 触达); 组合根 boot.ts 例外
+  boundary(
+    ["src/core/**/*.{ts,tsx}"],
+    ["@app/*", "@plugin/*"],
+    "core 保持 app/plugin 无关; 经 @protocol registry 触达插件",
+  ),
+  { files: ["src/core/shell/boot.ts"], rules: { "no-restricted-imports": "off" } },
+
+  // protocol: 只依赖 @lib (+ @/components 给 feeders)
+  boundary(
+    ["src/protocol/**/*.{ts,tsx}"],
+    ["@core/*", "@app/*", "@plugin/*", "@/app/*"],
+    "protocol 只依赖 @lib / @/components",
+  ),
+
+  // lib: 零内部依赖的叶子, 不碰任何子项目
+  boundary(
+    ["src/lib/**/*.{ts,tsx}"],
+    ["@core/*", "@app/*", "@plugin/*", "@protocol/*", "@/app/*"],
+    "lib 是零内部依赖的叶子",
+  ),
 ]
+
+export default config
