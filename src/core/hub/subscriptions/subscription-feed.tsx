@@ -48,19 +48,23 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
 export default function SubscriptionFeed() {
   const [state, setState] = React.useState<Loaded | null>(null)
   const mountedRef = React.useRef(true)
+  // 并发去重: 挂载 load 与同步事件 load 可能同时在飞, 仅最后发起的一次允许落 state, 防后写覆盖。
+  const seqRef = React.useRef(0)
 
   const load = React.useCallback(async () => {
+    const seq = ++seqRef.current
+    const fresh = () => mountedRef.current && seq === seqRef.current
     let subs: Subscription[] = []
     try {
       subs = await listSubscriptions()
     } catch {
-      if (mountedRef.current) setState({ tools: [], feeds: [] })
+      if (fresh()) setState({ tools: [], feeds: [] })
       return
     }
     const tools = subs.filter((s) => s.type === "tool")
     const sources = subs.filter((s) => s.type !== "tool")
     const feeds = await Promise.all(sources.map(loadFeed))
-    if (mountedRef.current) setState({ tools, feeds })
+    if (fresh()) setState({ tools, feeds })
   }, [])
 
   React.useEffect(() => {

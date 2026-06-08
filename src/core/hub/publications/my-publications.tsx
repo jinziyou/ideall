@@ -40,10 +40,23 @@ export default function MyPublications() {
 
   React.useEffect(() => {
     if (!uid) return
+    let active = true
     // 延后到下一 tick, 避免在 effect 同步阶段触发 setState
-    const t = setTimeout(() => reload(), 0)
-    return () => clearTimeout(t)
-  }, [uid, reload])
+    const t = setTimeout(async () => {
+      const res = await getPeerPublications(uid)
+      if (!active) return // uid 在请求期间变更: 丢弃过期结果, 防旧账号列表落到新状态
+      if (res.ok) {
+        setPubs(res.data ?? [])
+        setError(null)
+      } else {
+        setError(res.message)
+      }
+    }, 0)
+    return () => {
+      active = false
+      clearTimeout(t)
+    }
+  }, [uid])
 
   if (!session) {
     return (

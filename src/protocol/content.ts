@@ -21,7 +21,15 @@ const resolvers = new Map<SubscriptionType, ContentResolver>()
 
 /** 注册某些订阅类型的内容解析器 (组合根在启动时调用)。 */
 export function registerContentResolver(types: SubscriptionType[], fn: ContentResolver): void {
-  for (const t of types) resolvers.set(t, fn)
+  for (const t of types) {
+    // 开发期对重复注册告警: 让 manifest 声明重叠 (同一类型被两个 app 认领) 尽早暴露, 而非静默覆盖。
+    if (process.env.NODE_ENV !== "production" && resolvers.has(t)) {
+      console.warn(
+        `[content] 订阅类型 "${t}" 的解析器被重复注册并覆盖, 请检查各 manifest 的 types 是否重叠`,
+      )
+    }
+    resolvers.set(t, fn)
+  }
 }
 
 /** 按 sub.type 派发到已注册的 resolver; 未注册类型 → 空结果 (如 tool, 无内容流)。 */

@@ -40,3 +40,28 @@ test("encryptJson/decryptJson: 往返还原明文, 密文不含明文", async ()
   // 密文不应直接暴露明文
   assert.ok(!ciphertext.includes("测试订阅标题"))
 })
+
+test("decryptJson: 错误同步码派生的密钥必须解密失败 (端到端隔离)", async () => {
+  const { key } = await deriveKeys(CODE)
+  const { iv, ciphertext } = await encryptJson(key, { secret: 1 })
+  const { key: wrongKey } = await deriveKeys("ffffffffffffffffffffffffffffffff")
+  // 持错误同步码 (即错误密钥) 解密必须 reject, 而非静默还原
+  await assert.rejects(() => decryptJson(wrongKey, iv, ciphertext))
+})
+
+test("decryptJson: 篡改 ciphertext / iv 一字符必须解密失败 (GCM 认证标签)", async () => {
+  const { key } = await deriveKeys(CODE)
+  const { iv, ciphertext } = await encryptJson(key, { a: "hello" })
+  const flip = (s: string) => (s[0] === "A" ? "B" : "A") + s.slice(1)
+  await assert.rejects(() => decryptJson(key, iv, flip(ciphertext)), "篡改密文应失败")
+  await assert.rejects(() => decryptJson(key, flip(iv), ciphertext), "篡改 IV 应失败")
+})
+
+test("encryptJson: 同明文两次加密的 IV 必须不同 (nonce 唯一性)", async () => {
+  const { key } = await deriveKeys(CODE)
+  const a = await encryptJson(key, { same: "payload" })
+  const b = await encryptJson(key, { same: "payload" })
+  // AES-GCM 在相同 key 下复用 nonce 会灾难性泄密, 故每次必须新随机 IV
+  assert.notEqual(a.iv, b.iv)
+  assert.notEqual(a.ciphertext, b.ciphertext)
+})
