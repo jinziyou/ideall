@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    name: lint + typecheck + format + test + contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Lint (含依赖边界强制)
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Format check
+        run: pnpm format:check
+      - name: Test
+        run: pnpm test
+      # server.d.ts 与 openapi/server.json 一致性 (改了 schema 忘重生成会在此失败)
+      - name: API contract
+        run: pnpm gen:api:check
