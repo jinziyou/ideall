@@ -383,7 +383,12 @@ function BookmarkCard({
             <Globe className="h-4 w-4 text-muted-foreground" />
           )}
         </div>
-        <a href={safeHref(b.url)} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1">
+        <a
+          href={safeHref(b.url)}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="min-w-0 flex-1"
+        >
           <div className="truncate text-sm font-medium hover:underline" title={b.title}>
             {b.title}
           </div>

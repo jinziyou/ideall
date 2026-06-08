@@ -25,7 +25,9 @@ test("unionMerge: updatedAt 并列 → 本地优先 (稳定)", () => {
 })
 
 test("unionMerge: 并集保留各自独有 id", () => {
-  const ids = unionMerge([sub("a", "A", 100)], [sub("b", "B", 100)]).map((s) => s.id).sort()
+  const ids = unionMerge([sub("a", "A", 100)], [sub("b", "B", 100)])
+    .map((s) => s.id)
+    .sort()
   assert.deepEqual(ids, ["a", "b"])
 })
 

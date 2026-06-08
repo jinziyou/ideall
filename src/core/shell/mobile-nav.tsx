@@ -16,14 +16,24 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 /** 单个导航链接 (模块级, 避免在 MobileNav 渲染体内重建组件类型 → 每次渲染都卸载重挂)。 */
-function MLink({ link, active, onNavigate }: { link: NavLink; active: boolean; onNavigate: () => void }) {
+function MLink({
+  link,
+  active,
+  onNavigate,
+}: {
+  link: NavLink
+  active: boolean
+  onNavigate: () => void
+}) {
   return (
     <Link
       href={link.href}
       onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors",
-        active ? "bg-pop/10 font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        active
+          ? "bg-pop/10 font-medium text-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
       {link.dot ? (
@@ -56,7 +66,9 @@ export default function MobileNav() {
           <span>wonita</span>
         </SheetTitle>
         <nav className="mt-6 flex flex-col gap-1">
-          <span className="px-3 pb-1 text-xs font-medium text-muted-foreground">我的空间 · 中枢</span>
+          <span className="px-3 pb-1 text-xs font-medium text-muted-foreground">
+            我的空间 · 中枢
+          </span>
           {HOME_SUBPAGES.map((p) => (
             <MLink key={p.href} link={p} active={isActive(pathname, p.href)} onNavigate={close} />
           ))}

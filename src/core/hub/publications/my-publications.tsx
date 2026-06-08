@@ -106,11 +106,7 @@ export default function MyPublications() {
         <CardContent>
           <form onSubmit={onPublish} className="flex flex-col gap-2">
             <Input placeholder="标题" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <Input
-              placeholder="链接 (可选)"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
+            <Input placeholder="链接 (可选)" value={url} onChange={(e) => setUrl(e.target.value)} />
             <textarea
               placeholder="正文 / 笔记 (可选)"
               value={body}

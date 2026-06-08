@@ -76,7 +76,12 @@ export function SaveToHub({
   const pulseCls = pulse ? "animate-flowback motion-reduce:animate-none" : ""
   const trigger =
     variant === "icon" ? (
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", pulseCls, className)} title="收入中枢">
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn("h-8 w-8", pulseCls, className)}
+        title="收入中枢"
+      >
         <Plus className="h-4 w-4" />
         <span className="sr-only">收入中枢</span>
       </Button>
@@ -114,7 +119,9 @@ export function SaveToHub({
           </DropdownMenuItem>
         )}
         {analysisUrl && (
-          <DropdownMenuItem onSelect={() => window.open(analysisUrl, "_blank", "noopener,noreferrer")}>
+          <DropdownMenuItem
+            onSelect={() => window.open(analysisUrl, "_blank", "noopener,noreferrer")}
+          >
             <Network className="mr-2 h-4 w-4" />
             全面报道
           </DropdownMenuItem>

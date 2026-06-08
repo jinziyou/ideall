@@ -39,9 +39,7 @@ export default function AgentSettingsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        {open && <SettingsForm onClose={() => onOpenChange(false)} />}
-      </DialogContent>
+      <DialogContent>{open && <SettingsForm onClose={() => onOpenChange(false)} />}</DialogContent>
     </Dialog>
   )
 }
@@ -50,8 +48,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
   const initial = getAgentSettings()
   const [form, setForm] = React.useState<AgentSettings>(initial)
 
-  const presetValue =
-    PROVIDER_PRESETS.find((p) => p.baseURL === form.baseURL)?.label ?? CUSTOM
+  const presetValue = PROVIDER_PRESETS.find((p) => p.baseURL === form.baseURL)?.label ?? CUSTOM
 
   function applyPreset(label: string) {
     if (label === CUSTOM) return
@@ -114,7 +111,9 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
             value={form.baseURL}
             onChange={(e) => setForm((f) => ({ ...f, baseURL: e.target.value }))}
           />
-          <p className="text-xs text-muted-foreground">OpenAI 兼容端点，路径自动追加 /chat/completions。</p>
+          <p className="text-xs text-muted-foreground">
+            OpenAI 兼容端点，路径自动追加 /chat/completions。
+          </p>
         </div>
 
         <div className="grid gap-1.5">

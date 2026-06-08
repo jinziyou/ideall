@@ -18,7 +18,9 @@ export default async function Community() {
         <CardHeader>
           <CardTitle>发布者地图</CardTitle>
           <CardDescription>
-            信息来源的地理分布（联网才有，来自共享节点的 IP 定位）。会尽量聚焦到你所在城市，来源分布到多个城市时可在地图上方切换其它城市或切回全国；点越大代表该来源的信息越多（已定位 {locations.length} 个来源）。
+            信息来源的地理分布（联网才有，来自共享节点的 IP
+            定位）。会尽量聚焦到你所在城市，来源分布到多个城市时可在地图上方切换其它城市或切回全国；点越大代表该来源的信息越多（已定位{" "}
+            {locations.length} 个来源）。
           </CardDescription>
         </CardHeader>
         <CardContent>

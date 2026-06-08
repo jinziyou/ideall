@@ -89,7 +89,9 @@ export default function HomeNav() {
         {ENTRIES.map(({ href, label, icon: Icon }) => {
           // 概览 (/home) 仅精确匹配, 否则会被所有 /home/* 子页命中
           const active =
-            href === "/home" ? pathname === "/home" : pathname === href || pathname.startsWith(href + "/")
+            href === "/home"
+              ? pathname === "/home"
+              : pathname === href || pathname.startsWith(href + "/")
           const count = counts[href]
           return (
             <Link

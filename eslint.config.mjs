@@ -23,7 +23,15 @@ const config = [
   // app 完全独立: 只能依赖 @protocol / @lib / @/components；不碰 core / plugin / 其他 app
   boundary(
     ["src/apps/**/*.{ts,tsx}"],
-    ["@core/*", "@plugin/*", "@app/*", "@/app/*", "@/lib/peer-action", "@/lib/auth/*", "@/lib/api/server"],
+    [
+      "@core/*",
+      "@plugin/*",
+      "@app/*",
+      "@/app/*",
+      "@/lib/peer-action",
+      "@/lib/auth/*",
+      "@/lib/api/server",
+    ],
     "app 必须独立: 只能 import @protocol / @lib / @/components (契约一律走 @protocol)",
   ),
 

@@ -16,7 +16,10 @@ const SUB_TYPE_LABEL: Record<string, string> = {
 
 function section(title: string, total: number, lines: string[]): string {
   if (total === 0) return ""
-  const head = total > lines.length ? `${title}（共 ${total} 项，列前 ${lines.length}）：` : `${title}（${total} 项）：`
+  const head =
+    total > lines.length
+      ? `${title}（共 ${total} 项，列前 ${lines.length}）：`
+      : `${title}（${total} 项）：`
   return head + "\n" + lines.map((l) => `  - ${l}`).join("\n")
 }
 
@@ -50,7 +53,13 @@ export async function gatherHomeContext(): Promise<string> {
     ),
   )
   if (folders.length) {
-    blocks.push(section("收藏夹", folders.length, folders.slice(0, CAP).map((f) => f.name)))
+    blocks.push(
+      section(
+        "收藏夹",
+        folders.length,
+        folders.slice(0, CAP).map((f) => f.name),
+      ),
+    )
   }
   blocks.push(
     section(

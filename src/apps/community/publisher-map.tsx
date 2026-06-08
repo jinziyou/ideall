@@ -29,7 +29,10 @@ const CHINA_ZOOM = 1
 const CITY_ZOOM = 10
 
 /** 计算 geo 聚焦视图 (中心 + 缩放): 全国, 或指定城市的质心。 */
-function viewFor(selected: string, cities: CityGroup[]): { center: [number, number]; zoom: number } {
+function viewFor(
+  selected: string,
+  cities: CityGroup[],
+): { center: [number, number]; zoom: number } {
   if (selected !== ALL) {
     const c = cities.find((x) => x.city === selected)
     if (c) return { center: [c.longitude, c.latitude], zoom: CITY_ZOOM }
@@ -52,7 +55,9 @@ export default function PublisherMap({
   const cities = useMemo(() => groupByCity(locations), [locations])
 
   // 默认聚焦访问者城市 (无定位 / 该城市无数据 → 全国); 惰性初始化, 仅首渲染算一次。
-  const [selected, setSelected] = useState<string>(() => pickDefaultCity(cities, visitor)?.city ?? ALL)
+  const [selected, setSelected] = useState<string>(
+    () => pickDefaultCity(cities, visitor)?.city ?? ALL,
+  )
   // 数据刷新 (force-dynamic 软导航就地重渲染) 后选中城市可能从 cities 消失。渲染期直接收敛到合法值
   // (派生而非 effect 里 setState, 避免级联渲染 + Select 空白/视图文案不一致); ALL=全国恒合法。
   const activeCity =

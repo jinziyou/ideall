@@ -82,7 +82,8 @@ export default function SyncPanel() {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-medium">跨端同步</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            用同步码在多设备间同步订阅 · 端到端加密，服务端只存密文、读不到内容 · 取消订阅为尽力，可能被另一端带回。
+            用同步码在多设备间同步订阅 · 端到端加密，服务端只存密文、读不到内容 ·
+            取消订阅为尽力，可能被另一端带回。
           </p>
 
           {code ? (
@@ -121,7 +122,8 @@ export default function SyncPanel() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    在其它设备的「我的空间 · 订阅」里粘贴这串同步码即可同步。请妥善保管 —— 同步码即能力凭证，谁拿到都能读写你的订阅。
+                    在其它设备的「我的空间 · 订阅」里粘贴这串同步码即可同步。请妥善保管 ——
+                    同步码即能力凭证，谁拿到都能读写你的订阅。
                   </p>
                 </>
               )}
@@ -129,7 +131,11 @@ export default function SyncPanel() {
           ) : (
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button size="sm" onClick={enable} disabled={busy}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cloud className="h-4 w-4" />}
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Cloud className="h-4 w-4" />
+                )}
                 开启同步并生成同步码
               </Button>
               <span className="text-xs text-muted-foreground">或</span>

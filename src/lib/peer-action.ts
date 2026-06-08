@@ -26,10 +26,10 @@ export async function getPeers(): Promise<ApiResult<PeerPublisher[]>> {
 
 /** 某发布者的发布列表 (公开)。 */
 export async function getPeerPublications(id: string): Promise<ApiResult<Publication[]>> {
-  return apiFetch<Publication[]>(
-    `${SERVER_ADDR}/peer/${encodeURIComponent(id)}/publications`,
-    { cache: "no-store", defaultErrorMessage: "获取发布失败" },
-  )
+  return apiFetch<Publication[]>(`${SERVER_ADDR}/peer/${encodeURIComponent(id)}/publications`, {
+    cache: "no-store",
+    defaultErrorMessage: "获取发布失败",
+  })
 }
 
 /** 发布一条 (需登录 token)。 */

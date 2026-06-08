@@ -12,7 +12,8 @@ export default function HomeLayout({ children }: { children: React.ReactNode }) 
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">我的空间</h1>
           <p className="text-sm text-muted-foreground">
-            信息中枢 · 订阅、资源与书签 —— 个人数据 (订阅偏好 / 资源 / 书签) 本地 · 此设备 —— 存在本机浏览器、不上传服务器。
+            信息中枢 · 订阅、资源与书签 —— 个人数据 (订阅偏好 / 资源 / 书签) 本地 · 此设备 ——
+            存在本机浏览器、不上传服务器。
           </p>
         </div>
 

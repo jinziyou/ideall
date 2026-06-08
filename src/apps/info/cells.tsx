@@ -114,7 +114,11 @@ export function EntityCell({ entities }: { entities: NameEntity[] | undefined })
       {withEntry.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {withEntry.map((e, i) => (
-            <Badge key={`${e.label}-${e.name}-${i}`} variant="secondary" className="gap-1 font-normal">
+            <Badge
+              key={`${e.label}-${e.name}-${i}`}
+              variant="secondary"
+              className="gap-1 font-normal"
+            >
               <span>{e.name}</span>
               <EntityEntryLinks entity={e} />
             </Badge>
@@ -123,9 +127,7 @@ export function EntityCell({ entities }: { entities: NameEntity[] | undefined })
       )}
       {others.length > 0 && (
         <details className="text-muted-foreground">
-          <summary className="cursor-pointer select-none">
-            次要实体 ({others.length})
-          </summary>
+          <summary className="cursor-pointer select-none">次要实体 ({others.length})</summary>
           <div className="mt-1">{others.map((e) => e.name).join(", ")}</div>
         </details>
       )}
@@ -146,7 +148,11 @@ export function PublisherHoverCell({ publisher }: { publisher: Publisher | undef
       <HoverCardContent className="flex flex-col items-start gap-2 text-xs">
         <span className="text-muted-foreground">{publisher.domain}</span>
         <SubscribeButton
-          sub={{ type: "publisher", key: publisher.domain, title: publisher.name || publisher.domain }}
+          sub={{
+            type: "publisher",
+            key: publisher.domain,
+            title: publisher.name || publisher.domain,
+          }}
         />
       </HoverCardContent>
     </HoverCard>

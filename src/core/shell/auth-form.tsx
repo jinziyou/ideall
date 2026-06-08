@@ -76,7 +76,9 @@ export default function AuthForm() {
       <CardHeader>
         <CardTitle>{mode === "login" ? "登录" : "注册"}</CardTitle>
         <CardDescription>
-          {mode === "login" ? "登录账号以在「我的发布」发布内容，成为可被订阅的社区发布者。" : "创建账号以在「我的发布」发布内容，被他人订阅。"}
+          {mode === "login"
+            ? "登录账号以在「我的发布」发布内容，成为可被订阅的社区发布者。"
+            : "创建账号以在「我的发布」发布内容，被他人订阅。"}
           密码经 X25519 加密后才离开浏览器。
         </CardDescription>
       </CardHeader>
