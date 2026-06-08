@@ -4,6 +4,7 @@ import { ExternalLink, Newspaper } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatTimestamp } from "@/lib/format"
 import { openExternal } from "@/lib/safe-url"
+import { analysisLink } from "../columns"
 import { Info } from "../model"
 
 /**
@@ -38,9 +39,7 @@ export default function CoverageList({ items }: { items: Info[] }) {
               variant="ghost"
               size="sm"
               className="h-6 shrink-0 px-2 text-xs text-muted-foreground"
-              onClick={() =>
-                window.open(`/info/analysis?url=${encodeURIComponent(info.url)}`, "_blank")
-              }
+              onClick={() => window.open(analysisLink(info.url), "_blank")}
             >
               关联
             </Button>

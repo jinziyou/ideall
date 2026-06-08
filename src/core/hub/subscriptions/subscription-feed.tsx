@@ -10,6 +10,7 @@ import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
+import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import type { Subscription } from "../model"
 import { listSubscriptions, removeSubscription } from "../lib/subscriptions-store"
 
@@ -67,10 +68,10 @@ export default function SubscriptionFeed() {
     load()
     // 跨端同步完成后刷新订阅流 (SyncPanel 广播)
     const onSynced = () => load()
-    window.addEventListener("wonita:subscriptions-synced", onSynced)
+    window.addEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
     return () => {
       mountedRef.current = false
-      window.removeEventListener("wonita:subscriptions-synced", onSynced)
+      window.removeEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
     }
   }, [load])
 

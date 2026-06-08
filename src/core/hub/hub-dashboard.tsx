@@ -8,7 +8,7 @@ import { listSubscriptions } from "./lib/subscriptions-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listFiles } from "./lib/files-store"
 import { countAgentThreads } from "./lib/agent-threads-count"
-import { HUB_UPDATED } from "./lib/flowback"
+import { onHubUpdated } from "./lib/flowback"
 import type { Subscription } from "./model"
 import { HubStatTiles } from "./hub-stat-tiles"
 import { RecentFlowback, type FlowItem } from "./recent-flowback"
@@ -134,14 +134,11 @@ export default function HubDashboard() {
       })
     }
     load()
-    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (与头部计数同源)
-    const onUpdate = () => load()
-    window.addEventListener(HUB_UPDATED, onUpdate)
-    window.addEventListener("wonita:subscriptions-synced", onUpdate)
+    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (与头部计数同源; onHubUpdated 同听 HUB_UPDATED + SUBSCRIPTIONS_SYNCED)
+    const off = onHubUpdated(load)
     return () => {
       alive = false
-      window.removeEventListener(HUB_UPDATED, onUpdate)
-      window.removeEventListener("wonita:subscriptions-synced", onUpdate)
+      off()
     }
   }, [])
 
