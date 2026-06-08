@@ -3,7 +3,7 @@
 ## Repository
 
 `peer` 是 [Wonita](https://github.com/jinziyou/wonita) monorepo 中的用户节点 (myos) 前端。
-全局布局与 API 契约同步见根目录 [`CLAUDE.md`](../../CLAUDE.md)。
+全局布局与 API 契约同步见 monorepo 根目录 [`CLAUDE.md`](../CLAUDE.md)（本仓库作为 wonita 的 `peer/` 子模块挂载）。
 
 ## Positioning
 

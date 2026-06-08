@@ -1,4 +1,6 @@
-# 自包含：peer。在 peer 下: docker compose up --build
+# peer (myos) 应用服务。需先存在外部网络 wonita_net (与 super/ 共用):
+#   docker network create wonita_net   # 若尚未创建
+# 然后在 peer/ 下: docker compose up --build
 name: myos
 
 services:

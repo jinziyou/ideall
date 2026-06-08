@@ -1,5 +1,5 @@
 // 登录会话本地存储 (token + 当前用户), localStorage; 供 useSyncExternalStore 订阅。
-// 这是公开发布身份, 与「跨端同步」的无账号同步码 (home/lib/subscription-sync) 是两套独立身份。
+// 这是公开发布身份, 与「跨端同步」的无账号同步码 (plugins/sync/lib/subscription-sync) 是两套独立身份。
 
 import type { CurrentUser } from "./auth-action"
 
