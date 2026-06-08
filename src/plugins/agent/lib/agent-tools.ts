@@ -7,6 +7,10 @@ import type { SubscriptionType } from "@protocol/subscription"
 
 const SUB_TYPES: SubscriptionType[] = ["publisher", "entity", "tool", "search", "peer"]
 const LIST_CAP = 80
+// 写入边界对模型给的文本 / 标签设上限, 防超长串或海量标签被持久化进 IndexedDB。
+const STR_CAP = 2000
+const TAGS_CAP = 24
+const TAG_LEN_CAP = 64
 
 /** OpenAI function-calling 工具定义 (传给模型的 tools 数组)。 */
 export const AGENT_TOOLS = [
@@ -170,17 +174,19 @@ export interface ToolResult {
 }
 
 function asTags(v: unknown): string[] {
-  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean)
-  if (typeof v === "string")
-    return v
-      .split(/[,，\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-  return []
+  const raw = Array.isArray(v)
+    ? v.map((x) => String(x))
+    : typeof v === "string"
+      ? v.split(/[,，\s]+/)
+      : []
+  return raw
+    .map((s) => s.trim().slice(0, TAG_LEN_CAP))
+    .filter(Boolean)
+    .slice(0, TAGS_CAP)
 }
 
 function str(v: unknown): string {
-  return typeof v === "string" ? v.trim() : ""
+  return typeof v === "string" ? v.trim().slice(0, STR_CAP) : ""
 }
 
 /** 把收藏夹名解析为 id; 不存在则创建。空名返回 null (未分组)。 */
@@ -266,8 +272,8 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
         const target = bms.find((b) => b.id === id)
         if (!target) return { ok: false, summary: `未找到书签 ${id}`, data: { error: "not found" } }
         const patch: Record<string, unknown> = {}
-        if (typeof args.title === "string") patch.title = args.title.trim()
-        if (typeof args.description === "string") patch.description = args.description.trim()
+        if (typeof args.title === "string") patch.title = str(args.title)
+        if (typeof args.description === "string") patch.description = str(args.description)
         if (args.tags !== undefined) patch.tags = asTags(args.tags)
         if (typeof args.folder === "string")
           patch.folderId = await resolveFolderId(args.folder, hub)
@@ -330,9 +336,9 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
       }
 
       case "remove_subscription": {
-        const type = str(args.type) as SubscriptionType
+        const type = SUB_TYPES.find((t) => t === str(args.type))
         const key = str(args.key)
-        if (!SUB_TYPES.includes(type) || !key)
+        if (!type || !key)
           return { ok: false, summary: "type 或 key 无效", data: { error: "invalid type/key" } }
         const subs = await listSubscriptions()
         const target = subs.find((s) => s.type === type && s.key === key)
@@ -365,7 +371,7 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
         const target = files.find((f) => f.id === id)
         if (!target) return { ok: false, summary: `未找到资源 ${id}`, data: { error: "not found" } }
         const patch: Record<string, unknown> = {}
-        if (typeof args.name === "string" && args.name.trim()) patch.name = args.name.trim()
+        if (typeof args.name === "string" && str(args.name)) patch.name = str(args.name)
         if (args.tags !== undefined) patch.tags = asTags(args.tags)
         await updateFileMeta(id, patch)
         return { ok: true, summary: `已更新资源「${target.name}」`, data: { id } }
