@@ -32,11 +32,17 @@ export default function LocalDeviceChip() {
           本地 · 此设备
         </div>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          你的订阅、书签、文件与对话都存在这台设备的浏览器里, 默认<b className="font-medium text-foreground">不上传服务器</b>。
+          你的订阅、书签、文件与对话都存在这台设备的浏览器里, 默认
+          <b className="font-medium text-foreground">不上传服务器</b>。
         </p>
         <div className="mt-3 flex items-center justify-between rounded-md border bg-muted/40 px-2.5 py-2">
           <span className="text-xs">跨端同步</span>
-          <span className={cn("text-xs font-medium", synced ? "text-foreground" : "text-muted-foreground")}>
+          <span
+            className={cn(
+              "text-xs font-medium",
+              synced ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
             {synced ? "已开启 (端到端加密)" : "未开启"}
           </span>
         </div>

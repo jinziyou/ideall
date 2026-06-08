@@ -48,7 +48,9 @@ export default function CommandPalette() {
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="flex-1 text-left">跳转到…</span>
-        <kbd className="hidden rounded border bg-muted px-1.5 font-sans text-[10px] sm:inline">⌘K</kbd>
+        <kbd className="hidden rounded border bg-muted px-1.5 font-sans text-[10px] sm:inline">
+          ⌘K
+        </kbd>
       </button>
 
       <CommandDialog open={open} onOpenChange={setOpen}>

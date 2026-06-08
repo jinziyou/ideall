@@ -68,7 +68,10 @@ function CommandEmpty(props: React.ComponentProps<typeof CommandPrimitive.Empty>
   return <CommandPrimitive.Empty className="py-6 text-center text-sm" {...props} />
 }
 
-function CommandGroup({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Group>) {
+function CommandGroup({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Group>) {
   return (
     <CommandPrimitive.Group
       className={cn(

@@ -10,6 +10,7 @@ import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
+import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import type { Subscription } from "../model"
 import { listSubscriptions, removeSubscription } from "../lib/subscriptions-store"
 
@@ -67,10 +68,10 @@ export default function SubscriptionFeed() {
     load()
     // 跨端同步完成后刷新订阅流 (SyncPanel 广播)
     const onSynced = () => load()
-    window.addEventListener("wonita:subscriptions-synced", onSynced)
+    window.addEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
     return () => {
       mountedRef.current = false
-      window.removeEventListener("wonita:subscriptions-synced", onSynced)
+      window.removeEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
     }
   }, [load])
 
@@ -102,7 +103,8 @@ export default function SubscriptionFeed() {
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <Rss className="h-8 w-8 text-muted-foreground" />
         <p className="max-w-sm text-sm text-muted-foreground">
-          还没有订阅。去「发现」订阅发布者 / 实体 / 存搜索 / 社区发布者，或把常用工具钉到「我的空间」，都会回流到这里。
+          还没有订阅。去「发现」订阅发布者 / 实体 / 存搜索 /
+          社区发布者，或把常用工具钉到「我的空间」，都会回流到这里。
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           <Button asChild size="sm">

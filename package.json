@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "description": "Wonita 用户界面 / 个人信息总控终端，home 信息中枢 + info/community/tool",
   "private": true,
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "sync:api": "node scripts/sync-server-openapi.mjs",

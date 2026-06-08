@@ -8,7 +8,7 @@ import { listSubscriptions } from "./lib/subscriptions-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listFiles } from "./lib/files-store"
 import { countAgentThreads } from "./lib/agent-threads-count"
-import { HUB_UPDATED } from "./lib/flowback"
+import { onHubUpdated } from "./lib/flowback"
 import type { Subscription } from "./model"
 import { HubStatTiles } from "./hub-stat-tiles"
 import { RecentFlowback, type FlowItem } from "./recent-flowback"
@@ -33,25 +33,68 @@ const SUB_META: Record<Subscription["type"], { dotClass: string; label: string }
   tool: { dotClass: "bg-spoke-tool", label: "钉住工具" },
 }
 
-function buildFlow(subs: Subscription[], bookmarks: { id: string; title: string; createdAt: number }[], files: { id: string; name: string; createdAt: number }[]): FlowItem[] {
+function buildFlow(
+  subs: Subscription[],
+  bookmarks: { id: string; title: string; createdAt: number }[],
+  files: { id: string; name: string; createdAt: number }[],
+): FlowItem[] {
   const items: FlowItem[] = []
   for (const s of subs) {
     const m = SUB_META[s.type]
-    items.push({ id: `sub:${s.id}`, ts: s.createdAt, dotClass: m.dotClass, label: m.label, title: s.title, href: "/home/subscriptions" })
+    items.push({
+      id: `sub:${s.id}`,
+      ts: s.createdAt,
+      dotClass: m.dotClass,
+      label: m.label,
+      title: s.title,
+      href: "/home/subscriptions",
+    })
   }
   for (const b of bookmarks) {
-    items.push({ id: `bm:${b.id}`, ts: b.createdAt, dotClass: "bg-pop", label: "收藏书签", title: b.title, href: "/home/bookmarks" })
+    items.push({
+      id: `bm:${b.id}`,
+      ts: b.createdAt,
+      dotClass: "bg-pop",
+      label: "收藏书签",
+      title: b.title,
+      href: "/home/bookmarks",
+    })
   }
   for (const f of files) {
-    items.push({ id: `f:${f.id}`, ts: f.createdAt, dotClass: "bg-pop", label: "添加资源", title: f.name, href: "/home/resources" })
+    items.push({
+      id: `f:${f.id}`,
+      ts: f.createdAt,
+      dotClass: "bg-pop",
+      label: "添加资源",
+      title: f.name,
+      href: "/home/resources",
+    })
   }
   return items.sort((a, b) => b.ts - a.ts).slice(0, 14)
 }
 
 const SPOKES = [
-  { href: "/info", label: "资讯", dot: "bg-spoke-info", icon: Newspaper, hint: "订阅发布者 / 实体 · 收藏文章" },
-  { href: "/community", label: "社区", dot: "bg-spoke-community", icon: Map, hint: "订阅 peer · 接收他人发布" },
-  { href: "/tool", label: "工具", dot: "bg-spoke-tool", icon: Wrench, hint: "钉工具 · 存搜索为订阅" },
+  {
+    href: "/info",
+    label: "资讯",
+    dot: "bg-spoke-info",
+    icon: Newspaper,
+    hint: "订阅发布者 / 实体 · 收藏文章",
+  },
+  {
+    href: "/community",
+    label: "社区",
+    dot: "bg-spoke-community",
+    icon: Map,
+    hint: "订阅 peer · 接收他人发布",
+  },
+  {
+    href: "/tool",
+    label: "工具",
+    dot: "bg-spoke-tool",
+    icon: Wrench,
+    hint: "钉工具 · 存搜索为订阅",
+  },
 ] as const
 
 export default function HubDashboard() {
@@ -91,14 +134,11 @@ export default function HubDashboard() {
       })
     }
     load()
-    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (与头部计数同源)
-    const onUpdate = () => load()
-    window.addEventListener(HUB_UPDATED, onUpdate)
-    window.addEventListener("wonita:subscriptions-synced", onUpdate)
+    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (与头部计数同源; onHubUpdated 同听 HUB_UPDATED + SUBSCRIPTIONS_SYNCED)
+    const off = onHubUpdated(load)
     return () => {
       alive = false
-      window.removeEventListener(HUB_UPDATED, onUpdate)
-      window.removeEventListener("wonita:subscriptions-synced", onUpdate)
+      off()
     }
   }, [])
 
@@ -115,7 +155,8 @@ export default function HubDashboard() {
     )
   }
 
-  const isEmpty = data.subs.length === 0 && data.bookmarks === 0 && data.files === 0 && data.threads === 0
+  const isEmpty =
+    data.subs.length === 0 && data.bookmarks === 0 && data.files === 0 && data.threads === 0
 
   if (isEmpty) return <EmptyHub />
 
@@ -140,14 +181,18 @@ export default function HubDashboard() {
           {data.flow.length > 0 ? (
             <RecentFlowback items={data.flow} />
           ) : (
-            <p className="text-sm text-muted-foreground">还没有回流记录 —— 去「发现」订阅或收藏点什么。</p>
+            <p className="text-sm text-muted-foreground">
+              还没有回流记录 —— 去「发现」订阅或收藏点什么。
+            </p>
           )}
         </div>
 
         {/* 去发现, 带东西回家 */}
         <div className="rounded-xl border bg-card p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
-          <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都把东西回流进这个中枢</p>
+          <p className="mb-4 text-xs text-muted-foreground">
+            资讯 · 社区 · 工具，都把东西回流进这个中枢
+          </p>
           <div className="flex flex-col gap-2.5">
             {SPOKES.map((s) => (
               <Link

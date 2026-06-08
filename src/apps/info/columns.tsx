@@ -33,7 +33,8 @@ const HIDE_XL: ColumnMeta = {
 }
 
 /** 跳转到某条信息的「全面报道」分析页。 */
-const analysisLink = (url: string) => `/info/analysis?url=${encodeURIComponent(url)}`
+// /info/analysis 深链的唯一构造处 (本 app 内复用: columns 各处 + analysis/coverage)。
+export const analysisLink = (url: string) => `/info/analysis?url=${encodeURIComponent(url)}`
 
 /** 单条信息表格列 (实体页 / 发布者页)。 */
 export const getInfoColumns = (): ColumnDef<Info>[] => [

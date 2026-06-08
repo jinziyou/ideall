@@ -268,7 +268,12 @@ export default function AgentPanel() {
     <div className="flex flex-col gap-4 md:flex-row">
       {/* 会话侧栏 */}
       <aside className="md:w-52 md:shrink-0">
-        <Button variant="outline" size="sm" className="mb-2 w-full justify-start gap-2" onClick={newChat}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mb-2 w-full justify-start gap-2"
+          onClick={newChat}
+        >
           <SquarePen className="h-4 w-4" />
           新对话
         </Button>
@@ -318,7 +323,12 @@ export default function AgentPanel() {
               懂你的「我的空间」—— 结合订阅 / 书签 / 资源作答，对话只存本机
             </p>
           </div>
-          <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setSettingsOpen(true)}
+          >
             <Settings className="h-4 w-4" />
             设置
           </Button>
@@ -344,7 +354,9 @@ export default function AgentPanel() {
               </div>
               <div className="space-y-1">
                 <p className="font-medium">问问关于「我的空间」的事</p>
-                <p className="text-sm text-muted-foreground">助手会结合本机的订阅、书签与资源作答</p>
+                <p className="text-sm text-muted-foreground">
+                  助手会结合本机的订阅、书签与资源作答
+                </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (
@@ -387,7 +399,9 @@ export default function AgentPanel() {
               智能体模式
             </button>
             {agentMode && (
-              <span className="text-xs text-muted-foreground">模型可读写你的书签 / 订阅 / 资源</span>
+              <span className="text-xs text-muted-foreground">
+                模型可读写你的书签 / 订阅 / 资源
+              </span>
             )}
           </div>
           <div className="flex items-end gap-2">

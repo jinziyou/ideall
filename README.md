@@ -11,7 +11,8 @@ Wonita（**本地优先的个人信息总控终端**）的**用户界面**。从
 | community | `/community` | 发布者地图（信息来源地理分布） |
 | tool | `/tool` | 工具聚合（搜索 / AI / 导航） |
 
-> 项目全貌见根目录 [`README.md`](../../README.md)，开发约定见 [`CLAUDE.md`](CLAUDE.md)。
+> 项目全貌见 monorepo 根目录 [`README.md`](../README.md)，开发约定见 [`CLAUDE.md`](CLAUDE.md)。
+> （本仓库作为 wonita 的 `peer/` 子模块挂载，故 `../` 指向 monorepo 根。）
 
 ## 本地开发
 
@@ -41,15 +42,16 @@ curl -I -sS http://localhost:3000
 ```
 
 `docker-compose.yml` 期望宿主机存在外部网络 `wonita_net`（与 `super/` 共用），方便容器间互联。
-生产环境通过 [`scripts/prod.sh`](../../scripts/prod.sh) 统一编排，主机端口默认 `13000`（开发端口 + 10000）。
+生产环境**单独部署**（不经 super 的 `scripts/prod.sh` 编排）：在 `peer/` 下 `docker compose up -d --build`，
+主机端口由 `MYOS_PORT` 控制（约定开发端口 + 10000 = `13000`）。
 
 ## 环境变量
 
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `SERVER_ADDR` | super/server 地址 | `http://127.0.0.1:3001` (本地) / `http://server:3001` (容器) |
-| `myos_PORT` | Docker 宿主机映射端口 | `3000` |
-| `myos_SERVER_ADDR` | compose 注入的 super/server 地址 | `http://server:3001` |
+| `MYOS_PORT` | Docker 宿主机映射端口（compose 插值） | `3000` |
+| `MYOS_SERVER_ADDR` | compose 注入的 super/server 地址 | `http://server:3001` |
 | `WONITA_NETWORK` | Docker 共享网络名 | `wonita_net` |
 
 ## API 类型同步 (codegen)
@@ -69,7 +71,7 @@ scripts/sync-server-openapi.mjs
 2. peer 这边同步 + 重新生成类型:
 
 ```bash
-pnpm sync:api      # 优先用本地 ../../super/server/openapi.json, 找不到时退化到 GitHub raw
+pnpm sync:api      # 优先用本地 ../super/server/openapi.json, 找不到时退化到 GitHub raw
 pnpm gen:api       # openapi/server.json → src/lib/api/server.d.ts
 pnpm gen:api:check # CI 卡点: 校验生成结果与 schema 一致 (改了 schema 忘了重生成会在此失败)
 ```

@@ -78,7 +78,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
     }
   }
 
-  // 触及工具调用上限: 不再带 tools, 让模型基于已有结果给最终答复
+  // 触及工具调用上限: 不再带 tools, 让模型基于已有结果给最终答复。
+  // 但若用户恰在最后一轮结束时「停止」, 不应再发起这次收尾请求 (与循环内 abort 守卫一致)。
+  if (opts.signal?.aborted) return { content: "", toolEvents }
   const final = await requestCompletion({
     baseURL: opts.baseURL,
     model: opts.model,

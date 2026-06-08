@@ -59,6 +59,8 @@ export function DataTable<TData, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 
+  // React Compiler 主动跳过记忆化 TanStack 的 useReactTable (其返回函数不可安全 memo), 属预期、无害。
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

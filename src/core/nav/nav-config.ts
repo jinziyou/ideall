@@ -1,4 +1,14 @@
-import { Bookmark, Bot, FolderOpen, LayoutDashboard, Map, Megaphone, Newspaper, Rss, Wrench } from "lucide-react"
+import {
+  Bookmark,
+  Bot,
+  FolderOpen,
+  LayoutDashboard,
+  Map,
+  Megaphone,
+  Newspaper,
+  Rss,
+  Wrench,
+} from "lucide-react"
 import type { ComponentType } from "react"
 
 /** 导航单一真相源 —— 同时驱动桌面头部、移动 Sheet、⌘K 命令台, 杜绝手抄漂移。 */

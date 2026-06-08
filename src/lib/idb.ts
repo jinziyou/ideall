@@ -46,10 +46,25 @@ function openDB(): Promise<IDBDatabase> {
         db.createObjectStore(STORE_AGENT_THREADS, { keyPath: "id" })
       }
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      const db = req.result
+      // 另一标签页请求版本升级时主动关闭本连接 (否则会阻塞对方的 upgrade), 并清空单例,
+      // 使下次 openDB() 重新打开而非复用已 close 的连接 (复用会在 transaction 时抛 InvalidStateError)。
+      db.onversionchange = () => {
+        db.close()
+        dbPromise = null
+      }
+      resolve(db)
+    }
     req.onerror = () => {
       dbPromise = null // 打开失败 (配额 / 损坏 / 拒绝) 时清空单例, 允许后续重试恢复
       reject(req.error)
+    }
+    // 本页持旧版本连接、别的页加载新版本时, open 既不 success 也不 error 而是 blocked;
+    // 不处理则该 Promise 永久 pending, 冻结本页全部 home 本地读写。转成可被上层 catch 的 reject。
+    req.onblocked = () => {
+      dbPromise = null
+      reject(new Error("IndexedDB 升级被其它标签页阻塞, 请关闭其它 myos 标签页后重试"))
     }
   })
   return dbPromise

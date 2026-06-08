@@ -1,5 +1,6 @@
 // 组合根 (composition root) —— 唯一允许 import 各 app/plugin manifest 的地方。
-// 在客户端启动时把它们的能力 (内容解析器 / 后续的 HubDataPort 等) 注册进 protocol registry,
+// 客户端启动时注册进 protocol registry: (1) core 自身实现的 HubDataPort; (2) 各 app/plugin
+// manifest 贡献的能力 (info/community 的内容解析器、sync 插件的 SyncPort)。
 // 使中枢 (core) 永不直接依赖具体 app/plugin。
 import { registerContentResolver } from "@protocol/content"
 import { registerHubData } from "@protocol/hub-data"

@@ -226,8 +226,11 @@ export default function FileManager() {
         <StatCard label="文档" value={String(stats.byGroup.doc)} />
       </div>
 
-      {/* 上传区 (拖拽 + 点击) */}
+      {/* 上传区 (拖拽 + 点击 + 键盘) */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="上传文件: 拖拽到此处, 或按 Enter / 空格选择文件"
         onDragOver={(e) => {
           e.preventDefault()
           setDragging(true)
@@ -239,6 +242,13 @@ export default function FileManager() {
           if (e.dataTransfer.files.length) handleUpload(e.dataTransfer.files)
         }}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          // 纯键盘 / 读屏用户: Enter / 空格触发选择文件 (拖拽对键盘不可用)。
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            inputRef.current?.click()
+          }
+        }}
         className={cn(
           "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
           dragging

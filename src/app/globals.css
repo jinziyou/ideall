@@ -43,8 +43,8 @@
 
   /* 标识符 (同步码 / domain / peer id / hash) 用等宽, 给本地优先数据「终端」质感 */
   --font-mono:
-    ui-monospace, "SFMono-Regular", "Menlo", "Cascadia Mono", "Segoe UI Mono",
-    "Liberation Mono", monospace;
+    ui-monospace, "SFMono-Regular", "Menlo", "Cascadia Mono", "Segoe UI Mono", "Liberation Mono",
+    monospace;
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;

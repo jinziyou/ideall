@@ -3,7 +3,13 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { deriveKeys, encryptJson, decryptJson, isValidSyncCode, generateSyncCode } from "./sync-crypto"
+import {
+  deriveKeys,
+  encryptJson,
+  decryptJson,
+  isValidSyncCode,
+  generateSyncCode,
+} from "./sync-crypto"
 
 const CODE = "1234567890abcdef1234567890abcdef" // 32 hex = 16 字节
 

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { listSubscriptions } from "@core/hub/lib/subscriptions-store"
 import { listBookmarks } from "@core/hub/lib/bookmarks-store"
 import { listFiles } from "@core/hub/lib/files-store"
-import { HUB_UPDATED } from "@protocol/flowback"
+import { onHubUpdated } from "@protocol/flowback"
 import { HUB_HREF, HUB_LABEL } from "@core/nav/nav-config"
 
 /**
@@ -23,6 +23,7 @@ export default function HubNavLink() {
 
   React.useEffect(() => {
     let alive = true
+    let flashTimer: ReturnType<typeof setTimeout> | undefined
     async function load() {
       try {
         const [subs, bms, files] = await Promise.all([
@@ -34,7 +35,8 @@ export default function HubNavLink() {
         const n = subs.length + bms.length + files.length
         if (prev.current !== null && n > prev.current) {
           setFlash(true)
-          setTimeout(() => {
+          clearTimeout(flashTimer) // 快速连续回流时不让多枚计时器叠加
+          flashTimer = setTimeout(() => {
             if (alive) setFlash(false)
           }, 650)
         }
@@ -45,13 +47,12 @@ export default function HubNavLink() {
       }
     }
     load()
-    const onUpdate = () => load()
-    window.addEventListener(HUB_UPDATED, onUpdate)
-    window.addEventListener("wonita:subscriptions-synced", onUpdate)
+    // onHubUpdated 同时监听 HUB_UPDATED + SUBSCRIPTIONS_SYNCED, 返回值即退订函数。
+    const off = onHubUpdated(load)
     return () => {
       alive = false
-      window.removeEventListener(HUB_UPDATED, onUpdate)
-      window.removeEventListener("wonita:subscriptions-synced", onUpdate)
+      clearTimeout(flashTimer)
+      off()
     }
   }, [])
 

@@ -146,7 +146,11 @@ export const AGENT_TOOLS = [
         properties: {
           id: { type: "string", description: "文件 id (必填)" },
           name: { type: "string", description: "新文件名 (可选)" },
-          tags: { type: "array", items: { type: "string" }, description: "新标签集 (可选，整体替换)" },
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "新标签集 (可选，整体替换)",
+          },
         },
         required: ["id"],
       },
@@ -265,7 +269,8 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
         if (typeof args.title === "string") patch.title = args.title.trim()
         if (typeof args.description === "string") patch.description = args.description.trim()
         if (args.tags !== undefined) patch.tags = asTags(args.tags)
-        if (typeof args.folder === "string") patch.folderId = await resolveFolderId(args.folder, hub)
+        if (typeof args.folder === "string")
+          patch.folderId = await resolveFolderId(args.folder, hub)
         await updateBookmark(id, patch)
         return { ok: true, summary: `已更新书签「${target.title}」`, data: { id } }
       }
@@ -283,14 +288,20 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
         const fname = str(args.name)
         if (!fname) return { ok: false, summary: "缺少收藏夹名", data: { error: "name 必填" } }
         const folder = await addFolder(fname)
-        return { ok: true, summary: `已创建收藏夹「${folder.name}」`, data: { id: folder.id, name: folder.name } }
+        return {
+          ok: true,
+          summary: `已创建收藏夹「${folder.name}」`,
+          data: { id: folder.id, name: folder.name },
+        }
       }
 
       case "list_subscriptions": {
         const type = str(args.type)
         let subs = await listSubscriptions()
         if (type) subs = subs.filter((s) => s.type === type)
-        const items = subs.slice(0, LIST_CAP).map((s) => ({ type: s.type, key: s.key, title: s.title }))
+        const items = subs
+          .slice(0, LIST_CAP)
+          .map((s) => ({ type: s.type, key: s.key, title: s.title }))
         return {
           ok: true,
           summary: `列出 ${subs.length} 个订阅`,
@@ -311,7 +322,11 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
           searchKeyword: keyword,
           searchDomain: domain || undefined,
         })
-        return { ok: true, summary: `已订阅搜索「${keyword}」${domain ? ` @${domain}` : ""}`, data: { key } }
+        return {
+          ok: true,
+          summary: `已订阅搜索「${keyword}」${domain ? ` @${domain}` : ""}`,
+          data: { key },
+        }
       }
 
       case "remove_subscription": {
@@ -321,7 +336,8 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
           return { ok: false, summary: "type 或 key 无效", data: { error: "invalid type/key" } }
         const subs = await listSubscriptions()
         const target = subs.find((s) => s.type === type && s.key === key)
-        if (!target) return { ok: false, summary: `未找到订阅 ${type}:${key}`, data: { error: "not found" } }
+        if (!target)
+          return { ok: false, summary: `未找到订阅 ${type}:${key}`, data: { error: "not found" } }
         await removeSubscription(type, key)
         return { ok: true, summary: `已取消订阅「${target.title}」`, data: { type, key } }
       }
@@ -359,6 +375,10 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
         return { ok: false, summary: `未知工具 ${name}`, data: { error: "unknown tool" } }
     }
   } catch (e) {
-    return { ok: false, summary: `工具执行出错: ${name}`, data: { error: e instanceof Error ? e.message : String(e) } }
+    return {
+      ok: false,
+      summary: `工具执行出错: ${name}`,
+      data: { error: e instanceof Error ? e.message : String(e) },
+    }
   }
 }
