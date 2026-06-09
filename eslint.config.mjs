@@ -1,8 +1,9 @@
 import nextConfig from "eslint-config-next"
 
 // 依赖边界 (OS 式分层强制): 用 no-restricted-imports 禁止越界 import。
-// 方向: protocol→lib; lib→∅; app/*→{protocol,lib,components}; plugin/*→{protocol,lib,components};
-//       core→{protocol,lib,components} (插件经 @protocol registry); 组合根 core/shell/boot.ts 例外。
+// 方向: protocol→lib; lib→∅; components→{protocol,lib}; app/*→{protocol,lib,components};
+//       plugin/*→{protocol,lib,components}; core→{protocol,lib,components} (插件经 @protocol registry);
+//       组合根 core/shell/boot.ts 例外。
 const boundary = (files, deny, message) => ({
   files,
   rules: {
@@ -50,11 +51,18 @@ const config = [
   ),
   { files: ["src/core/shell/boot.ts"], rules: { "no-restricted-imports": "off" } },
 
-  // protocol: 只依赖 @lib (+ @/components 给 feeders)
+  // protocol: 纯契约/端口/纯函数, 只依赖 @lib (不含 UI; feeders 已迁至 @/components/feeders)
   boundary(
     ["src/protocol/**/*.{ts,tsx}"],
+    ["@core/*", "@app/*", "@plugin/*", "@/app/*", "@/components/*"],
+    "protocol 是纯契约/端口层, 只依赖 @lib; 不得 import UI (@/components) 或上层",
+  ),
+
+  // components: 共享 UI 叶子, 可依赖 @protocol (端口/类型) + @lib; 不碰 core / app / plugin
+  boundary(
+    ["src/components/**/*.{ts,tsx}"],
     ["@core/*", "@app/*", "@plugin/*", "@/app/*"],
-    "protocol 只依赖 @lib / @/components",
+    "components 是共享 UI: 仅可 import @protocol / @lib / 同层 @/components",
   ),
 
   // lib: 零内部依赖的叶子, 不碰任何子项目

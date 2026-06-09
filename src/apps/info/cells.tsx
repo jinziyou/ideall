@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref, openExternal } from "@/lib/safe-url"
-import { SubscribeButton } from "@protocol/feeders"
+import { SubscribeButton } from "@/components/feeders"
 import type { NameEntity, Publisher } from "./model"
 
 /**

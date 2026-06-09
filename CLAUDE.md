@@ -27,10 +27,11 @@ home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 
 | **apps** | `@app/*` | 用户态应用 | `info` / `community` / `tool` —— **三者完全独立**, 互不 import、不碰 core/plugin |
 | **plugins** | `@plugin/*` | 内核模块 | `agent` (AI 助手) + `sync` (跨端同步) —— 经 protocol 挂到 core |
 | **lib** | `@lib/*` / `@/lib/*` | libc | 纯共享叶子: utils/format/id/env/ner-labels/safe-url/idb/hub-format/sync-code/sync-crypto + auth/api/peer-action 实现 |
-| **protocol** | `@protocol/*` | ABI / IPC | 跨子项目契约: subscription/content(解析注册表)/flowback/hub-data(HubDataPort)/sync(SyncPort)/peer/auth/transport/server + feeders |
+| **protocol** | `@protocol/*` | ABI / IPC | 跨子项目契约 (纯端口/类型/纯函数, 不含 UI): subscription/content(解析注册表)/flowback/hub-data(HubDataPort)/sync(SyncPort)/peer/auth/transport/server |
 
-**依赖方向 (单向)**: `protocol→lib`; `lib→∅`; `app/*→{protocol,lib,components}`;
-`plugin/*→{protocol,lib,components}`; `core→{protocol,lib,components}` (插件经 `@protocol` registry 触达)。
+**依赖方向 (单向)**: `protocol→lib`; `lib→∅`; `components→{protocol,lib}` (共享 UI 叶子, 如 `feeders`);
+`app/*→{protocol,lib,components}`; `plugin/*→{protocol,lib,components}`;
+`core→{protocol,lib,components}` (插件经 `@protocol` registry 触达)。
 唯一例外: 组合根 `core/shell/boot.ts` 可 import 各 `@app/*/manifest`、`@plugin/*/manifest`。
 
 **`src/app/` 仅放 Next 路由入口** (薄 re-export, 真实代码在 `@core`/`@app`/`@plugin`)。
@@ -39,7 +40,7 @@ home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 
 
 - **内容 feed**: 中枢订阅流调 `@protocol/content` 的 `resolveSubscription`; info/community 在各自 `manifest.ts`
   注册 resolver (info 管 publisher/entity/search, community 管 peer)。core 不 import app。
-- **中枢数据**: app 反馈组件 (`@protocol/feeders`) 与 agent 插件经 `@protocol/hub-data` 的 `getHubData()`
+- **中枢数据**: app 反馈组件 (共享 UI `@/components/feeders`) 与 agent 插件经 `@protocol/hub-data` 的 `getHubData()`
   (HubDataPort, core 在 boot 注册实现) 读写订阅/书签/资源, 不直接依赖 core 存储。
 - **跨端同步**: core 同步面板调 `@protocol/sync` 的 `getSyncPort()`; sync 插件 `manifest.ts` 注册 SyncPort。
 - 启动注册由 `core/shell/boot-gate.tsx` (客户端启动闸, 挂在根 layout) 调 `boot.ts#registerAll()` 完成。

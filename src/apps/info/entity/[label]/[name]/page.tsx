@@ -7,7 +7,7 @@ import { getInfoColumns } from "../../../columns"
 import { DataTable } from "../../../table"
 import { Info } from "../../../model"
 import { EntityEntryLinks } from "../../../cells"
-import { SubscribeButton } from "@protocol/feeders"
+import { SubscribeButton } from "@/components/feeders"
 import { entityLabelText } from "@/lib/ner-labels"
 import { useApiResult } from "@/lib/use-api-result"
 

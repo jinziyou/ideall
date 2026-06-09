@@ -3,7 +3,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Button } from "@/components/ui/button"
 import { Info, InfoEvent } from "./model"
 import { EntityCell, PublisherHoverCell, TimeCell, TitleCell } from "./cells"
-import { SaveToHub } from "@protocol/feeders"
+import { SaveToHub } from "@/components/feeders"
 import { openExternal } from "@/lib/safe-url"
 
 /** Info.publisher → SaveToHub 的 publisher 入参 (domain 缺失时不提供订阅项)。 */
