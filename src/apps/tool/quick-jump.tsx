@@ -5,7 +5,7 @@ import { Clock, ExternalLink, LayoutGrid, Search, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { PinToolButton } from "@protocol/feeders"
+import { PinToolButton } from "@/components/feeders"
 
 const HISTORY_LIMIT = 10
 const EMPTY_HISTORY: string[] = []

@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toast } from "sonner"
 import { fetchLatestInfo, QueryParams } from "../action"
 import { Info } from "../model"
-import { SubscribeButton } from "@protocol/feeders"
+import { SubscribeButton } from "@/components/feeders"
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 

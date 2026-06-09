@@ -6,7 +6,7 @@ import { fetchLatestInfo } from "../../action"
 import { getInfoColumns } from "../../columns"
 import { DataTable } from "../../table"
 import { Info } from "../../model"
-import { SubscribeButton } from "@protocol/feeders"
+import { SubscribeButton } from "@/components/feeders"
 import { useApiResult } from "@/lib/use-api-result"
 
 export default function InfoPublisherPage({ params }: { params: Promise<{ domain: string }> }) {
