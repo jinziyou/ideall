@@ -36,7 +36,7 @@ export default function PeerPublishers() {
         }
       })
       .catch(() => {
-        if (alive) setError("加载失败, 请重试")
+        if (alive) setError("网络错误")
       })
     return () => {
       alive = false
@@ -46,7 +46,7 @@ export default function PeerPublishers() {
   if (error) {
     return (
       <div className="flex flex-col items-center gap-2 py-6 text-center text-sm text-muted-foreground">
-        <span>加载失败: {error}</span>
+        <span>加载失败：{error}</span>
         <Button variant="outline" size="sm" onClick={reload}>
           重试
         </Button>
@@ -59,7 +59,7 @@ export default function PeerPublishers() {
   if (peers.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
-        还没有社区发布者。登录后在「我的空间 · 我的发布」发布内容，即可成为社区发布者被他人订阅。
+        还没有社区发布者。登录后在「我的空间 · 我的发布」发布内容。
       </p>
     )
   }

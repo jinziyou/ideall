@@ -114,7 +114,7 @@ function PreviewBody({
           </pre>
         ) : (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            该类型暂不支持预览, 请下载后查看。
+            该类型暂不支持预览，请下载后查看。
           </div>
         )}
       </div>

@@ -19,7 +19,7 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
 }
 
 function CommandDialog({
-  title = "命令面板",
+  title = "命令台",
   description = "搜索并跳转",
   children,
   ...props

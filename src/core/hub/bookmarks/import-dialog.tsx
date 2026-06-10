@@ -94,7 +94,7 @@ export default function ImportDialog({
         })
       }
       await bulkAddBookmarks(inputs)
-      toast.success(`已导入 ${inputs.length} 个链接`)
+      toast.success(`已导入 ${inputs.length} 个书签`)
       onImported()
       handleOpenChange(false)
     } catch (e) {
@@ -110,8 +110,7 @@ export default function ImportDialog({
         <DialogHeader>
           <DialogTitle>导入浏览器书签</DialogTitle>
           <DialogDescription>
-            选择浏览器导出的书签文件 (.html)。Chrome / Edge / Firefox / Safari 均在「书签管理器 →
-            导出」中生成。
+            选择浏览器导出的书签文件 (.html)，在「书签管理器 → 导出」中生成。
           </DialogDescription>
         </DialogHeader>
 
@@ -139,7 +138,7 @@ export default function ImportDialog({
           {parsed && parsed.length > 0 && (
             <>
               <div className="rounded-md bg-muted p-3 text-sm">
-                解析到 <span className="font-semibold">{parsed.length}</span> 个链接, {folderCount}{" "}
+                解析到 <span className="font-semibold">{parsed.length}</span> 个书签，{folderCount}{" "}
                 个收藏夹。
               </div>
               <label className="flex items-center gap-2 text-sm">
@@ -149,7 +148,7 @@ export default function ImportDialog({
                   onChange={(e) => setKeepFolders(e.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                <Label className="cursor-pointer">保留原有收藏夹结构</Label>
+                <Label className="cursor-pointer">保留收藏夹结构</Label>
               </label>
             </>
           )}

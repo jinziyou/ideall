@@ -53,12 +53,12 @@ export function PinToolButton({
       } else {
         await hub.addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
-        flowbackToast(`已钉到我的空间 · ${name}`, () => router.push("/home/subscriptions"))
+        flowbackToast(`已钉住 ${name}`, () => router.push("/home/subscriptions"))
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }
     } catch {
-      toast.error("操作失败, 请重试")
+      toast.error("操作失败，请重试")
     } finally {
       setBusy(false)
     }

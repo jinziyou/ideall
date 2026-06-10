@@ -130,7 +130,7 @@ function BookmarkForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{editing ? "编辑链接" : "新增链接"}</DialogTitle>
+        <DialogTitle>{editing ? "编辑书签" : "新增书签"}</DialogTitle>
       </DialogHeader>
       <div className="grid gap-3">
         <div className="grid gap-1.5">

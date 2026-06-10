@@ -74,7 +74,7 @@ export async function POST(req: Request): Promise<Response> {
       }),
     })
   } catch (e) {
-    return bad(`无法连接模型服务: ${e instanceof Error ? e.message : String(e)}`, 502)
+    return bad(`无法连接模型服务：${e instanceof Error ? e.message : String(e)}`, 502)
   }
 
   if (!upstream.ok || !upstream.body) {

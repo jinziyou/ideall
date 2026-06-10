@@ -4,7 +4,7 @@ import DiscoverNav from "./discover-nav"
 
 export const metadata = {
   title: "发现 | wonita",
-  description: "资讯、社区与工具的聚合入口 —— 浏览、订阅，把发现里的来源回流到「我的空间」中枢。",
+  description: "资讯、社区与工具的聚合入口。订阅后回流到「我的空间」。",
 }
 
 /**
@@ -20,7 +20,7 @@ export default function DiscoverLayout({ children }: { children: React.ReactNode
         <Link
           href="/home"
           className="inline-flex items-center gap-1.5 rounded-full border border-pop/25 bg-pop/[0.06] px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-pop/10 hover:text-foreground"
-          title="这里的订阅 / 收藏都回流到「我的空间」中枢"
+          title="订阅与收藏回流到「我的空间」"
         >
           <CornerDownLeft className="h-3.5 w-3.5" />
           回流去向 · <span className="font-medium text-foreground">我的空间</span>

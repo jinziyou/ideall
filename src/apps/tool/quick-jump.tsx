@@ -131,8 +131,8 @@ export default function QuickJump({
     if (trimmed && !provider.queryUrl) {
       navigator.clipboard
         ?.writeText(trimmed)
-        .then(() => toast.success(`已复制关键词, 在 ${provider.name} 中粘贴即可`))
-        .catch(() => toast.info(`${provider.name} 暂不支持直接带词跳转, 请手动输入`))
+        .then(() => toast.success(`已复制关键词，到 ${provider.name} 粘贴`))
+        .catch(() => toast.info("复制失败，请手动输入"))
     }
     window.open(provider.home, "_blank", "noopener,noreferrer")
   }
@@ -147,7 +147,7 @@ export default function QuickJump({
     // 仅批量打开支持带词跳转的站点 (复制粘贴类无法批量处理, 见 jump)
     const targets = providers.filter((p) => p.queryUrl)
     const manual = providers.length - targets.length
-    const tail = manual > 0 ? `, 另 ${manual} 个需手动粘贴` : ""
+    const tail = manual > 0 ? `，另 ${manual} 个需手动粘贴` : ""
     let blocked = 0
     for (const provider of targets) {
       const url = provider.queryUrl!.replace("{q}", encodeURIComponent(trimmed))
@@ -155,9 +155,7 @@ export default function QuickJump({
       if (!win) blocked++
     }
     if (blocked > 0) {
-      toast.warning(
-        `已打开 ${targets.length - blocked} 个, ${blocked} 个被浏览器拦截, 请允许弹出窗口`,
-      )
+      toast.warning(`${blocked} 个被拦截，请允许弹出窗口`)
     } else {
       toast.success(`已打开 ${targets.length} 个站点${tail}`)
     }

@@ -59,7 +59,7 @@ export default function CommandPalette() {
         if (!port) throw new Error("同步功能不可用")
         const r = await port.syncNow(c)
         window.dispatchEvent(new Event(SUBSCRIPTIONS_SYNCED))
-        toast.success(r.added > 0 ? `同步完成 · 合并 ${r.added} 项已落本机` : "同步完成")
+        toast.success(r.added > 0 ? `同步完成 · 新增 ${r.added} 项` : "同步完成")
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "同步失败")
       }
@@ -89,7 +89,7 @@ export default function CommandPalette() {
       </button>
 
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="输入命令, 或跳到任意位置…" />
+        <CommandInput placeholder="输入命令或跳转…" />
         <CommandList>
           <CommandEmpty>没有匹配的命令或位置</CommandEmpty>
           <CommandGroup heading="发现">

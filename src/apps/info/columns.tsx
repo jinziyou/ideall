@@ -53,7 +53,7 @@ export const getInfoColumns = (): ColumnDef<Info>[] => [
   },
   {
     accessorKey: "publisher",
-    header: "发布网站",
+    header: "发布者",
     cell: ({ row }) => <PublisherHoverCell publisher={row.original.publisher} />,
     meta: HIDE_SM,
   },

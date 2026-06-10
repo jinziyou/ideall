@@ -116,7 +116,7 @@ export function DataTable<TData, TValue>({
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
                   <div className="inline-flex flex-col items-center gap-2 text-muted-foreground">
-                    <span>加载失败: {error}</span>
+                    <span>加载失败：{error}</span>
                     {onRetry && (
                       <Button variant="outline" size="sm" onClick={onRetry}>
                         重试

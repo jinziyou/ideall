@@ -8,7 +8,7 @@ export default function NotFound() {
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>404 · 这里没有东西</CardTitle>
-          <CardDescription>这个地址不在你的空间, 也不在发现里。</CardDescription>
+          <CardDescription>这个地址不在你的空间，也不在发现里。</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">

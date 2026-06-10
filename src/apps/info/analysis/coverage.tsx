@@ -41,7 +41,7 @@ export default function CoverageList({ items }: { items: Info[] }) {
               className="h-6 shrink-0 px-2 text-xs text-muted-foreground"
               onClick={() => window.open(analysisLink(info.url), "_blank")}
             >
-              关联
+              全面报道
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">

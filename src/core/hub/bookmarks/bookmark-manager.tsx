@@ -67,7 +67,7 @@ export default function BookmarkManager() {
       setFolders(f)
       setBookmarks(b)
     } catch (e) {
-      toast.error("读取本地链接失败", { description: String(e) })
+      toast.error("读取书签失败", { description: String(e) })
     }
   }, [])
 
@@ -82,7 +82,7 @@ export default function BookmarkManager() {
           setBookmarks(b)
         }
       } catch (e) {
-        toast.error("读取本地链接失败", { description: String(e) })
+        toast.error("读取书签失败", { description: String(e) })
       }
     }
     load()
@@ -242,7 +242,7 @@ export default function BookmarkManager() {
             </Button>
             <Button onClick={openAdd}>
               <Plus className="mr-2 h-4 w-4" />
-              新增链接
+              新增书签
             </Button>
           </div>
         </div>
@@ -251,8 +251,8 @@ export default function BookmarkManager() {
         {filtered.length === 0 ? (
           <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
             {bookmarks.length === 0
-              ? "还没有收藏链接，新增一条或导入浏览器书签试试。"
-              : "没有匹配的链接。"}
+              ? "还没有书签。新增一条或导入试试。"
+              : "没有匹配的书签。"}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -310,7 +310,7 @@ export default function BookmarkManager() {
         }}
         destructive
         title={`删除收藏夹「${deleteTarget?.name ?? ""}」?`}
-        description="夹内链接将移到「未分组」, 不会被删除。"
+        description="夹内书签将移到「未分组」，不会删除。"
         confirmLabel="删除"
         onConfirm={() => {
           if (deleteTarget) handleDeleteFolder(deleteTarget)
