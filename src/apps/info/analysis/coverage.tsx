@@ -5,14 +5,15 @@ import { Button } from "@/components/ui/button"
 import { formatTimestamp } from "@/lib/format"
 import { openExternal } from "@/lib/safe-url"
 import { analysisLink } from "../columns"
-import { Info } from "../model"
+import { RelatedInfo } from "../model"
 
 /**
  * 全面报道: 与当前信息「描述同一件事」的其它来源报道列表。
  * 数据来自 super/server `/info/analysis` (共享实体启发式, 已按相关度排序),
- * 这里只负责把每个来源渲染成一行: 发布者 + 标题 + 时间, 标题跳原文, 末尾可进该来源的关联分析。
+ * 这里只负责把每个来源渲染成一行: 发布者 + 标题 + 时间 + 关联强度 (共享实体数),
+ * 标题跳原文, 末尾可进该来源的关联分析。
  */
-export default function CoverageList({ items }: { items: Info[] }) {
+export default function CoverageList({ items }: { items: RelatedInfo[] }) {
   if (!items.length) {
     return (
       <div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -49,6 +50,13 @@ export default function CoverageList({ items }: { items: Info[] }) {
               {info.publisher?.name || info.publisher?.domain || "未知来源"}
             </span>
             <span>{formatTimestamp(info.publish_time)}</span>
+            {/* 关联强度: 共享实体数解释「为什么相关」; 有词条的共享实体更可信, 合并到同一徽标里表述 */}
+            {info.shared > 0 && (
+              <span className="rounded bg-muted px-1.5 py-0.5">
+                共享 {info.shared} 个实体
+                {info.shared_entry > 0 ? ` · ${info.shared_entry} 个有词条` : ""}
+              </span>
+            )}
           </div>
         </li>
       ))}

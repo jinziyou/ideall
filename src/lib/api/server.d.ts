@@ -108,6 +108,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/info/entity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /info/entity?label=&name= — 实体详情聚合 (peer 实体页 / admin 钻取) */
+        get: operations["get_entity_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/info/entity/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /info/entity/search?q=&limit= — 实体搜索 (按提及信息数倒序) */
+        get: operations["search_entities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/info/entity/{hour}": {
         parameters: {
             query?: never;
@@ -380,6 +414,77 @@ export interface components {
             /** @description 加密后的密码 (hex): 前 24 字节为 nonce, 末 16 字节为 Poly1305 标签, 中间为密文 */
             encrypted_password: string;
         };
+        /**
+         * @description 实体摘要 (实体搜索结果项 / 实体详情的共现实体项)。
+         *     跨周聚合口径: 按 `(name, label)` 值合并全部 period 分桶节点 (见 NameEntity 的周分桶说明)。
+         */
+        EntityBrief: {
+            /**
+             * Format: int32
+             * @description 提及该实体的信息条数 (共现项 = 与目标实体共同出现的信息条数)
+             */
+            count: number;
+            /** @description 任一分桶节点有百科词条即为 true */
+            has_entry: boolean;
+            label: string;
+            name: string;
+        };
+        /**
+         * @description 实体详情聚合 (`GET /info/entity?label=&name=`): 跨周合并该 `(name, label)` 的全部分桶节点。
+         *     实体不存在时返回 `mention_count = 0` 的空详情 (与 `/info` 系列「查无返回空默认」口径一致)。
+         */
+        EntityDetail: {
+            baike_url?: string | null;
+            /** @description 共现实体 top N (按共同出现的信息条数倒序) */
+            co_entities: components["schemas"]["EntityBrief"][];
+            /**
+             * Format: int64
+             * @description 最早/最晚提及的采集时间 (epoch 毫秒; 无提及时为 0)
+             */
+            first_seen: number;
+            /** @description 是否有百科词条 (任一分桶节点为 true 即 true) */
+            has_entry: boolean;
+            label: string;
+            /** Format: int64 */
+            last_seen: number;
+            /**
+             * Format: int32
+             * @description 提及该实体的信息总条数
+             */
+            mention_count: number;
+            name: string;
+            /** @description 按周 period 的提及分布 (升序), 供趋势展示 */
+            weekly: components["schemas"]["EntityPeriodCount"][];
+            wikipedia_url?: string | null;
+        };
+        /** @description 实体的单周提及量 (`period` = 周一零点 epoch 毫秒, 与 NameEntity.period 同口径)。 */
+        EntityPeriodCount: {
+            /** Format: int32 */
+            count: number;
+            /** Format: int64 */
+            period: number;
+        };
+        /**
+         * @description 近 N 小时各类实体频次 (`GET /info/entity/{hour}`), 每类 top 20 的 `{name: count}`。
+         *     覆盖入图的全部五类 (TIME 实体不入图故无此类)。
+         */
+        EntityStats: {
+            event: {
+                [key: string]: number;
+            };
+            loc: {
+                [key: string]: number;
+            };
+            org: {
+                [key: string]: number;
+            };
+            per: {
+                [key: string]: number;
+            };
+            product: {
+                [key: string]: number;
+            };
+        };
         Info: {
             /** Format: int64 */
             collect_time: number;
@@ -502,7 +607,10 @@ export interface components {
                 string,
                 string
             ][] | null;
-            /** @description 分页 `(page_size, offset)` */
+            /**
+             * @description 分页 `(page_size, page_index)`；实际 skip = page_size * page_index。
+             *     注意 `u8` 上限 255：单页最多 255 条、页码最多 255（当前数据量够用，未在 OpenAPI 契约暴露）。
+             */
             page_size_offset?: [
                 number,
                 number
@@ -514,6 +622,23 @@ export interface components {
                 number,
                 number
             ] | null;
+        };
+        /**
+         * @description `GET /info/analysis` 响应项: Info + 关联强度分数。
+         *     `#[serde(flatten)]` 让 JSON 形状 = Info 字段平铺 + 两个分数字段:
+         *     旧消费方仍可按 Info 读 (向后兼容), 新消费方据分数解释「为什么相关」并展示共享强度。
+         */
+        RelatedInfo: components["schemas"]["Info"] & {
+            /**
+             * Format: int32
+             * @description 与目标共享的实体数 (全实体口径, 兜底阈值 min_shared)
+             */
+            shared: number;
+            /**
+             * Format: int32
+             * @description 与目标共享且两侧都有百科词条的实体数 (更可信, 低阈值 min_shared_entry 即连边)
+             */
+            shared_entry: number;
         };
         SyncBlob: {
             /** @description 密文 (base64); 明文为客户端订阅列表 JSON, 服务端不可读 */
@@ -741,13 +866,63 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 与给定 URL 关联的信息列表 */
+            /** @description 与给定 URL 关联的信息列表 (Info 字段平铺 + shared/shared_entry 关联强度), 按相关度倒序, 至多 info.related.limit (默认 50) 条 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Info"][];
+                    "application/json": components["schemas"]["RelatedInfo"][];
+                };
+            };
+        };
+    };
+    get_entity_detail: {
+        parameters: {
+            query: {
+                /** @description 实体类别 (PER / ORG / LOC / PRODUCT / EVENT) */
+                label: string;
+                /** @description 实体名 */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 实体详情 (提及量/首末时间/周分布/词条链接/共现实体); 实体不存在时 mention_count 为 0 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityDetail"];
+                };
+            };
+        };
+    };
+    search_entities: {
+        parameters: {
+            query: {
+                /** @description 实体名子串 (CONTAINS 匹配) */
+                q: string;
+                /** @description 返回条数上限 (默认 20) */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 命中的实体摘要列表 (跨周分桶已按 (name,label) 聚合) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityBrief"][];
                 };
             };
         };
@@ -764,13 +939,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 三类实体频次 tuple, 固定顺序 `[PER, LOC, ORG]`, 各项为 `{name: count}` */
+            /** @description 近 N 小时五类实体频次 (每类 top 20 的 `{name: count}`) */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["EntityStats"];
                 };
             };
         };

@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/app-header"
+import HotEntities from "./hot-entities"
 import InfoList from "./list"
 
 export default function Info() {
@@ -10,8 +11,8 @@ export default function Info() {
         description="聚合多方来源的事件流，订阅后回流到「我的空间」。"
       />
       {/* TODO: 新闻分类未实现 (/info/news 路由不存在), 暂禁用占位以免点击 404。 */}
-      {/* TODO: 时间段筛选未接线 —— 选中值应转成 timestamp_from_to 传入 fetchInfoEvents, 暂禁用。 */}
 
+      <HotEntities />
       <div className="w-full">
         <InfoList />
       </div>
