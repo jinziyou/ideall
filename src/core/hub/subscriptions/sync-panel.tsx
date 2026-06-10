@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Cloud, Copy, Loader2, RefreshCw } from "lucide-react"
+import { Cloud, Copy, Loader2, Lock, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ServiceHeader } from "@/components/system/service-header"
 import { generateSyncCode, isValidSyncCode } from "@/lib/sync-crypto"
 import { clearSyncCode, getSyncCode, setSyncCode, subscribeSyncCode } from "@/lib/sync-code"
 import { getSyncPort } from "@protocol/sync"
@@ -28,7 +30,8 @@ export default function SyncPanel() {
       if (!port) throw new Error("同步功能不可用")
       const r = await port.syncNow(c)
       window.dispatchEvent(new Event(SUBSCRIPTIONS_SYNCED))
-      if (!silent) toast.success(r.added > 0 ? `同步完成, 合并 ${r.added} 项` : "同步完成")
+      if (!silent)
+        toast.success(r.added > 0 ? `同步完成 · 合并 ${r.added} 项已落本机` : "同步完成")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "同步失败")
     } finally {
@@ -78,83 +81,96 @@ export default function SyncPanel() {
 
   return (
     <section className="rounded-lg border bg-card p-4">
-      <div className="flex items-start gap-3">
-        <Cloud className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-medium">跨端同步</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            用同步码在多设备间同步订阅 · 端到端加密，服务端只存密文、读不到内容 ·
-            取消订阅为尽力，可能被另一端带回。
-          </p>
+      <ServiceHeader
+        icon={Cloud}
+        title="跨端同步"
+        status={
+          code ? { label: "已开启 · 端到端加密", tone: "ok" } : { label: "未开启", tone: "off" }
+        }
+      />
+      <p className="mt-2 text-xs text-muted-foreground">
+        用同步码在多设备间同步订阅 —— 服务端只存密文、读不到内容；取消订阅为尽力,
+        可能被另一端带回。
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Badge
+          variant="outline"
+          className="gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+        >
+          <Lock className="h-3 w-3" />
+          订阅明文 · 只在本机
+        </Badge>
+        <Badge
+          variant="outline"
+          className="gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+        >
+          <Cloud className="h-3 w-3" />
+          同步密文 · 经服务器
+        </Badge>
+      </div>
 
-          {code ? (
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={() => runSync(code)} disabled={busy}>
-                  {busy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  立即同步
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setReveal((v) => !v)}>
-                  {reveal ? "隐藏同步码" : "查看同步码"}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={disable}>
-                  关闭同步
-                </Button>
-              </div>
-              {reveal && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 break-all rounded bg-muted px-2 py-1 text-xs">
-                      {code}
-                    </code>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 shrink-0"
-                      onClick={copyCode}
-                      title="复制同步码"
-                    >
-                      <Copy className="h-4 w-4" />
-                      <span className="sr-only">复制同步码</span>
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    在其它设备的「我的空间 · 订阅」里粘贴这串同步码即可同步。请妥善保管 ——
-                    同步码即能力凭证，谁拿到都能读写你的订阅。
-                  </p>
-                </>
+      {code ? (
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={() => runSync(code)} disabled={busy}>
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
               )}
-            </div>
-          ) : (
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <Button size="sm" onClick={enable} disabled={busy}>
-                {busy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Cloud className="h-4 w-4" />
-                )}
-                开启同步并生成同步码
-              </Button>
-              <span className="text-xs text-muted-foreground">或</span>
+              立即同步
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setReveal((v) => !v)}>
+              {reveal ? "隐藏同步码" : "查看同步码"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={disable}>
+              关闭同步
+            </Button>
+          </div>
+          {reveal && (
+            <>
               <div className="flex items-center gap-2">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="粘贴已有同步码"
-                  className="h-9 w-full sm:w-64"
-                />
-                <Button size="sm" variant="outline" onClick={joinWithCode} disabled={busy}>
-                  加入
+                <code className="min-w-0 flex-1 break-all rounded bg-muted px-2 py-1 text-xs">
+                  {code}
+                </code>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0"
+                  onClick={copyCode}
+                  title="复制同步码"
+                >
+                  <Copy className="h-4 w-4" />
+                  <span className="sr-only">复制同步码</span>
                 </Button>
               </div>
-            </div>
+              <p className="text-xs text-muted-foreground">
+                在其它设备的「我的空间 · 订阅」里粘贴这串同步码即可同步。请妥善保管 ——
+                同步码即能力凭证，谁拿到都能读写你的订阅。
+              </p>
+            </>
           )}
         </div>
-      </div>
+      ) : (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <Button size="sm" onClick={enable} disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cloud className="h-4 w-4" />}
+            开启同步并生成同步码
+          </Button>
+          <span className="text-xs text-muted-foreground">或</span>
+          <div className="flex items-center gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="粘贴已有同步码"
+              className="h-9 w-full sm:w-64"
+            />
+            <Button size="sm" variant="outline" onClick={joinWithCode} disabled={busy}>
+              加入
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

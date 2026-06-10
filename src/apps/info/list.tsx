@@ -25,9 +25,6 @@ export default function InfoList() {
               最新
             </TabsTrigger>
             {/* TODO: 「热度」排序未实现 —— 需后端按来源数/热度返回事件后再启用, 暂禁用以免误导。 */}
-            <TabsTrigger value="trending" className="flex-1 sm:flex-none" disabled>
-              热度
-            </TabsTrigger>
           </TabsList>
         </Tabs>
         <Button variant="outline" onClick={() => window.open(`/info/search`, "_blank")}>

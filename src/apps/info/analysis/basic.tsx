@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Info } from "../model"
 import { EntityEntryLinks, partitionEntities } from "../cells"
+import { entityLabelText } from "@/lib/ner-labels"
 
 export default function InfoBasicView({ info }: { info: Info }) {
   const { withEntry, others } = partitionEntities(info.labels)
@@ -12,7 +13,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base sm:text-lg">基本信息</CardTitle>
+        <CardTitle className="text-base sm:text-lg">这篇报道</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div>
@@ -20,7 +21,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
           <div className="mt-1 font-medium break-all">{info.title}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">命名实体</div>
+          <div className="text-xs text-muted-foreground">相关实体</div>
           {withEntry.length === 0 && others.length === 0 ? (
             <div className="mt-1">
               <span className="text-muted-foreground">-</span>
@@ -42,7 +43,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
                           className="h-auto min-h-7 max-w-full whitespace-normal break-all py-1"
                           onClick={() => openEntity(entity.label, entity.name)}
                         >
-                          {entity.label}.{entity.name}
+                          {entityLabelText(entity.label)} · {entity.name}
                         </Button>
                         <span className="text-xs">
                           <EntityEntryLinks entity={entity} />
@@ -66,7 +67,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
                         className="h-auto min-h-7 max-w-full whitespace-normal break-all py-1 text-muted-foreground"
                         onClick={() => openEntity(entity.label, entity.name)}
                       >
-                        {entity.label}.{entity.name}
+                        {entityLabelText(entity.label)} · {entity.name}
                       </Button>
                     ))}
                   </div>

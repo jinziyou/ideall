@@ -31,6 +31,8 @@ const HIDE_XL: ColumnMeta = {
   headerClassName: "hidden xl:table-cell",
   cellClassName: "hidden xl:table-cell",
 }
+// 时间列单元格: 右对齐 + 等宽数字, 不加 font-mono (TimeCell 含中文格式时避免字体跳变)。
+const TIME_CELL = "text-right tabular-nums whitespace-nowrap"
 
 /** 跳转到某条信息的「全面报道」分析页。 */
 // /info/analysis 深链的唯一构造处 (本 app 内复用: columns 各处 + analysis/coverage)。
@@ -45,7 +47,7 @@ export const getInfoColumns = (): ColumnDef<Info>[] => [
   },
   {
     accessorKey: "labels",
-    header: "命名实体",
+    header: "实体",
     cell: ({ row }) => <EntityCell entities={row.original.labels} />,
     meta: HIDE_MD,
   },
@@ -57,15 +59,21 @@ export const getInfoColumns = (): ColumnDef<Info>[] => [
   },
   {
     accessorKey: "collect_time",
-    header: () => <div className="text-right">采集时间</div>,
+    header: () => <div className="text-right">收录时间</div>,
     cell: ({ row }) => <TimeCell value={row.original.collect_time} />,
-    meta: HIDE_LG,
+    meta: {
+      headerClassName: HIDE_LG.headerClassName,
+      cellClassName: `${HIDE_LG.cellClassName} ${TIME_CELL}`,
+    },
   },
   {
     accessorKey: "publish_time",
     header: () => <div className="text-right">发布时间</div>,
     cell: ({ row }) => <TimeCell value={row.original.publish_time} />,
-    meta: HIDE_MD,
+    meta: {
+      headerClassName: HIDE_MD.headerClassName,
+      cellClassName: `${HIDE_MD.cellClassName} ${TIME_CELL}`,
+    },
   },
   {
     id: "actions",
@@ -125,7 +133,7 @@ export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
   },
   {
     id: "labels",
-    header: "命名实体",
+    header: "实体",
     cell: ({ row }) => <EntityCell entities={row.original.lead.labels} />,
     meta: HIDE_MD,
   },
@@ -161,15 +169,21 @@ export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
   },
   {
     accessorKey: "lead.collect_time",
-    header: () => <div className="text-right">采集时间</div>,
+    header: () => <div className="text-right">收录时间</div>,
     cell: ({ row }) => <TimeCell value={row.original.lead.collect_time} />,
-    meta: HIDE_LG,
+    meta: {
+      headerClassName: HIDE_LG.headerClassName,
+      cellClassName: `${HIDE_LG.cellClassName} ${TIME_CELL}`,
+    },
   },
   {
     accessorKey: "lead.publish_time",
     header: () => <div className="text-right">发布时间</div>,
     cell: ({ row }) => <TimeCell value={row.original.lead.publish_time} />,
-    meta: HIDE_MD,
+    meta: {
+      headerClassName: HIDE_MD.headerClassName,
+      cellClassName: `${HIDE_MD.cellClassName} ${TIME_CELL}`,
+    },
   },
   {
     id: "actions",
@@ -205,7 +219,7 @@ export const getSearchColumns = (): ColumnDef<Info>[] => [
   },
   {
     accessorKey: "labels",
-    header: "命名实体",
+    header: "实体",
     cell: ({ row }) => <EntityCell entities={row.original.labels} />,
     meta: HIDE_MD,
   },
@@ -221,13 +235,19 @@ export const getSearchColumns = (): ColumnDef<Info>[] => [
     accessorKey: "publish_time",
     header: () => <div className="text-right">发布时间</div>,
     cell: ({ row }) => <TimeCell value={row.original.publish_time} />,
-    meta: HIDE_MD,
+    meta: {
+      headerClassName: HIDE_MD.headerClassName,
+      cellClassName: `${HIDE_MD.cellClassName} ${TIME_CELL}`,
+    },
   },
   {
     accessorKey: "collect_time",
-    header: () => <div className="text-right">采集时间</div>,
+    header: () => <div className="text-right">收录时间</div>,
     cell: ({ row }) => <TimeCell value={row.original.collect_time} />,
-    meta: HIDE_XL,
+    meta: {
+      headerClassName: HIDE_XL.headerClassName,
+      cellClassName: `${HIDE_XL.cellClassName} ${TIME_CELL}`,
+    },
   },
   {
     id: "actions",

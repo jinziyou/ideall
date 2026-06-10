@@ -2,8 +2,10 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowUpRight, Hexagon, Map, Newspaper, Wrench } from "lucide-react"
+import { ArrowUpRight, CornerDownLeft, Hexagon, Pin, Wrench } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SUB_SPOKE_META } from "@/components/spoke-meta"
+import { SPOKES } from "@core/nav/nav-config"
 import { listSubscriptions } from "./lib/subscriptions-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listFiles } from "./lib/files-store"
@@ -24,15 +26,6 @@ type HubData = {
   quota: number
 }
 
-/** 订阅类型 → 时间线展示元数据 (圆点色 + 动作文案)。 */
-const SUB_META: Record<Subscription["type"], { dotClass: string; label: string }> = {
-  publisher: { dotClass: "bg-spoke-info", label: "订阅发布者" },
-  entity: { dotClass: "bg-spoke-info", label: "订阅实体" },
-  search: { dotClass: "bg-spoke-info", label: "订阅搜索" },
-  peer: { dotClass: "bg-spoke-community", label: "订阅 peer" },
-  tool: { dotClass: "bg-spoke-tool", label: "钉住工具" },
-}
-
 function buildFlow(
   subs: Subscription[],
   bookmarks: { id: string; title: string; createdAt: number }[],
@@ -40,12 +33,12 @@ function buildFlow(
 ): FlowItem[] {
   const items: FlowItem[] = []
   for (const s of subs) {
-    const m = SUB_META[s.type]
+    const m = SUB_SPOKE_META[s.type]
     items.push({
       id: `sub:${s.id}`,
       ts: s.createdAt,
       dotClass: m.dotClass,
-      label: m.label,
+      label: m.actionLabel,
       title: s.title,
       href: "/home/subscriptions",
     })
@@ -72,30 +65,6 @@ function buildFlow(
   }
   return items.sort((a, b) => b.ts - a.ts).slice(0, 14)
 }
-
-const SPOKES = [
-  {
-    href: "/info",
-    label: "资讯",
-    dot: "bg-spoke-info",
-    icon: Newspaper,
-    hint: "订阅发布者 / 实体 · 收藏文章",
-  },
-  {
-    href: "/community",
-    label: "社区",
-    dot: "bg-spoke-community",
-    icon: Map,
-    hint: "订阅 peer · 接收他人发布",
-  },
-  {
-    href: "/tool",
-    label: "工具",
-    dot: "bg-spoke-tool",
-    icon: Wrench,
-    hint: "钉工具 · 存搜索为订阅",
-  },
-] as const
 
 export default function HubDashboard() {
   const [data, setData] = React.useState<HubData | null>(null)
@@ -176,7 +145,7 @@ export default function HubDashboard() {
         <div className="rounded-xl border-l-2 border-l-pop border bg-card p-5 shadow-sm lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-sm font-semibold">最近回流</h2>
-            <span className="text-xs text-muted-foreground">· 本地 · 收入中枢的动作落点</span>
+            <span className="text-xs text-muted-foreground">· 都落在这台设备上</span>
           </div>
           {data.flow.length > 0 ? (
             <RecentFlowback items={data.flow} />
@@ -218,7 +187,10 @@ export default function HubDashboard() {
       {/* 已钉工具 */}
       {data.pinnedTools.length > 0 && (
         <div>
-          <div className="mb-2.5 text-xs text-muted-foreground">⌘ 已钉工具</div>
+          <div className="mb-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Pin className="h-3.5 w-3.5" />
+            已钉工具
+          </div>
           <div className="flex flex-wrap gap-2.5">
             {data.pinnedTools.map((t) => (
               <a
@@ -244,27 +216,30 @@ export default function HubDashboard() {
 /** 空中枢: 把死屏变成产品心智模型的第一课 (hub-and-spoke 迷你示意图)。 */
 function EmptyHub() {
   return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed bg-card/50 px-6 py-12 text-center">
-      <h3 className="text-base font-semibold">◆ 我的空间还是空的 —— 去带点东西回家</h3>
+    <div className="flex min-h-[55dvh] flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 px-6 py-12 text-center">
+      <h3 className="text-lg font-semibold">我的空间还是空的 —— 去带点东西回家</h3>
       <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
         你订阅 / 收藏 / 钉住的一切都会落在这里, 且只留在这台设备。
       </p>
 
-      <div className="mt-8 flex flex-col items-center gap-1">
-        <div className="inline-flex flex-col items-center rounded-xl border-2 border-foreground/15 bg-pop/5 px-6 py-3">
+      <div className="mt-10 flex flex-col items-center gap-3">
+        <div className="inline-flex flex-col items-center rounded-xl border-2 border-foreground/15 bg-pop/5 px-8 py-4">
           <span className="flex items-center gap-2 text-sm font-semibold">
             <Hexagon className="h-4 w-4" />
             我的空间
           </span>
           <span className="text-xs text-muted-foreground">数据落在这里，本地恒在</span>
         </div>
-        <div className="my-1 text-muted-foreground">↑</div>
+        <div className="my-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <CornerDownLeft className="h-3.5 w-3.5" />
+          回流
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {SPOKES.map((s) => (
             <Link
               key={s.href}
               href={s.href}
-              className="flex flex-col items-center gap-1 rounded-xl border bg-background px-5 py-3 text-center transition-colors hover:bg-accent"
+              className="flex flex-col items-center gap-1 rounded-xl border bg-background px-6 py-4 text-center transition-colors hover:bg-accent"
             >
               <span className="flex items-center gap-1.5 text-sm font-semibold">
                 <span className={cn("h-2 w-2 rounded-full", s.dot)} />
@@ -275,6 +250,11 @@ function EmptyHub() {
           ))}
         </div>
       </div>
+
+      <p className="mt-8 text-xs text-muted-foreground">
+        随时按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>{" "}
+        呼出命令台
+      </p>
     </div>
   )
 }

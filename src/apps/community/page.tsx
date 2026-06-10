@@ -1,4 +1,6 @@
+import { Map as MapIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AppHeader } from "@/components/app-header"
 import { getPublisherLocations, getVisitorLocation } from "./action"
 import { isLocated } from "./model"
 import PublisherMap from "./publisher-map"
@@ -14,20 +16,29 @@ export default async function Community() {
 
   return (
     <main className="m-2 flex flex-col gap-4 sm:m-4">
+      <AppHeader
+        title="社区"
+        dotClass="bg-spoke-community"
+        description="看信息从哪里来、谁在发布 —— 订阅的发布者会回流到我的空间。"
+      />
       <Card>
         <CardHeader>
           <CardTitle>发布者地图</CardTitle>
           <CardDescription>
-            信息来源的地理分布（联网才有，来自共享节点的 IP
-            定位）。会尽量聚焦到你所在城市，来源分布到多个城市时可在地图上方切换其它城市或切回全国；点越大代表该来源的信息越多（已定位{" "}
-            {locations.length} 个来源）。
+            信息来源的地理分布 —— 点越大, 该来源的信息越多（已定位 {locations.length} 个来源）。
           </CardDescription>
+          <p className="text-xs text-muted-foreground">
+            联网才有 · 默认聚焦你所在城市, 可在地图上方切换其它城市或全国。
+          </p>
         </CardHeader>
         <CardContent>
           {locations.length ? (
             <PublisherMap locations={locations} visitor={visitor} />
           ) : (
-            <p className="py-12 text-center text-sm text-muted-foreground">暂无已定位的发布者。</p>
+            <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md bg-muted/30 text-sm text-muted-foreground">
+              <MapIcon className="h-6 w-6" />
+              还没有定位到发布者 —— 联网后, 来源的地理分布会出现在这里。
+            </div>
           )}
         </CardContent>
       </Card>
