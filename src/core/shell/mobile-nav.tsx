@@ -67,13 +67,13 @@ export default function MobileNav() {
         </SheetTitle>
         <nav className="mt-6 flex flex-col gap-1">
           <span className="px-3 pb-1 text-xs font-medium text-muted-foreground">
-            我的空间 · 中枢
+            我的空间
           </span>
           {HOME_SUBPAGES.filter((p) => p.group !== "system").map((p) => (
             <MLink key={p.href} link={p} active={isActive(pathname, p.href)} onNavigate={close} />
           ))}
           <span className="px-3 pb-1 pt-4 text-xs font-medium text-muted-foreground">
-            系统能力
+            系统服务
           </span>
           {HOME_SUBPAGES.filter((p) => p.group === "system").map((p) => (
             <MLink key={p.href} link={p} active={isActive(pathname, p.href)} onNavigate={close} />

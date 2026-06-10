@@ -13,7 +13,7 @@ const KnowledgeGraph = dynamic(() => import("./graph"), {
   loading: () => (
     <div className="flex h-[400px] items-center justify-center text-muted-foreground">
       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      加载图表…
+      加载图谱…
     </div>
   ),
 })
@@ -33,7 +33,7 @@ export default function InfoAnalysisView({ info, analysis }: { info: Info; analy
           </span>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          与本文描述同一事件的其他来源报道（共享关键实体）
+          描述同一事件的其他来源报道
         </p>
       </CardHeader>
       <CardContent>

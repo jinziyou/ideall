@@ -24,7 +24,7 @@ export default function AppError({
           <AlertTriangle className="h-6 w-6 shrink-0 text-destructive" />
           <div className="space-y-1.5">
             <CardTitle>页面加载出错</CardTitle>
-            <CardDescription>请稍后重试，若问题持续存在，可返回首页重新进入。</CardDescription>
+            <CardDescription>请稍后重试，或回我的空间。</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -34,7 +34,7 @@ export default function AppError({
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => window.location.assign("/")}>
-              返回首页
+              回我的空间
             </Button>
             <Button onClick={() => reset()}>重试</Button>
           </div>

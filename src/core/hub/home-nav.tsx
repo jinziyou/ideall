@@ -107,7 +107,7 @@ export default function HomeNav() {
         <span className="mx-1 w-px shrink-0 self-stretch bg-border md:hidden" />
         <div className="my-2 hidden border-t md:block" />
         <span className="hidden px-3 pb-1 text-[11px] font-medium text-muted-foreground md:block">
-          系统能力
+          系统服务
         </span>
         {systemItems.map(renderEntry)}
       </nav>

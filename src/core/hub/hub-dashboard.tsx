@@ -145,13 +145,13 @@ export default function HubDashboard() {
         <div className="rounded-xl border-l-2 border-l-pop border bg-card p-5 shadow-sm lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-sm font-semibold">最近回流</h2>
-            <span className="text-xs text-muted-foreground">· 都落在这台设备上</span>
+            <span className="text-xs text-muted-foreground">· 都落在本机</span>
           </div>
           {data.flow.length > 0 ? (
             <RecentFlowback items={data.flow} />
           ) : (
             <p className="text-sm text-muted-foreground">
-              还没有回流记录 —— 去「发现」订阅或收藏点什么。
+              还没有回流记录。去「发现」订阅或收藏。
             </p>
           )}
         </div>
@@ -160,7 +160,7 @@ export default function HubDashboard() {
         <div className="rounded-xl border bg-card p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
           <p className="mb-4 text-xs text-muted-foreground">
-            资讯 · 社区 · 工具，都把东西回流进这个中枢
+            资讯 · 社区 · 工具，都能回流到这里
           </p>
           <div className="flex flex-col gap-2.5">
             {SPOKES.map((s) => (
@@ -217,9 +217,9 @@ export default function HubDashboard() {
 function EmptyHub() {
   return (
     <div className="flex min-h-[55dvh] flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 px-6 py-12 text-center">
-      <h3 className="text-lg font-semibold">我的空间还是空的 —— 去带点东西回家</h3>
+      <h3 className="text-lg font-semibold">我的空间还是空的</h3>
       <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
-        你订阅 / 收藏 / 钉住的一切都会落在这里, 且只留在这台设备。
+        去「发现」订阅或收藏，内容会回流到这里。
       </p>
 
       <div className="mt-10 flex flex-col items-center gap-3">
@@ -228,7 +228,7 @@ function EmptyHub() {
             <Hexagon className="h-4 w-4" />
             我的空间
           </span>
-          <span className="text-xs text-muted-foreground">数据落在这里，本地恒在</span>
+          <span className="text-xs text-muted-foreground">数据只存本机</span>
         </div>
         <div className="my-1 flex items-center gap-1 text-xs text-muted-foreground">
           <CornerDownLeft className="h-3.5 w-3.5" />
@@ -252,7 +252,7 @@ function EmptyHub() {
       </div>
 
       <p className="mt-8 text-xs text-muted-foreground">
-        随时按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>{" "}
+        按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>{" "}
         呼出命令台
       </p>
     </div>

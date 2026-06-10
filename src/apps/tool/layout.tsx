@@ -20,7 +20,7 @@ export default function ToolLayout({ children }: { children: React.ReactNode }) 
       <AppHeader
         title="工具"
         dotClass="bg-spoke-tool"
-        description="常用搜索 / AI / 导航站 —— 钉住的工具会回流到我的空间。"
+        description="钉住的工具会回流到「我的空间」。"
       />
       <nav className="flex items-center gap-4 border-b">
         {tabs.map(({ href, label, icon: Icon }) => {

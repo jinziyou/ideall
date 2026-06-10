@@ -57,7 +57,7 @@ export function SaveToHub({
       pop()
       flowbackToast("已收藏到书签", () => router.push("/home/bookmarks"))
     } catch {
-      toast.error("收藏失败, 请重试")
+      toast.error("收藏失败，请重试")
     }
   }
 
@@ -74,7 +74,7 @@ export function SaveToHub({
         router.push("/home/subscriptions"),
       )
     } catch {
-      toast.error("订阅失败, 请重试")
+      toast.error("订阅失败，请重试")
     }
   }
 

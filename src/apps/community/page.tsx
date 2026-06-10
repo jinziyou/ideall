@@ -19,16 +19,16 @@ export default async function Community() {
       <AppHeader
         title="社区"
         dotClass="bg-spoke-community"
-        description="看信息从哪里来、谁在发布 —— 订阅的发布者会回流到我的空间。"
+        description="看信息从哪里来、谁在发布。"
       />
       <Card>
         <CardHeader>
           <CardTitle>发布者地图</CardTitle>
           <CardDescription>
-            信息来源的地理分布 —— 点越大, 该来源的信息越多（已定位 {locations.length} 个来源）。
+            已定位 {locations.length} 个发布者，点越大信息越多。
           </CardDescription>
           <p className="text-xs text-muted-foreground">
-            联网才有 · 默认聚焦你所在城市, 可在地图上方切换其它城市或全国。
+            联网才有 · 默认聚焦你所在城市。
           </p>
         </CardHeader>
         <CardContent>
@@ -37,7 +37,7 @@ export default async function Community() {
           ) : (
             <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md bg-muted/30 text-sm text-muted-foreground">
               <MapIcon className="h-6 w-6" />
-              还没有定位到发布者 —— 联网后, 来源的地理分布会出现在这里。
+              还没有定位到发布者。联网后会出现在这里。
             </div>
           )}
         </CardContent>
@@ -47,7 +47,7 @@ export default async function Community() {
         <CardHeader>
           <CardTitle>社区发布者</CardTitle>
           <CardDescription>
-            订阅社区里的发布者（其他用户），其发布的内容会回流到「我的空间」的订阅流。
+            订阅其他用户，其发布会回流到「我的空间」。
           </CardDescription>
         </CardHeader>
         <CardContent>

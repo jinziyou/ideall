@@ -63,7 +63,7 @@ export default function InfoToolbar<TData>({
   return (
     <div className="flex flex-col gap-2 py-4 md:flex-row md:flex-wrap md:items-center">
       <Input
-        placeholder="过滤当前结果集标题"
+        placeholder="按标题过滤当前结果"
         value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
         onChange={(event) => table.getColumn("title")?.setFilterValue(event.target.value)}
         className="w-full md:max-w-sm"
@@ -99,7 +99,7 @@ export default function InfoToolbar<TData>({
                   <span className="truncate">{format(date.from, "yyyy-MM-dd")}</span>
                 )
               ) : (
-                <span>选择时间范围</span>
+                <span>选择起止时间</span>
               )}
             </Button>
           </PopoverTrigger>

@@ -47,16 +47,16 @@ export default function LocalDeviceChip() {
         >
           <Lock className="h-3.5 w-3.5" />
           {synced && <span className="h-1.5 w-1.5 rounded-full bg-pop" />}
-          <span className="hidden lg:inline">本地 · 此设备</span>
+          <span className="hidden lg:inline">本机</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Lock className="h-4 w-4" />
-          本地 · 此设备
+          本机
         </div>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          你的订阅、书签、文件与对话都存在这台设备的浏览器里, 默认
+          订阅、书签等数据只存本机，默认
           <b className="font-medium text-foreground">不上传服务器</b>。
         </p>
         <div className="mt-3 flex items-center justify-between rounded-md border bg-muted/40 px-2.5 py-2">
@@ -67,7 +67,7 @@ export default function LocalDeviceChip() {
               synced ? "text-foreground" : "text-muted-foreground",
             )}
           >
-            {synced ? "已开启 (端到端加密)" : "未开启"}
+            {synced ? "已开启 · 端到端加密" : "未开启"}
           </span>
         </div>
         {storage && storage.quota > 0 && (
@@ -104,7 +104,7 @@ export default function LocalDeviceChip() {
           管理跨端同步 →
         </a>
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          登录账号只用于社区发布, 与这台设备上的数据无关。
+          登录账号只用于社区发布，与本机数据无关。
         </p>
       </PopoverContent>
     </Popover>

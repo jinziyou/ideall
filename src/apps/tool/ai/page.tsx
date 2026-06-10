@@ -2,7 +2,7 @@ import QuickJump, { type Provider } from "../quick-jump"
 
 export const metadata = {
   title: "AI | 工具 | wonita",
-  description: "一键将提问跳转到各大 AI 助手。",
+  description: "一键将提问跳转到各大 AI 站点。",
 }
 
 // 支持 queryUrl 的直接带词跳转; 不支持的回退到复制关键词 + 打开首页
@@ -91,8 +91,8 @@ export default function ToolAiPage() {
   return (
     <QuickJump
       title="AI"
-      description="输入问题, 一键跳转到各大 AI 助手。部分平台不支持带词跳转, 会自动复制到剪贴板, 打开后粘贴即可。"
-      placeholder="输入要向 AI 提问的内容…"
+      description="输入问题，一键跳转到各大 AI 站点。不支持带词的会自动复制，打开后粘贴。"
+      placeholder="输入要提问的内容…"
       providers={assistants}
     />
   )

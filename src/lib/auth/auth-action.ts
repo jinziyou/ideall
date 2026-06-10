@@ -22,10 +22,10 @@ export async function getServerPublicKey(clientId: string): Promise<ApiResult<st
   try {
     const res = await fetch(`${AUTH}/secret/${encodeURIComponent(clientId)}`, { cache: "no-store" })
     const text = (await res.text()).trim()
-    if (!res.ok) return { ok: false, status: res.status, message: text || "获取服务端公钥失败" }
+    if (!res.ok) return { ok: false, status: res.status, message: text || "获取密钥失败，请重试" }
     return { ok: true, data: text }
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? `网络错误: ${e.message}` : "网络错误" }
+    return { ok: false, message: e instanceof Error ? `网络错误：${e.message}` : "网络错误" }
   }
 }
 

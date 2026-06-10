@@ -59,7 +59,7 @@ export function SubscribeButton({
         setTimeout(() => setPulse(false), 600)
       }
     } catch {
-      toast.error("订阅操作失败, 请重试")
+      toast.error("操作失败，请重试")
     } finally {
       setBusy(false)
     }

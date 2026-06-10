@@ -81,7 +81,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
       <DialogHeader>
         <DialogTitle>AI 助手设置</DialogTitle>
         <DialogDescription>
-          自带 API Key，仅保存在本机浏览器；对话发往模型时经本节点代理转发，服务端不留存密钥与内容。
+          自带 API Key，只存本机。服务器不留存密钥与对话内容。
         </DialogDescription>
       </DialogHeader>
 
@@ -145,7 +145,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
             checked={form.includeHomeContext}
             onChange={(e) => setForm((f) => ({ ...f, includeHomeContext: e.target.checked }))}
           />
-          <span>把本机的订阅 / 书签 / 资源作为上下文一并发送（让助手「懂我的空间」）</span>
+          <span>把本机的订阅、书签、资源作为上下文发送</span>
         </label>
       </div>
 

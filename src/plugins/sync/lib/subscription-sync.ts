@@ -39,7 +39,7 @@ export async function syncNow(code: string): Promise<SyncResult> {
       const decoded = await decryptJson<unknown[]>(key, got.data.iv, got.data.ciphertext)
       if (Array.isArray(decoded)) remote = decoded.filter(isValidRemoteSub)
     } catch {
-      throw new Error("解密失败: 同步码可能不一致")
+      throw new Error("解密失败：同步码可能不一致")
     }
   }
 

@@ -116,7 +116,7 @@ export default function FileManager() {
     try {
       setFiles(await listFiles())
     } catch (e) {
-      toast.error("读取本地文件失败", { description: String(e) })
+      toast.error("读取文件失败", { description: String(e) })
     } finally {
       setLoading(false)
     }
@@ -130,7 +130,7 @@ export default function FileManager() {
         const list = await listFiles()
         if (active) setFiles(list)
       } catch (e) {
-        toast.error("读取本地文件失败", { description: String(e) })
+        toast.error("读取文件失败", { description: String(e) })
       } finally {
         if (active) setLoading(false)
       }
@@ -232,7 +232,7 @@ export default function FileManager() {
       <div
         role="button"
         tabIndex={0}
-        aria-label="上传文件: 拖拽到此处, 或按 Enter / 空格选择文件"
+        aria-label="上传文件：拖拽到此处，或按 Enter / 空格选择文件"
         onDragOver={(e) => {
           e.preventDefault()
           setDragging(true)
@@ -264,9 +264,9 @@ export default function FileManager() {
           <Upload className="h-7 w-7 text-muted-foreground" />
         )}
         <div className="text-sm font-medium">
-          {uploading ? "正在保存…" : "拖拽文件到此处, 或点击选择"}
+          {uploading ? "正在保存…" : "拖拽文件到此处，或点击选择"}
         </div>
-        <div className="text-xs text-muted-foreground">文件只存在这台设备上, 不上传服务器</div>
+        <div className="text-xs text-muted-foreground">文件只存本机，不上传服务器</div>
         <input
           ref={inputRef}
           type="file"
@@ -347,7 +347,7 @@ export default function FileManager() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-          {files.length === 0 ? "还没有文件, 上传一个试试。" : "没有匹配的文件。"}
+          {files.length === 0 ? "还没有文件。上传一个试试。" : "没有匹配的文件。"}
         </div>
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">

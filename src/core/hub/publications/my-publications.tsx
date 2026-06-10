@@ -72,9 +72,9 @@ export default function MyPublications() {
           <Megaphone className="h-6 w-6" />
         </div>
         <div className="space-y-1">
-          <p className="font-medium">发布要用账号身份 —— 它与本机数据、同步码无关</p>
+          <p className="font-medium">发布要用账号身份，与本机数据、同步码无关</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            登录后, 你发布的内容可被其他人订阅, 你就成了社区里的一个节点。
+            登录后发布内容，供他人订阅。
           </p>
         </div>
         <Button asChild size="sm">
@@ -137,7 +137,7 @@ export default function MyPublications() {
               公开 · 经服务器
             </Badge>
           </div>
-          <CardDescription>发布会离开此设备、可被任何人订阅 —— 这是你的公开身份。</CardDescription>
+          <CardDescription>发布是公开的，任何人都能订阅。</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onPublish} className="flex flex-col gap-2">
@@ -162,7 +162,7 @@ export default function MyPublications() {
         <h2 className="text-sm font-medium text-muted-foreground">我的发布</h2>
         {error ? (
           <div className="flex flex-col items-start gap-2">
-            <p className="text-sm text-muted-foreground">加载失败: {error}</p>
+            <p className="text-sm text-muted-foreground">加载失败：{error}</p>
             <Button variant="outline" size="sm" onClick={() => reload()}>
               重试
             </Button>

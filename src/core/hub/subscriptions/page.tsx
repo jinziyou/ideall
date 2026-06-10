@@ -3,7 +3,7 @@ import SyncPanel from "./sync-panel"
 
 export const metadata = {
   title: "订阅 | wonita",
-  description: "已订阅发布者的最新内容 —— 来自「发现」, 汇聚到「我的空间」中枢。",
+  description: "已订阅来源的最新内容，汇聚到「我的空间」。",
 }
 
 export default function SubscriptionsPage() {

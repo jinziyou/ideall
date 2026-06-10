@@ -383,7 +383,7 @@ export async function executeTool(name: string, args: Args): Promise<ToolResult>
   } catch (e) {
     return {
       ok: false,
-      summary: `工具执行出错: ${name}`,
+      summary: `工具执行出错：${name}`,
       data: { error: e instanceof Error ? e.message : String(e) },
     }
   }

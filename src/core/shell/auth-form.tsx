@@ -38,7 +38,7 @@ export default function AuthForm() {
         return
       }
       if (sk.data === null) {
-        toast.error("获取密钥失败, 请重试")
+        toast.error("获取密钥失败，请重试")
         return
       }
       const payload = {
@@ -53,7 +53,7 @@ export default function AuthForm() {
         return
       }
       if (!res.data) {
-        toast.error(mode === "login" ? "登录响应为空, 请重试" : "注册响应为空, 请重试")
+        toast.error(mode === "login" ? "登录失败，请重试" : "注册失败，请重试")
         return
       }
       const me = await fetchMe(res.data.token)
@@ -62,10 +62,10 @@ export default function AuthForm() {
           ? me.data
           : { id: 0, email: email.trim(), name: email.trim(), avatar: null }
       setSession(res.data.token, user)
-      toast.success(mode === "login" ? "已登录" : "注册成功, 已登录")
+      toast.success(mode === "login" ? "已登录" : "注册成功，已登录")
       router.push("/home")
     } catch {
-      toast.error("操作失败, 请重试")
+      toast.error("操作失败，请重试")
     } finally {
       setBusy(false)
     }
@@ -77,9 +77,9 @@ export default function AuthForm() {
         <CardTitle>{mode === "login" ? "登录" : "注册"}</CardTitle>
         <CardDescription>
           {mode === "login"
-            ? "登录账号以在「我的发布」发布内容，成为可被订阅的社区发布者。"
-            : "创建账号以在「我的发布」发布内容，被他人订阅。"}
-          密码经 X25519 加密后才离开浏览器。
+            ? "登录后可在「我的发布」发布内容，供他人订阅。"
+            : "注册后可在「我的发布」发布内容，供他人订阅。"}
+          密码在浏览器加密后才发送。
         </CardDescription>
       </CardHeader>
       <CardContent>

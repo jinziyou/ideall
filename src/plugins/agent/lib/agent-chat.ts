@@ -53,7 +53,7 @@ export async function requestCompletion(opts: CompletionOptions): Promise<Comple
     })
   } catch (e) {
     if (opts.signal?.aborted) throw new DOMException("aborted", "AbortError")
-    throw new Error(`网络错误: ${e instanceof Error ? e.message : String(e)}`)
+    throw new Error(`网络错误：${e instanceof Error ? e.message : String(e)}`)
   }
   if (!res.ok) {
     let message = `请求失败 (${res.status})`
@@ -85,7 +85,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<void> {
     })
   } catch (e) {
     if (opts.signal?.aborted) return
-    throw new Error(`网络错误: ${e instanceof Error ? e.message : String(e)}`)
+    throw new Error(`网络错误：${e instanceof Error ? e.message : String(e)}`)
   }
 
   if (!res.ok || !res.body) {

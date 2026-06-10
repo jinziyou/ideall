@@ -32,7 +32,7 @@ export default function AccountMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="secondary" size="icon" className="rounded-full">
           <CircleUser className="h-5 w-5" />
-          <span className="sr-only">切换用户菜单</span>
+          <span className="sr-only">打开账户菜单</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

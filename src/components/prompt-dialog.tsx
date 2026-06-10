@@ -22,7 +22,7 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "确认",
+  confirmLabel = "确定",
   destructive = false,
   onConfirm,
 }: {

@@ -98,7 +98,7 @@ export default function PublisherMap({
       } catch {
         // 底图加载失败: 提示用户并显占位, 不抛出未捕获的 promise rejection。
         if (disposed) return
-        toast.error("地图底图加载失败, 请刷新重试")
+        toast.error("底图加载失败，请刷新重试")
         setLoadFailed(true)
         return
       }

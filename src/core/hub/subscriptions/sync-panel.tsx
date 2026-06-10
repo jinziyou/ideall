@@ -31,7 +31,7 @@ export default function SyncPanel() {
       const r = await port.syncNow(c)
       window.dispatchEvent(new Event(SUBSCRIPTIONS_SYNCED))
       if (!silent)
-        toast.success(r.added > 0 ? `同步完成 · 合并 ${r.added} 项已落本机` : "同步完成")
+        toast.success(r.added > 0 ? `同步完成 · 新增 ${r.added} 项` : "同步完成")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "同步失败")
     } finally {
@@ -68,7 +68,7 @@ export default function SyncPanel() {
   function disable() {
     clearSyncCode()
     setReveal(false)
-    toast.success("已关闭本机同步，服务端密文仍保留")
+    toast.success("已关闭同步，服务器密文仍保留")
   }
 
   function copyCode() {
@@ -89,8 +89,7 @@ export default function SyncPanel() {
         }
       />
       <p className="mt-2 text-xs text-muted-foreground">
-        用同步码在多设备间同步订阅 —— 服务端只存密文、读不到内容；取消订阅为尽力,
-        可能被另一端带回。
+        用同步码在多设备间同步订阅，服务器只存密文。取消的订阅可能被另一端带回。
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Badge
@@ -98,7 +97,7 @@ export default function SyncPanel() {
           className="gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
         >
           <Lock className="h-3 w-3" />
-          订阅明文 · 只在本机
+          订阅明文 · 只存本机
         </Badge>
         <Badge
           variant="outline"
@@ -145,8 +144,7 @@ export default function SyncPanel() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                在其它设备的「我的空间 · 订阅」里粘贴这串同步码即可同步。请妥善保管 ——
-                同步码即能力凭证，谁拿到都能读写你的订阅。
+                在其它设备的「我的空间 · 订阅」里粘贴此码。谁拿到同步码，都能读写你的订阅。
               </p>
             </>
           )}
@@ -155,7 +153,7 @@ export default function SyncPanel() {
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <Button size="sm" onClick={enable} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cloud className="h-4 w-4" />}
-            开启同步并生成同步码
+            开启同步
           </Button>
           <span className="text-xs text-muted-foreground">或</span>
           <div className="flex items-center gap-2">
