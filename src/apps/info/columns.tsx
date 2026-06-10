@@ -2,6 +2,7 @@ import { ColumnDef } from "@tanstack/react-table"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
 import { Info, InfoEvent } from "./model"
+import { PublisherGroup } from "./derive"
 import { EntityCell, PublisherHoverCell, TimeCell, TitleCell } from "./cells"
 import { SaveToHub } from "@/components/feeders"
 import { openExternal } from "@/lib/safe-url"
@@ -38,7 +39,7 @@ const TIME_CELL = "text-right tabular-nums whitespace-nowrap"
 // /info/analysis 深链的唯一构造处 (本 app 内复用: columns 各处 + analysis/coverage)。
 export const analysisLink = (url: string) => `/info/analysis?url=${encodeURIComponent(url)}`
 
-/** 单条信息表格列 (实体页 / 发布者页)。 */
+/** 单条信息表格列 (实体页 / 发布者页 / 首页「最新」视图)。 */
 export const getInfoColumns = (): ColumnDef<Info>[] => [
   {
     accessorKey: "title",
@@ -97,7 +98,7 @@ export const getInfoColumns = (): ColumnDef<Info>[] => [
   },
 ]
 
-/** 事件 (聚类后) 表格列 (/info 首页): 标题带来源数, 来源列汇总多家发布者。 */
+/** 事件 (聚类后) 表格列 (/info 首页「热点」视图): 标题带来源数, 来源列汇总多家发布者。 */
 export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
   {
     accessorKey: "lead.title",
@@ -203,6 +204,77 @@ export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
             variant="icon"
             bookmark={{ title: lead.title ?? lead.url, url: lead.url }}
             publisher={pubOf(lead)}
+          />
+        </div>
+      )
+    },
+  },
+]
+
+/** 发布者 (分组) 表格列 (/info 首页「发布者」视图): 一行一个发布者, 按最近更新倒序。 */
+export const getPublisherGroupColumns = (): ColumnDef<PublisherGroup>[] => [
+  {
+    id: "publisher",
+    header: "发布者",
+    cell: ({ row }) => {
+      const publisher = row.original.publisher
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <PublisherHoverCell publisher={publisher} />
+          {publisher.name && (
+            <span className="text-xs text-muted-foreground">{publisher.domain}</span>
+          )}
+        </div>
+      )
+    },
+  },
+  {
+    id: "latest",
+    header: "最新信息",
+    cell: ({ row }) => (
+      <TitleCell title={row.original.latest.title ?? ""} url={row.original.latest.url} />
+    ),
+  },
+  {
+    id: "labels",
+    header: "实体",
+    cell: ({ row }) => <EntityCell entities={row.original.latest.labels} />,
+    meta: HIDE_MD,
+  },
+  {
+    id: "count",
+    header: () => <div className="text-right">条数</div>,
+    cell: ({ row }) => (
+      <div className="text-right text-xs font-medium tabular-nums">{row.original.count}</div>
+    ),
+    meta: HIDE_SM,
+  },
+  {
+    id: "latest_time",
+    header: () => <div className="text-right">最近更新</div>,
+    cell: ({ row }) => <TimeCell value={row.original.latest.collect_time} />,
+    meta: { cellClassName: TIME_CELL },
+  },
+  {
+    id: "actions",
+    header: () => <span className="sr-only">操作</span>,
+    cell: ({ row }) => {
+      const { latest, publisher } = row.original
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            className="h-auto p-0 text-xs"
+            variant="link"
+            onClick={() =>
+              window.open(`/info/publisher/${encodeURIComponent(publisher.domain)}`, "_blank")
+            }
+          >
+            发布者页
+          </Button>
+          <SaveToHub
+            variant="icon"
+            bookmark={{ title: latest.title ?? latest.url, url: latest.url }}
+            publisher={pubOf(latest)}
           />
         </div>
       )
