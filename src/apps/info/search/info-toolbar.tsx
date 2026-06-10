@@ -10,12 +10,25 @@ import { DateRange } from "react-day-picker"
 import { cn } from "@/lib/utils"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { toast } from "sonner"
 import { fetchLatestInfo, QueryParams } from "../action"
 import { Info } from "../model"
 import { SubscribeButton } from "@/components/feeders"
+import { entityLabelText } from "@/lib/ner-labels"
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
+
+/** 实体类别下拉的「全部」sentinel (Radix Select 的 value 不允许空串)。 */
+const ALL_LABELS = "__all__"
+/** 可筛选的实体类别 (TIME 无筛选价值, 与实体展示口径一致地排除)。 */
+const ENTITY_LABELS = ["PER", "LOC", "ORG", "PRODUCT", "EVENT"]
 
 export default function InfoToolbar<TData>({
   table,
@@ -26,9 +39,14 @@ export default function InfoToolbar<TData>({
 }) {
   const [date, setDate] = React.useState<DateRange | undefined>()
   const [domain, setDomain] = React.useState("")
+  // 实体过滤: 后端契约 entity_label_name 每项必须带 label, 「全部 + 实体名」无法表达 (不限类别),
+  // 故选「全部」时直接禁用实体名输入 —— 实现最简单且不会让用户误以为查了全类别。
+  const [entityLabel, setEntityLabel] = React.useState(ALL_LABELS)
+  const [entityName, setEntityName] = React.useState("")
   const [querying, setQuerying] = React.useState(false)
 
   async function handleQuery() {
+    const name = entityName.trim()
     // 时间戳用毫秒 (与 super/server fromepochmillis 一致); 起始端回退一天, 让选中起始日整天落入区间。
     const param: QueryParams = {
       publisher_domain: domain,
@@ -36,7 +54,7 @@ export default function InfoToolbar<TData>({
         (date?.from?.getTime() ?? 0) - ONE_DAY_MS,
         date?.to?.getTime() ?? Date.now(),
       ],
-      entity_label_name: null,
+      entity_label_name: entityLabel !== ALL_LABELS && name ? [[entityLabel, name]] : null,
       page_size_offset: null,
     }
     setQuerying(true)
@@ -75,6 +93,30 @@ export default function InfoToolbar<TData>({
           onChange={(event) => setDomain(event.target.value)}
           className="w-full md:w-48"
           placeholder="example.com"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="text-sm text-muted-foreground shrink-0">实体:</label>
+        <Select value={entityLabel} onValueChange={setEntityLabel}>
+          <SelectTrigger className="h-10 w-[104px] shrink-0" aria-label="实体类别">
+            <SelectValue placeholder="类别" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_LABELS}>全部</SelectItem>
+            {ENTITY_LABELS.map((label) => (
+              <SelectItem key={label} value={label}>
+                {entityLabelText(label)} {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          value={entityName}
+          onChange={(event) => setEntityName(event.target.value)}
+          className="w-full md:w-40"
+          // 「全部」时禁用: 见上方 entityLabel 状态处注释 (契约要求逐项给 label)
+          disabled={entityLabel === ALL_LABELS}
+          placeholder={entityLabel === ALL_LABELS ? "先选类别" : "实体名"}
         />
       </div>
       <div className="flex items-center gap-2">

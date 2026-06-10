@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "wonita-super/server",
-    "description": "Wonita 核心 API: 用户检查、JWT 鉴权、信息查询。\n\n消费方: super/admin (查询) + peer (查询)。",
+    "description": "Wonita 核心 API: 用户检查、JWT 鉴权、信息查询、订阅跨端同步 (E2E 加密)、community 发布与发布者档案。\n\n消费方: super/admin (查询)、peer/myos (查询 + 同步 + 发布)。",
     "license": {
       "name": ""
     },
@@ -227,13 +227,100 @@
         ],
         "responses": {
           "200": {
-            "description": "与给定 URL 关联的信息列表",
+            "description": "与给定 URL 关联的信息列表 (Info 字段平铺 + shared/shared_entry 关联强度), 按相关度倒序, 至多 info.related.limit (默认 50) 条",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Info"
+                    "$ref": "#/components/schemas/RelatedInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/entity": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "GET /info/entity?label=&name= — 实体详情聚合 (peer 实体页 / admin 钻取)",
+        "operationId": "get_entity_detail",
+        "parameters": [
+          {
+            "name": "label",
+            "in": "query",
+            "description": "实体类别 (PER / ORG / LOC / PRODUCT / EVENT)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "实体名",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "实体详情 (提及量/首末时间/周分布/词条链接/共现实体); 实体不存在时 mention_count 为 0",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info/entity/search": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "GET /info/entity/search?q=&limit= — 实体搜索 (按提及信息数倒序)",
+        "operationId": "search_entities",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "实体名子串 (CONTAINS 匹配)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "返回条数上限 (默认 20)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "命中的实体摘要列表 (跨周分桶已按 (name,label) 聚合)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EntityBrief"
                   }
                 }
               }
@@ -263,10 +350,12 @@
         ],
         "responses": {
           "200": {
-            "description": "三类实体频次 tuple, 固定顺序 `[PER, LOC, ORG]`, 各项为 `{name: count}`",
+            "description": "近 N 小时五类实体频次 (每类 top 20 的 `{name: count}`)",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/EntityStats"
+                }
               }
             }
           }
@@ -796,6 +885,188 @@
           }
         }
       },
+      "EntityBrief": {
+        "type": "object",
+        "description": "实体摘要 (实体搜索结果项 / 实体详情的共现实体项)。\n跨周聚合口径: 按 `(name, label)` 值合并全部 period 分桶节点 (见 NameEntity 的周分桶说明)。",
+        "required": [
+          "name",
+          "label",
+          "count",
+          "has_entry"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "提及该实体的信息条数 (共现项 = 与目标实体共同出现的信息条数)",
+            "minimum": 0
+          },
+          "has_entry": {
+            "type": "boolean",
+            "description": "任一分桶节点有百科词条即为 true"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "EntityDetail": {
+        "type": "object",
+        "description": "实体详情聚合 (`GET /info/entity?label=&name=`): 跨周合并该 `(name, label)` 的全部分桶节点。\n实体不存在时返回 `mention_count = 0` 的空详情 (与 `/info` 系列「查无返回空默认」口径一致)。",
+        "required": [
+          "name",
+          "label",
+          "has_entry",
+          "mention_count",
+          "first_seen",
+          "last_seen",
+          "weekly",
+          "co_entities"
+        ],
+        "properties": {
+          "baike_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "co_entities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityBrief"
+            },
+            "description": "共现实体 top N (按共同出现的信息条数倒序)"
+          },
+          "first_seen": {
+            "type": "integer",
+            "format": "int64",
+            "description": "最早/最晚提及的采集时间 (epoch 毫秒; 无提及时为 0)"
+          },
+          "has_entry": {
+            "type": "boolean",
+            "description": "是否有百科词条 (任一分桶节点为 true 即 true)"
+          },
+          "label": {
+            "type": "string"
+          },
+          "last_seen": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mention_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "提及该实体的信息总条数",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "weekly": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityPeriodCount"
+            },
+            "description": "按周 period 的提及分布 (升序), 供趋势展示"
+          },
+          "wikipedia_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "EntityPeriodCount": {
+        "type": "object",
+        "description": "实体的单周提及量 (`period` = 周一零点 epoch 毫秒, 与 NameEntity.period 同口径)。",
+        "required": [
+          "period",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "period": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "EntityStats": {
+        "type": "object",
+        "description": "近 N 小时各类实体频次 (`GET /info/entity/{hour}`), 每类 top 20 的 `{name: count}`。\n覆盖入图的全部五类 (TIME 实体不入图故无此类)。",
+        "required": [
+          "per",
+          "loc",
+          "org",
+          "product",
+          "event"
+        ],
+        "properties": {
+          "event": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "loc": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "org": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "per": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "product": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "Info": {
         "type": "object",
         "required": [
@@ -1118,7 +1389,7 @@
                 "minimum": 0
               }
             ],
-            "description": "分页 `(page_size, offset)`"
+            "description": "分页 `(page_size, page_index)`；实际 skip = page_size * page_index。\n注意 `u8` 上限 255：单页最多 255 条、页码最多 255（当前数据量够用，未在 OpenAPI 契约暴露）。"
           },
           "publisher_domain": {
             "type": [
@@ -1146,6 +1417,35 @@
             "description": "`[from, to]` 时间戳毫秒区间, 闭区间 (与存储一致: super/form 存 epoch 毫秒, 查询用 datetime.fromepochmillis)"
           }
         }
+      },
+      "RelatedInfo": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Info"
+          },
+          {
+            "type": "object",
+            "required": [
+              "shared",
+              "shared_entry"
+            ],
+            "properties": {
+              "shared": {
+                "type": "integer",
+                "format": "int32",
+                "description": "与目标共享的实体数 (全实体口径, 兜底阈值 min_shared)",
+                "minimum": 0
+              },
+              "shared_entry": {
+                "type": "integer",
+                "format": "int32",
+                "description": "与目标共享且两侧都有百科词条的实体数 (更可信, 低阈值 min_shared_entry 即连边)",
+                "minimum": 0
+              }
+            }
+          }
+        ],
+        "description": "`GET /info/analysis` 响应项: Info + 关联强度分数。\n`#[serde(flatten)]` 让 JSON 形状 = Info 字段平铺 + 两个分数字段:\n旧消费方仍可按 Info 读 (向后兼容), 新消费方据分数解释「为什么相关」并展示共享强度。"
       },
       "SyncBlob": {
         "type": "object",

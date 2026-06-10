@@ -4,7 +4,7 @@ import dynamic from "next/dynamic"
 import { Loader2 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Info } from "../model"
+import { Info, RelatedInfo } from "../model"
 import CoverageList from "./coverage"
 
 // 知识图谱仅在 TabsContent 展开时才加载, 首屏不计入图谱 (AntV G6) 体积
@@ -22,7 +22,13 @@ const KnowledgeGraph = dynamic(() => import("./graph"), {
  * 全面报道视图: `analysis` 是 super/server 用共享实体启发式算出的「描述同一件事」的其它来源。
  * 默认直接呈现来源列表 (把原本孤立的信息关联起来), 关系图谱按需切换。
  */
-export default function InfoAnalysisView({ info, analysis }: { info: Info; analysis: Info[] }) {
+export default function InfoAnalysisView({
+  info,
+  analysis,
+}: {
+  info: Info
+  analysis: RelatedInfo[]
+}) {
   return (
     <Card>
       <CardHeader>

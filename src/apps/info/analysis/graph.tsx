@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useRef } from "react"
-import { Graph, type GraphData } from "@antv/g6"
+import { Graph, NodeEvent, type GraphData, type IPointerEvent } from "@antv/g6"
 import { NER_LABEL_TEXT } from "@/lib/ner-labels"
-import { Info, NameEntity } from "../model"
+import { entityLink } from "../cells"
+import { Info, NameEntity, RelatedInfo } from "../model"
 
 /**
  * 关系图谱 (AntV G6): 把「全面报道」的聚类依据可视化 —— 本文与各关联报道通过 *共享命名实体* 相连,
@@ -13,7 +14,8 @@ import { Info, NameEntity } from "../model"
  * 只画本文持有的实体集 (聚类基准), 关联报道仅连到与本文 *共享* 的实体, 避免噪声。
  */
 
-type Props = { info: Info; related: Info[] }
+// related 用 RelatedInfo (Info + shared/shared_entry); 图谱只读 Info 字段, 结构天然兼容
+type Props = { info: Info; related: RelatedInfo[] }
 
 // 命名实体 label → 中文分类 (文案复用全站统一口径; 此处分类还用于映射节点填充色)
 const OTHER_ENTITY = "其他实体"
@@ -37,7 +39,7 @@ const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…"
 
 type Built = { data: GraphData; categories: string[] }
 
-function buildGraph(info: Info, related: Info[]): Built {
+function buildGraph(info: Info, related: RelatedInfo[]): Built {
   const nodes: NonNullable<GraphData["nodes"]> = []
   const edges: NonNullable<GraphData["edges"]> = []
   const seen = new Set<string>()
@@ -71,10 +73,11 @@ function buildGraph(info: Info, related: Info[]): Built {
     present.add(cat)
     nodes.push({
       id: key,
-      data: { category: cat, tooltip: `${cat} · ${e.name}` },
+      data: { category: cat, tooltip: `${cat} · ${e.name} · 点击查看实体页` },
       style: {
         size: 22,
         fill: CATEGORY_COLOR[cat],
+        cursor: "pointer", // 实体节点可点进实体页, 给出手型提示
         labelText: truncate(e.name, 10),
         labelPlacement: "bottom",
         labelFontSize: 11,
@@ -162,6 +165,16 @@ const KnowledgeGraph = ({ info, related }: Props) => {
             `<div style="max-width:280px;font-size:12px;line-height:1.5">${items?.[0]?.data?.tooltip ?? ""}</div>`,
         },
       ],
+    })
+    // 实体节点点击进实体页: 实体节点 id 即 entityKey 的 `${label}:${name}`;
+    // 文章节点 id 带 `info:` 前缀 (NER label 不可能是 "info"), 据此区分不导航。
+    // label 本身不含 ":", 故按第一个 ":" 切分即可还原 (实体名内可含 ":")。
+    graph.on(NodeEvent.CLICK, (evt: IPointerEvent) => {
+      const id = String((evt.target as { id?: unknown })?.id ?? "")
+      if (!id || id.startsWith("info:")) return
+      const sep = id.indexOf(":")
+      if (sep <= 0) return
+      window.open(entityLink(id.slice(0, sep), id.slice(sep + 1)), "_blank")
     })
     graph.render()
     return () => {

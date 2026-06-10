@@ -13,6 +13,11 @@ import type { NameEntity, Publisher } from "./model"
  * 避免「同一种单元格在多处各写一遍」导致的样式/时区漂移 (历史上时间列就出现过本地/UTC 不一致)。
  */
 
+/** 跳转到某个实体的实体页。 */
+// /info/entity/[label]/[name] 深链的唯一构造处 (本 app 内复用: cells / basic / graph / hot-entities)。
+export const entityLink = (label: string, name: string) =>
+  `/info/entity/${label}/${encodeURIComponent(name)}`
+
 /** 标题截断: 超长时保留头尾、中间省略号, 兼顾可读性与列宽对齐。 */
 export function truncate(text: string, max: number): string {
   if (!text || text.length <= max) return text
@@ -101,8 +106,30 @@ export function EntityEntryLinks({ entity }: { entity: NameEntity }) {
 }
 
 /**
+ * 实体名链接: 点击新开实体页 (window.open 与 columns 各处跳转模式一致)。
+ * 样式刻意低调 (hover 才出下划线), 不与 Badge 内已有的百科/维基外链抢视觉。
+ */
+function EntityNameLink({ label, name }: { label: string; name: string }) {
+  return (
+    <button
+      type="button"
+      title="查看实体页"
+      className="cursor-pointer underline-offset-2 hover:underline"
+      onClick={(e) => {
+        // Badge 内与百科/维基外链并排, 阻止冒泡避免相互干扰 (外链侧已有同样处理)
+        e.stopPropagation()
+        window.open(entityLink(label, name), "_blank")
+      }}
+    >
+      {name}
+    </button>
+  )
+}
+
+/**
  * 命名实体单元格: 有词条实体作 Badge 突出展示 (附百科/维基链接),
  * 其余归到可折叠的「可能性低或不重要的实体」组。旧数据无 has_entry 时全部落入「其余」。
+ * 实体名一律可点进实体页 (实体维度的浏览入口)。
  */
 export function EntityCell({ entities }: { entities: NameEntity[] | undefined }) {
   const { withEntry, others } = partitionEntities(entities)
@@ -119,7 +146,7 @@ export function EntityCell({ entities }: { entities: NameEntity[] | undefined })
               variant="secondary"
               className="gap-1 font-normal"
             >
-              <span>{e.name}</span>
+              <EntityNameLink label={e.label} name={e.name} />
               <EntityEntryLinks entity={e} />
             </Badge>
           ))}
@@ -128,7 +155,11 @@ export function EntityCell({ entities }: { entities: NameEntity[] | undefined })
       {others.length > 0 && (
         <details className="text-muted-foreground">
           <summary className="cursor-pointer select-none">次要实体 ({others.length})</summary>
-          <div className="mt-1">{others.map((e) => e.name).join(", ")}</div>
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+            {others.map((e, i) => (
+              <EntityNameLink key={`${e.label}-${e.name}-${i}`} label={e.label} name={e.name} />
+            ))}
+          </div>
         </details>
       )}
     </div>

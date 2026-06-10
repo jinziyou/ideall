@@ -21,11 +21,14 @@ import type { ApiResult } from "@/lib/api"
  * @param fetcher 返回 `ApiResult<T>` 的取数函数 (通常是 Server Action)。
  * @param initial data 初始值 (与原各页保持一致, 如 `[]`)。
  * @param deps 触发重新取数的依赖项 (传 `[]` 即仅首次挂载取数)。
+ * @param opts.silent 失败时仍 setError 但不 toast —— 供增强型区块 (如热门实体榜) 使用:
+ *   它们失败时整体隐藏, 弹 toast 会让用户看到错误却找不到出错的 UI, 还与主链路报错叠成双 toast。
  */
 export function useApiResult<T>(
   fetcher: () => Promise<ApiResult<T>>,
   initial: T,
   deps: unknown[],
+  opts?: { silent?: boolean },
 ): { data: T; loading: boolean; error: string | null; reload: () => void } {
   const [data, setData] = React.useState<T>(initial)
   const [loading, setLoading] = React.useState(true)
@@ -46,7 +49,7 @@ export function useApiResult<T>(
         if (!active) return
         if (!result.ok) {
           setError(result.message)
-          toast.error(result.message)
+          if (!opts?.silent) toast.error(result.message)
         } else {
           setData(result.data ?? initial)
           setError(null)

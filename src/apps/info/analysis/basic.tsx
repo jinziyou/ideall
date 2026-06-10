@@ -3,13 +3,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Info } from "../model"
-import { EntityEntryLinks, partitionEntities } from "../cells"
+import { entityLink, EntityEntryLinks, partitionEntities } from "../cells"
 import { entityLabelText } from "@/lib/ner-labels"
 
 export default function InfoBasicView({ info }: { info: Info }) {
   const { withEntry, others } = partitionEntities(info.labels)
-  const openEntity = (label: string, name: string) =>
-    window.open(`/info/entity/${encodeURIComponent(label)}/${encodeURIComponent(name)}`)
+  const openEntity = (label: string, name: string) => window.open(entityLink(label, name))
   return (
     <Card>
       <CardHeader>
