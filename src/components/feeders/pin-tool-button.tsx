@@ -4,12 +4,12 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Pin } from "lucide-react"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
+import { cn } from "@/components/lib/utils"
 import { getHubData } from "@protocol/hub-data"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 「钉到我的空间」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
+ * 「钉到「我的」」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
  * 经 protocol 的 HubDataPort 写入 (本地优先)。图标按钮形态, 作为工具卡的角标叠加。
  */
 export function PinToolButton({
@@ -69,8 +69,8 @@ export function PinToolButton({
       type="button"
       onClick={toggle}
       disabled={pinned === null || busy}
-      title={pinned ? "取消钉住" : "钉到我的空间"}
-      aria-label={pinned ? `取消钉住 ${name}` : `钉到我的空间 ${name}`}
+      title={pinned ? "取消钉住" : "钉到「我的」"}
+      aria-label={pinned ? `取消钉住 ${name}` : `钉到「我的」 ${name}`}
       className={cn(
         "rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
         pinned && "text-pop",

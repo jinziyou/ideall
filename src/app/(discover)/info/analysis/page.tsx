@@ -1,1 +1,1 @@
-export { default } from "@app/info/analysis/page"
+export { default } from "@/components/apps/info/analysis/page"

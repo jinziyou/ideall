@@ -1,1 +1,1 @@
-export { default } from "@app/info/publisher/[domain]/page"
+export { default } from "@/components/apps/info/publisher/[domain]/page"

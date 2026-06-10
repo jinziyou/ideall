@@ -1,1 +1,1 @@
-export { default } from "@app/info/entity/[label]/[name]/page"
+export { default } from "@/components/apps/info/entity/[label]/[name]/page"

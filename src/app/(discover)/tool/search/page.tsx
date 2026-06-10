@@ -1,1 +1,1 @@
-export { default, metadata } from "@app/tool/search/page"
+export { default, metadata } from "@/components/apps/tool/search/page"

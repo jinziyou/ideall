@@ -13,7 +13,7 @@
 
 > 权威最终稿。脊柱 = **方向 A「中枢仪表盘 / Hub-as-living-dashboard」**（三位评委一致排名第一，44.3 / 43.7 / 43.4）。在其结构上**嫁接**方向 C 的「暖纸墨 + ember-amber 身份层 + 本地·此设备所有权链」（评委一致点名的最高 distinctiveness/最低风险皮肤）与方向 B 的**透明工具调用 chip**（`✓ 已写入本机 / 撤销`，三位评委一致点名为最佳「per-action local-first 具象化」）。**拒绝**把 agent 做成产品脊柱（B 的结构性赌注）——评委一致认定其依赖不可靠的 BYO-key、且其兜底恰是 A 的 dashboard。
 >
-> 全部改动落在 Next.js 16 App Router + Tailwind v4 `@theme` + shadcn/ui，**不新增并行 UI 库**，**不为 home 数据新增 server 依赖**，**不破坏 info→super/server 契约**（DTO 仍从 `src/lib/api/server.d.ts` 派生）。暗色采用**自写轻量方案**（`THEME_INIT` 内联脚本 + `ThemeApplier` + `lib/theme.ts`），**不引入 `next-themes`**（沙箱内 registry 不可达）。所有面向用户文案保持简体中文。
+> 全部改动落在 Next.js 16 App Router + Tailwind v4 `@theme` + shadcn/ui，**不新增并行 UI 库**，**不为 home 数据新增 server 依赖**，**不破坏 info→super/server 契约**（DTO 仍从 `src/components/lib/api/server.d.ts` 派生）。暗色采用**自写轻量方案**（`THEME_INIT` 内联脚本 + `ThemeApplier` + `lib/theme.ts`），**不引入 `next-themes`**（沙箱内 registry 不可达）。所有面向用户文案保持简体中文。
 
 ---
 
@@ -88,11 +88,11 @@ src/app/
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **「我的空间」= 唯一主项**：左锚、加粗、active 时墨色实心下划线，挂一枚**回流计数 badge**（订阅+书签，`HUB_UPDATED` 事件驱动，回流成功时 count-up）。点击 → `/home`（dashboard）。它**不再与「发现」平级**。组件为 `src/app/hub-nav-link.tsx`。
+- **「我的空间」= 唯一主项**：左锚、加粗、active 时墨色实心下划线，挂一枚**回流计数 badge**（订阅+书签，`HUB_UPDATED` 事件驱动，回流成功时 count-up）。点击 → `/home`（dashboard）。它**不再与「发现」平级**。组件为 `src/app/shell/hub-nav-link.tsx`。
 - **「发现」= 明确次级 spoke 簇**：三条 spoke 内联平铺为轻量文字链接（**不是隐藏 dropdown**），各前缀 spoke-hue 圆点（info 蓝 / community 绿 / tool 紫）。整体重量明显轻于「我的空间」。
-- **⌘K 命令台**（组件 `src/app/command-palette.tsx`，**无独立 `search.tsx`**）：shadcn `Command`（cmdk 已装，包装在 `src/components/ui/command.tsx`）。统一入口：跳 spoke / 过滤 `/info` 标题 / 把 query 交给 home agent / 新建书签。对「总控终端」这是定义性控件。
-- **本地·此设备 🔒 药丸**（组件 `src/app/local-device-chip.tsx`，常驻）：`HardDrive`/lock 图标 + 墨色文案。hover/点开展开「你的数据存在这台设备，没有上传服务器」+ 同步状态（已同步码 N 设备 / 未开启）+ 本地存储用量（`navigator.storage.estimate()`，从 home-nav 提升到全局）+ 链到同步面板。
-- **🌓 主题切换**（组件 `src/app/theme-toggle.tsx`）：调 `lib/theme.ts` 的 `setThemeChoice`，复活已存在的 `.dark` 块（自写方案，**不依赖 `next-themes`**）。
+- **⌘K 命令台**（组件 `src/app/shell/command-palette.tsx`，**无独立 `search.tsx`**）：shadcn `Command`（cmdk 已装，包装在 `src/components/ui/command.tsx`）。统一入口：跳 spoke / 过滤 `/info` 标题 / 把 query 交给 home agent / 新建书签。对「总控终端」这是定义性控件。
+- **本地·此设备 🔒 药丸**（组件 `src/app/shell/local-device-chip.tsx`，常驻）：`HardDrive`/lock 图标 + 墨色文案。hover/点开展开「你的数据存在这台设备，没有上传服务器」+ 同步状态（已同步码 N 设备 / 未开启）+ 本地存储用量（`navigator.storage.estimate()`，从 home-nav 提升到全局）+ 链到同步面板。
+- **🌓 主题切换**（组件 `src/app/shell/theme-toggle.tsx`）：调 `lib/theme.ts` 的 `setThemeChoice`，复活已存在的 `.dark` 块（自写方案，**不依赖 `next-themes`**）。
 - **账户菜单**：复用，退出跳 `/home`。
 
 ### 2.3 Hub nav（`home-nav.tsx`，子页左侧栏，统一所有权语言）
@@ -389,10 +389,10 @@ active 态（已实现）：`bg-pop/10 font-medium text-foreground` + 2px 墨色
 
 沙箱内 npm registry 不可达，故**不引入 `next-themes`**，改用自写控制器：
 
-- **`src/lib/theme.ts`**：`ThemeChoice = "light" | "dark" | "system"`，选择存 `localStorage("wonita-theme")`（`THEME_KEY`）；`applyTheme` / `setThemeChoice` / `getThemeChoice` 切 `<html>` 的 `.dark` 类；`updateFavicon` 让 tab favicon 跟随手动主题（用 `lib/brand.ts` 的 `BRAND_INK` + `WONITA_PATH`）。
+- **`src/components/lib/theme.ts`**：`ThemeChoice = "light" | "dark" | "system"`，选择存 `localStorage("wonita-theme")`（`THEME_KEY`）；`applyTheme` / `setThemeChoice` / `getThemeChoice` 切 `<html>` 的 `.dark` 类；`updateFavicon` 让 tab favicon 跟随手动主题（用 `lib/brand.ts` 的 `BRAND_INK` + `WONITA_PATH`）。
 - **`THEME_INIT` 内联脚本**：`layout.tsx` 在 `<body>` 顶部 `<script dangerouslySetInnerHTML>` 同步注入，首帧前打 `.dark` 类，**无闪烁**。
-- **`src/app/theme-applier.tsx`（`<ThemeApplier/>`）**：水合后兜底重新断言主题（防根树重渲染抹掉 `.dark`）。
-- **`src/app/theme-toggle.tsx`（`<ThemeToggle/>`）**：header 内 Sun/Moon 切换，调 `setThemeChoice`。
+- **`src/app/shell/theme-applier.tsx`（`<ThemeApplier/>`）**：水合后兜底重新断言主题（防根树重渲染抹掉 `.dark`）。
+- **`src/app/shell/theme-toggle.tsx`（`<ThemeToggle/>`）**：header 内 Sun/Moon 切换，调 `setThemeChoice`。
 - `<html lang="zh-CN" suppressHydrationWarning>` 已在 `layout.tsx`。
 - **硬前置**：tool 二级 pill 套娃已收敛为页内 segmented control（`tool/layout.tsx`，muted 底单行分段），无 12 色 rainbow 残留；全局色全走 token（`bg-pop` / `text-spoke-*` 等），暗色自动翻转。
 
@@ -411,7 +411,7 @@ active 态（已实现）：`bg-pop/10 font-medium text-foreground` + 2px 墨色
 
 ### 5.7 品牌（已落地 dark-safe）
 
-品牌字形已改为 **dark-safe 内联 SVG**：`src/components/wonita-mark.tsx`（`<WonitaMark/>`）内联 `<svg fill="currentColor">` + `src/lib/brand.ts` 的 `WONITA_PATH`，跟随文字色，暗色不消失（不用 `<img src="/wonita.svg">`——`<img>` 取不到 CSS `currentColor`）。favicon 由 `lib/theme.ts` 的 `updateFavicon` 用 `BRAND_INK`（`{ light: "#1b222e", dark: "#e8ecf2" }`）按手动主题动态生成，`public/icon.svg` 用 `prefers-color-scheme` 处理首帧。wordmark 用 `--font-sans`（无 display 字体）。tagline「链接我你TA / 想你所想」可在 dashboard 首屏露出。
+品牌字形已改为 **dark-safe 内联 SVG**：`src/components/wonita-mark.tsx`（`<WonitaMark/>`）内联 `<svg fill="currentColor">` + `src/components/lib/brand.ts` 的 `WONITA_PATH`，跟随文字色，暗色不消失（不用 `<img src="/wonita.svg">`——`<img>` 取不到 CSS `currentColor`）。favicon 由 `lib/theme.ts` 的 `updateFavicon` 用 `BRAND_INK`（`{ light: "#1b222e", dark: "#e8ecf2" }`）按手动主题动态生成，`public/icon.svg` 用 `prefers-color-scheme` 处理首帧。wordmark 用 `--font-sans`（无 display 字体）。tagline「链接我你TA / 想你所想」可在 dashboard 首屏露出。
 **`components.json` `baseColor` 已是 `neutral`（非 slate）——此项已完成，无需再改。**
 
 ---
@@ -431,7 +431,7 @@ active 态（已实现）：`bg-pop/10 font-medium text-foreground` + 2px 墨色
 
 ### 6.2 ⌘K 中枢命令台（记忆点之一）
 
-`<CommandPalette>`（`src/app/command-palette.tsx`，**取代设想中的 `search.tsx`**）→ shadcn `Command`（cmdk 已装，包装在 `src/components/ui/command.tsx`）。统一入口：跳 spoke / 过滤 `/info` 标题 / 把当前页「焦点对象」（一篇 info、一个实体、一组 coverage、一条 tool query）作为上下文交给 home agent / 新建书签。对「总控终端」，随手可唤的命令台是定义性体验。
+`<CommandPalette>`（`src/app/shell/command-palette.tsx`，**取代设想中的 `search.tsx`**）→ shadcn `Command`（cmdk 已装，包装在 `src/components/ui/command.tsx`）。统一入口：跳 spoke / 过滤 `/info` 标题 / 把当前页「焦点对象」（一篇 info、一个实体、一组 coverage、一条 tool query）作为上下文交给 home agent / 新建书签。对「总控终端」，随手可唤的命令台是定义性体验。
 
 ### 6.3 透明工具调用「落库」chip（嫁接方向 B 的灵魂，记忆点之二）
 
@@ -446,19 +446,19 @@ home agent 每次调用本地工具，对话内联一枚 chip：图标 + summary
 | 文件 | 改动 |
 | --- | --- |
 | `src/app/layout.tsx` | `THEME_INIT` 内联脚本 + `<ThemeApplier/>` + `<html lang="zh-CN" suppressHydrationWarning>`；字体走 `globals.css` 字体栈（**无 `next/font`、无 `<ThemeProvider>`**） |
-| `src/app/header.tsx` | 重写：`nav-config` 单一真相源、hub-primary、`<CommandPalette/>` ⌘K、`<LocalDeviceChip/>`、`<ThemeToggle/>`、`<HubNavLink/>` 回流计数 badge |
-| `src/app/command-palette.tsx` | 死 input → ⌘K CommandPalette（**取代不存在的 `search.tsx`**） |
+| `src/app/shell/header.tsx` | 重写：`nav-config` 单一真相源、hub-primary、`<CommandPalette/>` ⌘K、`<LocalDeviceChip/>`、`<ThemeToggle/>`、`<HubNavLink/>` 回流计数 badge |
+| `src/app/shell/command-palette.tsx` | 死 input → ⌘K CommandPalette（**取代不存在的 `search.tsx`**） |
 | `src/app/page.tsx` | throwaway 卡 → `<HubDashboard/>` |
 | `src/app/not-found.tsx` / `account-menu.tsx` | 默认目标 `/` → `/home` |
 | `src/app/globals.css` | Ink 墨灰 token（§5.1/5.2）、`--pop`/`--flowback`/`--spoke-*`、`flowback-settle`、`@theme inline` 注册 |
 | `src/app/home/page.tsx` | 已渲染 `<HubDashboard/>`（无 redirect）★ |
 | `src/app/home/layout.tsx` / `home-nav.tsx` | 墨色框架（`bg-pop/10` + `border-pop` 左轨）、概览入口、同步状态行、usage bar `bg-primary` |
-| `src/app/home/subscribe-button.tsx` / `pin-tool-button.tsx` | 保持独立开关组件（**未转调 `<SaveToHub>`**；`<SaveToHub>` 是 info 列表等处另用的回流原语，三者并存） |
-| `src/app/home/agent/chat-message.tsx` | tool chip 已为「已写入本机」(`Lock`，`bg-pop/10 text-pop`)/「仅读取」(`Eye`，muted) 角标 |
+| `src/components/feeders/subscribe-button.tsx` / `pin-tool-button.tsx` | 保持独立开关组件（**未转调 `<SaveToHub>`**；`<SaveToHub>` 是 info 列表等处另用的回流原语，三者并存） |
+| `src/components/plugins/agent/views/chat-message.tsx` | tool chip 已为「已写入本机」(`Lock`，`bg-pop/10 text-pop`)/「仅读取」(`Eye`，muted) 角标 |
 | `src/app/home/subscriptions/*` | 同步码 mono 化；空态各页内联（未接 `<EmptyState>`） |
 | `src/app/(discover)/layout.tsx` / `discover-nav.tsx` | 顶部分区导航（muted 底单行分段）；spoke-hue dot / 回流去向锚点为后续规划 |
 | `src/app/(discover)/tool/layout.tsx` | 已收敛为页内 segmented control（`usePathname` + muted 底单行，取消二级 pill 套娃） |
-| `src/app/(discover)/info/columns.tsx` / `cells.tsx` / `analysis/*` | `columns.tsx` 已接 `<SaveToHub>`（收藏/订阅）；analysis/coverage/G6 回流为后续 |
+| `src/components/apps/info/columns.tsx` / `cells.tsx` / `analysis/*` | `columns.tsx` 已接 `<SaveToHub>`（收藏/订阅）；analysis/coverage/G6 回流为后续 |
 | `src/app/(discover)/community/*` | 地图 popover 就地订阅、peer 卡增强（部分后续） |
 | `src/app/(discover)/tool/search/ai/navigation/*` | 结果回流、ai `historyKey`（部分后续）；无 12 色 rainbow 残留 |
 | `components.json` | `baseColor` **已是 `neutral`**（非 slate），此项已完成 |
@@ -472,16 +472,16 @@ home agent 每次调用本地工具，对话内联一枚 chip：图标 + summary
 | `<HubDashboard>` | `src/app/home/hub-dashboard.tsx` | 中枢仪表盘本体（/ 与 /home 共用） |
 | `<RecentFlowback>` | `src/app/home/recent-flowback.tsx` | 「最近回流」跨 store merge-sort 时间线 ★ |
 | `<HubStatTiles>` | `src/app/home/hub-stat-tiles.tsx` | 所有权一览 |
-| `<SaveToHub>` | `src/app/home/save-to-hub.tsx` | 统一回流原语（按 bookmark/publisher 分派，见 §4.0） |
+| `<SaveToHub>` | `src/components/feeders/save-to-hub.tsx` | 统一回流原语（按 bookmark/publisher 分派，见 §4.0） |
 | `lib/flowback.ts` | `src/app/home/lib/flowback.ts` | `HUB_UPDATED` 进程内事件 + `notifyHubUpdated()` 计数广播（取代规划中的 `flowback-anim.tsx`） |
-| `<LocalDeviceChip>` | `src/app/local-device-chip.tsx` | 本地·此设备所有权药丸（全局 chrome） |
-| `<CommandPalette>` | `src/app/command-palette.tsx` | ⌘K 命令台 |
-| `<ThemeToggle>` | `src/app/theme-toggle.tsx` | Sun/Moon 切换（自写主题方案） |
-| `<ThemeApplier>` | `src/app/theme-applier.tsx` | 水合后兜底重断言主题 |
-| `<HubNavLink>` | `src/app/hub-nav-link.tsx` | 「我的空间」主项 + 回流计数 badge（`HUB_UPDATED` 驱动） |
-| `<MobileNav>` | `src/app/mobile-nav.tsx` | 移动 Sheet（由 `nav-config` 驱动） |
+| `<LocalDeviceChip>` | `src/app/shell/local-device-chip.tsx` | 本地·此设备所有权药丸（全局 chrome） |
+| `<CommandPalette>` | `src/app/shell/command-palette.tsx` | ⌘K 命令台 |
+| `<ThemeToggle>` | `src/app/shell/theme-toggle.tsx` | Sun/Moon 切换（自写主题方案） |
+| `<ThemeApplier>` | `src/app/shell/theme-applier.tsx` | 水合后兜底重断言主题 |
+| `<HubNavLink>` | `src/app/shell/hub-nav-link.tsx` | 「我的空间」主项 + 回流计数 badge（`HUB_UPDATED` 驱动） |
+| `<MobileNav>` | `src/app/shell/mobile-nav.tsx` | 移动 Sheet（由 `nav-config` 驱动） |
 | `<WonitaMark>` | `src/components/wonita-mark.tsx` | 品牌字形内联 SVG（`currentColor`，dark-safe） |
-| `nav-config` | `src/app/nav-config.ts` | 单一 nav 真相源（桌面 + 移动），导出 `SPOKES` 等 |
+| `nav-config` | `src/app/nav/nav-config.ts` | 单一 nav 真相源（桌面 + 移动），导出 `SPOKES` 等 |
 
 **未实现（规划）：**
 
@@ -568,9 +568,9 @@ home agent 每次调用本地工具，对话内联一枚 chip：图标 + summary
 **一句话**：方向 A 的结构（中枢首屏 + 最近回流脊柱 + spoke 进料口）× **Ink 纯墨灰皮肤与所有权签名**（黑白灰 + 墨色填充关键动作 + 本地·此设备 + mono 标识符）× 方向 B 的透明落库 chip（`✓已写入本机/撤销`）= 一块你每天打开就看见、会因你的回流而生长、不可错认是 local-first 的活中枢；每次带东西回家，你都看见它落进时间线。~80% 复用既有本地数据与组件，net-new 主要在表达层，不破坏既有 BUILT 能力与 info→super/server 契约。
 
 相关文件（绝对路径，供实现；仓库根为 `/home/lyping/jinziyou/wonita`）：
-- token/动效/主题：`/home/lyping/jinziyou/wonita/peer/src/app/globals.css`、`/home/lyping/jinziyou/wonita/peer/src/lib/theme.ts`、`/home/lyping/jinziyou/wonita/peer/src/lib/brand.ts`
+- token/动效/主题：`/home/lyping/jinziyou/wonita/peer/src/app/globals.css`、`/home/lyping/jinziyou/wonita/peer/src/components/lib/theme.ts`、`/home/lyping/jinziyou/wonita/peer/src/components/lib/brand.ts`
 - 着陆/dashboard：`/home/lyping/jinziyou/wonita/peer/src/app/page.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/page.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/hub-dashboard.tsx`
-- header/nav：`/home/lyping/jinziyou/wonita/peer/src/app/header.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/command-palette.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/hub-nav-link.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/nav-config.ts`、`/home/lyping/jinziyou/wonita/peer/src/app/home/home-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/(discover)/discover-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/(discover)/tool/layout.tsx`
-- 回流：`/home/lyping/jinziyou/wonita/peer/src/app/home/save-to-hub.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/lib/flowback.ts`、`/home/lyping/jinziyou/wonita/peer/src/app/home/subscribe-button.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/pin-tool-button.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/(discover)/info/columns.tsx`
-- agent：`/home/lyping/jinziyou/wonita/peer/src/app/home/agent/chat-message.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/lib/agent-tools.ts`
-- 布局/主题：`/home/lyping/jinziyou/wonita/peer/src/app/layout.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/theme-applier.tsx`、`/home/lyping/jinziyou/wonita/peer/components.json`
+- header/nav：`/home/lyping/jinziyou/wonita/peer/src/app/shell/header.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/shell/command-palette.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/shell/hub-nav-link.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/nav/nav-config.ts`、`/home/lyping/jinziyou/wonita/peer/src/app/home/home-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/shell/discover-nav.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/(discover)/tool/layout.tsx`
+- 回流：`/home/lyping/jinziyou/wonita/peer/src/components/feeders/save-to-hub.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/home/lib/flowback.ts`、`/home/lyping/jinziyou/wonita/peer/src/components/feeders/subscribe-button.tsx`、`/home/lyping/jinziyou/wonita/peer/src/components/feeders/pin-tool-button.tsx`、`/home/lyping/jinziyou/wonita/peer/src/components/apps/info/columns.tsx`
+- agent：`/home/lyping/jinziyou/wonita/peer/src/components/plugins/agent/views/chat-message.tsx`、`/home/lyping/jinziyou/wonita/peer/src/components/plugins/agent/lib/agent-tools.ts`
+- 布局/主题：`/home/lyping/jinziyou/wonita/peer/src/app/layout.tsx`、`/home/lyping/jinziyou/wonita/peer/src/app/shell/theme-applier.tsx`、`/home/lyping/jinziyou/wonita/peer/components.json`

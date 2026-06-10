@@ -1,1 +1,1 @@
-export { default, metadata } from "@app/tool/navigation/page"
+export { default, metadata } from "@/components/apps/tool/navigation/page"

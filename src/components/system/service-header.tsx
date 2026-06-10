@@ -1,6 +1,6 @@
 import type { ComponentType } from "react"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { cn } from "@/components/lib/utils"
 
 /**
  * plugins 域统一签名 —— 方形图标位 + 「系统服务」徽章 + 状态字 (单行, 不再加冗余提示)。

@@ -1,2 +1,2 @@
 export const dynamic = "force-dynamic"
-export { default } from "@app/community/page"
+export { default } from "@/components/apps/community/page"

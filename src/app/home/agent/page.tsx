@@ -1,1 +1,1 @@
-export { default } from "@plugin/agent/views/agent-page"
+export { default } from "@/components/plugins/agent/views/agent-page"

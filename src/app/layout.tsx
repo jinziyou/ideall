@@ -1,1 +1,1 @@
-export { default, metadata, viewport } from "@core/shell/root-layout"
+export { default, metadata, viewport } from "@/app/shell/root-layout"

@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/components/lib/utils"
 
 /**
  * 三 app 统一页头 (纯展示 Server Component) —— spoke 色点 + 标题 + 一句回流定位描述。

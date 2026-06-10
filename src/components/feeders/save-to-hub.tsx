@@ -12,12 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn } from "@/components/lib/utils"
 import { getHubData } from "@protocol/hub-data"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 统一回流原语「收入我的空间」(反馈原语) —— 把 spoke 上的任意条目 (文章 / 事件 / 链接) 落进本地中枢。
+ * 统一回流原语「收入我的」(反馈原语) —— 把 spoke 上的任意条目 (文章 / 事件 / 链接) 落进本地中枢。
  * 按传入的能力渲染菜单项: 收藏到书签 / 订阅发布者; 另带原文 / 全面报道 直达。
  * 经 protocol 的 HubDataPort 写入, 广播 HUB_UPDATED 让头部计数 +1。
  */
@@ -85,15 +85,15 @@ export function SaveToHub({
         variant="ghost"
         size="icon"
         className={cn("h-8 w-8", pulseCls, className)}
-        title="收入我的空间"
+        title="收入我的"
       >
         <Plus className="h-4 w-4" />
-        <span className="sr-only">收入我的空间</span>
+        <span className="sr-only">收入我的</span>
       </Button>
     ) : (
       <Button size="sm" className={cn("gap-1.5", pulseCls, className)}>
         <Plus className="h-4 w-4" />
-        收入我的空间
+        收入我的
       </Button>
     )
 

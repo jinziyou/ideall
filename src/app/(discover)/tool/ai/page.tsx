@@ -1,1 +1,1 @@
-export { default, metadata } from "@app/tool/ai/page"
+export { default, metadata } from "@/components/apps/tool/ai/page"

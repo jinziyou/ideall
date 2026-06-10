@@ -1,1 +1,1 @@
-export { default, metadata } from "@core/shell/discover-layout"
+export { default, metadata } from "@/app/shell/discover-layout"

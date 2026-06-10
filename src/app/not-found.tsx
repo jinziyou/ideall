@@ -1,1 +1,1 @@
-export { default } from "@core/shell/not-found"
+export { default } from "@/app/shell/not-found"

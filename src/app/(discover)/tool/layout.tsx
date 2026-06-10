@@ -1,1 +1,1 @@
-export { default } from "@app/tool/layout"
+export { default } from "@/components/apps/tool/layout"

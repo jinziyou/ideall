@@ -1,5 +1,5 @@
 import * as React from "react"
-import { WONITA_PATH } from "@/lib/brand"
+import { WONITA_PATH } from "@/components/lib/brand"
 
 /**
  * Wonita 品牌字形 (内联 SVG, fill=currentColor) —— 跟随文字色, 暗色安全。

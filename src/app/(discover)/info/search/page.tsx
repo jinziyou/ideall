@@ -1,1 +1,1 @@
-export { default } from "@app/info/search/page"
+export { default } from "@/components/apps/info/search/page"

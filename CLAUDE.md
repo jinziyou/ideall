@@ -17,33 +17,28 @@ home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 
 **社区 = 用户/peer 发布层 (账号)**: 登录后发布内容成为社区发布者, 他人订阅其发布进订阅流。
 **账号 (公开发布身份) 与跨端同步的无账号同步码是两套独立身份**。
 
-## 架构: OS 式 5 子项目 (src/ 下)
+## 架构: 扁平三目录 (src/ 下)
 
-借鉴操作系统概念组织, 用 tsconfig 路径别名 + ESLint `no-restricted-imports` **强制**依赖方向:
+常规 Next.js 布局: 路由与核心实现同址, 共享代码归 components, 契约独立。
 
-| 子项目 | 别名 | OS 类比 | 内容 |
-|---|---|---|---|
-| **core** | `@core/*` | 内核 + shell | `hub/` 中枢 (dashboard/订阅/书签/资源/发布 + IndexedDB 数据层 `hub/lib`)、`shell/` 全局壳 (header/nav/命令台/主题/`boot`)、`nav/` |
-| **apps** | `@app/*` | 用户态应用 | `info` / `community` / `tool` —— **三者完全独立**, 互不 import、不碰 core/plugin |
-| **plugins** | `@plugin/*` | 内核模块 | `agent` (AI 助手) + `sync` (跨端同步) —— 经 protocol 挂到 core |
-| **lib** | `@lib/*` / `@/lib/*` | libc | 纯共享叶子: utils/format/id/env/ner-labels/safe-url/idb/hub-format/sync-code/sync-crypto + auth/api/peer-action 实现 |
-| **protocol** | `@protocol/*` | ABI / IPC | 跨子项目契约 (纯端口/类型/纯函数, 不含 UI): subscription/content(解析注册表)/flowback/hub-data(HubDataPort)/sync(SyncPort)/peer/auth/transport/server |
+| 目录 | 别名 | 内容 |
+|---|---|---|
+| **app** | `@/app/*` | Next 路由 + 核心实现同址: `home/` 中枢 (dashboard/订阅/书签/资源/发布 + IndexedDB 数据层 `home/lib`, 页面即路由)、`shell/` 全局壳 (header/nav/命令台/主题/`boot`, 非路由)、`nav/` 导航配置、`(discover)/` 与 `auth` 等路由入口 |
+| **components** | `@/components/*` | 全部共享代码: `apps/` 三应用模块 (`info` / `community` / `tool`, 页面组件由 app 路由薄 re-export)、`plugins/` (`agent` AI 助手 + `sync` 跨端同步)、`lib/` 纯工具 (utils/format/idb/sync-crypto/auth/api/...)、`ui/` shadcn 原语、`feeders/` 等共享 UI |
+| **protocol** | `@protocol/*` | 跨模块契约 (纯端口/类型/纯函数, 不含 UI): subscription/content(解析注册表)/flowback/hub-data(HubDataPort)/sync(SyncPort)/peer/auth/transport/server |
 
-**依赖方向 (单向)**: `protocol→lib`; `lib→∅`; `components→{protocol,lib}` (共享 UI 叶子, 如 `feeders`);
-`app/*→{protocol,lib,components}`; `plugin/*→{protocol,lib,components}`;
-`core→{protocol,lib,components}` (插件经 `@protocol` registry 触达)。
-唯一例外: 组合根 `core/shell/boot.ts` 可 import 各 `@app/*/manifest`、`@plugin/*/manifest`。
+ESLint 仅强制 **protocol 纯度**: 契约层只可依赖 `@/components/lib` 纯工具, 不得 import UI 或页面代码。
+其余依赖方向不再用 lint 强制, 但仍遵循惯例: components 不 import app; info/community/tool 互不 import。
 
-**`src/app/` 仅放 Next 路由入口** (薄 re-export, 真实代码在 `@core`/`@app`/`@plugin`)。
-
-### 依赖反转 (app/plugin 经 protocol 而非直连 core)
+### 依赖反转 (模块经 protocol 而非互相直连)
 
 - **内容 feed**: 中枢订阅流调 `@protocol/content` 的 `resolveSubscription`; info/community 在各自 `manifest.ts`
-  注册 resolver (info 管 publisher/entity/search, community 管 peer)。core 不 import app。
-- **中枢数据**: app 反馈组件 (共享 UI `@/components/feeders`) 与 agent 插件经 `@protocol/hub-data` 的 `getHubData()`
-  (HubDataPort, core 在 boot 注册实现) 读写订阅/书签/资源, 不直接依赖 core 存储。
-- **跨端同步**: core 同步面板调 `@protocol/sync` 的 `getSyncPort()`; sync 插件 `manifest.ts` 注册 SyncPort。
-- 启动注册由 `core/shell/boot-gate.tsx` (客户端启动闸, 挂在根 layout) 调 `boot.ts#registerAll()` 完成。
+  注册 resolver (info 管 publisher/entity/search, community 管 peer)。
+- **中枢数据**: 反馈组件 (`@/components/feeders`) 与 agent 插件经 `@protocol/hub-data` 的 `getHubData()`
+  (HubDataPort, 中枢在 boot 注册实现) 读写订阅/书签/资源, 不直接依赖中枢存储。
+- **跨端同步**: 中枢同步面板调 `@protocol/sync` 的 `getSyncPort()`; sync 插件 `manifest.ts` 注册 SyncPort。
+- 启动注册由 `app/shell/boot-gate.tsx` (客户端启动闸, 挂在根 layout) 调 `boot.ts#registerAll()` 完成
+  (组合根, import 各模块 manifest)。
 
 ## Common commands
 
@@ -51,12 +46,12 @@ home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm build
-pnpm lint         # 含依赖边界强制 (no-restricted-imports)
-pnpm test         # node --test：protocol/sync (合并) + lib/sync-crypto
+pnpm lint         # 含 protocol 纯度强制 (no-restricted-imports)
+pnpm test         # node --test：protocol/sync (合并) + components/lib/sync-crypto
 
 # API codegen (改了 super/server 的 schema 后跑)
 pnpm sync:api     # 从 super/server/openapi.json 同步 → openapi/server.json
-pnpm gen:api      # → src/lib/api/server.d.ts
+pnpm gen:api      # → src/components/lib/api/server.d.ts
 pnpm gen:api:check  # CI 卡点
 ```
 
@@ -64,10 +59,11 @@ pnpm gen:api:check  # CI 卡点
 
 - 默认 Server Component, 仅交互组件加 `"use client"`
 - UI 复用 `src/components/ui` 的 shadcn 原语, 禁止引入并行 UI 库
-- TypeScript strict, 跨后端 DTO 一律从 `@protocol/server` (源 `src/lib/api/server.d.ts`) 派生
+- TypeScript strict, 跨后端 DTO 一律从 `@protocol/server` (源 `src/components/lib/api/server.d.ts`) 派生
 - 所有 fetch / Server Action 必须 `try-catch` + `res.ok` 检查
 - 用户可见文案与代码注释均使用简体中文
-- **新增 app / plugin**: 在 `src/apps/<name>` 或 `src/plugins/<name>` 建模块 + `manifest.ts`,
-  在 `core/shell/boot.ts` 注册; 跨子项目交互一律经 `@protocol` (新增契约/端口加到 `src/protocol`)
-- **边界**: app/plugin 不得 import `@core`/其他 app/plugin (`pnpm lint` 强制); 越界请改走 `@protocol`
-- 本地优先模块的数据存 IndexedDB (`@/lib/idb`); 个人数据默认不上传, 仅跨端同步/发布时经 super 节点
+- **新增功能模块 / 插件**: 在 `src/components/apps/<name>` 或 `src/components/plugins/<name>` 建模块 +
+  `manifest.ts`, 在 `app/shell/boot.ts` 注册; 跨模块交互一律经 `@protocol` (新增契约/端口加到 `src/protocol`)
+- **边界**: protocol 不得 import UI/页面 (`pnpm lint` 强制); components 不 import app、
+  info/community/tool 互不 import 为惯例约束
+- 本地优先模块的数据存 IndexedDB (`@/components/lib/idb`); 个人数据默认不上传, 仅跨端同步/发布时经 super 节点

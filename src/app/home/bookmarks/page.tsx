@@ -1,1 +1,10 @@
-export { default, metadata } from "@core/hub/bookmarks/page"
+import BookmarkManager from "./bookmark-manager"
+
+export const metadata = {
+  title: "书签 | wonita",
+  description: "书签只存本机，支持分组与导入。",
+}
+
+export default function BookmarksPage() {
+  return <BookmarkManager />
+}

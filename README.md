@@ -2,7 +2,7 @@
 
 Wonita（**本地优先的个人信息总控终端**）的**用户界面**。从个人视角聚合信息、资源、工具与社区。
 
-模块以 **home（我的空间）为信息中枢**，`info`（资讯）/ `community`（社区）/ `tool`（工具）三者围绕并服务于 home：
+模块以 **home（「我的」）为信息中枢**，`info`（资讯）/ `community`（社区）/ `tool`（工具）三者围绕并服务于 home：
 
 | 模块 | 路由 | 角色 |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ peer 调 `super/server` 的所有 fetch 请求都基于 server 的 OpenAPI schem
 
 ```
 openapi/server.json          ← 从 super/server/openapi.json 同步的副本
-src/lib/api/server.d.ts      ← openapi-typescript 生成的类型
+src/components/lib/api/server.d.ts      ← openapi-typescript 生成的类型
 scripts/sync-server-openapi.mjs
 ```
 
@@ -72,11 +72,11 @@ scripts/sync-server-openapi.mjs
 
 ```bash
 pnpm sync:api      # 优先用本地 ../super/server/openapi.json, 找不到时退化到 GitHub raw
-pnpm gen:api       # openapi/server.json → src/lib/api/server.d.ts
+pnpm gen:api       # openapi/server.json → src/components/lib/api/server.d.ts
 pnpm gen:api:check # CI 卡点: 校验生成结果与 schema 一致 (改了 schema 忘了重生成会在此失败)
 ```
 
-3. `git add openapi/server.json src/lib/api/server.d.ts && git commit`
+3. `git add openapi/server.json src/components/lib/api/server.d.ts && git commit`
 
 环境变量覆盖:
 - `SERVER_REF=feat-x pnpm sync:api` — 拉 super 仓库的特定分支 / tag (远端模式)

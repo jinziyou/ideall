@@ -1,2 +1,2 @@
 "use client"
-export { default } from "@core/shell/error"
+export { default } from "@/app/shell/error"

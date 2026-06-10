@@ -19,10 +19,6 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@core/*": ["./src/core/*"],
-      "@app/*": ["./src/apps/*"],
-      "@plugin/*": ["./src/plugins/*"],
-      "@lib/*": ["./src/lib/*"],
       "@protocol/*": ["./src/protocol/*"]
     },
     "target": "ES2022"
