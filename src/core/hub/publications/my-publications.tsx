@@ -2,11 +2,18 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Loader2, Trash2 } from "lucide-react"
+import { Cloud, Loader2, Megaphone, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { getSession, subscribeSession } from "@protocol/auth"
@@ -60,10 +67,16 @@ export default function MyPublications() {
 
   if (!session) {
     return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <p className="max-w-sm text-sm text-muted-foreground">
-          登录后即可在社区发布内容，成为社区发布者，被他人订阅。
-        </p>
+      <div className="flex min-h-[40dvh] flex-col items-center justify-center gap-4 py-12 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Megaphone className="h-6 w-6" />
+        </div>
+        <div className="space-y-1">
+          <p className="font-medium">发布要用账号身份 —— 它与本机数据、同步码无关</p>
+          <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+            登录后, 你发布的内容可被其他人订阅, 你就成了社区里的一个节点。
+          </p>
+        </div>
         <Button asChild size="sm">
           <Link href="/auth">登录 / 注册</Link>
         </Button>
@@ -114,7 +127,17 @@ export default function MyPublications() {
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">发布</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base">发布</CardTitle>
+            <Badge
+              variant="outline"
+              className="gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+            >
+              <Cloud className="h-3 w-3" />
+              公开 · 经服务器
+            </Badge>
+          </div>
+          <CardDescription>发布会离开此设备、可被任何人订阅 —— 这是你的公开身份。</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onPublish} className="flex flex-col gap-2">

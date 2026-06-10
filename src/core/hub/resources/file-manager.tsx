@@ -28,6 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { TextPromptDialog } from "@/components/prompt-dialog"
 import { cn } from "@/lib/utils"
 import { FileMeta } from "../model"
 import { addFile, deleteFile, getFile, listFiles, updateFileMeta } from "../lib/files-store"
@@ -107,6 +108,8 @@ export default function FileManager() {
   const [dragging, setDragging] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [previewId, setPreviewId] = React.useState<string | null>(null)
+  // 重命名对话框状态 (替代 window.prompt): 以目标文件对象控制 open
+  const [renameTarget, setRenameTarget] = React.useState<FileMeta | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   const refresh = React.useCallback(async () => {
@@ -170,9 +173,8 @@ export default function FileManager() {
     }
   }
 
-  async function handleRename(file: FileMeta) {
-    const name = window.prompt("重命名文件", file.name)?.trim()
-    if (!name || name === file.name) return
+  async function handleRename(file: FileMeta, name: string) {
+    if (name === file.name) return
     try {
       await updateFileMeta(file.id, { name })
       setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name } : f)))
@@ -264,7 +266,7 @@ export default function FileManager() {
         <div className="text-sm font-medium">
           {uploading ? "正在保存…" : "拖拽文件到此处, 或点击选择"}
         </div>
-        <div className="text-xs text-muted-foreground">文件仅保存在本机浏览器 (IndexedDB)</div>
+        <div className="text-xs text-muted-foreground">文件只存在这台设备上, 不上传服务器</div>
         <input
           ref={inputRef}
           type="file"
@@ -355,7 +357,7 @@ export default function FileManager() {
               file={file}
               onPreview={() => setPreviewId(file.id)}
               onDownload={() => handleDownload(file)}
-              onRename={() => handleRename(file)}
+              onRename={() => setRenameTarget(file)}
               onDelete={() => handleDelete(file)}
             />
           ))}
@@ -369,7 +371,7 @@ export default function FileManager() {
               first={i === 0}
               onPreview={() => setPreviewId(file.id)}
               onDownload={() => handleDownload(file)}
-              onRename={() => handleRename(file)}
+              onRename={() => setRenameTarget(file)}
               onDelete={() => handleDelete(file)}
             />
           ))}
@@ -380,6 +382,18 @@ export default function FileManager() {
         fileId={previewId}
         onOpenChange={(open) => !open && setPreviewId(null)}
         onDownload={(f) => downloadBlob(f.blob, f.name)}
+      />
+      <TextPromptDialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null)
+        }}
+        title="重命名文件"
+        label="名称"
+        defaultValue={renameTarget?.name ?? ""}
+        onSubmit={(name) => {
+          if (renameTarget) handleRename(renameTarget, name)
+        }}
       />
     </div>
   )

@@ -69,7 +69,13 @@ export default function MobileNav() {
           <span className="px-3 pb-1 text-xs font-medium text-muted-foreground">
             我的空间 · 中枢
           </span>
-          {HOME_SUBPAGES.map((p) => (
+          {HOME_SUBPAGES.filter((p) => p.group !== "system").map((p) => (
+            <MLink key={p.href} link={p} active={isActive(pathname, p.href)} onNavigate={close} />
+          ))}
+          <span className="px-3 pb-1 pt-4 text-xs font-medium text-muted-foreground">
+            系统能力
+          </span>
+          {HOME_SUBPAGES.filter((p) => p.group === "system").map((p) => (
             <MLink key={p.href} link={p} active={isActive(pathname, p.href)} onNavigate={close} />
           ))}
           <span className="px-3 pb-1 pt-4 text-xs font-medium text-muted-foreground">发现</span>

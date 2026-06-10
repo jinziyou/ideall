@@ -6,6 +6,7 @@ import { Bot, Loader2, Send, Settings, SquarePen, Trash2, Wrench, X } from "luci
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { ServiceHeader } from "@/components/system/service-header"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import {
   createThread,
@@ -314,12 +315,17 @@ export default function AgentPanel() {
       {/* 对话区 */}
       <section className="mx-auto flex w-full min-w-0 max-w-4xl flex-1 flex-col">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Bot className="h-5 w-5 text-primary" />
-              AI 助手
-            </h2>
-            <p className="truncate text-xs text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <ServiceHeader
+              icon={Bot}
+              title="AI 助手"
+              status={
+                configured
+                  ? { label: `就绪 · ${settings.model}`, tone: "ok" }
+                  : { label: "未配置模型", tone: "warn" }
+              }
+            />
+            <p className="mt-1 truncate text-xs text-muted-foreground">
               懂你的「我的空间」—— 结合订阅 / 书签 / 资源作答，对话只存本机
             </p>
           </div>
@@ -335,8 +341,8 @@ export default function AgentPanel() {
         </div>
 
         {!configured && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-            <span>尚未配置模型。填一个你自己的 API Key 即可（默认 DeepSeek，密钥只存本机）。</span>
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-l-2 border-l-pop bg-muted/40 px-4 py-3 text-sm">
+            <span>未配置模型 —— 填一个你自己的 API Key 即可开始（默认 DeepSeek，密钥只存本机）。</span>
             <Button size="sm" onClick={() => setSettingsOpen(true)}>
               去设置
             </Button>

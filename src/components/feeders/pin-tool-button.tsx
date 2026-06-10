@@ -1,13 +1,15 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { Loader2, Pin } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { getHubData } from "@protocol/hub-data"
+import { flowbackToast } from "./flowback-toast"
 
 /**
- * 「钉到 home」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
+ * 「钉到我的空间」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
  * 经 protocol 的 HubDataPort 写入 (本地优先)。图标按钮形态, 作为工具卡的角标叠加。
  */
 export function PinToolButton({
@@ -20,6 +22,7 @@ export function PinToolButton({
   url: string
   className?: string
 }) {
+  const router = useRouter()
   const [pinned, setPinned] = React.useState<boolean | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [pulse, setPulse] = React.useState(false)
@@ -50,7 +53,7 @@ export function PinToolButton({
       } else {
         await hub.addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
-        toast.success(`已钉到 home · ${name}`)
+        flowbackToast(`已钉到我的空间 · ${name}`, () => router.push("/home/subscriptions"))
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }
@@ -66,8 +69,8 @@ export function PinToolButton({
       type="button"
       onClick={toggle}
       disabled={pinned === null || busy}
-      title={pinned ? "取消钉住" : "钉到 home"}
-      aria-label={pinned ? `取消钉住 ${name}` : `钉到 home ${name}`}
+      title={pinned ? "取消钉住" : "钉到我的空间"}
+      aria-label={pinned ? `取消钉住 ${name}` : `钉到我的空间 ${name}`}
       className={cn(
         "rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
         pinned && "text-pop",

@@ -6,6 +6,8 @@ import { Rss, Search, Tag, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { SUB_SPOKE_META } from "@/components/spoke-meta"
+import { cn } from "@/lib/utils"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
@@ -132,7 +134,10 @@ export default function SubscriptionFeed() {
     <div className="flex flex-col gap-6">
       {tools.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-muted-foreground">已钉工具</h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-spoke-tool" />
+            已钉工具
+          </h2>
           <div className="flex flex-wrap gap-2">
             {tools.map((t) => (
               <span
@@ -169,7 +174,10 @@ export default function SubscriptionFeed() {
       {feeds.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {feeds.map(({ sub, items, error }) => (
-            <Card key={sub.id} className="flex flex-col">
+            <Card
+              key={sub.id}
+              className={cn("flex flex-col border-t-2", SUB_SPOKE_META[sub.type].topBorderClass)}
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
                 <Link
                   href={sourceHref(sub)}

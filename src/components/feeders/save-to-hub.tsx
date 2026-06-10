@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { BookmarkPlus, FileText, Network, Plus, Rss } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -13,9 +14,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { getHubData } from "@protocol/hub-data"
+import { flowbackToast } from "./flowback-toast"
 
 /**
- * 统一回流原语「收入中枢」(反馈原语) —— 把 spoke 上的任意条目 (文章 / 事件 / 链接) 落进本地中枢。
+ * 统一回流原语「收入我的空间」(反馈原语) —— 把 spoke 上的任意条目 (文章 / 事件 / 链接) 落进本地中枢。
  * 按传入的能力渲染菜单项: 收藏到书签 / 订阅发布者; 另带原文 / 全面报道 直达。
  * 经 protocol 的 HubDataPort 写入, 广播 HUB_UPDATED 让头部计数 +1。
  */
@@ -34,6 +36,7 @@ export function SaveToHub({
   variant?: "button" | "icon"
   className?: string
 }) {
+  const router = useRouter()
   const [pulse, setPulse] = React.useState(false)
   function pop() {
     setPulse(true)
@@ -52,7 +55,7 @@ export function SaveToHub({
       }
       await hub.addBookmark({ title: bookmark.title, url: bookmark.url })
       pop()
-      toast.success("已收藏到书签")
+      flowbackToast("已收藏到书签", () => router.push("/home/bookmarks"))
     } catch {
       toast.error("收藏失败, 请重试")
     }
@@ -67,7 +70,9 @@ export function SaveToHub({
         title: publisher.name || publisher.domain,
       })
       pop()
-      toast.success(`已订阅 ${publisher.name || publisher.domain}`)
+      flowbackToast(`已订阅 ${publisher.name || publisher.domain}`, () =>
+        router.push("/home/subscriptions"),
+      )
     } catch {
       toast.error("订阅失败, 请重试")
     }
@@ -80,15 +85,15 @@ export function SaveToHub({
         variant="ghost"
         size="icon"
         className={cn("h-8 w-8", pulseCls, className)}
-        title="收入中枢"
+        title="收入我的空间"
       >
         <Plus className="h-4 w-4" />
-        <span className="sr-only">收入中枢</span>
+        <span className="sr-only">收入我的空间</span>
       </Button>
     ) : (
       <Button size="sm" className={cn("gap-1.5", pulseCls, className)}>
         <Plus className="h-4 w-4" />
-        收入中枢
+        收入我的空间
       </Button>
     )
 
