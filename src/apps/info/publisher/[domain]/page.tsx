@@ -24,7 +24,7 @@ export default function InfoPublisherPage({ params }: { params: Promise<{ domain
     <main className="m-2 sm:m-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-base sm:text-lg">发布者: {domain}</CardTitle>
+          <CardTitle className="min-w-0 break-all text-base sm:text-lg">发布者: {domain}</CardTitle>
           <SubscribeButton sub={{ type: "publisher", key: domain, title: domain }} />
         </CardHeader>
         <CardContent>

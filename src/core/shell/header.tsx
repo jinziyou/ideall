@@ -26,12 +26,12 @@ export function Header() {
       {/* 桌面导航: 我的空间 (主) + 发现三 spoke (次级) */}
       <nav className="hidden items-center gap-1 md:flex">
         <HubNavLink />
-        <span className="ml-2 mr-1 text-xs text-muted-foreground">发现</span>
+        <span className="ml-2 mr-1 whitespace-nowrap text-xs text-muted-foreground">发现</span>
         {SPOKES.map((s) => (
           <Link
             key={s.href}
             href={s.href}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <span className={`h-2 w-2 rounded-full ${s.dot}`} />
             {s.label}

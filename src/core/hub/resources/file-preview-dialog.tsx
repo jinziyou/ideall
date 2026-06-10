@@ -25,7 +25,7 @@ export default function FilePreviewDialog({
 }) {
   return (
     <Dialog open={!!fileId} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         {/* key=fileId 让每次切换文件都重新挂载, 由 useState 初始值起步于 loading */}
         {fileId && <PreviewBody key={fileId} fileId={fileId} onDownload={onDownload} />}
       </DialogContent>
@@ -98,7 +98,7 @@ function PreviewBody({
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         ) : kind === "image" ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={file.name} className="max-h-[60vh] object-contain" />
+          <img src={url} alt={file.name} className="max-h-[60vh] max-w-full object-contain" />
         ) : kind === "video" ? (
           <video src={url} controls className="max-h-[60vh] w-full" />
         ) : kind === "audio" ? (

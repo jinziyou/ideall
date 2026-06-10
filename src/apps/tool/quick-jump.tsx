@@ -174,7 +174,7 @@ export default function QuickJump({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex max-w-6xl flex-col gap-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -258,9 +258,9 @@ export default function QuickJump({
                 {provider.name.slice(0, 1)}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1 text-sm font-medium">
-                  {provider.name}
-                  <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
+                <span className="flex min-w-0 items-center gap-1 text-sm font-medium">
+                  <span className="truncate">{provider.name}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
                 </span>
                 {provider.hint ? (
                   <span className="mt-0.5 block truncate text-xs text-muted-foreground">

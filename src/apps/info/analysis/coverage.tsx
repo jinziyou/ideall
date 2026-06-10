@@ -29,7 +29,7 @@ export default function CoverageList({ items }: { items: Info[] }) {
           <div className="flex items-start justify-between gap-2">
             <Button
               variant="link"
-              className="h-auto justify-start whitespace-normal p-0 text-left text-sm font-medium"
+              className="h-auto min-w-0 justify-start whitespace-normal break-all p-0 text-left text-sm font-medium"
               onClick={() => openExternal(info.url)}
             >
               {info.title || info.url}

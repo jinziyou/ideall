@@ -39,7 +39,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
                         <Button
                           variant="secondary"
                           size="sm"
-                          className="h-7"
+                          className="h-auto min-h-7 max-w-full whitespace-normal break-all py-1"
                           onClick={() => openEntity(entity.label, entity.name)}
                         >
                           {entity.label}.{entity.name}
@@ -63,7 +63,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
                         key={`${entity.label}-${entity.name}-${index}`}
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-muted-foreground"
+                        className="h-auto min-h-7 max-w-full whitespace-normal break-all py-1 text-muted-foreground"
                         onClick={() => openEntity(entity.label, entity.name)}
                       >
                         {entity.label}.{entity.name}

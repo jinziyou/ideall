@@ -44,11 +44,11 @@ export default function CommandPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-accent sm:w-[240px] lg:w-[300px]"
+        className="flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-accent sm:w-[240px] md:w-[150px] lg:w-[240px] xl:w-[300px]"
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="flex-1 text-left">跳转到…</span>
-        <kbd className="hidden rounded border bg-muted px-1.5 font-sans text-[10px] sm:inline">
+        <kbd className="hidden rounded border bg-muted px-1.5 font-sans text-[10px] lg:inline">
           ⌘K
         </kbd>
       </button>

@@ -39,8 +39,8 @@ export default function EntityPage({
     <main className="m-2 sm:m-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="flex flex-wrap items-center gap-2 text-base sm:text-lg">
-            <span>
+          <CardTitle className="flex min-w-0 flex-wrap items-center gap-2 text-base sm:text-lg">
+            <span className="min-w-0 break-words">
               实体: <span className="text-muted-foreground">{entityLabelText(label)}</span> · {name}
             </span>
             {entry && (

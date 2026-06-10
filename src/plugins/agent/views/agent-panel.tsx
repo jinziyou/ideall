@@ -299,7 +299,7 @@ export default function AgentPanel() {
                   {t.title}
                 </button>
                 <button
-                  className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                  className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                   title="删除对话"
                   onClick={() => removeThread(t.id)}
                 >
@@ -312,7 +312,7 @@ export default function AgentPanel() {
       </aside>
 
       {/* 对话区 */}
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section className="mx-auto flex w-full min-w-0 max-w-4xl flex-1 flex-col">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 text-lg font-semibold">
@@ -345,7 +345,7 @@ export default function AgentPanel() {
 
         <div
           ref={scrollRef}
-          className="flex h-[calc(100vh-19rem)] min-h-[20rem] flex-col gap-4 overflow-y-auto rounded-lg border bg-background/40 p-4"
+          className="flex h-[calc(100dvh-35rem)] min-h-[14rem] flex-col gap-4 overflow-y-auto rounded-lg border bg-background/40 p-4 md:h-[calc(100dvh-19rem)] md:min-h-[20rem]"
         >
           {messages.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
