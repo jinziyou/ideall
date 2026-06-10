@@ -28,6 +28,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { ConfirmDialog, TextPromptDialog } from "@/components/prompt-dialog"
 import { cn } from "@/lib/utils"
 import { safeHref, openExternal } from "@/lib/safe-url"
 import { Bookmark, BookmarkFolder } from "../model"
@@ -55,6 +56,10 @@ export default function BookmarkManager() {
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<Bookmark | null>(null)
   const [importOpen, setImportOpen] = React.useState(false)
+  // 收藏夹对话框状态 (替代 window.prompt/confirm): 重命名/删除以目标夹对象控制 open
+  const [newFolderOpen, setNewFolderOpen] = React.useState(false)
+  const [renameTarget, setRenameTarget] = React.useState<BookmarkFolder | null>(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<BookmarkFolder | null>(null)
 
   const refresh = React.useCallback(async () => {
     try {
@@ -122,9 +127,7 @@ export default function BookmarkManager() {
     setDialogOpen(true)
   }
 
-  async function handleNewFolder() {
-    const name = window.prompt("新建收藏夹名称")?.trim()
-    if (!name) return
+  async function handleNewFolder(name: string) {
     try {
       const folder = await addFolder(name)
       await refresh()
@@ -134,9 +137,8 @@ export default function BookmarkManager() {
     }
   }
 
-  async function handleRenameFolder(folder: BookmarkFolder) {
-    const name = window.prompt("重命名收藏夹", folder.name)?.trim()
-    if (!name || name === folder.name) return
+  async function handleRenameFolder(folder: BookmarkFolder, name: string) {
+    if (name === folder.name) return
     try {
       await renameFolder(folder.id, name)
       await refresh()
@@ -146,8 +148,6 @@ export default function BookmarkManager() {
   }
 
   async function handleDeleteFolder(folder: BookmarkFolder) {
-    if (!window.confirm(`删除收藏夹「${folder.name}」? 夹内链接将移到「未分组」, 不会被删除。`))
-      return
     try {
       await deleteFolder(folder.id)
       if (active === folder.id) setActive("all")
@@ -186,7 +186,7 @@ export default function BookmarkManager() {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={handleNewFolder}
+            onClick={() => setNewFolderOpen(true)}
             title="新建收藏夹"
           >
             <FolderPlus className="h-4 w-4" />
@@ -215,8 +215,8 @@ export default function BookmarkManager() {
               count={counts.get(f.id) ?? 0}
               active={active === f.id}
               onClick={() => setActive(f.id)}
-              onRename={() => handleRenameFolder(f)}
-              onDelete={() => handleDeleteFolder(f)}
+              onRename={() => setRenameTarget(f)}
+              onDelete={() => setDeleteTarget(f)}
             />
           ))}
         </nav>
@@ -283,6 +283,38 @@ export default function BookmarkManager() {
         onOpenChange={setImportOpen}
         folders={folders}
         onImported={refresh}
+      />
+      <TextPromptDialog
+        open={newFolderOpen}
+        onOpenChange={setNewFolderOpen}
+        title="新建收藏夹"
+        label="名称"
+        onSubmit={(name) => handleNewFolder(name)}
+      />
+      <TextPromptDialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null)
+        }}
+        title="重命名收藏夹"
+        label="名称"
+        defaultValue={renameTarget?.name ?? ""}
+        onSubmit={(name) => {
+          if (renameTarget) handleRenameFolder(renameTarget, name)
+        }}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        destructive
+        title={`删除收藏夹「${deleteTarget?.name ?? ""}」?`}
+        description="夹内链接将移到「未分组」, 不会被删除。"
+        confirmLabel="删除"
+        onConfirm={() => {
+          if (deleteTarget) handleDeleteFolder(deleteTarget)
+        }}
       />
     </div>
   )

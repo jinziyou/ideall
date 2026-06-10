@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, CornerDownLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/hub-format"
 
@@ -44,7 +44,10 @@ export function RecentFlowback({ items }: { items: FlowItem[] }) {
     <div className="flex flex-col gap-4">
       {groups.map((group) => (
         <div key={group.name}>
-          <div className="mb-1.5 text-xs text-muted-foreground">⤵ {group.name}</div>
+          <div className="mb-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+            <CornerDownLeft className="h-3 w-3" />
+            {group.name}
+          </div>
           <ol className="relative ml-1 border-l border-border pl-4">
             {group.items.map((it) => (
               <li key={it.id} className="relative flex items-center gap-3 py-1.5">
@@ -61,7 +64,9 @@ export function RecentFlowback({ items }: { items: FlowItem[] }) {
                   <span className="shrink-0 text-muted-foreground">{it.label}</span>
                   <span className="truncate font-medium">{it.title}</span>
                 </Link>
-                <span className="shrink-0 text-xs text-muted-foreground">{formatTime(it.ts)}</span>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {formatTime(it.ts)}
+                </span>
               </li>
             ))}
           </ol>

@@ -1,12 +1,14 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { Check, Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getHubData } from "@protocol/hub-data"
 import type { NewSubscription } from "@protocol/subscription"
+import { flowbackToast } from "./flowback-toast"
 
 /**
  * 订阅开关 (反馈原语) —— 把「发现」里的来源 (发布者 / 实体 / peer) 订阅回 home 中枢。
@@ -23,6 +25,7 @@ export function SubscribeButton({
   className?: string
 }) {
   const { type, key, title } = sub
+  const router = useRouter()
   // null = 尚未读出本地订阅状态 (按钮先禁用, 避免误判已/未订阅)
   const [subscribed, setSubscribed] = React.useState<boolean | null>(null)
   const [busy, setBusy] = React.useState(false)
@@ -51,7 +54,7 @@ export function SubscribeButton({
       } else {
         await hub.addSubscription(sub)
         setSubscribed(true)
-        toast.success(`已订阅 ${title}`)
+        flowbackToast(`已订阅 ${title}`, () => router.push("/home/subscriptions"))
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }

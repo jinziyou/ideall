@@ -3,28 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bookmark, Bot, FolderOpen, HardDrive, LayoutDashboard, Megaphone, Rss } from "lucide-react"
+import { HardDrive } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { HOME_SUBPAGES, type NavLink } from "@core/nav/nav-config"
 import { listFiles } from "./lib/files-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listSubscriptions } from "./lib/subscriptions-store"
 import { countAgentThreads } from "./lib/agent-threads-count"
 import { formatBytes } from "@/lib/hub-format"
-
-type NavEntry = {
-  href: string
-  label: string
-  icon: React.ComponentType<{ className?: string }>
-}
-
-const ENTRIES: NavEntry[] = [
-  { href: "/home", label: "概览", icon: LayoutDashboard },
-  { href: "/home/subscriptions", label: "订阅", icon: Rss },
-  { href: "/home/agent", label: "AI 助手", icon: Bot },
-  { href: "/home/publications", label: "我的发布", icon: Megaphone },
-  { href: "/home/resources", label: "资源管理", icon: FolderOpen },
-  { href: "/home/bookmarks", label: "书签管理", icon: Bookmark },
-]
 
 /**
  * 我的空间左侧分区导航: 资源 / 书签 走独立路由, 并展示数量与本地存储用量。
@@ -83,37 +69,47 @@ export default function HomeNav() {
   }
   const pct = quota > 0 ? Math.min(100, (usage / quota) * 100) : 0
 
+  const hubItems = HOME_SUBPAGES.filter((p) => p.group !== "system")
+  const systemItems = HOME_SUBPAGES.filter((p) => p.group === "system")
+
+  const renderEntry = ({ href, label, icon: Icon }: NavLink) => {
+    // 概览 (/home) 仅精确匹配, 否则会被所有 /home/* 子页命中
+    const active =
+      href === "/home" ? pathname === "/home" : pathname === href || pathname.startsWith(href + "/")
+    const count = counts[href]
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={cn(
+          "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2.5 text-sm transition-colors md:shrink",
+          active
+            ? "bg-pop/10 font-medium text-foreground md:border-l-2 md:border-pop md:pl-[10px]"
+            : "hover:bg-accent/60",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+        <span className="flex-1 text-left">{label}</span>
+        {count !== null && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            {count}
+          </span>
+        )}
+      </Link>
+    )
+  }
+
   return (
     <aside className="md:w-56 md:shrink-0">
       <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-        {ENTRIES.map(({ href, label, icon: Icon }) => {
-          // 概览 (/home) 仅精确匹配, 否则会被所有 /home/* 子页命中
-          const active =
-            href === "/home"
-              ? pathname === "/home"
-              : pathname === href || pathname.startsWith(href + "/")
-          const count = counts[href]
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2.5 text-sm transition-colors md:shrink",
-                active
-                  ? "bg-pop/10 font-medium text-foreground md:border-l-2 md:border-pop md:pl-[10px]"
-                  : "hover:bg-accent/60",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              <span className="flex-1 text-left">{label}</span>
-              {count !== null && (
-                <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                  {count}
-                </span>
-              )}
-            </Link>
-          )
-        })}
+        {hubItems.map(renderEntry)}
+        {/* 系统能力组: 桌面分隔线 + 组标签, 移动横滚降级为竖线分隔 */}
+        <span className="mx-1 w-px shrink-0 self-stretch bg-border md:hidden" />
+        <div className="my-2 hidden border-t md:block" />
+        <span className="hidden px-3 pb-1 text-[11px] font-medium text-muted-foreground md:block">
+          系统能力
+        </span>
+        {systemItems.map(renderEntry)}
       </nav>
 
       {quota > 0 && (
