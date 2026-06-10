@@ -1341,7 +1341,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 邮箱已存在 */
-            302: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
