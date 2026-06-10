@@ -60,7 +60,7 @@ export default function MobileNav() {
           <span className="sr-only">打开菜单</span>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-72">
+      <SheetContent side="left" className="w-72 max-w-[85vw] overflow-y-auto">
         <SheetTitle className="flex items-center gap-2">
           <WonitaMark className="h-5 w-auto text-foreground" />
           <span>wonita</span>

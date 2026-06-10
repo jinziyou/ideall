@@ -109,6 +109,9 @@ export default function PublisherMap({
       chart.setOption({
         tooltip: {
           trigger: "item",
+          // 窄屏: 限制 tooltip 在图表区域内, 长域名在图内换行, 避免越出视口触发横向滚动。
+          confine: true,
+          extraCssText: "max-width:100%;white-space:normal;word-break:break-all;",
           formatter: (p: {
             name: string
             data?: { domain?: string; city?: string; country?: string; count?: number }
@@ -191,7 +194,7 @@ export default function PublisherMap({
           </Select>
         </div>
       )}
-      <div className="relative h-[480px] w-full sm:h-[600px]">
+      <div className="relative h-[min(480px,75dvh)] w-full sm:h-[min(600px,80dvh)]">
         <div ref={ref} className="h-full w-full" />
         {loadFailed && (
           <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground">

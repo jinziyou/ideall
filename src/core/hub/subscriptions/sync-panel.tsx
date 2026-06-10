@@ -108,7 +108,7 @@ export default function SyncPanel() {
               {reveal && (
                 <>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-xs">
+                    <code className="min-w-0 flex-1 break-all rounded bg-muted px-2 py-1 text-xs">
                       {code}
                     </code>
                     <Button
@@ -130,7 +130,7 @@ export default function SyncPanel() {
               )}
             </div>
           ) : (
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <Button size="sm" onClick={enable} disabled={busy}>
                 {busy ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

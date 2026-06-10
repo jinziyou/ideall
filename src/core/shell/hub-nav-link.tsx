@@ -60,7 +60,7 @@ export default function HubNavLink() {
     <Link
       href={HUB_HREF}
       className={cn(
-        "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition-colors",
+        "inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition-colors",
         active ? "text-foreground" : "text-foreground/80 hover:text-foreground",
       )}
     >

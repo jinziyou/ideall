@@ -161,12 +161,12 @@ export default function MyPublications() {
                       href={safeHref(p.url)}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="text-sm font-medium hover:underline"
+                      className="break-words text-sm font-medium hover:underline"
                     >
                       {p.title}
                     </a>
                   ) : (
-                    <span className="text-sm font-medium">{p.title}</span>
+                    <span className="break-words text-sm font-medium">{p.title}</span>
                   )}
                   {p.body ? (
                     <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{p.body}</p>

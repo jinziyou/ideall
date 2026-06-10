@@ -25,7 +25,7 @@ export function truncate(text: string, max: number): string {
 export function TitleCell({ title, url, max = 30 }: { title: string; url: string; max?: number }) {
   const trigger = (
     <Button
-      className="h-auto max-w-[260px] justify-start p-0 text-left"
+      className="h-auto max-w-[30vw] justify-start p-0 text-left sm:max-w-[260px]"
       variant="link"
       onClick={() => openExternal(url)}
     >

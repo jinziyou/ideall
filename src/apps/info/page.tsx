@@ -11,7 +11,7 @@ import InfoList from "./list"
 
 export default function Info() {
   return (
-    <main className="flex min-h-screen flex-col gap-3 p-2 sm:p-4">
+    <main className="flex min-h-screen flex-col gap-3 p-2 sm:p-4 2xl:mx-auto 2xl:w-full 2xl:max-w-screen-2xl">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <ToggleGroup type="single" defaultValue="all" className="self-start">
           <ToggleGroupItem value="all" asChild>

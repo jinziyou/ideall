@@ -323,7 +323,7 @@ function FolderItem({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5 opacity-0 transition-opacity group-hover:opacity-100"
+              className="h-5 w-5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>

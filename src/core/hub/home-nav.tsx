@@ -85,7 +85,7 @@ export default function HomeNav() {
 
   return (
     <aside className="md:w-56 md:shrink-0">
-      <nav className="flex gap-1 md:flex-col">
+      <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
         {ENTRIES.map(({ href, label, icon: Icon }) => {
           // 概览 (/home) 仅精确匹配, 否则会被所有 /home/* 子页命中
           const active =
@@ -98,7 +98,7 @@ export default function HomeNav() {
               key={href}
               href={href}
               className={cn(
-                "flex flex-1 items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors md:flex-none",
+                "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2.5 text-sm transition-colors md:shrink",
                 active
                   ? "bg-pop/10 font-medium text-foreground md:border-l-2 md:border-pop md:pl-[10px]"
                   : "hover:bg-accent/60",
