@@ -2,7 +2,8 @@
   "name": "myos",
   "version": "0.1.0",
   "description": "Wonita 用户界面 / 个人信息总控终端，home 信息中枢 + info/community/tool",
-  "private": true,
+  "license": "Apache-2.0",
+  "private": false,
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "next dev -p 3000",
