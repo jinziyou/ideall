@@ -1,0 +1,105 @@
+name: app-build
+
+# myos 跨平台 App 构建 (Tauri 2.0)。
+# 触发: 手动 (workflow_dispatch) 或推送 app-v* tag (如 app-v0.1.0)。
+# 桌面三平台经 tauri-action 出安装包并挂到 GitHub Release 草稿; Android 出 debug APK 工件。
+# iOS 需 Apple 开发者证书/描述文件, 见 docs/app.md (此处不含, 避免无证书空跑)。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "app-v*"
+
+# 静态导出把后端地址内联进包: 用仓库变量 NEXT_PUBLIC_SERVER_ADDR (Settings → Variables),
+# 未设则回退占位 (官方 API 上线后填真实值)。
+env:
+  NEXT_PUBLIC_SERVER_ADDR: ${{ vars.NEXT_PUBLIC_SERVER_ADDR || 'https://api.wonita.example' }}
+
+jobs:
+  desktop:
+    name: desktop (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: macos-latest, label: macos-arm64, args: "--target aarch64-apple-darwin" }
+          - { platform: macos-latest, label: macos-x64, args: "--target x86_64-apple-darwin" }
+          - { platform: ubuntu-22.04, label: linux-x64, args: "" }
+          - { platform: windows-latest, label: windows-x64, args: "" }
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux WebKit deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      # tauri-action 自动跑 beforeBuildCommand (pnpm app:export → 静态导出) 再 tauri build,
+      # 并把产物 (.dmg/.app, .deb/.rpm/.AppImage, .msi/.exe) 上传到 Release 草稿。
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: "myos ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}"
+          releaseDraft: true
+
+  android:
+    name: android (debug apk)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android NDK
+        run: sdkmanager "ndk;26.1.10909125"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+      - run: pnpm install --frozen-lockfile
+      # gen/android 不入库, CI 现场初始化后构建 debug APK (release 需 keystore 签名, 见 docs/app.md)。
+      - name: Init + build Android (debug)
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: |
+          pnpm tauri android init --ci
+          pnpm tauri android build --debug --apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myos-android-debug-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
