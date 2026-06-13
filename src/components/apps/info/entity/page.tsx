@@ -161,7 +161,13 @@ function EntityView() {
               知识图谱中暂无「{name}」的提及记录
             </div>
           ) : (
-            <DataTable columns={columns} data={data} loading={loading} error={error} onRetry={reload} />
+            <DataTable
+              columns={columns}
+              data={data}
+              loading={loading}
+              error={error}
+              onRetry={reload}
+            />
           )}
         </CardContent>
       </Card>

@@ -12,8 +12,7 @@ export default function NotFound() {
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            或按{" "}
-            <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>{" "}
+            或按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>{" "}
             跳转到任意位置
           </p>
           <Button asChild>

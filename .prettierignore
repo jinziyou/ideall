@@ -5,7 +5,7 @@ node_modules
 next-env.d.ts
 
 # 生成文件 (由 openapi-typescript / sync 脚本产出, 勿手动格式化)
-src/lib/api/server.d.ts
+src/components/lib/api/server.d.ts
 openapi
 pnpm-lock.yaml
 

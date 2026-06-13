@@ -80,9 +80,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
     <>
       <DialogHeader>
         <DialogTitle>AI 助手设置</DialogTitle>
-        <DialogDescription>
-          自带 API Key，只存本机。服务器不留存密钥与对话内容。
-        </DialogDescription>
+        <DialogDescription>自带 API Key，只存本机。服务器不留存密钥与对话内容。</DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-3">

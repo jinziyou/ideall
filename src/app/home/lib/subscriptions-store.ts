@@ -1,7 +1,14 @@
 // 「发现」订阅本地存储仓库 —— 基于 IndexedDB。
 // home 从 info / community / tool 订阅来源 (发布者 / 实体 / 工具 / 搜索); 仅订阅偏好存本地, 内容实时拉取。
 import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
-import { idbBulkPut, idbDelete, idbGet, idbGetAll, idbPut, STORE_SUBSCRIPTIONS } from "@/components/lib/idb"
+import {
+  idbBulkPut,
+  idbDelete,
+  idbGet,
+  idbGetAll,
+  idbPut,
+  STORE_SUBSCRIPTIONS,
+} from "@/components/lib/idb"
 import { notifyHubUpdated } from "./flowback"
 
 export type { NewSubscription }

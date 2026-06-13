@@ -250,9 +250,7 @@ export default function BookmarkManager() {
         {/* 链接列表 */}
         {filtered.length === 0 ? (
           <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-            {bookmarks.length === 0
-              ? "还没有书签。新增一条或导入试试。"
-              : "没有匹配的书签。"}
+            {bookmarks.length === 0 ? "还没有书签。新增一条或导入试试。" : "没有匹配的书签。"}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

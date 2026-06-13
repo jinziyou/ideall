@@ -29,7 +29,13 @@ function PublisherView() {
           <SubscribeButton sub={{ type: "publisher", key: domain, title: domain }} />
         </CardHeader>
         <CardContent>
-          <DataTable columns={columns} data={data} loading={loading} error={error} onRetry={reload} />
+          <DataTable
+            columns={columns}
+            data={data}
+            loading={loading}
+            error={error}
+            onRetry={reload}
+          />
         </CardContent>
       </Card>
     </main>

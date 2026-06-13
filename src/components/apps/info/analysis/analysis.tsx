@@ -38,9 +38,7 @@ export default function InfoAnalysisView({
             {analysis.length} 个相关来源
           </span>
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          描述同一事件的其他来源报道
-        </p>
+        <p className="text-xs text-muted-foreground">描述同一事件的其他来源报道</p>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="list" className="w-full">

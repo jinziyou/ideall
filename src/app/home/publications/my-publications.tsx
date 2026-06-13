@@ -7,13 +7,7 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatTimestamp } from "@/components/lib/format"
 import { safeHref } from "@/components/lib/safe-url"
 import { getSession, subscribeSession } from "@protocol/auth"

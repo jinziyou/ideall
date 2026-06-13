@@ -98,9 +98,7 @@ export default function InfoList() {
         </Button>
       </div>
 
-      {mode === "hot" && (
-        <DataTable columns={getEventColumns()} data={hotEvents} {...tableProps} />
-      )}
+      {mode === "hot" && <DataTable columns={getEventColumns()} data={hotEvents} {...tableProps} />}
       {mode === "publisher" && (
         <>
           <p className="text-xs text-muted-foreground">

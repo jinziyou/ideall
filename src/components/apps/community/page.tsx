@@ -31,7 +31,11 @@ export default function Community() {
 
   return (
     <main className="m-2 flex flex-col gap-4 sm:m-4">
-      <AppHeader title="社区" dotClass="bg-spoke-community" description="看信息从哪里来、谁在发布。" />
+      <AppHeader
+        title="社区"
+        dotClass="bg-spoke-community"
+        description="看信息从哪里来、谁在发布。"
+      />
       <Card>
         <CardHeader>
           <CardTitle>发布者地图</CardTitle>

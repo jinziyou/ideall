@@ -17,11 +17,7 @@ export default function ToolLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <main className="m-2 flex flex-col gap-4 sm:m-4">
-      <AppHeader
-        title="工具"
-        dotClass="bg-spoke-tool"
-        description="钉住的工具会回流到「我的」。"
-      />
+      <AppHeader title="工具" dotClass="bg-spoke-tool" description="钉住的工具会回流到「我的」。" />
       <nav className="flex items-center gap-4 border-b">
         {tabs.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)

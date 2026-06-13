@@ -150,18 +150,14 @@ export default function HubDashboard() {
           {data.flow.length > 0 ? (
             <RecentFlowback items={data.flow} />
           ) : (
-            <p className="text-sm text-muted-foreground">
-              还没有回流记录。去「发现」订阅或收藏。
-            </p>
+            <p className="text-sm text-muted-foreground">还没有回流记录。去「发现」订阅或收藏。</p>
           )}
         </div>
 
         {/* 去发现, 带东西回家 */}
         <div className="rounded-xl border bg-card p-5 shadow-sm">
           <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
-          <p className="mb-4 text-xs text-muted-foreground">
-            资讯 · 社区 · 工具，都能回流到这里
-          </p>
+          <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都能回流到这里</p>
           <div className="flex flex-col gap-2.5">
             {SPOKES.map((s) => (
               <Link
@@ -252,8 +248,7 @@ function EmptyHub() {
       </div>
 
       <p className="mt-8 text-xs text-muted-foreground">
-        按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>{" "}
-        呼出命令台
+        按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd> 呼出命令台
       </p>
     </div>
   )

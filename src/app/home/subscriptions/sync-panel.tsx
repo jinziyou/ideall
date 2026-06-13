@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ServiceHeader } from "@/components/system/service-header"
 import { generateSyncCode, isValidSyncCode } from "@/components/lib/sync-crypto"
-import { clearSyncCode, getSyncCode, setSyncCode, subscribeSyncCode } from "@/components/lib/sync-code"
+import {
+  clearSyncCode,
+  getSyncCode,
+  setSyncCode,
+  subscribeSyncCode,
+} from "@/components/lib/sync-code"
 import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 
@@ -30,8 +35,7 @@ export default function SyncPanel() {
       if (!port) throw new Error("同步功能不可用")
       const r = await port.syncNow(c)
       window.dispatchEvent(new Event(SUBSCRIPTIONS_SYNCED))
-      if (!silent)
-        toast.success(r.added > 0 ? `同步完成 · 新增 ${r.added} 项` : "同步完成")
+      if (!silent) toast.success(r.added > 0 ? `同步完成 · 新增 ${r.added} 项` : "同步完成")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "同步失败")
     } finally {

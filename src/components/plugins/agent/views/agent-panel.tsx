@@ -360,9 +360,7 @@ export default function AgentPanel() {
               </div>
               <div className="space-y-1">
                 <p className="font-medium">问问关于「我的」的事</p>
-                <p className="text-sm text-muted-foreground">
-                  结合本机的订阅、书签、资源作答
-                </p>
+                <p className="text-sm text-muted-foreground">结合本机的订阅、书签、资源作答</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (
@@ -405,9 +403,7 @@ export default function AgentPanel() {
               智能体模式
             </button>
             {agentMode && (
-              <span className="text-xs text-muted-foreground">
-                助手可读写你的订阅、书签、资源
-              </span>
+              <span className="text-xs text-muted-foreground">助手可读写你的订阅、书签、资源</span>
             )}
           </div>
           <div className="flex items-end gap-2">
