@@ -25,7 +25,9 @@
   "dependencies": {
     "@antv/g6": "^5.1.1",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-http": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-updater": "^2",
     "@noble/ciphers": "^2.2.0",
     "@noble/curves": "^2.2.0",
     "@radix-ui/react-avatar": "^1.1.11",

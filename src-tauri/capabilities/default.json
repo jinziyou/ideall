@@ -3,5 +3,13 @@
   "identifier": "default",
   "description": "myos 主窗口默认能力集",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": [
+    "core:default",
+    "opener:default",
+    {
+      "identifier": "http:default",
+      "comment": "App 内 fetch 绕过 CORS: 放行任意 http/https 端点 (用户自配的 LLM / 后端)。",
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+    }
+  ]
 }

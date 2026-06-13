@@ -1,8 +1,8 @@
 // 客户端流式对话 —— 直接调用用户配置的 OpenAI 兼容端点 (BYO key, 不经服务端代理)。
 // 在浏览器 / App webview 运行 (fetch + ReadableStream), 由对话面板调用。
 // key 仅存本地、随请求带 Authorization 头, 不上传任何第三方。
-// 注: 浏览器直连受厂商 CORS 限制 —— 本地端点 (Ollama 等) 与放行 CORS 的端点可直用;
-//     桌面/移动 App 可后续接 Tauri HTTP 插件绕过 CORS (见 docs/app.md)。
+// App (Tauri) 经 HTTP 插件 (Rust 侧请求) 绕过 webview CORS, 可直连任意厂商端点;
+// 纯浏览器 (web) 直连受厂商 CORS 限制 —— 本地端点 (Ollama 等) 与放行 CORS 的端点可直用。
 
 export interface StreamChatOptions {
   baseURL: string
@@ -53,11 +53,26 @@ async function errorMessage(res: Response): Promise<string> {
   return `请求失败 (${res.status})`
 }
 
+// App (Tauri) 用 HTTP 插件经 Rust 发请求绕过 CORS; 纯浏览器用标准 fetch。惰性加载, 不进 web 主链路。
+let _appFetch: typeof fetch | null | undefined
+async function resolveFetch(): Promise<typeof fetch> {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return fetch
+  if (_appFetch !== undefined) return _appFetch ?? fetch
+  try {
+    const mod = await import("@tauri-apps/plugin-http")
+    _appFetch = mod.fetch as unknown as typeof fetch
+  } catch {
+    _appFetch = null
+  }
+  return _appFetch ?? fetch
+}
+
 /** 发起一次非流式补全 (智能体工具轮用); 返回 assistant 消息 (可能含 tool_calls)。出错抛异常。 */
 export async function requestCompletion(opts: CompletionOptions): Promise<CompletionMessage> {
   let res: Response
+  const httpFetch = await resolveFetch()
   try {
-    res = await fetch(chatUrl(opts.baseURL), {
+    res = await httpFetch(chatUrl(opts.baseURL), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -86,8 +101,9 @@ export async function requestCompletion(opts: CompletionOptions): Promise<Comple
 /** 发起一次流式补全; 出错抛异常 (含厂商返回的错误消息)。 */
 export async function streamChat(opts: StreamChatOptions): Promise<void> {
   let res: Response
+  const httpFetch = await resolveFetch()
   try {
-    res = await fetch(chatUrl(opts.baseURL), {
+    res = await httpFetch(chatUrl(opts.baseURL), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
