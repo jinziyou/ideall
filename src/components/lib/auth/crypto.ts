@@ -18,7 +18,7 @@ function fromHex(hex: string): Uint8Array {
   return out
 }
 
-/** 随机会话 id (服务端按它在 Redis 缓存其临时密钥对; GET secret 与 POST 登录须用同一个)。 */
+/** 随机会话 id (服务端按它缓存其临时密钥对; GET secret 与 POST 登录须用同一个)。 */
 export function newClientId(): string {
   return toHex(crypto.getRandomValues(new Uint8Array(16)))
 }

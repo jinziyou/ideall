@@ -32,9 +32,9 @@ export async function fetchLatestInfo(
 }
 
 /**
- * 按同一事件聚类后的报道列表 (`POST /info/events`): 分页结果内共享实体两两判定 + 并查集传递闭包。
- * ⚠️ 口径不同于「全面报道」(`getRelatedInfo` → `/info/analysis`): 后者对单篇做全图一跳、
- * 仅取与目标直接共享的其它 Info、不做传递闭包, 故事件的 `source_count` 与全面报道页的来源数通常不相等。
+ * 按同一事件聚类后的报道列表 (`POST /info/events`): 后端把分页结果内描述同一事件的多来源报道归为一簇 (传递关联: A-B、B-C 关联 ⇒ A、B、C 同簇)。
+ * ⚠️ 口径不同于「全面报道」(`getRelatedInfo` → `/info/analysis`): 后者只取与单篇目标直接关联的其它 Info、
+ * 不做传递关联, 故事件的 `source_count` 与全面报道页的来源数通常不相等。
  */
 export async function fetchInfoEvents(
   params: QueryParams | Record<string, unknown>,

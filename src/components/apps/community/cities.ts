@@ -1,5 +1,5 @@
 // community 地图的城市聚合 / 默认聚焦选择 (纯函数, 无副作用)。
-// 城市名沿用后端 ip-api 反查的原始值 (多为英文专名), 与地图 tooltip 口径一致。
+// 城市名沿用后端定位返回的原始值 (多为英文专名), 与地图 tooltip 口径一致。
 
 import { PublisherLocation, IpLocation, isLocated } from "./model"
 
@@ -11,7 +11,7 @@ export interface CityGroup {
   latitude: number
 }
 
-/** 规范化城市名做匹配: 去空白 + 小写 (容忍 ip-api 与访问者定位的大小写/空格差异)。 */
+/** 规范化城市名做匹配: 去空白 + 小写 (容忍后端定位返回的大小写/空格差异)。 */
 export function cityKey(city: string): string {
   return city.trim().toLowerCase()
 }
@@ -45,7 +45,7 @@ export function groupByCity(locations: PublisherLocation[]): CityGroup[] {
 
 /**
  * 阈值 (度, ~111km/度): 城市名匹配失败时, 仅当最近城市质心在此距离内才聚焦它。
- * 取 0.5° (~55km) 收紧到"同城/同都市圈"量级——只为容忍 ip-api 对同一地点的城市名差异,
+ * 取 0.5° (~55km) 收紧到"同城/同都市圈"量级——只为容忍后端定位对同一地点的城市名差异,
  * 避免把明显不同的邻市误判为访问者所在城市 (与 Q2「无数据回退全国」的口径对齐)。
  */
 const NEAR_DEG = 0.5
