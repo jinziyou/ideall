@@ -266,7 +266,7 @@ export const getPublisherGroupColumns = (): ColumnDef<PublisherGroup>[] => [
             className="h-auto p-0 text-xs"
             variant="link"
             onClick={() =>
-              window.open(`/info/publisher/${encodeURIComponent(publisher.domain)}`, "_blank")
+              window.open(`/info/publisher?domain=${encodeURIComponent(publisher.domain)}`, "_blank")
             }
           >
             发布者页

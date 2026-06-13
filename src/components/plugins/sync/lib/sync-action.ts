@@ -1,7 +1,5 @@
-"use server"
-
-// 同步块中转 (Server Action): 仅把客户端加密好的密文转发到 super/server /sync/{id}。
-// 中转只经手密文, 看不到明文 (端到端加密)。
+// 同步块数据访问 (同构: web/app 共用): 直接读写 super/server /sync/{id} 的加密密文。
+// 仅经手密文, 看不到明文 (端到端加密; 客户端 sync-crypto 已加解密)。
 
 import { SERVER_ADDR } from "@/components/lib/env"
 import { apiFetch, type ApiResult } from "@/components/lib/api"

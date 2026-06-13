@@ -1,5 +1,8 @@
-// 客户端流式对话 —— 调用本节点代理 /api/agent/chat, 解析 OpenAI 兼容的 SSE 增量。
-// 在浏览器运行 (使用 fetch + ReadableStream), 由对话面板调用。
+// 客户端流式对话 —— 直接调用用户配置的 OpenAI 兼容端点 (BYO key, 不经服务端代理)。
+// 在浏览器 / App webview 运行 (fetch + ReadableStream), 由对话面板调用。
+// key 仅存本地、随请求带 Authorization 头, 不上传任何第三方。
+// 注: 浏览器直连受厂商 CORS 限制 —— 本地端点 (Ollama 等) 与放行 CORS 的端点可直用;
+//     桌面/移动 App 可后续接 Tauri HTTP 插件绕过 CORS (见 docs/app.md)。
 
 export interface StreamChatOptions {
   baseURL: string
@@ -32,21 +35,39 @@ export interface CompletionOptions {
   signal?: AbortSignal
 }
 
+/** 拼接 chat/completions 端点 (容忍 baseURL 末尾斜杠)。 */
+function chatUrl(baseURL: string): string {
+  return `${baseURL.trim().replace(/\/+$/, "")}/chat/completions`
+}
+
+/** 解析厂商错误响应 (OpenAI 兼容: `{error:{message}}` 或裸 `{error}`)。 */
+async function errorMessage(res: Response): Promise<string> {
+  try {
+    const j = await res.json()
+    const e = j?.error
+    if (typeof e === "string") return e
+    if (e?.message) return e.message as string
+  } catch {
+    /* 忽略解析失败 */
+  }
+  return `请求失败 (${res.status})`
+}
+
 /** 发起一次非流式补全 (智能体工具轮用); 返回 assistant 消息 (可能含 tool_calls)。出错抛异常。 */
 export async function requestCompletion(opts: CompletionOptions): Promise<CompletionMessage> {
   let res: Response
   try {
-    res = await fetch("/api/agent/chat", {
+    res = await fetch(chatUrl(opts.baseURL), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${opts.apiKey}`,
       },
+      // tool_choice 不显式发 —— 有 tools 时各家默认即 "auto", 省略可避免个别端点不识别该字段。
       body: JSON.stringify({
-        baseURL: opts.baseURL,
         model: opts.model,
         messages: opts.messages,
-        tools: opts.tools,
+        ...(Array.isArray(opts.tools) && opts.tools.length ? { tools: opts.tools } : {}),
         stream: false,
       }),
       signal: opts.signal,
@@ -55,15 +76,7 @@ export async function requestCompletion(opts: CompletionOptions): Promise<Comple
     if (opts.signal?.aborted) throw new DOMException("aborted", "AbortError")
     throw new Error(`网络错误：${e instanceof Error ? e.message : String(e)}`)
   }
-  if (!res.ok) {
-    let message = `请求失败 (${res.status})`
-    try {
-      message = (await res.json())?.error ?? message
-    } catch {
-      /* 忽略解析失败 */
-    }
-    throw new Error(message)
-  }
+  if (!res.ok) throw new Error(await errorMessage(res))
   const data = await res.json().catch(() => null)
   const msg = data?.choices?.[0]?.message
   if (!msg) throw new Error("模型返回为空")
@@ -74,13 +87,13 @@ export async function requestCompletion(opts: CompletionOptions): Promise<Comple
 export async function streamChat(opts: StreamChatOptions): Promise<void> {
   let res: Response
   try {
-    res = await fetch("/api/agent/chat", {
+    res = await fetch(chatUrl(opts.baseURL), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${opts.apiKey}`,
       },
-      body: JSON.stringify({ baseURL: opts.baseURL, model: opts.model, messages: opts.messages }),
+      body: JSON.stringify({ model: opts.model, messages: opts.messages, stream: true }),
       signal: opts.signal,
     })
   } catch (e) {
@@ -88,16 +101,7 @@ export async function streamChat(opts: StreamChatOptions): Promise<void> {
     throw new Error(`网络错误：${e instanceof Error ? e.message : String(e)}`)
   }
 
-  if (!res.ok || !res.body) {
-    // 代理在错误时返回 JSON { error }
-    let message = `请求失败 (${res.status})`
-    try {
-      message = (await res.json())?.error ?? message
-    } catch {
-      /* 忽略解析失败 */
-    }
-    throw new Error(message)
-  }
+  if (!res.ok || !res.body) throw new Error(await errorMessage(res))
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()

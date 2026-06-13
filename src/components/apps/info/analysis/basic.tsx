@@ -81,7 +81,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
             variant="link"
             className="h-auto p-0"
             onClick={() =>
-              window.open(`/info/publisher/${encodeURIComponent(info.publisher.domain)}`)
+              window.open(`/info/publisher?domain=${encodeURIComponent(info.publisher.domain)}`)
             }
           >
             {info.publisher.domain}

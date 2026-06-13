@@ -1,5 +1,5 @@
-"use server"
-
+// 同构数据层 (web SSR / app 静态导出客户端 共用): 纯 fetch 封装, 无服务端专属 API。
+// 服务端读 SERVER_ADDR, 客户端读 NEXT_PUBLIC_SERVER_ADDR (见 lib/env.ts)。
 import { INFO_API_URI } from "@/components/lib/env"
 import { apiFetch, type ApiResult } from "@/components/lib/api"
 import { EntityDetail, EntityStats, Info, InfoEvent, RelatedInfo } from "./model"

@@ -1,6 +1,4 @@
-"use server"
-
-// 用户(peer)发布层的 Server Action 中转: 公开发现/读取 + 带 token 的发布/删除。
+// 用户(peer)发布层数据访问 (同构: web SSR / app 客户端共用): 公开发现/读取 + 带 token 的发布/删除。
 // 对接 super/server P2a 端点 (/peers, /peer/{id}/publications, /me/publications)。
 
 import { SERVER_ADDR } from "@/components/lib/env"

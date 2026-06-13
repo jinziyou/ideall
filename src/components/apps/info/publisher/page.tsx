@@ -1,17 +1,18 @@
 "use client"
 
-import { use } from "react"
+import { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { fetchLatestInfo } from "../../action"
-import { getInfoColumns } from "../../columns"
-import { DataTable } from "../../table"
-import { Info } from "../../model"
+import { fetchLatestInfo } from "../action"
+import { getInfoColumns } from "../columns"
+import { DataTable } from "../table"
+import { Info } from "../model"
 import { SubscribeButton } from "@/components/feeders"
 import { useApiResult } from "@/components/lib/use-api-result"
 
-export default function InfoPublisherPage({ params }: { params: Promise<{ domain: string }> }) {
-  const { domain: rawDomain } = use(params)
-  const domain = decodeURIComponent(rawDomain)
+// 发布者页 (查询参数路由 /info/publisher?domain= , 兼容静态导出)。
+function PublisherView() {
+  const domain = useSearchParams().get("domain") ?? ""
 
   const columns = getInfoColumns()
   const { data, loading, error, reload } = useApiResult<Info[]>(
@@ -28,15 +29,17 @@ export default function InfoPublisherPage({ params }: { params: Promise<{ domain
           <SubscribeButton sub={{ type: "publisher", key: domain, title: domain }} />
         </CardHeader>
         <CardContent>
-          <DataTable
-            columns={columns}
-            data={data}
-            loading={loading}
-            error={error}
-            onRetry={reload}
-          />
+          <DataTable columns={columns} data={data} loading={loading} error={error} onRetry={reload} />
         </CardContent>
       </Card>
     </main>
+  )
+}
+
+export default function InfoPublisherPage() {
+  return (
+    <Suspense>
+      <PublisherView />
+    </Suspense>
   )
 }

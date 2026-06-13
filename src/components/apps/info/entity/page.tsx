@@ -1,13 +1,14 @@
 "use client"
 
-import React, { use } from "react"
+import React, { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { fetchLatestInfo, getEntityDetail } from "../../../action"
-import { getInfoColumns } from "../../../columns"
-import { DataTable } from "../../../table"
-import { EntityDetail, Info, NameEntity } from "../../../model"
-import { entityLink, EntityEntryLinks } from "../../../cells"
+import { fetchLatestInfo, getEntityDetail } from "../action"
+import { getInfoColumns } from "../columns"
+import { DataTable } from "../table"
+import { EntityDetail, Info, NameEntity } from "../model"
+import { entityLink, EntityEntryLinks } from "../cells"
 import { SubscribeButton } from "@/components/feeders"
 import { entityLabelText } from "@/components/lib/ner-labels"
 import { formatTimestamp } from "@/components/lib/format"
@@ -56,13 +57,11 @@ function CoEntities({ items }: { items: EntityDetail["co_entities"] }) {
   )
 }
 
-export default function EntityPage({
-  params,
-}: {
-  params: Promise<{ label: string; name: string }>
-}) {
-  const { label, name: rawName } = use(params)
-  const name = decodeURIComponent(rawName)
+// 实体页 (查询参数路由 /info/entity?label=&name= , 兼容静态导出)。
+function EntityView() {
+  const sp = useSearchParams()
+  const label = sp.get("label") ?? ""
+  const name = sp.get("name") ?? ""
 
   const columns = getInfoColumns()
   const { data, loading, error, reload } = useApiResult<Info[]>(
@@ -139,9 +138,7 @@ export default function EntityPage({
           {detail && detail.mention_count > 0 && (
             <div className="space-y-3 rounded-md border bg-muted/30 p-3 text-sm">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  提及 {detail.mention_count} 条
-                </span>
+                <span className="font-medium text-foreground">提及 {detail.mention_count} 条</span>
                 <span>首次 {formatTimestamp(detail.first_seen)}</span>
                 <span>最近 {formatTimestamp(detail.last_seen)}</span>
               </div>
@@ -164,16 +161,18 @@ export default function EntityPage({
               知识图谱中暂无「{name}」的提及记录
             </div>
           ) : (
-            <DataTable
-              columns={columns}
-              data={data}
-              loading={loading}
-              error={error}
-              onRetry={reload}
-            />
+            <DataTable columns={columns} data={data} loading={loading} error={error} onRetry={reload} />
           )}
         </CardContent>
       </Card>
     </main>
+  )
+}
+
+export default function EntityPage() {
+  return (
+    <Suspense>
+      <EntityView />
+    </Suspense>
   )
 }

@@ -26,10 +26,10 @@ type Loaded = { tools: Subscription[]; feeds: SourceFeed[] }
 
 /** 订阅来源对应的内链。 */
 function sourceHref(sub: Subscription): string {
-  if (sub.type === "publisher") return `/info/publisher/${encodeURIComponent(sub.key)}`
+  if (sub.type === "publisher") return `/info/publisher?domain=${encodeURIComponent(sub.key)}`
   if (sub.type === "search") return "/info/search"
   if (sub.type === "peer") return "/community"
-  return `/info/entity/${encodeURIComponent(sub.entityLabel ?? "")}/${encodeURIComponent(
+  return `/info/entity?label=${encodeURIComponent(sub.entityLabel ?? "")}&name=${encodeURIComponent(
     sub.entityName ?? "",
   )}`
 }

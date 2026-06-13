@@ -13,10 +13,14 @@ import type { NameEntity, Publisher } from "./model"
  * 避免「同一种单元格在多处各写一遍」导致的样式/时区漂移 (历史上时间列就出现过本地/UTC 不一致)。
  */
 
-/** 跳转到某个实体的实体页。 */
-// /info/entity/[label]/[name] 深链的唯一构造处 (本 app 内复用: cells / basic / graph / hot-entities)。
+/** 跳转到某个实体的实体页 (查询参数路由, 兼容静态导出)。 */
+// /info/entity?label=&name= 深链的唯一构造处 (本 app 内复用: cells / basic / graph / hot-entities)。
 export const entityLink = (label: string, name: string) =>
-  `/info/entity/${label}/${encodeURIComponent(name)}`
+  `/info/entity?label=${encodeURIComponent(label)}&name=${encodeURIComponent(name)}`
+
+/** 跳转到某个发布者页 (查询参数路由, 兼容静态导出)。 */
+export const publisherLink = (domain: string) =>
+  `/info/publisher?domain=${encodeURIComponent(domain)}`
 
 /** 标题截断: 超长时保留头尾、中间省略号, 兼顾可读性与列宽对齐。 */
 export function truncate(text: string, max: number): string {

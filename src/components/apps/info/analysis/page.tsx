@@ -1,21 +1,57 @@
-import { notFound } from "next/navigation"
+"use client"
+
+import { Suspense, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { Loader2 } from "lucide-react"
 import { getInfo, getRelatedInfo } from "../action"
+import { Info, RelatedInfo } from "../model"
 import InfoAnalysisView from "./analysis"
 import InfoBasicView from "./basic"
 
-export default async function InfoAnalysisPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ url: string }>
-}) {
-  const { url } = await searchParams
-  if (!url) {
-    notFound()
-  }
+// 全面报道页 (查询参数路由 /info/analysis?url= , 兼容静态导出): 客户端按 url 取单条 + 关联报道。
+function AnalysisView() {
+  const url = useSearchParams().get("url") ?? ""
+  const [info, setInfo] = useState<Info | null>(null)
+  const [related, setRelated] = useState<RelatedInfo[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const [infoList, info] = await Promise.all([getRelatedInfo(url), getInfo(url)])
+  useEffect(() => {
+    let active = true
+    async function run() {
+      // 在 async 函数内置位 (await 前), 避免 effect 体内同步 setState 的级联渲染 lint。
+      setLoading(true)
+      if (!url) {
+        setInfo(null)
+        setLoading(false)
+        return
+      }
+      // 关联报道与单条详情并行拉取。
+      const [rel, i] = await Promise.all([getRelatedInfo(url), getInfo(url)])
+      if (!active) return
+      setRelated(rel)
+      setInfo(i)
+      setLoading(false)
+    }
+    run()
+    return () => {
+      active = false
+    }
+  }, [url])
+
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        加载中…
+      </main>
+    )
+  }
   if (!info) {
-    notFound()
+    return (
+      <main className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        {url ? "信息不存在或已移除" : "缺少信息地址"}
+      </main>
+    )
   }
 
   return (
@@ -24,8 +60,16 @@ export default async function InfoAnalysisPage({
         <InfoBasicView info={info} />
       </section>
       <section className="md:col-span-3">
-        <InfoAnalysisView info={info} analysis={infoList} />
+        <InfoAnalysisView info={info} analysis={related} />
       </section>
     </main>
+  )
+}
+
+export default function InfoAnalysisPage() {
+  return (
+    <Suspense>
+      <AnalysisView />
+    </Suspense>
   )
 }

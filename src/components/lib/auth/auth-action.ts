@@ -1,7 +1,5 @@
-"use server"
-
-// 鉴权中转 (Server Action): 把浏览器算好的密文/请求转发到 super/server /authorize。
-// 中转只过密文 (密码在浏览器已 X25519 加密), 看不到明文密码。
+// 鉴权数据访问 (同构: web/app 客户端共用): 把浏览器算好的密文/请求发往 super/server /authorize。
+// 只经手密文 (密码在浏览器已 X25519 加密), 看不到明文密码。
 
 import { SERVER_ADDR } from "@/components/lib/env"
 import { apiFetch, type ApiResult } from "@/components/lib/api"

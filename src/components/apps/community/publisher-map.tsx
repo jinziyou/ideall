@@ -58,7 +58,7 @@ export default function PublisherMap({
   const [selected, setSelected] = useState<string>(
     () => pickDefaultCity(cities, visitor)?.city ?? ALL,
   )
-  // 数据刷新 (force-dynamic 软导航就地重渲染) 后选中城市可能从 cities 消失。渲染期直接收敛到合法值
+  // 数据刷新后选中城市可能从 cities 消失。渲染期直接收敛到合法值
   // (派生而非 effect 里 setState, 避免级联渲染 + Select 空白/视图文案不一致); ALL=全国恒合法。
   const activeCity =
     selected !== ALL && cities.some((c) => cityKey(c.city) === cityKey(selected)) ? selected : ALL
@@ -147,7 +147,7 @@ export default function PublisherMap({
       // 点击散点 → 跳到该发布者页 (在那里可订阅), 把社区地图接回「发现 → 订阅」闭环。
       chart.on("click", (params) => {
         const domain = (params as { data?: { domain?: string } }).data?.domain
-        if (domain) router.push(`/info/publisher/${encodeURIComponent(domain)}`)
+        if (domain) router.push(`/info/publisher?domain=${encodeURIComponent(domain)}`)
       })
 
       chartRef.current = chart
