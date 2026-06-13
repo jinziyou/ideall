@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select"
 import { DataTable } from "./table"
 import { getEventColumns, getInfoColumns, getPublisherGroupColumns } from "./columns"
-import { fetchInfoEvents } from "./action"
+import { fetchInfoEvents } from "./data"
 import { InfoEvent } from "./model"
 import { rankEventsByTrend, flattenEvents, groupByPublisher } from "./derive"
 import { useApiResult } from "@/components/lib/use-api-result"

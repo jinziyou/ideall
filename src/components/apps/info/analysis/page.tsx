@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
-import { getInfo, getRelatedInfo } from "../action"
+import { getInfo, getRelatedInfo } from "../data"
 import { Info, RelatedInfo } from "../model"
 import InfoAnalysisView from "./analysis"
 import InfoBasicView from "./basic"

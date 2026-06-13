@@ -3,7 +3,7 @@
 import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { fetchLatestInfo } from "../action"
+import { fetchLatestInfo } from "../data"
 import { getInfoColumns } from "../columns"
 import { DataTable } from "../table"
 import { Info } from "../model"

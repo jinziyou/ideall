@@ -4,7 +4,7 @@ import * as React from "react"
 import { Badge } from "@/components/ui/badge"
 import { entityLabelText } from "@/components/lib/ner-labels"
 import { useApiResult } from "@/components/lib/use-api-result"
-import { fetchEntityStats } from "./action"
+import { fetchEntityStats } from "./data"
 import { entityLink } from "./cells"
 import { EntityStats } from "./model"
 

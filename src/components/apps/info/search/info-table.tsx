@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { DataTable } from "../table"
 import InfoToolbar from "./info-toolbar"
 import { getSearchColumns } from "../columns"
-import { fetchLatestInfo } from "../action"
+import { fetchLatestInfo } from "../data"
 import { Info } from "../model"
 
 /** /info/search 搜索表格: 自身负责取数, 分页/过滤/工具栏交给统一的 DataTable。 */

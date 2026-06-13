@@ -6,7 +6,7 @@ import type { Subscription } from "@protocol/subscription"
 import { unionMerge, subsEqual, type SyncResult } from "@protocol/sync"
 import { getHubData } from "@protocol/hub-data"
 import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/components/lib/sync-crypto"
-import { getSyncBlob, putSyncBlob } from "./sync-action"
+import { getSyncBlob, putSyncBlob } from "./sync-api"
 
 /**
  * 远端项最小结构校验。AES-GCM 已防无密钥方篡改, 但持正确同步码的某端仍可能上传缺字段/类型错误的项;

@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { fetchLatestInfo, QueryParams } from "../action"
+import { fetchLatestInfo, QueryParams } from "../data"
 import { Info } from "../model"
 import { SubscribeButton } from "@/components/feeders"
 import { entityLabelText } from "@/components/lib/ner-labels"
