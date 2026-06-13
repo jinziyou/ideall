@@ -1,0 +1,25 @@
+[package]
+name = "myos"
+version = "0.1.0"
+description = "myos — Wonita 用户客户端 (Tauri 外壳)"
+authors = ["myos contributors"]
+edition = "2021"
+rust-version = "1.77.2"
+
+# 库 crate 供桌面/移动两种入口共用 (移动端需 cdylib)。
+[lib]
+name = "myos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# 默认生产关闭开发者工具; `cargo tauri dev` 自动开。
+custom-protocol = ["tauri/custom-protocol"]

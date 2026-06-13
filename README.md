@@ -29,6 +29,8 @@
 
 myos 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；myos 通过 `SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
 
+myos 以两种形态分发，同一套 Next.js 代码：**Web**（SSR，官方生产实例由 Wonita 编排部署）与 **App**（Tauri 跨平台桌面 / 移动客户端，随本仓库发布）。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
+
 ## 快速开始
 
 ```bash
@@ -65,6 +67,18 @@ curl -I -sS http://localhost:3000
 ```
 
 默认 `docker compose up` 即可独立运行：compose 会自建桥接网络 `myos_net`，主机端口由 `MYOS_PORT` 控制（默认 `3000`），后端地址由 `MYOS_SERVER_ADDR` 控制。若要与同机部署的后端共用一张网络，叠加 `docker-compose.override.example.yml`（见该文件注释）即可接入既有外部网络。
+
+## App（桌面 / 移动）
+
+myos 同一套代码经 **Tauri 2.0** 打包为跨平台客户端（Linux / Windows / macOS / iOS / Android），工程在 [`src-tauri/`](src-tauri)。App 用 Next.js 静态导出（`output: export`）+ 客户端直连后端（`NEXT_PUBLIC_SERVER_ADDR`）。
+
+```bash
+pnpm app:dev        # 桌面开发壳（加载 pnpm dev 的 localhost:3000）
+pnpm app:export     # 静态导出 → out/（BUILD_TARGET=app；需数据层客户端化，见路线图）
+pnpm app:build      # 多平台打包（需平台工具链 + 图标 pnpm tauri icon）
+```
+
+完整方案、平台矩阵与分阶段路线图见 [docs/app.md](docs/app.md)。
 
 ## 环境变量
 
