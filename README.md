@@ -27,9 +27,7 @@
 - **极客 / 开发者**：fork 本仓库改 UI、写插件；自建后端需自行部署 super 级服务（官方不提供一键镜像）。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务；详见 [TRADEMARK.md](TRADEMARK.md)。
 
-完整系统架构见 monorepo [`wonita/ARCHITECTURE.md`](https://github.com/jinziyou/wonita/blob/main/ARCHITECTURE.md)。
-
-> myos 亦作为 [`wonita`](https://github.com/jinziyou/wonita) 的 `peer/` git submodule 挂载；**源码权威仓库为本仓库**。在 monorepo 内开发时，路径为 `peer/*`，命令在 `peer/` 下执行。
+myos 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；myos 通过 `SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
 
 ## 快速开始
 
@@ -45,11 +43,11 @@ pnpm dev                     # http://localhost:3000
 
 | 模式 | 适用 | `SERVER_ADDR` 示例 |
 | --- | --- | --- |
-| **官方** | 使用 Wonita 官方资讯与图谱 | `https://api.wonita.example`（TODO: 替换为正式 URL） |
-| **本地开发** | 本机联调 super/server | `http://127.0.0.1:3001` |
-| **Docker** | 与 super 同 compose 网络 | `http://server:3001`（由 compose 注入） |
+| **官方** | 使用 Wonita 官方资讯与图谱 | _官方 API 尚未公开发布；上线后填正式基址_ |
+| **本地开发**（默认） | 本机联调后端 | `http://127.0.0.1:3001` |
+| **Docker** | compose 注入 | `http://host.docker.internal:3001`（默认；同机后端见 override） |
 
-复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。home / tool 的本地能力不依赖后端；info / community 需可用的 super/server。
+复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。开箱默认走本地开发模式。home / tool 的本地能力不依赖后端；info / community 需可用的后端 (super/server)。
 
 ## 构建与 Lint
 
@@ -66,34 +64,36 @@ docker compose up -d --build
 curl -I -sS http://localhost:3000
 ```
 
-`docker-compose.yml` 期望宿主机存在外部网络 `wonita_net`（与 wonita `super/` 共用）。单独部署时主机端口由 `MYOS_PORT` 控制（默认 `3000`）。
+默认 `docker compose up` 即可独立运行：compose 会自建桥接网络 `myos_net`，主机端口由 `MYOS_PORT` 控制（默认 `3000`），后端地址由 `MYOS_SERVER_ADDR` 控制。若要与同机部署的后端共用一张网络，叠加 `docker-compose.override.example.yml`（见该文件注释）即可接入既有外部网络。
 
 ## 环境变量
 
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
-| `SERVER_ADDR` | super/server API 基址 | 见 `.env.example` |
+| `SERVER_ADDR` | 后端 API 基址（官方信息服务或自托管） | 见 `.env.example` |
 | `MYOS_PORT` | Docker 宿主机映射端口 | `3000` |
-| `MYOS_SERVER_ADDR` | compose 注入的 server 地址 | `http://server:3001` |
-| `WONITA_NETWORK` | Docker 共享网络名 | `wonita_net` |
+| `MYOS_SERVER_ADDR` | compose 注入的后端地址 | `http://host.docker.internal:3001` |
+| `MYOS_NETWORK` | compose 自建桥接网络名 | `myos_net` |
 
 ## API 类型同步 (codegen)
 
 myos 调用 super/server 的类型来自 OpenAPI schema，**不手写 DTO**：
 
 ```
-openapi/server.json                    ← 契约镜像
-src/components/lib/api/server.d.ts     ← openapi-typescript 生成
-scripts/sync-server-openapi.mjs
+openapi/server.json                    ← 已提交的契约源
+src/components/lib/api/server.d.ts     ← openapi-typescript 生成物
+scripts/sync-server-openapi.mjs        ← 维护者刷新契约用 (可选)
 ```
 
 ```bash
-pnpm sync:api      # 优先 ../super/server/openapi.json，否则 GitHub raw
-pnpm gen:api
-pnpm gen:api:check # CI：schema 与生成物一致
+pnpm gen:api        # openapi/server.json → server.d.ts（离线；普通贡献者只需这一步）
+pnpm gen:api:check  # CI：schema 与生成物一致
+
+# 维护者：拿到后端新导出的 openapi.json 后刷新契约源并提交
+SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 ```
 
-在 wonita monorepo 内：`super/server` 改 router 后先 `cargo run --bin export-openapi`，再在 myos 执行上述命令。
+`openapi/server.json` 已随仓库提交，构建/类型生成完全离线；后端契约更新后由维护者 `sync:api` 刷新并提交。
 
 ## 参与贡献
 

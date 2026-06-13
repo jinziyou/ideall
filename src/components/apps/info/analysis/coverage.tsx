@@ -9,7 +9,7 @@ import { RelatedInfo } from "../model"
 
 /**
  * 全面报道: 与当前信息「描述同一件事」的其它来源报道列表。
- * 数据来自 super/server `/info/analysis` (共享实体启发式, 已按相关度排序),
+ * 数据来自 super/server `/info/analysis` (已按相关度排序),
  * 这里只负责把每个来源渲染成一行: 发布者 + 标题 + 时间 + 关联强度 (共享实体数),
  * 标题跳原文, 末尾可进该来源的关联分析。
  */

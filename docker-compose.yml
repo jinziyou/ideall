@@ -1,6 +1,8 @@
-# peer (myos) 应用服务。需先存在外部网络 wonita_net (与 super/ 共用):
-#   docker network create wonita_net   # 若尚未创建
-# 然后在 peer/ 下: docker compose up --build
+# myos (Wonita 用户客户端) 应用服务 —— 默认开箱即用, compose 自建桥接网络:
+#   docker compose up -d --build
+#   curl -I -sS http://localhost:${MYOS_PORT:-3000}
+# 与同机部署的后端共用一张已存在的外部网络时, 叠加 override 示例:
+#   见 docker-compose.override.example.yml
 name: myos
 
 services:
@@ -11,7 +13,10 @@ services:
     ports:
       - "${MYOS_PORT:-3000}:3000"
     environment:
-      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://server:3001}
+      # 后端 (官方信息服务或自托管) API 基址; 默认指向宿主机 3001 端口上的后端。
+      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://host.docker.internal:3001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test:
         [
@@ -26,5 +31,4 @@ services:
 
 networks:
   default:
-    name: ${WONITA_NETWORK:-wonita_net}
-    external: true
+    name: ${MYOS_NETWORK:-myos_net}

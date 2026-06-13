@@ -2,8 +2,9 @@
 
 ## Repository
 
-`peer` 是 [Wonita](https://github.com/jinziyou/wonita) monorepo 中的用户节点 (myos) 前端。
-全局布局与 API 契约同步见 monorepo 根目录 [`CLAUDE.md`](../CLAUDE.md)（本仓库作为 wonita 的 `peer/` 子模块挂载）。
+myos 是 Wonita 生态面向用户的**客户端前端** (Next.js)，本仓库为源码权威仓库。
+整体定位见 [README.md](README.md)；API 契约同步见下方 "API codegen"。
+信息采集 / NLP / 知识图谱 / 鉴权由官方信息服务（后端，闭源）提供，myos 经 `SERVER_ADDR` 连接，不在本仓库范围内。
 
 ## Positioning
 

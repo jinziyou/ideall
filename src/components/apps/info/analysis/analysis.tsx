@@ -19,7 +19,7 @@ const KnowledgeGraph = dynamic(() => import("./graph"), {
 })
 
 /**
- * 全面报道视图: `analysis` 是 super/server 用共享实体启发式算出的「描述同一件事」的其它来源。
+ * 全面报道视图: `analysis` 是 super/server 算出的「描述同一件事」的其它来源。
  * 默认直接呈现来源列表 (把原本孤立的信息关联起来), 关系图谱按需切换。
  */
 export default function InfoAnalysisView({

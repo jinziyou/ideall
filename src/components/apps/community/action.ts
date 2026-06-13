@@ -20,7 +20,7 @@ export async function getPublisherLocations(): Promise<PublisherLocation[]> {
 
 /**
  * 是否为可对外定位的公网 IP。排除非 IP 占位串 ("unknown" 等)、回环、私网、链路本地、ULA ——
- * 这些既无定位意义又会白打一次 super/ip-api 往返, 直接回退全国。服务端 geoip 会再兜底校验一次。
+ * 这些既无定位意义, 本地直接判定回退全国, 省去一次无谓的后端往返。
  */
 function isPublicIp(raw: string): boolean {
   // 去掉 IPv4-mapped 前缀 ::ffff: 后按 v4 判定

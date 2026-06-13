@@ -1,6 +1,6 @@
 # myos 开源清单
 
-发布 myos 为独立开源仓库前，按本清单逐项确认。适用于 [`jinziyou/myos`](https://github.com/jinziyou/myos) 作为权威仓库、[`wonita`](https://github.com/jinziyou/wonita) monorepo 以 submodule 挂载 `peer/` 的布局。
+发布 myos 为独立开源仓库前，按本清单逐项确认。本仓库 [`jinziyou/myos`](https://github.com/jinziyou/myos) 为源码权威仓库；官方信息服务（采集 / NLP / 知识图谱 / 鉴权）闭源、由官方运营，不在本仓库范围内。
 
 ## 1. 法律与品牌
 
@@ -55,4 +55,3 @@
 | [LICENSE](LICENSE) | 源码版权与再分发条款 |
 | [TRADEMARK.md](TRADEMARK.md) | 品牌与命名边界 |
 | [README.md](README.md) | 用户与开发者入口 |
-| [wonita ARCHITECTURE](https://github.com/jinziyou/wonita/blob/main/ARCHITECTURE.md) | 系统全局架构（myos 在 P2P 中的角色） |

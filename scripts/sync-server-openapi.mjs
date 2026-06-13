@@ -1,19 +1,14 @@
 /**
- * 把 super/server/openapi.json 同步到 peer/openapi/server.json。
+ * 把后端 (super/server) 导出的 openapi.json 刷新到本仓库 openapi/server.json。
  *
- * 优先用 monorepo 内本地路径:
+ * openapi/server.json 已随仓库提交, 是类型 codegen (`pnpm gen:api`) 的契约源 ——
+ * 普通使用者与贡献者**无需运行本脚本**即可 build / typecheck / 出包。
  *
- *     wonita/
- *       ├── peer/                ← working dir
- *       └── super/server/openapi.json     ← 期望的本地源
+ * 本脚本仅供能拿到后端 openapi 导出的维护者在契约更新后刷新该文件:
  *
- * 找不到本地副本时退化到 GitHub raw URL (需联网)。
+ *     SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
  *
- * 用法:
- *
- *     pnpm sync:api                      # 默认 main 分支
- *     SERVER_REF=feat-x pnpm sync:api    # 指定分支/tag/commit
- *     SERVER_LOCAL=/abs/path.json pnpm sync:api   # 强制使用本地路径
+ * 未提供 SERVER_LOCAL 时不做任何远程拉取, 直接以已提交的 openapi/server.json 为准并提示。
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs"
@@ -24,47 +19,36 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const APP_ROOT = resolve(__dirname, "..")
 const OUTPUT = resolve(APP_ROOT, "openapi/server.json")
-const DEFAULT_LOCAL = resolve(APP_ROOT, "../super/server/openapi.json")
-const REPO = "jinziyou/wonita"
-const REF = process.env.SERVER_REF ?? "main"
-const REMOTE_URL = `https://raw.githubusercontent.com/${REPO}/${REF}/super/server/openapi.json`
 
-async function load() {
-  const forcedLocal = process.env.SERVER_LOCAL
-  if (forcedLocal) {
-    console.log(`[sync] SERVER_LOCAL=${forcedLocal}`)
-    return readFileSync(forcedLocal, "utf-8")
-  }
-  if (existsSync(DEFAULT_LOCAL)) {
-    console.log(`[sync] 使用本地: ${DEFAULT_LOCAL}`)
-    return readFileSync(DEFAULT_LOCAL, "utf-8")
-  }
-  console.log(`[sync] 本地不存在, 拉远端: ${REMOTE_URL}`)
-  const res = await fetch(REMOTE_URL)
-  if (!res.ok) {
-    throw new Error(`拉取失败 ${res.status}: ${REMOTE_URL}`)
-  }
-  return await res.text()
-}
-
-async function main() {
-  let raw
-  try {
-    raw = await load()
-  } catch (e) {
-    console.error(`[sync] ${e instanceof Error ? e.message : e}`)
+function loadSource() {
+  const forced = process.env.SERVER_LOCAL
+  if (!forced) return null
+  if (!existsSync(forced)) {
+    console.error(`[sync] SERVER_LOCAL 指向的文件不存在: ${forced}`)
     process.exit(1)
   }
-  // 校验是合法 JSON
+  console.log(`[sync] 使用 SERVER_LOCAL: ${forced}`)
+  return readFileSync(forced, "utf-8")
+}
+
+function main() {
+  const raw = loadSource()
+  if (raw == null) {
+    console.log(
+      "[sync] 未设置 SERVER_LOCAL —— openapi/server.json 已是仓库内提交的契约源, 无需同步。\n" +
+        "        如需用新的后端契约刷新: SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api",
+    )
+    return
+  }
   try {
     JSON.parse(raw)
   } catch (e) {
     console.error(`[sync] 内容不是合法 JSON: ${e instanceof Error ? e.message : e}`)
     process.exit(1)
   }
-  if (!raw.endsWith("\n")) raw += "\n"
+  const out = raw.endsWith("\n") ? raw : raw + "\n"
   mkdirSync(dirname(OUTPUT), { recursive: true })
-  writeFileSync(OUTPUT, raw, "utf-8")
+  writeFileSync(OUTPUT, out, "utf-8")
   console.log(`[sync] 已写入 ${OUTPUT}`)
 }
 
