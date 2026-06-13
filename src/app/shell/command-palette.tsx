@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Bookmark, Copy, Hexagon, RefreshCw, Search, SunMoon } from "lucide-react"
+import { Bookmark, Copy, DownloadCloud, Hexagon, RefreshCw, Search, SunMoon } from "lucide-react"
 import { toast } from "sonner"
 import {
   CommandDialog,
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/command"
 import { setThemeChoice } from "@/components/lib/theme"
 import { getSyncCode, subscribeSyncCode } from "@/components/lib/sync-code"
+import { checkForUpdate, inTauri } from "@/components/lib/updater"
 import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import { HOME_SUBPAGES, SPOKES } from "@/app/nav/nav-config"
@@ -29,6 +30,12 @@ export default function CommandPalette() {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, () => null)
+  // updater 仅桌面 (Tauri) 生效; 取常量快照 (SSR / web = false), 避免 effect 内同步 setState 的级联渲染 lint。
+  const isDesktop = React.useSyncExternalStore(
+    () => () => {},
+    inTauri,
+    () => false,
+  )
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -72,6 +79,18 @@ export default function CommandPalette() {
       () => toast.success("同步码已复制"),
       () => toast.error("复制失败"),
     )
+  }
+
+  function checkUpdate() {
+    setOpen(false)
+    void (async () => {
+      const id = toast.loading("正在检查更新…")
+      const r = await checkForUpdate()
+      if (r === "updated") toast.success("已下载新版本，重启后生效", { id })
+      else if (r === "uptodate") toast.success("已是最新版本", { id })
+      else if (r === "error") toast.error("检查更新失败（更新服务可能未配置）", { id })
+      else toast.dismiss(id) // unsupported: 理论上不会到 (仅桌面显示该命令)
+    })()
   }
 
   return (
@@ -137,6 +156,12 @@ export default function CommandPalette() {
               <Hexagon className="h-4 w-4" />
               回到「我的」
             </CommandItem>
+            {isDesktop && (
+              <CommandItem value="检查更新 update 升级 upgrade" onSelect={checkUpdate}>
+                <DownloadCloud className="h-4 w-4" />
+                检查更新
+              </CommandItem>
+            )}
           </CommandGroup>
         </CommandList>
       </CommandDialog>
