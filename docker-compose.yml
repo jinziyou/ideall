@@ -10,6 +10,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # 浏览器客户端取数的后端地址 (构建期内联进静态资源); 由部署侧 NEXT_PUBLIC_SERVER_ADDR 注入。
+        NEXT_PUBLIC_SERVER_ADDR: ${NEXT_PUBLIC_SERVER_ADDR:-}
     ports:
       - "${MYOS_PORT:-3000}:3000"
     environment:

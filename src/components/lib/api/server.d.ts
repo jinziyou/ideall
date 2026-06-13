@@ -510,8 +510,8 @@ export interface components {
             source_count: number;
         };
         /**
-         * @description 访问者 IP 地理定位结果 (供 peer community 地图默认聚焦访问者所在城市)。
-         *     经纬度由 super/server 对访问者 IP 做地理定位得到; 定位失败时经纬度为 0。
+         * @description 访问者 IP 地理定位结果 (供社区地图默认聚焦访问者所在城市)。
+         *     经纬度由服务端对访问者 IP 做地理定位得到; 定位失败时经纬度为 0。
          */
         IpLocation: {
             city: string;
@@ -522,11 +522,11 @@ export interface components {
             longitude: number;
         };
         /**
-         * @description 命名实体 (NER 结果)。`label` 取值见 super/form 的 NER schema:
+         * @description 命名实体 (NER 结果)。`label` 取值:
          *     `PER` / `ORG` / `LOC` / `TIME` / `PRODUCT` / `EVENT`。`period` 为所属周 (周一 0 点) 的 epoch 毫秒。
          *
-         *     词条富化字段 (super/form 查百度百科 + 维基百科后写入): `has_entry` 标记该实体是否有百科词条,
-         *     `baike_url` / `wikipedia_url` 为对应词条链接。`#[serde(default)]` 保证旧数据 (无这些字段) 反序列化安全。
+         *     词条富化字段 (服务端富化后写入): `has_entry` 标记该实体是否有百科词条,
+         *     `baike_url` / `wikipedia_url` 为对应词条链接 (缺省兼容无这些字段的旧数据)。
          */
         NameEntity: {
             baike_url?: string | null;
@@ -583,8 +583,8 @@ export interface components {
             period: number;
         };
         /**
-         * @description 发布者地理位置 (供 peer community 地图展示)。
-         *     经纬度由 super/server 对发布者域名做 IP 地理定位得到。
+         * @description 发布者地理位置 (供社区发布者地图展示)。
+         *     经纬度由服务端对发布者域名做 IP 地理定位得到。
          */
         PublisherLocation: {
             city: string;
@@ -617,7 +617,7 @@ export interface components {
             ] | null;
             /** @description 限定发布者域名 */
             publisher_domain?: string | null;
-            /** @description `[from, to]` 时间戳毫秒区间, 闭区间 (与存储一致: super/form 存 epoch 毫秒, 查询用 datetime.fromepochmillis) */
+            /** @description `[from, to]` 时间戳毫秒区间, 闭区间 (epoch 毫秒) */
             timestamp_from_to?: [
                 number,
                 number
@@ -625,7 +625,7 @@ export interface components {
         };
         /**
          * @description `GET /info/analysis` 响应项: Info + 关联强度分数。
-         *     `#[serde(flatten)]` 让 JSON 形状 = Info 字段平铺 + 两个分数字段:
+         *     JSON 形状 = Info 字段平铺 + 两个分数字段:
          *     旧消费方仍可按 Info 读 (向后兼容), 新消费方据分数解释「为什么相关」并展示共享强度。
          */
         RelatedInfo: components["schemas"]["Info"] & {

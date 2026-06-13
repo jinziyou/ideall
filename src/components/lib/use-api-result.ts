@@ -18,7 +18,7 @@ import type { ApiResult } from "@/components/lib/api"
  *
  * 返回 `error` 让页面区分"加载失败"(error 非空) 与"真无数据"(error 为空但 data 空)。
  *
- * @param fetcher 返回 `ApiResult<T>` 的取数函数 (通常是 Server Action)。
+ * @param fetcher 返回 `ApiResult<T>` 的取数函数 (同构数据访问函数, 如 info/action 的 fetchLatestInfo)。
  * @param initial data 初始值 (与原各页保持一致, 如 `[]`)。
  * @param deps 触发重新取数的依赖项 (传 `[]` 即仅首次挂载取数)。
  * @param opts.silent 失败时仍 setError 但不 toast —— 供增强型区块 (如热门实体榜) 使用:

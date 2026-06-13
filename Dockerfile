@@ -16,6 +16,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Web 形态: 浏览器客户端取数的后端地址, 构建期内联进静态资源 (见 src/components/lib/env.ts)。
+# 部署侧经 build arg 注入官方公网 API; 缺省为空时回落 env.ts 默认 (本地)。
+ARG NEXT_PUBLIC_SERVER_ADDR=""
+ENV NEXT_PUBLIC_SERVER_ADDR=$NEXT_PUBLIC_SERVER_ADDR
 RUN pnpm build
 
 # 运行

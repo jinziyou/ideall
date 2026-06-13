@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# peer 本地开发启动脚本（Next.js dev, 端口 3000）。
+# myos 本地开发启动脚本（Next.js dev, 端口 3000）。
 #
 # 用法：
-#   bash peer/run.sh           # 启动 peer
+#   bash run.sh                # 启动 myos
 
 set -euo pipefail
 
@@ -15,5 +15,5 @@ if [[ ! -d "node_modules" ]]; then
   echo "Tip: run 'pnpm install' in ${SCRIPT_DIR} first." >&2
 fi
 
-echo "Starting peer at http://localhost:3000 ..."
+echo "Starting myos at http://localhost:3000 ..."
 pnpm dev

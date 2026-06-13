@@ -1,7 +1,7 @@
 // 登录密码学 (浏览器): 复刻 super/server (orion 0.17) 的 X25519 + XChaCha20-Poly1305 方案。
 // 共享密钥 = raw X25519(clientPriv, serverPub) (orion key_agreement 不哈希, 仅查低阶点);
 // 密码用 XChaCha20-Poly1305 加密, encrypted_password = nonce(24) || 密文 || tag(16) 的 hex。
-// 明文密码只在浏览器内加密 —— 经 server action 中转时只过密文。
+// 明文密码只在浏览器内加密 —— 上送 super/server 时只过密文。
 // WebCrypto 无 XChaCha, 故用 @noble (与 orion 字节对齐)。
 
 import { x25519 } from "@noble/curves/ed25519.js"

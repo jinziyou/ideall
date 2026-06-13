@@ -47,7 +47,7 @@ export default function InfoToolbar<TData>({
 
   async function handleQuery() {
     const name = entityName.trim()
-    // 时间戳用毫秒 (与 super/server fromepochmillis 一致); 起始端回退一天, 让选中起始日整天落入区间。
+    // 时间戳用毫秒 (与后端存储一致); 起始端回退一天, 让选中起始日整天落入区间。
     const param: QueryParams = {
       publisher_domain: domain,
       timestamp_from_to: [

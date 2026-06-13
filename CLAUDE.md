@@ -54,7 +54,7 @@ pnpm test         # node --test：protocol/sync (合并) + components/lib/sync-c
 
 # App (Tauri 跨平台桌面/移动; 工程在 src-tauri/, 见 docs/app.md)
 pnpm app:dev      # 桌面开发壳 (加载 pnpm dev 的 localhost:3000)
-pnpm app:export   # 静态导出 → out/ (BUILD_TARGET=app; 依赖数据层客户端化)
+pnpm app:export   # 静态导出 → out/ (BUILD_TARGET=app; 数据层已同构客户端化)
 pnpm app:build    # 多平台打包 (需平台工具链 + 图标)
 
 # API codegen (改了 super/server 的 schema 后)
@@ -68,7 +68,7 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 
 同一套 Next.js 代码两种构建目标 (见 [docs/app.md](docs/app.md)):
 - **Web** (默认): `output: standalone` SSR；官方生产实例由 wonita 仓库编排部署 (代码仍在本仓)。
-- **App**: `BUILD_TARGET=app` → `output: export` 静态导出，Tauri 2.0 (`src-tauri/`) 打包为 Linux/Windows/macOS/iOS/Android。无 Node 运行时，故数据层走**客户端直连后端** (`NEXT_PUBLIC_SERVER_ADDR`)；Server Actions 需逐步客户端化 (docs/app.md Phase 1)。
+- **App**: `BUILD_TARGET=app` → `output: export` 静态导出，Tauri 2.0 (`src-tauri/`) 打包为 Linux/Windows/macOS/iOS/Android。无 Node 运行时，故数据层走**客户端直连后端** (`NEXT_PUBLIC_SERVER_ADDR`)；数据访问已同构客户端化 (Phase 1 完成，web SSR / app 客户端共用，见 docs/app.md)。
 - `lib/env.ts` 的 `SERVER_ADDR` 已同构 (服务端 `SERVER_ADDR` / 客户端 `NEXT_PUBLIC_SERVER_ADDR`)。
 
 ## Conventions
@@ -76,7 +76,7 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 - 默认 Server Component, 仅交互组件加 `"use client"`
 - UI 复用 `src/components/ui` 的 shadcn 原语, 禁止引入并行 UI 库
 - TypeScript strict, 跨后端 DTO 一律从 `@protocol/server` (源 `src/components/lib/api/server.d.ts`) 派生
-- 所有 fetch / Server Action 必须 `try-catch` + `res.ok` 检查
+- 所有 fetch / 数据访问函数必须 `try-catch` + `res.ok` 检查
 - 用户可见文案与代码注释均使用简体中文
 - **新增功能模块 / 插件**: 在 `src/components/apps/<name>` 或 `src/components/plugins/<name>` 建模块 +
   `manifest.ts`, 在 `app/shell/boot.ts` 注册; 跨模块交互一律经 `@protocol` (新增契约/端口加到 `src/protocol`)

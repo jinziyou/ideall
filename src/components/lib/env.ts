@@ -1,7 +1,7 @@
 /**
  * 后端 (super/server) API 基址 —— **同构** (web SSR 与 app 静态导出共用)。
  *
- * - 服务端 (SSR / Server Component / Server Action): 读 `SERVER_ADDR`
+ * - 服务端 (SSR / Server Component): 读 `SERVER_ADDR`
  *   (非 NEXT_PUBLIC_ 前缀, 不进客户端 bundle)。容器内由 compose 注入 `SERVER_ADDR=http://server:3001`。
  * - 客户端 (app 静态导出 / 浏览器直连 super/server): 读 `NEXT_PUBLIC_SERVER_ADDR` (构建期内联)。
  *
