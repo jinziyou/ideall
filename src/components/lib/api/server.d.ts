@@ -497,7 +497,7 @@ export interface components {
             title: string;
             url: string;
         };
-        /** @description 同一事件的多来源报道聚类 (`POST /info/events`; 共享实体启发式, 分页结果内并查集传递闭包)。 */
+        /** @description 同一事件的多来源报道聚类 (`POST /info/events`)。 */
         InfoEvent: {
             /** @description 代表稿: 聚类内最新采集的一篇 */
             lead: components["schemas"]["Info"];
@@ -511,7 +511,7 @@ export interface components {
         };
         /**
          * @description 访问者 IP 地理定位结果 (供 peer community 地图默认聚焦访问者所在城市)。
-         *     经纬度由 super/server 对访问者 IP 做地理定位得到 (ip-api.com); 定位失败时经纬度为 0。
+         *     经纬度由 super/server 对访问者 IP 做地理定位得到; 定位失败时经纬度为 0。
          */
         IpLocation: {
             city: string;
@@ -569,7 +569,7 @@ export interface components {
             created_at: number;
             /**
              * Format: int64
-             * @description Neo4j Publication 节点 id
+             * @description 发布物 (publication) id
              */
             id: number;
             title: string;
@@ -584,7 +584,7 @@ export interface components {
         };
         /**
          * @description 发布者地理位置 (供 peer community 地图展示)。
-         *     经纬度由 super/server 对域名做 IP 地理定位得到, 缓存在 Neo4j `Website` 节点。
+         *     经纬度由 super/server 对发布者域名做 IP 地理定位得到。
          */
         PublisherLocation: {
             city: string;
