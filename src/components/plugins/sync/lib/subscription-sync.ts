@@ -23,6 +23,9 @@ function isValidRemoteSub(s: unknown): s is Subscription {
   )
 }
 
+// 同步推送的最大尝试次数: 每次 409 (并发冲突) 后重新 GET→合并→PUT。有界以防对端高频写时死循环。
+const SYNC_MAX_ATTEMPTS = 4
+
 /** 执行一次同步。失败抛 Error (含可展示消息)。 */
 export async function syncNow(code: string): Promise<SyncResult> {
   if (!isValidSyncCode(code)) throw new Error("同步码格式不正确")
@@ -30,36 +33,43 @@ export async function syncNow(code: string): Promise<SyncResult> {
   const hub = getHubData()
 
   const local = await hub.listSubscriptions()
+  // merged 跨重试累积: unionMerge 是按 id 的 LWW 并集 (幂等可结合), 故每轮并入新拉到的远端即可。
+  let merged = local
 
-  let remote: Subscription[] = []
-  const got = await getSyncBlob(storageId)
-  if (!got.ok) throw new Error(got.message)
-  if (got.data) {
-    try {
-      const decoded = await decryptJson<unknown[]>(key, got.data.iv, got.data.ciphertext)
-      if (Array.isArray(decoded)) remote = decoded.filter(isValidRemoteSub)
-    } catch {
-      throw new Error("解密失败：同步码可能不一致")
+  // 乐观并发: 携带本端读到的基线版本 PUT; 若服务端已被另一端更新 (409) → 重新 GET→合并→PUT。
+  // 修复旧的"丢失更新"窗口: 另一端在本端 GET 之后、PUT 之前新增的订阅不再被无条件覆盖丢弃。
+  for (let attempt = 1; ; attempt++) {
+    const got = await getSyncBlob(storageId)
+    if (!got.ok) throw new Error(got.message)
+    const base = got.data?.updated_at ?? 0 // 尚无数据 → 基线 0 (期望服务端也无数据)
+    let remote: Subscription[] = []
+    if (got.data) {
+      try {
+        const decoded = await decryptJson<unknown[]>(key, got.data.iv, got.data.ciphertext)
+        if (Array.isArray(decoded)) remote = decoded.filter(isValidRemoteSub)
+      } catch {
+        throw new Error("解密失败：同步码可能不一致")
+      }
     }
-  }
 
-  const merged = unionMerge(local, remote)
-  // LWW 下即使长度不变也可能有字段更新, 故按"非等价就写回"判定。
-  if (!subsEqual(merged, local)) {
-    await hub.bulkPutSubscriptions(merged)
-  }
+    merged = unionMerge(merged, remote)
+    // LWW 下即使长度不变也可能有字段更新, 故按"非等价就写回"判定。
+    if (!subsEqual(merged, local)) {
+      await hub.bulkPutSubscriptions(merged)
+    }
 
-  // 已知限制 (丢失更新窗口): 此处是无条件覆盖式 PUT, 未携带期望 updated_at。unionMerge 是逐订阅
-  // LWW, 故并发只在"另一端在本端 GET 之后、本 PUT 之前新增了一条本端未持有的订阅"时丢该新订阅
-  // (已有订阅的字段更新由 updatedAt 保护)。彻底修复需 super/server 支持乐观并发 (PUT 带 updated_at,
-  // 冲突返 409 → 客户端重新 GET→merge→PUT), 属跨仓改动; 当前服务端仅 204/400/500, 暂记录于此。
-  const enc = await encryptJson(key, merged)
-  const put = await putSyncBlob(storageId, {
-    iv: enc.iv,
-    ciphertext: enc.ciphertext,
-    updated_at: Date.now(),
-  })
-  if (!put.ok) throw new Error(put.message)
+    const enc = await encryptJson(key, merged)
+    const put = await putSyncBlob(
+      storageId,
+      { iv: enc.iv, ciphertext: enc.ciphertext, updated_at: Date.now() },
+      base,
+    )
+    if (put.ok) break
+    // 409 = 并发冲突: 另一端已抢先更新, 重新拉取合并后再试 (有界); 其它错误直接抛。
+    if (put.status === 409 && attempt < SYNC_MAX_ATTEMPTS) continue
+    if (put.status === 409) throw new Error("同步冲突: 多端同时修改, 请稍后重试")
+    throw new Error(put.message)
+  }
 
   // 精确统计"本地原本不存在的新 id 数"(LWW 下字段更新不算 added)。
   const localIds = new Set(local.map((s) => s.id))

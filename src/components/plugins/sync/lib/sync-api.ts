@@ -15,9 +15,18 @@ export async function getSyncBlob(id: string): Promise<ApiResult<SyncBlob | null
   return res
 }
 
-/** 覆盖式上传加密同步块。 */
-export async function putSyncBlob(id: string, blob: SyncBlob): Promise<ApiResult<unknown>> {
-  return apiFetch(`${SERVER_ADDR}/sync/${encodeURIComponent(id)}`, {
+/**
+ * 上传加密同步块。传 `expected` (本端最近读到的 updated_at; 尚无数据传 0) 时走乐观并发:
+ * 服务端当前版本与之不符则返回 409 (调用方据此重新 GET→合并→重试)。省略 = 无条件覆盖。
+ */
+export async function putSyncBlob(
+  id: string,
+  blob: SyncBlob,
+  expected?: number,
+): Promise<ApiResult<unknown>> {
+  const base = `${SERVER_ADDR}/sync/${encodeURIComponent(id)}`
+  const url = expected === undefined ? base : `${base}?expected=${expected}`
+  return apiFetch(url, {
     method: "PUT",
     json: blob,
     cache: "no-store",

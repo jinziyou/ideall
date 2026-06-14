@@ -368,7 +368,12 @@ export interface paths {
         };
         /** GET /sync/{id} — 取回端到端加密的同步块 (服务端不可读内容)。 */
         get: operations["get_sync_blob"];
-        /** PUT /sync/{id} — 覆盖式上传端到端加密的同步块。 */
+        /**
+         * PUT /sync/{id} — 上传端到端加密的同步块。
+         * @description 带 `?expected=<base>` 时走乐观并发: 仅当服务端当前 `updated_at` 与 `expected` 相符 (或尚无数据且
+         *     `expected=0`) 才写, 否则 409 —— 防"另一端在本端 GET 之后、本 PUT 之前新增"被覆盖丢失。
+         *     不带 `expected` 时维持无条件覆盖 (旧客户端兼容)。
+         */
         put: operations["put_sync_blob"];
         post?: never;
         delete?: never;
@@ -916,7 +921,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 命中的实体摘要列表 (跨周分桶已按 (name,label) 聚合) */
+            /** @description 命中的实体摘要列表 (跨周分桶已按 (name,label) 聚合); 搜索词为空时返回空列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -924,6 +929,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EntityBrief"][];
                 };
+            };
+            /** @description 搜索词过长 (>200 字符) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -1104,7 +1116,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 名称为空 */
+            /** @description 名称为空或超长 (>200 字符) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1142,7 +1154,7 @@ export interface operations {
                     "application/json": components["schemas"]["Publication"];
                 };
             };
-            /** @description 标题为空 */
+            /** @description 标题为空, 或标题/正文超长 (title >500, body >50000 字符) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1291,7 +1303,10 @@ export interface operations {
     };
     put_sync_blob: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 乐观并发基线版本 (本端最近读到的 updated_at; 尚无数据传 0); 省略=无条件覆盖 */
+                expected?: number;
+            };
             header?: never;
             path: {
                 /** @description 同步码派生的存储 id */
@@ -1314,6 +1329,13 @@ export interface operations {
             };
             /** @description id 非法 */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 版本冲突 (服务端已被其它端更新); 客户端应重新 GET→合并→重试 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
