@@ -314,7 +314,7 @@
         ],
         "responses": {
           "200": {
-            "description": "命中的实体摘要列表 (跨周分桶已按 (name,label) 聚合)",
+            "description": "命中的实体摘要列表 (跨周分桶已按 (name,label) 聚合); 搜索词为空时返回空列表",
             "content": {
               "application/json": {
                 "schema": {
@@ -325,6 +325,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "搜索词过长 (>200 字符)"
           }
         }
       }
@@ -569,7 +572,7 @@
             "description": "已更新"
           },
           "400": {
-            "description": "名称为空"
+            "description": "名称为空或超长 (>200 字符)"
           },
           "500": {
             "description": "更新失败"
@@ -606,7 +609,7 @@
             }
           },
           "400": {
-            "description": "标题为空"
+            "description": "标题为空, 或标题/正文超长 (title >500, body >50000 字符)"
           },
           "500": {
             "description": "发布失败"
@@ -777,7 +780,8 @@
         "tags": [
           "sync"
         ],
-        "summary": "PUT /sync/{id} — 覆盖式上传端到端加密的同步块。",
+        "summary": "PUT /sync/{id} — 上传端到端加密的同步块。",
+        "description": "带 `?expected=<base>` 时走乐观并发: 仅当服务端当前 `updated_at` 与 `expected` 相符 (或尚无数据且\n`expected=0`) 才写, 否则 409 —— 防\"另一端在本端 GET 之后、本 PUT 之前新增\"被覆盖丢失。\n不带 `expected` 时维持无条件覆盖 (旧客户端兼容)。",
         "operationId": "put_sync_blob",
         "parameters": [
           {
@@ -787,6 +791,16 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "expected",
+            "in": "query",
+            "description": "乐观并发基线版本 (本端最近读到的 updated_at; 尚无数据传 0); 省略=无条件覆盖",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -806,6 +820,9 @@
           },
           "400": {
             "description": "id 非法"
+          },
+          "409": {
+            "description": "版本冲突 (服务端已被其它端更新); 客户端应重新 GET→合并→重试"
           },
           "500": {
             "description": "保存失败"
