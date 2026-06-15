@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react"
 import { Graph, NodeEvent, type GraphData, type IPointerEvent } from "@antv/g6"
 import { NER_LABEL_TEXT } from "@/components/lib/ner-labels"
+import { infoDisplayTitle } from "@/components/lib/format"
 import { entityLink } from "../cells"
 import { Info, NameEntity, RelatedInfo } from "../model"
 
@@ -52,11 +53,11 @@ function buildGraph(info: Info, related: RelatedInfo[]): Built {
   present.add("本文")
   nodes.push({
     id: srcId,
-    data: { category: "本文", tooltip: info.title || info.url },
+    data: { category: "本文", tooltip: infoDisplayTitle(info.title) || info.url },
     style: {
       size: 48,
       fill: CATEGORY_COLOR["本文"],
-      labelText: truncate(info.title || info.url, 16),
+      labelText: truncate(infoDisplayTitle(info.title) || info.url, 16),
       labelPlacement: "bottom",
       labelFontSize: 12,
       labelFontWeight: 600,
@@ -100,7 +101,7 @@ function buildGraph(info: Info, related: RelatedInfo[]): Built {
       data: {
         category: "关联报道",
         // 报道标题较长, 不常驻标签, 仅 hover tooltip 展示
-        tooltip: `${r.publisher?.name || r.publisher?.domain || "未知来源"} · ${r.title || r.url}`,
+        tooltip: `${r.publisher?.name || r.publisher?.domain || "未知来源"} · ${infoDisplayTitle(r.title) || r.url}`,
       },
       style: { size: 28, fill: CATEGORY_COLOR["关联报道"] },
     })

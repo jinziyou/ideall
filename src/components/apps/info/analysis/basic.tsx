@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { infoDisplayTitle } from "@/components/lib/format"
 import { Info } from "../model"
 import { entityLink, EntityEntryLinks, partitionEntities } from "../cells"
 import { entityLabelText } from "@/components/lib/ner-labels"
@@ -17,7 +18,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
       <CardContent className="space-y-4 text-sm">
         <div>
           <div className="text-xs text-muted-foreground">标题</div>
-          <div className="mt-1 font-medium break-all">{info.title}</div>
+          <div className="mt-1 font-medium break-all">{infoDisplayTitle(info.title) || info.url}</div>
         </div>
         <div>
           <div className="text-xs text-muted-foreground">相关实体</div>

@@ -10,3 +10,22 @@ export function formatTimestamp(ms: number | string | undefined | null): string 
   if (!Number.isFinite(n) || n <= 0) return "-"
   return new Date(n).toLocaleString("zh-CN")
 }
+
+/** 信息展示时间: 优先发布时间, 缺失时回退收录时间 (部分源未抽到 publish_time)。 */
+export function formatInfoTime(info: {
+  publish_time?: number | string | null
+  collect_time?: number | string | null
+}): string {
+  const pub = typeof info.publish_time === "number" ? info.publish_time : parseInt(String(info.publish_time))
+  if (Number.isFinite(pub) && pub > 0) return formatTimestamp(pub)
+  return formatTimestamp(info.collect_time)
+}
+
+/**
+ * 清洗部分站点爬取时混入的 UI 噪声 (如第一财经标题末尾的阅读数 + 「N小时前」)。
+ * 仅去掉末尾固定模式, 不动正文中间的换行。
+ */
+export function infoDisplayTitle(title: string | undefined | null): string {
+  if (!title) return ""
+  return title.replace(/\n+\d+\n+\d+(?:\.\d+)?(?:小时|分钟|天|秒|个月|年)前\s*$/, "").trim()
+}

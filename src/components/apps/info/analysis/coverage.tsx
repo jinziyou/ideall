@@ -2,7 +2,7 @@
 
 import { ExternalLink, Newspaper } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { formatTimestamp } from "@/components/lib/format"
+import { formatInfoTime, infoDisplayTitle } from "@/components/lib/format"
 import { openExternal } from "@/components/lib/safe-url"
 import { analysisLink } from "../columns"
 import { RelatedInfo } from "../model"
@@ -33,7 +33,7 @@ export default function CoverageList({ items }: { items: RelatedInfo[] }) {
               className="h-auto min-w-0 justify-start whitespace-normal break-all p-0 text-left text-sm font-medium"
               onClick={() => openExternal(info.url)}
             >
-              {info.title || info.url}
+              {infoDisplayTitle(info.title) || info.url}
               <ExternalLink className="ml-1 inline h-3 w-3 shrink-0" />
             </Button>
             <Button
@@ -49,7 +49,7 @@ export default function CoverageList({ items }: { items: RelatedInfo[] }) {
             <span className="font-medium text-foreground/80">
               {info.publisher?.name || info.publisher?.domain || "未知来源"}
             </span>
-            <span>{formatTimestamp(info.publish_time)}</span>
+            <span>{formatInfoTime(info)}</span>
             {/* 关联强度: 共享实体数解释「为什么相关」; 有词条的共享实体更可信, 合并到同一徽标里表述 */}
             {info.shared > 0 && (
               <span className="rounded bg-muted px-1.5 py-0.5">
