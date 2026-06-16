@@ -4,7 +4,7 @@
 
 ## 1. 法律与品牌
 
-- [ ] **[LICENSE](LICENSE)** — Apache 2.0 已就位；将 `Copyright 2025-present Wonita Project` 替换为你的法律实体名称（个人或公司）
+- [x] **[LICENSE](LICENSE)** — Apache 2.0 已就位；版权人为 **lyping**（个人）；jinziyou 注册为法律实体后再 assign 至公司
 - [ ] **[TRADEMARK.md](TRADEMARK.md)** — 商标边界已阅读；填写文末联系邮箱
 - [ ] **package.json** — `"private": false`，`"license": "Apache-2.0"`
 - [ ] （可选）**NOTICE** — 若需额外声明第三方依赖版权，新增 `NOTICE` 文件
@@ -14,8 +14,8 @@
 
 - [ ] **[README.md](README.md)** — 含「开源客户端 vs 官方信息服务」分层说明
 - [ ] **[.env.example](.env.example)** — 含官方 / 本地自托管 / Docker 三种 `SERVER_ADDR` 说明
-- [ ] （建议）**CONTRIBUTING.md** — PR 规范、开发环境、只接受 myos 范围改动
-- [ ] （建议）**SECURITY.md** — 漏洞报告渠道（`.github/SECURITY.md`）
+- [x] （建议）**CONTRIBUTING.md** — PR 规范、开发环境、只接受 myos 范围改动；含 DCO 签名要求（暂不启用 CLA）
+- [x] （建议）**SECURITY.md** — 漏洞报告渠道（`.github/SECURITY.md`，联系邮箱待填）
 - [ ] （可选）**.github/FUNDING.yml** — GitHub Sponsors / 爱发电等赞助链接
 
 ## 3. 仓库与边界
@@ -27,7 +27,7 @@
 
 ## 4. 默认体验
 
-- [ ] 官方发行版默认后端地址指向**官方 API**（见 `.env.example` 模式 A / `NEXT_PUBLIC_SERVER_ADDR`；上线前替换 `https://api.wonita.example` 占位 URL）
+- [ ] 官方发行版默认后端地址指向**官方 API** `https://api.wonita.link`（见 `.env.example` 模式 A / `NEXT_PUBLIC_SERVER_ADDR`）
 - [ ] **home / tool** 在无 super 时可独立使用（本地优先）；**info / community** 文档中说明依赖后端
 - [ ] 关于页或 README 链到 [TRADEMARK.md](TRADEMARK.md) 与官方服务条款（TODO: 服务条款 URL）
 

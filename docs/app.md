@@ -18,7 +18,7 @@ myos/                         # 仓库根 (wonita monorepo 内挂载于 peer/)
 ├── src/                      # Next.js 应用 (web + app 共用)
 ├── src-tauri/                # Tauri 2.0 app 外壳 (Rust)
 │   ├── Cargo.toml
-│   ├── tauri.conf.json       # devUrl=localhost:3000 (dev) / frontendDist=../out (打包)
+│   ├── tauri.conf.json       # devUrl=localhost:5020 (dev) / frontendDist=../out (打包)
 │   ├── build.rs
 │   ├── capabilities/         # 权限能力集
 │   ├── icons/                # 应用图标 (见 icons/README.md)
@@ -31,11 +31,11 @@ myos/                         # 仓库根 (wonita monorepo 内挂载于 peer/)
 
 ```bash
 # Web (现状, 不变)
-pnpm dev            # SSR 开发 http://localhost:3000
+pnpm dev            # SSR 开发 http://localhost:5020
 pnpm build          # 生产 (output: standalone)
 
 # App (Tauri)
-pnpm app:dev        # 桌面开发壳: 加载 pnpm dev 起的 localhost:3000 (Phase 0 即可用)
+pnpm app:dev        # 桌面开发壳: 加载 pnpm dev 起的 localhost:5020 (Phase 0 即可用)
 pnpm app:export     # 静态导出 → out/ (BUILD_TARGET=app; 依赖 Phase 1 数据层客户端化)
 pnpm app:build      # 多平台打包 (依赖 app:export + 平台工具链/图标)
 

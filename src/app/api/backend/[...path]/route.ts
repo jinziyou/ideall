@@ -1,13 +1,11 @@
 /**
  * Web 形态同源 API 代理: 浏览器请求 /api/backend/* , 由 Next.js 服务端转发到 super/server。
- * 避免客户端跨域与构建期内联 API 地址 (wonita.org 等域名场景) 不一致。
+ * 避免客户端跨域与构建期内联 API 地址 (生产域名场景) 不一致。
  */
 import { NextRequest } from "next/server"
 
 const UPSTREAM =
-  process.env.SERVER_ADDR ??
-  process.env.NEXT_PUBLIC_SERVER_ADDR ??
-  "http://127.0.0.1:3001"
+  process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "http://127.0.0.1:5021"
 
 const FORWARD_REQUEST_HEADERS = ["content-type", "authorization"] as const
 

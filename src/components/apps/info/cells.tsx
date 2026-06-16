@@ -3,7 +3,7 @@
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { formatTimestamp } from "@/components/lib/format"
+import { formatTimestamp, infoDisplayTitle } from "@/components/lib/format"
 import { safeHref, openExternal } from "@/components/lib/safe-url"
 import { SubscribeButton } from "@/components/feeders"
 import type { NameEntity, Publisher } from "./model"
@@ -32,20 +32,21 @@ export function truncate(text: string, max: number): string {
 
 /** 标题单元格: 点击新开原文, 超长时 hover 显示全文。 */
 export function TitleCell({ title, url, max = 30 }: { title: string; url: string; max?: number }) {
+  const display = infoDisplayTitle(title) || url
   const trigger = (
     <Button
       className="h-auto max-w-[30vw] justify-start p-0 text-left sm:max-w-[260px]"
       variant="link"
       onClick={() => openExternal(url)}
     >
-      <span className="truncate">{truncate(title, max)}</span>
+      <span className="truncate">{truncate(display, max)}</span>
     </Button>
   )
-  if (title.length <= max) return trigger
+  if (display.length <= max) return trigger
   return (
     <HoverCard>
       <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
-      <HoverCardContent className="max-w-sm text-sm">{title}</HoverCardContent>
+      <HoverCardContent className="max-w-sm text-sm">{display}</HoverCardContent>
     </HoverCard>
   )
 }

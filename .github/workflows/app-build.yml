@@ -11,9 +11,9 @@ on:
       - "app-v*"
 
 # 静态导出把后端地址内联进包: 用仓库变量 NEXT_PUBLIC_SERVER_ADDR (Settings → Variables),
-# 未设则回退占位 (官方 API 上线后填真实值)。
+# 未设则回退到官方 API 默认值 api.wonita.link。
 env:
-  NEXT_PUBLIC_SERVER_ADDR: ${{ vars.NEXT_PUBLIC_SERVER_ADDR || 'https://api.wonita.example' }}
+  NEXT_PUBLIC_SERVER_ADDR: ${{ vars.NEXT_PUBLIC_SERVER_ADDR || 'https://api.wonita.link' }}
 
 jobs:
   desktop:

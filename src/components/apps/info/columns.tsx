@@ -5,6 +5,7 @@ import { Info, InfoEvent } from "./model"
 import { PublisherGroup } from "./derive"
 import { EntityCell, PublisherHoverCell, TimeCell, TitleCell } from "./cells"
 import { SaveToHub } from "@/components/feeders"
+import { infoDisplayTitle } from "@/components/lib/format"
 import { openExternal } from "@/components/lib/safe-url"
 
 /** Info.publisher → SaveToHub 的 publisher 入参 (domain 缺失时不提供订阅项)。 */
@@ -105,7 +106,7 @@ export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
     header: "事件",
     cell: ({ row }) => {
       const event = row.original
-      const title = event.lead.title ?? ""
+      const title = infoDisplayTitle(event.lead.title) || event.lead.url
       const url = event.lead.url
       const trigger = (
         <div className="flex max-w-[280px] flex-col items-start gap-1">

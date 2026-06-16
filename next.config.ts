@@ -11,7 +11,7 @@ const webConfig: NextConfig = {
   // 配置跨域
   experimental: {
     serverActions: {
-      allowedOrigins: ["127.0.0.1", "localhost:3000"],
+      allowedOrigins: ["127.0.0.1", "localhost:5020"],
     },
   },
 }
@@ -20,6 +20,9 @@ const appConfig: NextConfig = {
   output: "export",
   // 静态导出无 Node 图片优化服务
   images: { unoptimized: true },
+  // 向客户端 bundle 注入构建目标标记: env.ts 的 clientWebProxyBase() 据此跳过同源 /api/backend 代理
+  // (静态导出无 Next 服务端, 应直连 NEXT_PUBLIC_SERVER_ADDR)。脚本只设 BUILD_TARGET, 故在此派生。
+  env: { NEXT_PUBLIC_BUILD_TARGET: "app" },
 }
 
 export default isApp ? appConfig : webConfig
