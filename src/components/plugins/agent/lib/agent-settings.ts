@@ -1,5 +1,6 @@
 // AI 助手的模型接入设置 —— 本地优先, 仅存本机浏览器 localStorage。
-// 用户自带 API Key: key 不进任何服务端配置, 只在浏览器保存, 发送时按请求经本节点代理转发。
+// 用户自带 API Key: key 不进任何服务端配置, 只在浏览器保存, 发送时随请求带 Authorization 头直连厂商端点
+// (不经服务端代理; App 经 Tauri HTTP 插件绕 CORS, 见 agent-chat.ts)。
 // 默认 DeepSeek (OpenAI 兼容); 改 baseURL / model 即可切到 OpenAI、本地 vLLM 等兼容端点。
 
 const SETTINGS_KEY = "wonita:agent:settings"
