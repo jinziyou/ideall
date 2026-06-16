@@ -16,7 +16,8 @@ export function formatInfoTime(info: {
   publish_time?: number | string | null
   collect_time?: number | string | null
 }): string {
-  const pub = typeof info.publish_time === "number" ? info.publish_time : parseInt(String(info.publish_time))
+  const pub =
+    typeof info.publish_time === "number" ? info.publish_time : parseInt(String(info.publish_time))
   if (Number.isFinite(pub) && pub > 0) return formatTimestamp(pub)
   return formatTimestamp(info.collect_time)
 }
