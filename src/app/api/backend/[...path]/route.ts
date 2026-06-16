@@ -1,6 +1,6 @@
 /**
  * Web 形态同源 API 代理: 浏览器请求 /api/backend/* , 由 Next.js 服务端转发到 super/server。
- * 避免客户端跨域与构建期内联 API 地址 (wonita.org 等域名场景) 不一致。
+ * 避免客户端跨域与构建期内联 API 地址 (生产域名场景) 不一致。
  */
 import { NextRequest } from "next/server"
 

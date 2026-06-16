@@ -3,7 +3,7 @@
  *
  * - 服务端 (SSR / Route Handler): 读 `SERVER_ADDR` (容器内如 `http://host.docker.internal:3001`)。
  * - Web 浏览器: 走同源 `/api/backend` 代理 (见 `app/api/backend/[...path]/route.ts`),
- *   避免跨域与构建期内联占位 API 地址导致取数失败 (wonita.org 等)。
+ *   避免跨域与构建期内联占位 API 地址导致取数失败 (如生产域名)。
  * - App 静态导出: 客户端直连 `NEXT_PUBLIC_SERVER_ADDR` (无 Node 代理)。
  */
 function clientWebProxyBase(): string | undefined {
