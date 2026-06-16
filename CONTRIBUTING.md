@@ -18,7 +18,7 @@ myos 仓库只包含**客户端**代码。请将 PR 限定在以下范围：
 
 ```bash
 pnpm install
-pnpm dev          # Web (SSR) http://localhost:3000
+pnpm dev          # Web (SSR) http://localhost:5020
 ```
 
 `info` / `community` 需要可用的后端（`SERVER_ADDR`，见 [README](README.md#连接后端-server_addr)）；`home` / `tool` 的本地能力无需后端。

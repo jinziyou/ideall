@@ -38,7 +38,7 @@ git clone git@github.com:jinziyou/myos.git
 cd myos
 cp .env.example .env.local   # 按需选择官方或自托管 SERVER_ADDR
 pnpm install
-pnpm dev                     # http://localhost:3000
+pnpm dev                     # http://localhost:5020
 ```
 
 ### 连接后端 (`SERVER_ADDR`)
@@ -46,8 +46,8 @@ pnpm dev                     # http://localhost:3000
 | 模式 | 适用 | `SERVER_ADDR` 示例 |
 | --- | --- | --- |
 | **官方** | 使用 Wonita 官方资讯与图谱 | _官方 API 尚未公开发布；上线后填正式基址_ |
-| **本地开发**（默认） | 本机联调后端 | `http://127.0.0.1:3001` |
-| **Docker** | compose 注入 | `http://host.docker.internal:3001`（默认；同机后端见 override） |
+| **本地开发**（默认） | 本机联调后端 | `http://127.0.0.1:5021` |
+| **Docker** | compose 注入 | `http://host.docker.internal:5021`（默认；同机后端见 override） |
 
 复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。开箱默认走本地开发模式。home / tool 的本地能力不依赖后端；info / community 需可用的后端 (super/server)。
 
@@ -63,17 +63,17 @@ pnpm typecheck
 
 ```bash
 docker compose up -d --build
-curl -I -sS http://localhost:3000
+curl -I -sS http://localhost:5020
 ```
 
-默认 `docker compose up` 即可独立运行：compose 会自建桥接网络 `myos_net`，主机端口由 `MYOS_PORT` 控制（默认 `3000`），后端地址由 `MYOS_SERVER_ADDR` 控制。若要与同机部署的后端共用一张网络，叠加 `docker-compose.override.example.yml`（见该文件注释）即可接入既有外部网络。
+默认 `docker compose up` 即可独立运行：compose 会自建桥接网络 `myos_net`，主机端口由 `MYOS_PORT` 控制（默认 `5020`），后端地址由 `MYOS_SERVER_ADDR` 控制。若要与同机部署的后端共用一张网络，叠加 `docker-compose.override.example.yml`（见该文件注释）即可接入既有外部网络。
 
 ## App（桌面 / 移动）
 
 myos 同一套代码经 **Tauri 2.0** 打包为跨平台客户端（Linux / Windows / macOS / iOS / Android），工程在 [`src-tauri/`](src-tauri)。App 用 Next.js 静态导出（`output: export`）+ 客户端直连后端（`NEXT_PUBLIC_SERVER_ADDR`）。
 
 ```bash
-pnpm app:dev        # 桌面开发壳（加载 pnpm dev 的 localhost:3000）
+pnpm app:dev        # 桌面开发壳（加载 pnpm dev 的 localhost:5020）
 pnpm app:export     # 静态导出 → out/（BUILD_TARGET=app；需数据层客户端化，见路线图）
 pnpm app:build      # 多平台打包（需平台工具链 + 图标 pnpm tauri icon）
 ```
@@ -85,8 +85,8 @@ pnpm app:build      # 多平台打包（需平台工具链 + 图标 pnpm tauri i
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `SERVER_ADDR` | 后端 API 基址（官方信息服务或自托管） | 见 `.env.example` |
-| `MYOS_PORT` | Docker 宿主机映射端口 | `3000` |
-| `MYOS_SERVER_ADDR` | compose 注入的后端地址 | `http://host.docker.internal:3001` |
+| `MYOS_PORT` | Docker 宿主机映射端口 | `5020` |
+| `MYOS_SERVER_ADDR` | compose 注入的后端地址 | `http://host.docker.internal:5021` |
 | `MYOS_NETWORK` | compose 自建桥接网络名 | `myos_net` |
 
 ## API 类型同步 (codegen)

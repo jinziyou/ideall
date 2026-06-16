@@ -5,7 +5,7 @@
   "identifier": "org.wonita.myos",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3000",
+    "devUrl": "http://localhost:5020",
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm app:export"
   },

@@ -27,7 +27,7 @@
 
 ## 4. 默认体验
 
-- [ ] 官方发行版默认后端地址指向**官方 API**（见 `.env.example` 模式 A / `NEXT_PUBLIC_SERVER_ADDR`；上线前替换 `https://api.wonita.example` 占位 URL）
+- [ ] 官方发行版默认后端地址指向**官方 API** `https://api.wonita.link`（见 `.env.example` 模式 A / `NEXT_PUBLIC_SERVER_ADDR`）
 - [ ] **home / tool** 在无 super 时可独立使用（本地优先）；**info / community** 文档中说明依赖后端
 - [ ] 关于页或 README 链到 [TRADEMARK.md](TRADEMARK.md) 与官方服务条款（TODO: 服务条款 URL）
 

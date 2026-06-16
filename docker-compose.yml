@@ -1,6 +1,6 @@
 # myos (Wonita 用户客户端) 应用服务 —— 默认开箱即用, compose 自建桥接网络:
 #   docker compose up -d --build
-#   curl -I -sS http://localhost:${MYOS_PORT:-3000}
+#   curl -I -sS http://localhost:${MYOS_PORT:-5020}
 # 与同机部署的后端共用一张已存在的外部网络时, 叠加 override 示例:
 #   见 docker-compose.override.example.yml
 name: myos
@@ -14,17 +14,17 @@ services:
         # 浏览器客户端取数的后端地址 (构建期内联进静态资源); 由部署侧 NEXT_PUBLIC_SERVER_ADDR 注入。
         NEXT_PUBLIC_SERVER_ADDR: ${NEXT_PUBLIC_SERVER_ADDR:-}
     ports:
-      - "${MYOS_PORT:-3000}:3000"
+      - "${MYOS_PORT:-5020}:5020"
     environment:
-      # 后端 (官方信息服务或自托管) API 基址; 默认指向宿主机 3001 端口上的后端。
-      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://host.docker.internal:3001}
+      # 后端 (官方信息服务或自托管) API 基址; 默认指向宿主机 5021 端口上的后端。
+      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://host.docker.internal:5021}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          'node -e "require(''http'').get(''http://127.0.0.1:3000'', (res) => process.exit(res.statusCode < 500 ? 0 : 1)).on(''error'', () => process.exit(1));"',
+          'node -e "require(''http'').get(''http://127.0.0.1:5020'', (res) => process.exit(res.statusCode < 500 ? 0 : 1)).on(''error'', () => process.exit(1));"',
         ]
       interval: 15s
       timeout: 5s

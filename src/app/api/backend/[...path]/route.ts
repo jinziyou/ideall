@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server"
 
 const UPSTREAM =
-  process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "http://127.0.0.1:3001"
+  process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "http://127.0.0.1:5021"
 
 const FORWARD_REQUEST_HEADERS = ["content-type", "authorization"] as const
 

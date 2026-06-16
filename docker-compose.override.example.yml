@@ -12,7 +12,7 @@
 services:
   myos:
     environment:
-      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://server:3001}
+      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://server:5021}
 
 networks:
   default:
