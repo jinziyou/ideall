@@ -18,7 +18,9 @@ export default function InfoBasicView({ info }: { info: Info }) {
       <CardContent className="space-y-4 text-sm">
         <div>
           <div className="text-xs text-muted-foreground">标题</div>
-          <div className="mt-1 font-medium break-all">{infoDisplayTitle(info.title) || info.url}</div>
+          <div className="mt-1 font-medium break-all">
+            {infoDisplayTitle(info.title) || info.url}
+          </div>
         </div>
         <div>
           <div className="text-xs text-muted-foreground">相关实体</div>
