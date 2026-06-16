@@ -8,7 +8,7 @@
  */
 function clientWebProxyBase(): string | undefined {
   if (typeof window === "undefined") return undefined
-  // App 静态导出无 Next.js 服务端, 不走路由代理
+  // App 静态导出无 Next.js 服务端, 不走路由代理 (NEXT_PUBLIC_BUILD_TARGET 由 next.config.ts appConfig 注入)
   if (process.env.NEXT_PUBLIC_BUILD_TARGET === "app") return undefined
   return `${window.location.origin}/api/backend`
 }

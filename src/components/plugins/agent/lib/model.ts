@@ -28,7 +28,7 @@ export interface AgentMessage {
 
 /**
  * AI 助手对话线程 —— 本地优先, 消息内联存于线程文档 (IndexedDB agentThreads 仓库)。
- * 对话内容只存本机浏览器; 发送时才把消息 + home 上下文经本节点代理转发给模型厂商。
+ * 对话内容只存本机浏览器; 发送时才把消息 + home 上下文直连发给模型厂商 (不经服务端代理; 见 agent-chat.ts)。
  */
 export interface AgentThread {
   id: string
