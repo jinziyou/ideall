@@ -7,7 +7,19 @@ import { NextRequest } from "next/server"
 const UPSTREAM =
   process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "http://127.0.0.1:5021"
 
-const FORWARD_REQUEST_HEADERS = ["content-type", "authorization"] as const
+const FORWARD_REQUEST_HEADERS = [
+  "content-type",
+  "authorization",
+  // 访问者地理定位 (/info/geoip): 透传 Cloudflare 边缘地理头 (首选) + 来源 IP 头 (回退),
+  // 让 super/server 看到访问者地理/IP 而非 Next 服务端 IP。均由前置 Cloudflare / 平台反代注入。
+  "cf-ipcity",
+  "cf-iplatitude",
+  "cf-iplongitude",
+  "cf-ipcountry",
+  "cf-connecting-ip",
+  "x-real-ip",
+  "x-forwarded-for",
+] as const
 
 type RouteCtx = { params: Promise<{ path: string[] }> }
 
