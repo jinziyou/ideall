@@ -67,8 +67,6 @@ export type Provider = {
    * 用字符串而非函数, 以便从 Server Component 序列化传入 Client Component。
    */
   queryUrl?: string
-  /** 图标圆形背景色 (Tailwind class) */
-  accent?: string
   /** 一句话说明 */
   hint?: string
 }

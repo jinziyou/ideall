@@ -8,12 +8,6 @@ const isApp = process.env.BUILD_TARGET === "app"
 
 const webConfig: NextConfig = {
   output: "standalone",
-  // 配置跨域
-  experimental: {
-    serverActions: {
-      allowedOrigins: ["127.0.0.1", "localhost:5020"],
-    },
-  },
 }
 
 const appConfig: NextConfig = {

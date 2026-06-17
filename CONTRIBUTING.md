@@ -30,6 +30,7 @@ PR 必须通过以下检查（CI 同样会跑）：
 ```bash
 pnpm lint           # 含 protocol 纯度强制
 pnpm typecheck
+pnpm format:check   # Prettier 格式（CI 强制）
 pnpm test
 pnpm gen:api:check  # OpenAPI 契约与生成物一致
 ```

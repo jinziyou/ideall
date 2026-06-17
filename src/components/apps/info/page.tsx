@@ -10,8 +10,6 @@ export default function Info() {
         dotClass="bg-spoke-info"
         description="聚合多方来源的事件流，订阅后回流到「我的」。"
       />
-      {/* TODO: 新闻分类未实现 (/info/news 路由不存在), 暂禁用占位以免点击 404。 */}
-
       <HotEntities />
       <div className="w-full">
         <InfoList />

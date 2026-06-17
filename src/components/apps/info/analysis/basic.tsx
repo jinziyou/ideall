@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { infoDisplayTitle } from "@/components/lib/format"
 import { Info } from "../model"
-import { entityLink, EntityEntryLinks, partitionEntities } from "../cells"
+import { entityLink, EntityEntryLinks, partitionEntities, publisherLink } from "../cells"
 import { entityLabelText } from "@/components/lib/ner-labels"
 
 export default function InfoBasicView({ info }: { info: Info }) {
@@ -83,9 +83,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
           <Button
             variant="link"
             className="h-auto p-0"
-            onClick={() =>
-              window.open(`/info/publisher?domain=${encodeURIComponent(info.publisher.domain)}`)
-            }
+            onClick={() => window.open(publisherLink(info.publisher.domain))}
           >
             {info.publisher.domain}
             {info.publisher.name ? ` · ${info.publisher.name}` : ""}
