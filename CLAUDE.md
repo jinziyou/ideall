@@ -28,7 +28,7 @@ home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 
 |---|---|---|
 | **app** | `@/app/*` | Next 路由 + 核心实现同址: `home/` 中枢 (dashboard/订阅/书签/资源/发布 + IndexedDB 数据层 `home/lib`, 页面即路由)、`shell/` 全局壳 (header/nav/命令台/主题/`boot`, 非路由)、`nav/` 导航配置、`(discover)/` 与 `auth` 等路由入口 |
 | **components** | `@/components/*` | 全部共享代码: `apps/` 三应用模块 (`info` / `community` / `tool`, 页面组件由 app 路由薄 re-export)、`plugins/` (`agent` AI 助手 + `sync` 跨端同步)、`lib/` 纯工具 (utils/format/idb/sync-crypto/auth/api/...)、`ui/` shadcn 原语、`feeders/` 等共享 UI |
-| **protocol** | `@protocol/*` | 跨模块契约 (纯端口/类型/纯函数, 不含 UI): subscription/content(解析注册表)/flowback/hub-data(HubDataPort)/sync(SyncPort)/peer/auth/transport/server |
+| **protocol** | `@protocol/*` | 跨模块契约 (纯端口/类型/纯函数, 不含 UI): subscription/content(解析注册表)/flowback/hub-data(HubDataPort)/sync(SyncPort)/peer/auth/server |
 
 ESLint 仅强制 **protocol 纯度**: 契约层只可依赖 `@/components/lib` 纯工具, 不得 import UI 或页面代码。
 其余依赖方向不再用 lint 强制, 但仍遵循惯例: components 不 import app; info/community/tool 互不 import。
@@ -69,7 +69,7 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 同一套 Next.js 代码两种构建目标 (见 [docs/app.md](docs/app.md)):
 - **Web** (默认): `output: standalone` SSR；官方生产实例由 wonita 仓库编排部署 (代码仍在本仓)。
 - **App**: `BUILD_TARGET=app` → `output: export` 静态导出，Tauri 2.0 (`src-tauri/`) 打包为 Linux/Windows/macOS/iOS/Android。无 Node 运行时，故数据层走**客户端直连后端** (`NEXT_PUBLIC_SERVER_ADDR`)；数据访问已同构客户端化 (Phase 1 完成，web SSR / app 客户端共用，见 docs/app.md)。
-- `lib/env.ts` 的 `SERVER_ADDR` 已同构 (服务端 `SERVER_ADDR` / 客户端 `NEXT_PUBLIC_SERVER_ADDR`)。
+- `lib/env.ts` 的 `SERVER_ADDR` 已同构: 服务端读 `SERVER_ADDR`; Web 浏览器走同源 `/api/backend` 代理 (`app/api/backend/[...path]/route.ts`); App 静态导出直连 `NEXT_PUBLIC_SERVER_ADDR`。
 
 ## Conventions
 

@@ -3,16 +3,10 @@
 
 import { SERVER_ADDR } from "@/components/lib/env"
 import { apiFetch, type ApiResult } from "@/components/lib/api"
+import type { components } from "@protocol/server"
 
-export type Publication = {
-  id: number
-  title: string
-  url: string
-  body: string
-  /** epoch 毫秒 */
-  created_at: number
-}
-export type PeerPublisher = { id: number; name: string; publication_count: number }
+export type Publication = components["schemas"]["Publication"]
+export type PeerPublisher = components["schemas"]["PeerPublisher"]
 
 /** 社区发布者列表 (公开)。 */
 export async function getPeers(): Promise<ApiResult<PeerPublisher[]>> {
