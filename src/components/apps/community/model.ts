@@ -1,10 +1,5 @@
-// 发布者位置类型派生自 super/server 的 OpenAPI schema (src/components/lib/api/server.d.ts)。
-// 改了 server 端模型, 重跑 `pnpm sync:api && pnpm gen:api` 同步。
-
-import type { components } from "@protocol/server"
-
-export type PublisherLocation = components["schemas"]["PublisherLocation"]
-export type IpLocation = components["schemas"]["IpLocation"]
+// community 领域类型 —— 由 myos 自有协议 `@protocol/server-port` 派生 (不再依赖 super/server wire DTO)。
+export type { PublisherLocation, IpLocation } from "@protocol/server-port"
 
 /** 是否成功定位: 经纬度为有限值且非 (0,0) 占位。发布者计数、地图绘制、访问者定位共用此判定, 保证口径一致。 */
 export function isLocated(l: { longitude: number; latitude: number }): boolean {
