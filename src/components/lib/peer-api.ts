@@ -1,49 +1,25 @@
-// 用户(peer)发布层数据访问 (同构: web SSR / app 客户端共用): 公开发现/读取 + 带 token 的发布/删除。
-// 对接 super/server P2a 端点 (/peers, /peer/{id}/publications, /me/publications)。
+// 用户(peer)发布层取数 facade —— 经 `@protocol/server-port` 的 ServerPort (官方实现为 HTTP 适配器)。
+// 公开发现/读取 + 带 token 的发布/删除。
+import { getServerPort, type PublishDraft } from "@protocol/server-port"
 
-import { SERVER_ADDR } from "@/components/lib/env"
-import { apiFetch, type ApiResult } from "@/components/lib/api"
-import type { components } from "@protocol/server"
-
-export type Publication = components["schemas"]["Publication"]
-export type PeerPublisher = components["schemas"]["PeerPublisher"]
+export type { Publication, PeerPublisher } from "@protocol/server-port"
 
 /** 社区发布者列表 (公开)。 */
-export async function getPeers(): Promise<ApiResult<PeerPublisher[]>> {
-  return apiFetch<PeerPublisher[]>(`${SERVER_ADDR}/peers`, {
-    cache: "no-store",
-    defaultErrorMessage: "获取社区发布者失败",
-  })
+export function getPeers() {
+  return getServerPort().listPeers()
 }
 
 /** 某发布者的发布列表 (公开)。 */
-export async function getPeerPublications(id: string): Promise<ApiResult<Publication[]>> {
-  return apiFetch<Publication[]>(`${SERVER_ADDR}/peer/${encodeURIComponent(id)}/publications`, {
-    cache: "no-store",
-    defaultErrorMessage: "获取发布失败",
-  })
+export function getPeerPublications(id: string) {
+  return getServerPort().getPeerPublications(id)
 }
 
 /** 发布一条 (需登录 token)。 */
-export async function publish(
-  token: string,
-  input: { title: string; url?: string; body?: string },
-): Promise<ApiResult<Publication>> {
-  return apiFetch<Publication>(`${SERVER_ADDR}/me/publications`, {
-    method: "POST",
-    json: { title: input.title, url: input.url ?? "", body: input.body ?? "" },
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-    defaultErrorMessage: "发布失败",
-  })
+export function publish(token: string, input: PublishDraft) {
+  return getServerPort().publish(token, input)
 }
 
 /** 删除自己的一条发布 (需登录 token)。 */
-export async function deletePublication(token: string, id: number): Promise<ApiResult<unknown>> {
-  return apiFetch(`${SERVER_ADDR}/me/publications/${id}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-    defaultErrorMessage: "删除失败",
-  })
+export function deletePublication(token: string, id: number) {
+  return getServerPort().deletePublication(token, id)
 }
