@@ -21,19 +21,19 @@
 ## 3. 仓库与边界
 
 - [ ] myos **独立仓库**为源码权威；wonita 仅 submodule 引用
-- [ ] **super/**（server / form / admin）保持私有或独立闭源许可，**不**随 myos 发布
+- [ ] **wonita 服务**（server / form / admin）保持私有或独立闭源许可，**不**随 myos 发布
 - [ ] `openapi/server.json` 可公开（API 契约）；采集配置、NLP prompt、图谱数据**不**进入 myos 仓库
 - [ ] CI（`.github/workflows/ci.yml`）在公开仓库可正常运行（无私有 secret 依赖）
 
 ## 4. 默认体验
 
 - [ ] 官方发行版默认后端地址指向**官方 API** `https://api.wonita.link`（见 `.env.example` 模式 A / `NEXT_PUBLIC_SERVER_ADDR`）
-- [ ] **home / tool** 在无 super 时可独立使用（本地优先）；**info / community** 文档中说明依赖后端
+- [ ] **home / tool** 在无 wonita 服务时可独立使用（本地优先）；**info / community** 文档中说明依赖后端
 - [ ] 关于页或 README 链到 [TRADEMARK.md](TRADEMARK.md) 与官方服务条款（TODO: 服务条款 URL）
 
-## 5. 官方 API 运营（super 侧，非本仓）
+## 5. 官方 API 运营（wonita 服务侧，非本仓）
 
-- [ ] 官方 super/server 发布 **API Terms of Service**（禁止未授权商业镜像、批量再分发数据等）
+- [ ] 官方 wonita 服务发布 **API Terms of Service**（禁止未授权商业镜像、批量再分发数据等）
 - [ ] 鉴权、rate limit、滥用监控就绪
 - [ ] 对外公布**唯一**官方 API 基址（与 myos 默认配置一致）
 

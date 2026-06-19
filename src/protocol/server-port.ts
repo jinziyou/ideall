@@ -1,18 +1,18 @@
-// 超级节点 (super-node) 契约 —— myos 用自己的领域词汇定义「一个信息服务必须提供什么」。
+// ServerPort 契约 —— myos 用自己的领域词汇定义「一个信息服务必须提供什么」。
 //
 // 这是本地优先 / 混合 P2P 定位的关键端口: myos = ordinary peer, 不被任何单一后端绑死。
-// 任何实现了 `ServerPort` 的节点 (官方 wonita super/server、第三方、未来嵌入式/局域网 peer)
-// 都能服务 myos。HTTP → super/server 只是「其中一个适配器」(见 components/lib/server/http-adapter)。
+// 任何实现了 `ServerPort` 的节点 (官方 wonita 服务、第三方、未来嵌入式/局域网 peer)
+// 都能服务 myos。HTTP → wonita 服务只是「其中一个适配器」(见 components/lib/server/http-adapter)。
 //
 // 与 HubDataPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
 // ServerPort 是**同构**的 (web SSR 渲染期也要取数, 此时客户端启动闸 BootGate 尚未运行),
 // 故 `getServerPort()` 默认回退到官方 HTTP 适配器; App 形态 / 测试 / 未来其它节点可经
-// `registerServerPort()` 覆盖。领域类型在此自有定义, **不依赖** super/server 的 wire DTO
+// `registerServerPort()` 覆盖。领域类型在此自有定义, **不依赖** wonita 服务的 wire DTO
 // (openapi 生成的 `lib/api/server.d.ts`); wire→domain 的映射与漂移门收敛在 HTTP 适配器内。
 import type { ApiResult } from "@/components/lib/api"
 import { httpServerAdapter } from "@/components/lib/server/http-adapter"
 
-// ── 领域类型 (myos 自有; 与 super/server wire DTO 在适配器内做编译期漂移门校验) ──────────────
+// ── 领域类型 (myos 自有; 与 wonita 服务 wire DTO 在适配器内做编译期漂移门校验) ──────────────
 
 /** 命名实体 (NER 结果)。`label`: PER/ORG/LOC/TIME/PRODUCT/EVENT; `period` 为所属周 (周一 0 点) epoch 毫秒。 */
 export interface NameEntity {
@@ -226,15 +226,15 @@ export interface ServerPort {
 let override: ServerPort | null = null
 
 /**
- * 覆盖默认的 super-node 适配器。
- * App 形态 (嵌入式/局域网节点)、测试、或对接非官方 super-node 时调用; 默认无需注册 (见下)。
+ * 覆盖默认的 wonita 服务适配器。
+ * App 形态 (嵌入式/局域网节点)、测试、或对接非官方 ServerPort 实现时调用; 默认无需注册 (见下)。
  */
 export function registerServerPort(p: ServerPort): void {
   override = p
 }
 
 /**
- * 取 super-node 端口。默认回退到官方 HTTP 适配器 (对接 wonita super/server),
+ * 取 ServerPort 端口。默认回退到官方 HTTP 适配器 (对接 wonita 服务),
  * 故 web SSR 渲染期 (BootGate 未运行) 也可用; `registerServerPort()` 可覆盖。
  */
 export function getServerPort(): ServerPort {

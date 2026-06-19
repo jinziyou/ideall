@@ -1,5 +1,5 @@
 /**
- * Web 形态同源 API 代理: 浏览器请求 /api/backend/* , 由 Next.js 服务端转发到 super/server。
+ * Web 形态同源 API 代理: 浏览器请求 /api/backend/* , 由 Next.js 服务端转发到 wonita 服务。
  * 避免客户端跨域与构建期内联 API 地址 (生产域名场景) 不一致。
  */
 import { NextRequest } from "next/server"
@@ -11,7 +11,7 @@ const FORWARD_REQUEST_HEADERS = [
   "content-type",
   "authorization",
   // 访问者地理定位 (/info/geoip): 透传 Cloudflare 边缘地理头 (首选) + 来源 IP 头 (回退),
-  // 让 super/server 看到访问者地理/IP 而非 Next 服务端 IP。均由前置 Cloudflare / 平台反代注入。
+  // 让 wonita 服务看到访问者地理/IP 而非 Next 服务端 IP。均由前置 Cloudflare / 平台反代注入。
   "cf-ipcity",
   "cf-iplatitude",
   "cf-iplongitude",

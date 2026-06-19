@@ -9,8 +9,8 @@
 | 模块 | 路由 | 角色 | 是否依赖远程后端 |
 | --- | --- | --- | --- |
 | home | `/home` | 信息中枢（个人资源 / 书签，本地优先） | 否 |
-| info | `/info` | 信息聚合展示 | 是（super/server） |
-| community | `/community` | 发布者地图、订阅与发布 | 是（super/server） |
+| info | `/info` | 信息聚合展示 | 是（后端数据服务） |
+| community | `/community` | 发布者地图、订阅与发布 | 是（后端数据服务） |
 | tool | `/tool` | 工具聚合（搜索 / AI / 导航） | 部分功能可选 |
 
 ## 开源范围与官方服务
@@ -24,12 +24,12 @@
 | 商标 | 见 [TRADEMARK.md](TRADEMARK.md) | **Wonita** 品牌与官方数据 |
 
 - **普通用户**：安装 myos，连接 [官方 API](#连接后端-server_addr) 即可使用完整能力。
-- **极客 / 开发者**：fork 本仓库改 UI、写插件；自建后端需自行部署 super 级服务（官方不提供一键镜像）。
+- **极客 / 开发者**：fork 本仓库改 UI、写插件；自建后端需自行部署 wonita 服务（官方不提供一键镜像）。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务；详见 [TRADEMARK.md](TRADEMARK.md)。
 
 myos 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；myos 通过 `SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
 
-myos 以两种形态分发，同一套 Next.js 代码：**Web**（SSR，官方生产实例由 Wonita 编排部署）与 **App**（Tauri 跨平台桌面 / 移动客户端，随本仓库发布）。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
+myos 以两种形态分发，同一套 Next.js 代码：**Web**（SSR，生产实例由 myos 自身的部署流程编排，经 `SERVER_ADDR` / `NEXT_PUBLIC_SERVER_ADDR` 指向后端数据服务）与 **App**（Tauri 跨平台桌面 / 移动客户端，随本仓库发布）。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
 
 ## 快速开始
 
@@ -49,7 +49,7 @@ pnpm dev                     # http://localhost:5020
 | **本地开发**（默认） | 本机联调后端 | `http://127.0.0.1:5021` |
 | **Docker** | compose 注入 | `http://host.docker.internal:5021`（默认；同机后端见 override） |
 
-复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。开箱默认走本地开发模式。home / tool 的本地能力不依赖后端；info / community 需可用的后端 (super/server)。
+复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。开箱默认走本地开发模式。home / tool 的本地能力不依赖后端；info / community 需可用的后端数据服务（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现）。
 
 ## 构建与 Lint
 
@@ -91,7 +91,7 @@ pnpm app:build      # 多平台打包（需平台工具链 + 图标 pnpm tauri i
 
 ## API 类型同步 (codegen)
 
-myos 调用 super/server 的类型来自 OpenAPI schema，**不手写 DTO**：
+myos 调用后端数据服务的类型来自 OpenAPI schema（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现），**不手写 DTO**：
 
 ```
 openapi/server.json                    ← 已提交的契约源

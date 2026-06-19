@@ -45,7 +45,7 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
  * 订阅流 —— 把 home 已订阅的来源汇聚到「我的」中枢:
  *   - 工具 (tool): 顶部「已钉工具」快捷启动区 (无内容流, 点开即跳)
  *   - 发布者 / 实体 / 搜索 / 社区发布者(peer): 各自最新条目卡片
- * 本地优先: 订阅偏好读自 IndexedDB; 内容实时从 super 拉取。
+ * 本地优先: 订阅偏好读自 IndexedDB; 内容实时从 wonita 服务拉取。
  */
 export default function SubscriptionFeed() {
   const [state, setState] = React.useState<Loaded | null>(null)

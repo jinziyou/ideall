@@ -1,5 +1,5 @@
 // info 取数 facade —— 一律经 `@protocol/server-port` 的 ServerPort (官方实现为 HTTP 适配器)。
-// 保留历史函数名/签名/返回口径, 调用点无需改动; wire DTO 与 super/server 细节收敛在适配器内。
+// 保留历史函数名/签名/返回口径, 调用点无需改动; wire DTO 与 wonita 服务细节收敛在适配器内。
 import { getServerPort, type InfoQuery } from "@protocol/server-port"
 
 /** 信息查询参数 (= ServerPort 的 InfoQuery)。 */

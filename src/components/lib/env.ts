@@ -1,5 +1,5 @@
 /**
- * 后端 (super/server) API 基址 —— **同构** (web SSR 与 app 静态导出共用)。
+ * 后端 (wonita 服务) API 基址 —— **同构** (web SSR 与 app 静态导出共用)。
  *
  * - 服务端 (SSR / Route Handler): 读 `SERVER_ADDR` (容器内如 `http://host.docker.internal:5021`)。
  * - Web 浏览器: 走同源 `/api/backend` 代理 (见 `app/api/backend/[...path]/route.ts`),
@@ -19,5 +19,5 @@ export const SERVER_ADDR: string =
   process.env.NEXT_PUBLIC_SERVER_ADDR ??
   "http://127.0.0.1:5021"
 
-/** super/server 的 `/info` 子路由前缀, info 模块所有取数的 base URL。 */
+/** wonita 服务的 `/info` 子路由前缀, info 模块所有取数的 base URL。 */
 export const INFO_API_URI: string = `${SERVER_ADDR}/info`

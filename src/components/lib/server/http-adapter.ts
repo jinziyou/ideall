@@ -1,4 +1,4 @@
-// 官方 super-node 的 HTTP 适配器 —— `ServerPort` 的参考实现 (对接 wonita super/server)。
+// 官方 wonita 服务的 HTTP 适配器 —— `ServerPort` 的参考实现 (对接 wonita server)。
 //
 // **本文件是整个前端唯一允许 import wire DTO (`@/components/lib/api/server`, openapi 生成) 的地方**
 // (由 eslint 强制)。业务代码一律用 `@protocol/server-port` 的领域类型。
@@ -29,7 +29,7 @@ type Wire = components["schemas"]
 const AUTH = `${SERVER_ADDR}/authorize`
 
 // ── 漂移门 (编译期, 零运行时): wire DTO 必须仍可赋给 myos 领域类型。 ────────────────────────────
-// super/server 改/删 myos 依赖的字段 → `gen:api` 重生成 server.d.ts → 下面恒等映射的返回类型注解
+// wonita 服务改/删 myos 依赖的字段 → `gen:api` 重生成 server.d.ts → 下面恒等映射的返回类型注解
 // 编译失败 → CI 红。这是「契约权威在 myos」落到类型层的硬保证。
 const _contractGates = {
   info: (x: Wire["Info"]): Info => x,
@@ -57,7 +57,7 @@ export function looksLikeMillis(t: number): boolean {
 function warnIfNotMillis(where: string, t: number | undefined): void {
   if (process.env.NODE_ENV !== "production" && typeof t === "number" && !looksLikeMillis(t)) {
     console.warn(
-      `[server-adapter] ${where} 时间戳疑似非毫秒 (got ${t}); super/server 契约要求 epoch 毫秒 (info-timestamp-unit-ms)`,
+      `[server-adapter] ${where} 时间戳疑似非毫秒 (got ${t}); wonita 服务契约要求 epoch 毫秒 (info-timestamp-unit-ms)`,
     )
   }
 }
