@@ -18,10 +18,11 @@ ideall 仓库只包含**客户端**代码。请将 PR 限定在以下范围：
 
 ```bash
 pnpm install
-pnpm dev          # Web (SSR) http://localhost:5020
+pnpm dev          # 开发服 (SSR) http://localhost:5020，也是 Tauri 壳的加载源
+pnpm app:dev      # Tauri 桌面开发壳（加载上面的 dev 服）
 ```
 
-`info` / `community` 需要可用的后端（`SERVER_ADDR`，见 [README](README.md#连接后端-server_addr)）；`home` / `tool` 的本地能力无需后端。
+`info` / `community` 需要可用的后端（`NEXT_PUBLIC_SERVER_ADDR`，见 [README](README.md#连接后端-next_public_server_addr)）；`home` / `tool` 的本地能力无需后端。ideall 仅以 App 形态分发，详见 [docs/app.md](docs/app.md)。
 
 ## 提交前检查
 

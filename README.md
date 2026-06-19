@@ -27,55 +27,42 @@
 - **极客 / 开发者**：fork 本仓库改 UI、写插件；自建后端需自行部署 wonita 服务（官方不提供一键镜像）。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务；详见 [TRADEMARK.md](TRADEMARK.md)。
 
-ideall 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；ideall 通过 `SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
+ideall 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；ideall 通过 `NEXT_PUBLIC_SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
 
-ideall 以两种形态分发，同一套 Next.js 代码：**Web**（SSR，生产实例由 ideall 自身的部署流程编排，经 `SERVER_ADDR` / `NEXT_PUBLIC_SERVER_ADDR` 指向后端数据服务）与 **App**（Tauri 跨平台桌面 / 移动客户端，随本仓库发布）。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
+ideall **仅以 App 形态分发**：同一套 Next.js 代码经 **Tauri 2.0** 静态导出后打包为**跨平台客户端 —— Windows / Linux / macOS 桌面 + iOS / Android 移动**。无 Node 运行时、无 SSR 生产服务端，客户端直连后端数据服务。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
 
 ## 快速开始
 
 ```bash
 git clone git@github.com:jinziyou/ideall.git
 cd ideall
-cp .env.example .env.local   # 按需选择官方或自托管 SERVER_ADDR
+cp .env.example .env.local   # 按需选择官方或自托管后端地址
 pnpm install
-pnpm dev                     # http://localhost:5020
+pnpm dev                     # 开发服 http://localhost:5020（也是 Tauri 壳的加载源）
+pnpm app:dev                 # 起 Tauri 桌面开发壳（加载上面的 dev 服）
 ```
 
-### 连接后端 (`SERVER_ADDR`)
+### 连接后端 (`NEXT_PUBLIC_SERVER_ADDR`)
 
-| 模式 | 适用 | `SERVER_ADDR` 示例 |
+App 客户端直连后端数据服务，地址在静态导出构建期内联进包，故用 `NEXT_PUBLIC_SERVER_ADDR`：
+
+| 模式 | 适用 | `NEXT_PUBLIC_SERVER_ADDR` 示例 |
 | --- | --- | --- |
 | **官方** | 使用 Wonita 官方资讯与图谱 | _官方 API 尚未公开发布；上线后填正式基址_ |
 | **本地开发**（默认） | 本机联调后端 | `http://127.0.0.1:5021` |
-| **Docker** | compose 注入 | `http://host.docker.internal:5021`（默认；同机后端见 override） |
 
-复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。开箱默认走本地开发模式。home / tool 的本地能力不依赖后端；info / community 需可用的后端数据服务（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现）。
-
-## 构建与 Lint
-
-```bash
-pnpm build
-pnpm lint
-pnpm typecheck
-```
-
-## Docker
-
-```bash
-docker compose up -d --build
-curl -I -sS http://localhost:5020
-```
-
-默认 `docker compose up` 即可独立运行：compose 会自建桥接网络 `ideall_net`，主机端口由 `IDEALL_PORT` 控制（默认 `5020`），后端地址由 `IDEALL_SERVER_ADDR` 控制。若要与同机部署的后端共用一张网络，叠加 `docker-compose.override.example.yml`（见该文件注释）即可接入既有外部网络。
+复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。开箱默认走本地开发模式。home / tool 的本地能力不依赖后端；info / community 需可用的后端数据服务（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现）。客户端直连需后端放行 CORS（见 [docs/app.md](docs/app.md)）。
 
 ## App（桌面 / 移动）
 
-ideall 同一套代码经 **Tauri 2.0** 打包为跨平台客户端（Linux / Windows / macOS / iOS / Android），工程在 [`src-tauri/`](src-tauri)。App 用 Next.js 静态导出（`output: export`）+ 客户端直连后端（`NEXT_PUBLIC_SERVER_ADDR`）。
+ideall 同一套代码经 **Tauri 2.0** 打包为跨平台客户端（Windows / Linux / macOS / iOS / Android），工程在 [`src-tauri/`](src-tauri)。App 用 Next.js 静态导出（`output: export`）+ 客户端直连后端（`NEXT_PUBLIC_SERVER_ADDR`）。
 
 ```bash
 pnpm app:dev        # 桌面开发壳（加载 pnpm dev 的 localhost:5020）
-pnpm app:export     # 静态导出 → out/（BUILD_TARGET=app；需数据层客户端化，见路线图）
+pnpm app:export     # 静态导出 → out/（= pnpm build）
 pnpm app:build      # 多平台打包（需平台工具链 + 图标 pnpm tauri icon）
+pnpm lint           # 含 protocol 纯度强制
+pnpm typecheck
 ```
 
 完整方案、平台矩阵与分阶段路线图见 [docs/app.md](docs/app.md)。
@@ -84,10 +71,8 @@ pnpm app:build      # 多平台打包（需平台工具链 + 图标 pnpm tauri i
 
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
-| `SERVER_ADDR` | 后端 API 基址（官方信息服务或自托管） | 见 `.env.example` |
-| `IDEALL_PORT` | Docker 宿主机映射端口 | `5020` |
-| `IDEALL_SERVER_ADDR` | compose 注入的后端地址 | `http://host.docker.internal:5021` |
-| `IDEALL_NETWORK` | compose 自建桥接网络名 | `ideall_net` |
+| `NEXT_PUBLIC_SERVER_ADDR` | App 客户端直连的后端 API 基址（官方信息服务或自托管） | 见 `.env.example` |
+| `SERVER_ADDR` | 仅 `pnpm dev` SSR 渲染期在服务端读取；不设时回退到上一项 | 见 `.env.example` |
 
 ## API 类型同步 (codegen)
 

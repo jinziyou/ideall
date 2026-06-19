@@ -13,7 +13,7 @@
 ## 2. 文档
 
 - [ ] **[README.md](README.md)** — 含「开源客户端 vs 官方信息服务」分层说明
-- [ ] **[.env.example](.env.example)** — 含官方 / 本地自托管 / Docker 三种 `SERVER_ADDR` 说明
+- [ ] **[.env.example](.env.example)** — 含官方 / 本地自托管两种 `NEXT_PUBLIC_SERVER_ADDR` 说明（App 客户端直连）
 - [x] （建议）**CONTRIBUTING.md** — PR 规范、开发环境、只接受 ideall 范围改动；含 DCO 签名要求（暂不启用 CLA）
 - [x] （建议）**SECURITY.md** — 漏洞报告渠道（`.github/SECURITY.md`，联系邮箱待填）
 - [ ] （可选）**.github/FUNDING.yml** — GitHub Sponsors / 爱发电等赞助链接

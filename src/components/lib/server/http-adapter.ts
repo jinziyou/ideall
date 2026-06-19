@@ -2,8 +2,8 @@
 //
 // **本文件是整个前端唯一允许 import wire DTO (`@/components/lib/api/server`, openapi 生成) 的地方**
 // (由 eslint 强制)。业务代码一律用 `@protocol/server-port` 的领域类型。
-// 同构: web SSR 读 `SERVER_ADDR`, web 浏览器走同源 `/api/backend` 代理, app 直连
-// `NEXT_PUBLIC_SERVER_ADDR` (见 lib/env.ts)。
+// 同构: App 客户端直连 `NEXT_PUBLIC_SERVER_ADDR`, `pnpm dev` SSR 渲染期读 `SERVER_ADDR`
+// (见 lib/env.ts)。
 import { SERVER_ADDR, INFO_API_URI } from "@/components/lib/env"
 import { apiFetch, type ApiResult } from "@/components/lib/api"
 import type { components } from "@/components/lib/api/server"

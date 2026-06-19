@@ -36,7 +36,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# app: Next 静态导出产物 (BUILD_TARGET=app)。Tauri 工程的 target/gen 见 src-tauri/.gitignore
+# app: Next 静态导出产物 (output: export)。Tauri 工程的 target/gen 见 src-tauri/.gitignore
 /out/
 
 # redesign 设计探索 / 截图 scratch (本地参考, 不入库)

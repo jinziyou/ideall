@@ -1,5 +1,5 @@
 /**
- * 统一 fetch 封装, 供同构数据访问函数 (web SSR / app 客户端直连后端共用) 使用。
+ * 统一 fetch 封装, 供同构数据访问函数 (App 客户端直连后端 / `pnpm dev` SSR 渲染共用) 使用。
  *
  * 约定所有取数函数返回 `ApiResult<T>`:
  *   - `ok: true` 时, `data` 为响应体; 200/204 空 body 时为 `null` (parseJsonSafe 如实返回)

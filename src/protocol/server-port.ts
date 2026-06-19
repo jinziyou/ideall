@@ -5,7 +5,7 @@
 // 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 components/lib/server/http-adapter)。
 //
 // 与 HubDataPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
-// ServerPort 是**同构**的 (web SSR 渲染期也要取数, 此时客户端启动闸 BootGate 尚未运行),
+// ServerPort 是**同构**的 (SSR 预渲染期也要取数 —— `pnpm dev` 与导出前预渲染, 此时客户端启动闸 BootGate 尚未运行),
 // 故 `getServerPort()` 默认回退到官方 HTTP 适配器; App 形态 / 测试 / 未来其它节点可经
 // `registerServerPort()` 覆盖。领域类型在此自有定义, **不依赖** wonita 服务的 wire DTO
 // (openapi 生成的 `lib/api/server.d.ts`); wire→domain 的映射与漂移门收敛在 HTTP 适配器内。
@@ -235,7 +235,7 @@ export function registerServerPort(p: ServerPort): void {
 
 /**
  * 取 ServerPort 端口。默认回退到官方 HTTP 适配器 (对接 wonita 服务),
- * 故 web SSR 渲染期 (BootGate 未运行) 也可用; `registerServerPort()` 可覆盖。
+ * 故 SSR 预渲染期 (BootGate 未运行) 也可用; `registerServerPort()` 可覆盖。
  */
 export function getServerPort(): ServerPort {
   return override ?? httpServerAdapter

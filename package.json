@@ -8,10 +8,9 @@
   "scripts": {
     "dev": "next dev -p 5020",
     "build": "next build",
-    "start": "next start",
     "tauri": "tauri",
     "app:dev": "tauri dev",
-    "app:export": "BUILD_TARGET=app next build",
+    "app:export": "next build",
     "app:build": "tauri build",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
