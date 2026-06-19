@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { DataTablePagination } from "@/components/data-table-pagination"
+import { DataTablePagination } from "@/components/shared/data-table-pagination"
 
 type ColumnMeta = { headerClassName?: string; cellClassName?: string }
 

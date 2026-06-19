@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PinToolButton } from "@/components/feeders"
 
 export const metadata = {
-  title: "导航 | 工具 | wonita",
+  title: "导航 | 工具 | ideall",
   description: "常用站点导航。",
 }
 

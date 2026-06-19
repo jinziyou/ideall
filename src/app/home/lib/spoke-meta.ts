@@ -1,4 +1,4 @@
-// 订阅类型 → spoke 视觉映射的单一真相源 (components→protocol 合法依赖)。
+// 订阅类型 → spoke 视觉映射的单一真相源 (home 渲染订阅项专用; app→protocol 合法依赖)。
 // 注意: 类名必须保持完整静态字面量 (Tailwind 4 摇树), 禁止拼接。
 
 import type { SubscriptionType } from "@protocol/subscription"

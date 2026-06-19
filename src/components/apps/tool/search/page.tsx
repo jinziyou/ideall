@@ -1,7 +1,7 @@
 import QuickJump, { type Provider } from "../quick-jump"
 
 export const metadata = {
-  title: "搜索 | 工具 | wonita",
+  title: "搜索 | 工具 | ideall",
   description: "一键将关键词跳转到各大搜索引擎。",
 }
 

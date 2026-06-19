@@ -1,7 +1,7 @@
 import HomeNav from "./home-nav"
 
 export const metadata = {
-  title: "我的 | wonita",
+  title: "我的 | ideall",
   description: "你的信息中枢，订阅、书签、资源只存本机。",
 }
 

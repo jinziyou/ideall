@@ -3,7 +3,7 @@ import { CornerDownLeft } from "lucide-react"
 import DiscoverNav from "./discover-nav"
 
 export const metadata = {
-  title: "发现 | wonita",
+  title: "发现 | ideall",
   description: "资讯、社区与工具的聚合入口。订阅后回流到「我的」。",
 }
 

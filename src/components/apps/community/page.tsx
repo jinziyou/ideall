@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Map as MapIcon, Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AppHeader } from "@/components/app-header"
+import { AppHeader } from "@/components/shared/app-header"
 import { getPublisherLocations, getVisitorLocation } from "./data"
 import { isLocated, type PublisherLocation, type IpLocation } from "./model"
 import PublisherMap from "./publisher-map"

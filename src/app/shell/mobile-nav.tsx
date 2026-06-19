@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { WonitaMark } from "@/components/wonita-mark"
+import { WonitaMark } from "@/components/shared/wonita-mark"
 import { cn } from "@/components/lib/utils"
 import { HOME_SUBPAGES, SPOKES, type NavLink } from "@/app/nav/nav-config"
 
@@ -63,7 +63,7 @@ export default function MobileNav() {
       <SheetContent side="left" className="w-72 max-w-[85vw] overflow-y-auto">
         <SheetTitle className="flex items-center gap-2">
           <WonitaMark className="h-5 w-auto text-foreground" />
-          <span>wonita</span>
+          <span>ideall</span>
         </SheetTitle>
         <nav className="mt-6 flex flex-col gap-1">
           <span className="px-3 pb-1 text-xs font-medium text-muted-foreground">我的</span>

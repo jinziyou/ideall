@@ -52,5 +52,3 @@ export function ServiceHeader({
     </div>
   )
 }
-
-export default ServiceHeader

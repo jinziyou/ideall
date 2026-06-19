@@ -58,7 +58,7 @@ home 是信息中枢，info / community / tool 三模块围绕并服务于它—
 | 目录 | 别名 | 内容 |
 | --- | --- | --- |
 | **app** | `@/app/*` | Next 路由 + 核心实现同址：`home/` 中枢（页面即路由 + IndexedDB 数据层 `home/lib`）、`shell/` 全局壳（header/nav/命令台/主题/`boot`，非路由）、`nav/` 导航配置、`(discover)/` 与 `auth/` 路由入口 |
-| **components** | `@/components/*` | 全部共享代码：`apps/`（info/community/tool 三应用模块）、`plugins/`（`agent` AI 助手 + `sync` 跨端同步）、`lib/` 纯工具（utils/format/idb/sync-crypto/auth/api/server 适配器…）、`ui/` shadcn 原语、`feeders/` 等共享 UI |
+| **components** | `@/components/*` | 全部共享代码：`apps/`（info/community/tool 三应用模块）、`plugins/`（`agent` AI 助手 + `sync` 跨端同步）、`lib/` 纯工具（utils/format/idb/sync-crypto/auth/api/server 适配器…）、`ui/` shadcn 原语、`shared/` 跨 app/core/plugin 共享 UI 原语（app-header/service-header/prompt-dialog/data-table-pagination/wonita-mark）、`feeders/` 中枢回流反馈 UI |
 | **protocol** | `@protocol/*` | 跨模块契约（纯端口/类型/纯函数，**不含 UI**）：`subscription` / `content`（解析注册表）/ `flowback` / `hub-data`（HubDataPort）/ `sync`（SyncPort）/ `server-port`（ServerPort）/ `peer` / `auth` |
 
 **端口模式**：每个跨模块契约都是「端口 + register/get」。模块经 protocol 间接协作，core 永不直连具体 app/plugin：
