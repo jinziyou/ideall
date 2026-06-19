@@ -2,7 +2,9 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**本地优先的个人信息总控终端** — Wonita 生态的用户界面（客户端）。
+**开源、本地优先、供应商中立的个人信息工作台** — 你的信息、密钥与后端都在你手里。
+
+ideall **能独立成立**：自带本地阅读与 AI 助手（自带 LLM 密钥），**零后端即是完整产品**；需要聚合与知识图谱时，默认接入 **wonita** 智能后端，且经 `ServerPort` 契约**随时可换 / 可自建**。
 
 以 **home（「我的」）为信息中枢**，`info`（资讯）/ `community`（社区）/ `tool`（工具）围绕并服务于 home：
 
@@ -13,21 +15,22 @@
 | community | `/community` | 发布者地图、订阅与发布 | 是（后端数据服务） |
 | tool | `/tool` | 工具聚合（搜索 / AI / 导航） | 部分功能可选 |
 
-## 开源范围与官方服务
+## 开源客户端与后端服务
 
-本仓库（**ideall**）是 **Apache 2.0** 开源的客户端。你可以自由使用、修改、自托管 UI。
+本仓库（**ideall**）是 **Apache 2.0** 开源的客户端，可自由使用、修改、自托管。后端取数经 `ServerPort` 契约消费——**ideall 不被任何单一后端绑死**，wonita 只是默认与参考实现。
 
-| | ideall（本仓库） | Wonita 官方信息服务 |
+| | ideall（本仓库） | wonita 后端服务（默认，可换） |
 | --- | --- | --- |
-| 内容 | Next.js 前端、本地 home、插件 | 采集、NLP、知识图谱、鉴权 API |
-| 许可 | [Apache 2.0](LICENSE) | 闭源，由官方运营 |
+| 内容 | Next.js 前端、本地 home、插件、BYO-key agent | 采集、NLP、知识图谱、实体/事件追踪、鉴权 API |
+| 许可 | [Apache 2.0](LICENSE) | 闭源，官方运营（也可自实现 `ServerPort` 替换） |
+| 角色 | 独立可用的本地工作台 | 可选的"语料级智能"增强 |
 | 商标 | **Wonita** 名称与官方 logo 不随 Apache 2.0 许可转让 | **Wonita** 品牌与官方数据 |
 
-- **普通用户**：安装 ideall，连接 [官方 API](#连接后端-server_addr) 即可使用完整能力。
-- **极客 / 开发者**：fork 本仓库改 UI、写插件；自建后端需自行部署 wonita 服务（官方不提供一键镜像）。
+- **本地能力（home / tool / 同步 / agent）零后端即可用**——离线、无账号、数据存在你设备上。
+- **需要聚合 / 知识图谱时**：默认连接 [wonita 后端](#连接后端-next_public_server_addr)；也可换用自建后端或自行实现 `ServerPort`。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务，或冒充官方 Wonita / ideall 网络。
 
-ideall 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；ideall 通过 `NEXT_PUBLIC_SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
+本仓库是该客户端的源码权威仓库。个人数据默认不上传，仅跨端同步 / 发布时经后端服务。
 
 ideall **仅以 App 形态分发**：同一套 Next.js 代码经 **Tauri 2.0** 静态导出后打包为**跨平台客户端 —— Windows / Linux / macOS 桌面 + iOS / Android 移动**。无 Node 运行时、无 SSR 生产服务端，客户端直连后端数据服务。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
 
