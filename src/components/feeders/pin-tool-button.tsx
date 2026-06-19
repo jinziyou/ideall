@@ -86,5 +86,3 @@ export function PinToolButton({
     </button>
   )
 }
-
-export default PinToolButton

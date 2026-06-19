@@ -56,7 +56,6 @@ const NEAR_DEG = 0.5
  *   2) 否则取距访问者最近且在阈值内的城市 (容忍同一地点的城市名格式差异);
  *   3) 都没有 (访问者无定位 / 该城市无发布者) → null, 调用方回退全国。
  */
-// 注意: 当前 getVisitorLocation 恒返回 null (见 community/data.ts), 故 visitor 分支暂不触达; 后端支持来源 IP 定位后即生效。
 export function pickDefaultCity(cities: CityGroup[], visitor: IpLocation | null): CityGroup | null {
   if (!visitor || !isLocated(visitor) || cities.length === 0) return null
 

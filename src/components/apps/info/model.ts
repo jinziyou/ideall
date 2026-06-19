@@ -7,6 +7,5 @@ export type {
   Publisher,
   RelatedInfo,
   EntityDetail,
-  EntityBrief,
   EntityStats,
 } from "@protocol/server-port"
