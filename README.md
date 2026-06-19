@@ -34,6 +34,8 @@ ideall **能独立成立**：自带本地阅读与 AI 助手（自带 LLM 密钥
 
 ideall **仅以 App 形态分发**：同一套 Next.js 代码经 **Tauri 2.0** 静态导出后打包为**跨平台客户端 —— Windows / Linux / macOS 桌面 + iOS / Android 移动**。无 Node 运行时、无 SSR 生产服务端，客户端直连后端数据服务。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
 
+> 想深入领域模型、模块边界、数据流图与关键不变量？见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
 ## 快速开始
 
 ```bash
@@ -97,9 +99,18 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 
 `openapi/server.json` 已随仓库提交，构建/类型生成完全离线；后端契约更新后由维护者 `sync:api` 刷新并提交。
 
+## 文档导航
+
+| 文档 | 内容 |
+| --- | --- |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 架构权威说明：领域模型、模块与边界、数据流图、技术选型、关键不变量 |
+| [docs/app.md](docs/app.md) | App（桌面 / 移动）方案、平台矩阵、CI、签名与分阶段路线图 |
+| [CLAUDE.md](CLAUDE.md) | 仓库结构与开发约定（贡献者速查） |
+| [.github/SECURITY.md](.github/SECURITY.md) | 安全策略与漏洞报告（含跨端同步加密关注点） |
+
 ## 参与贡献
 
-欢迎 Issue 与 PR（UI、home 本地能力、插件等）。开发约定见 [CLAUDE.md](CLAUDE.md)。
+欢迎 Issue 与 PR（UI、home 本地能力、插件等）。开发约定见 [CLAUDE.md](CLAUDE.md)，架构说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 赞助
 

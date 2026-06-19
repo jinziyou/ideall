@@ -3,7 +3,7 @@
 ## Repository
 
 ideall 是**独立项目 / 独立仓库** (`git@github.com:jinziyou/ideall.git`) 的**客户端前端** (Next.js)，本仓库为源码权威仓库。
-整体定位见 [README.md](README.md)；API 契约同步见下方 "API codegen"。
+整体定位见 [README.md](README.md)；架构权威说明见 [ARCHITECTURE.md](ARCHITECTURE.md)；API 契约同步见下方 "API codegen"。
 ideall 是后端数据服务的**外部消费方 / 客户端**：经 `ServerPort` 契约消费 wonita 服务的数据服务 API（wonita 服务是 `ServerPort` 的参考实现；第三方 / 嵌入式 / 局域网节点亦可实现 `ServerPort`）。信息采集 / NLP / 知识图谱 / 鉴权由该后端数据服务提供，ideall 经 `NEXT_PUBLIC_SERVER_ADDR` 连接，不在本仓库范围内；ideall 不被单一后端绑死。
 
 ideall **仅以 App 形态分发**（Tauri 跨平台静态导出，无 Node 运行时 / 无 SSR 生产部署）。
@@ -23,7 +23,7 @@ ideall 是**开源、本地优先、供应商中立的个人信息工作台**（
   免费/付费线守在"语料级智能"(聚合 / 知识图谱 / 实体事件追踪), 基础本地功能不入墙。
 - **目标盘**: 信息密集型专业人士 + 重视数据自持的高级用户 / 极客(非大众)。
 - **community / peer 发布降级为远期可选赌注**(Follow、腾讯 ima 已大规模占据), 验证本地产品留存后再投。
-- 完整战略见 `docs/strategy-internal.md`(内部, 不入公开仓库)。
+- 完整战略见 jinziyou 私有仓库 `docs/ideall-strategy.md`(内部, 不入本公开仓库)。
 
 **home 是信息中枢, info / community / tool 三个模块都为 home 服务** (hub-and-spoke):
 home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 搜索 / 社区发布者 peer) 回流到
@@ -33,6 +33,8 @@ home 通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 
 **账号 (公开发布身份) 与跨端同步的无账号同步码是两套独立身份**。
 
 ## 架构: 扁平三目录 (src/ 下)
+
+> 本节是日常开发速查; 完整架构 (领域模型 / 数据流图 / 不变量) 见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 常规 Next.js 布局: 路由与核心实现同址, 共享代码归 components, 契约独立。
 
