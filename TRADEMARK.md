@@ -1,30 +1,30 @@
 # Wonita 商标政策
 
-本文件说明 **Wonita** 及相关品牌的合理使用边界。myos 源码以 [Apache License 2.0](LICENSE) 发布；**商标权不受该许可转让**。
+本文件说明 **Wonita** 及相关品牌的合理使用边界。ideall 源码以 [Apache License 2.0](LICENSE) 发布；**商标权不受该许可转让**。
 
 ## 受保护标识
 
 以下名称、标识及易混淆变体归本项目维护者 **lyping**（jinziyou 注册为法律实体后转至该主体）所有（下称「我们」）：
 
 - **Wonita**（文字商标）
-- **myos**（本客户端项目名称）
-- Wonita / myos 官方 logo、图标及视觉识别（如 `wonita.svg` 等仓库内资产）
+- **ideall**（本客户端项目名称）
+- Wonita / ideall 官方 logo、图标及视觉识别（如 `wonita.svg` 等仓库内资产）
 
 ## 允许的使用
 
 在**不暗示官方背书、不造成用户混淆**的前提下，你可以：
 
-- 说明你的衍生作品「基于 myos」或「fork 自 [jinziyou/myos](https://github.com/jinziyou/myos)」
-- 在文档、Issue、PR 中如实引用 Wonita / myos 名称以描述兼容性
+- 说明你的衍生作品「基于 ideall」或「fork 自 [jinziyou/ideall](https://github.com/jinziyou/ideall)」
+- 在文档、Issue、PR 中如实引用 Wonita / ideall 名称以描述兼容性
 - 在遵守 [LICENSE](LICENSE) 的前提下修改、分发源码
 
 ## 禁止的使用
 
 未经我们**书面授权**，不得：
 
-- 将产品、域名、应用商店条目或公共服务命名为 **Wonita**、**myos**，或使用足以混淆的近似名称（如 Wonita Cloud、MyOS Info 等），并对外提供**信息聚合 / 资讯图谱类在线服务**
-- 声称你的部署是「官方 Wonita」「官方 myos」或「Wonita 团队运营」
-- 使用 Wonita / myos 官方 logo 作为你独立产品的品牌标识（fork 保留原 logo 仅用于注明来源除外，且不得单独作为你的品牌）
+- 将产品、域名、应用商店条目或公共服务命名为 **Wonita**、**ideall**，或使用足以混淆的近似名称（如 Wonita Cloud、Ideall Info 等），并对外提供**信息聚合 / 资讯图谱类在线服务**
+- 声称你的部署是「官方 Wonita」「官方 ideall」或「Wonita 团队运营」
+- 使用 Wonita / ideall 官方 logo 作为你独立产品的品牌标识（fork 保留原 logo 仅用于注明来源除外，且不得单独作为你的品牌）
 - 在营销材料中暗示你的信息服务与我们的采集、图谱、发布者数据存在官方关联
 
 ## 与开源许可的关系
@@ -45,7 +45,7 @@ Apache 2.0 **不**授予商标权（见 LICENSE 第 6 条）。你可以合法 f
 
 ## 「认证 Wonita 节点」与官方网络
 
-myos 客户端开源、可自由 fork 与自托管，任何人都可运行兼容后端（见上）。但**「官方 Wonita 网络」「认证 Wonita 节点 / Verified Wonita」等标识属于品牌使用，须经我们授权**：
+ideall 客户端开源、可自由 fork 与自托管，任何人都可运行兼容后端（见上）。但**「官方 Wonita 网络」「认证 Wonita 节点 / Verified Wonita」等标识属于品牌使用，须经我们授权**：
 
 - 兼容后端默认是**非官方**的，不得使用上述标识，也不得在官方目录中登记
 - 只有满足我们公布的**一致性标准**（conformance：API 契约符合、服务条款合规、数据来源与质量要求等）、接受相关条款并通过我们核验的节点，方可使用「认证 Wonita 节点」标识并登记进官方 peer 目录

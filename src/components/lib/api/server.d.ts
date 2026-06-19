@@ -65,7 +65,7 @@ export interface paths {
         /**
          * GET /authorize/secret/{client_id} — 下发服务端临时 X25519 公钥 (hex 明文串)。
          * @description 注意: 响应体是裸 hex 字符串, **不可** 包成 `Json<String>` —— 否则会被加上引号,
-         *     破坏 myos 端按裸串解析的 wire 格式。
+         *     破坏 ideall 端按裸串解析的 wire 格式。
          */
         get: operations["get_server_public_key"];
         put?: never;
@@ -553,7 +553,7 @@ export interface components {
             title: string;
             url?: string;
         };
-        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (myos `type:"peer"` 的 key)。 */
+        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (ideall `type:"peer"` 的 key)。 */
         PeerPublisher: {
             /**
              * Format: int64

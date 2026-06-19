@@ -1,6 +1,6 @@
-# myos 开源清单
+# ideall 开源清单
 
-发布 myos 为独立开源仓库前，按本清单逐项确认。本仓库 [`jinziyou/myos`](https://github.com/jinziyou/myos) 为源码权威仓库；官方信息服务（采集 / NLP / 知识图谱 / 鉴权）闭源、由官方运营，不在本仓库范围内。
+发布 ideall 为独立开源仓库前，按本清单逐项确认。本仓库 [`jinziyou/ideall`](https://github.com/jinziyou/ideall) 为源码权威仓库；官方信息服务（采集 / NLP / 知识图谱 / 鉴权）闭源、由官方运营，不在本仓库范围内。
 
 ## 1. 法律与品牌
 
@@ -14,15 +14,15 @@
 
 - [ ] **[README.md](README.md)** — 含「开源客户端 vs 官方信息服务」分层说明
 - [ ] **[.env.example](.env.example)** — 含官方 / 本地自托管 / Docker 三种 `SERVER_ADDR` 说明
-- [x] （建议）**CONTRIBUTING.md** — PR 规范、开发环境、只接受 myos 范围改动；含 DCO 签名要求（暂不启用 CLA）
+- [x] （建议）**CONTRIBUTING.md** — PR 规范、开发环境、只接受 ideall 范围改动；含 DCO 签名要求（暂不启用 CLA）
 - [x] （建议）**SECURITY.md** — 漏洞报告渠道（`.github/SECURITY.md`，联系邮箱待填）
 - [ ] （可选）**.github/FUNDING.yml** — GitHub Sponsors / 爱发电等赞助链接
 
 ## 3. 仓库与边界
 
-- [ ] myos **独立仓库**为源码权威；wonita 仅 submodule 引用
-- [ ] **wonita 服务**（server / form / admin）保持私有或独立闭源许可，**不**随 myos 发布
-- [ ] `openapi/server.json` 可公开（API 契约）；采集配置、NLP prompt、图谱数据**不**进入 myos 仓库
+- [ ] ideall **独立仓库**为源码权威；wonita 仅 submodule 引用
+- [ ] **wonita 服务**（server / form / admin）保持私有或独立闭源许可，**不**随 ideall 发布
+- [ ] `openapi/server.json` 可公开（API 契约）；采集配置、NLP prompt、图谱数据**不**进入 ideall 仓库
 - [ ] CI（`.github/workflows/ci.yml`）在公开仓库可正常运行（无私有 secret 依赖）
 
 ## 4. 默认体验
@@ -35,13 +35,13 @@
 
 - [ ] 官方 wonita 服务发布 **API Terms of Service**（禁止未授权商业镜像、批量再分发数据等）
 - [ ] 鉴权、rate limit、滥用监控就绪
-- [ ] 对外公布**唯一**官方 API 基址（与 myos 默认配置一致）
+- [ ] 对外公布**唯一**官方 API 基址（与 ideall 默认配置一致）
 
 ## 6. 发布日
 
-- [ ] 将 myos 仓库设为 **Public**
+- [ ] 将 ideall 仓库设为 **Public**
 - [ ] 打首个 tag（如 `v0.1.0`）并写 Release notes，强调：客户端开源、信息服务官方运营
-- [ ] wonita monorepo README 已指向 myos 开源仓库（通常已存在 submodule 链接）
+- [ ] wonita monorepo README 已指向 ideall 开源仓库（通常已存在 submodule 链接）
 - [ ] （可选）HN / V2EX / 社群公告，附赞助链接
 
 ## 许可选型备忘

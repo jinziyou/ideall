@@ -28,9 +28,9 @@ import type {
 type Wire = components["schemas"]
 const AUTH = `${SERVER_ADDR}/authorize`
 
-// ── 漂移门 (编译期, 零运行时): wire DTO 必须仍可赋给 myos 领域类型。 ────────────────────────────
-// wonita 服务改/删 myos 依赖的字段 → `gen:api` 重生成 server.d.ts → 下面恒等映射的返回类型注解
-// 编译失败 → CI 红。这是「契约权威在 myos」落到类型层的硬保证。
+// ── 漂移门 (编译期, 零运行时): wire DTO 必须仍可赋给 ideall 领域类型。 ────────────────────────────
+// wonita 服务改/删 ideall 依赖的字段 → `gen:api` 重生成 server.d.ts → 下面恒等映射的返回类型注解
+// 编译失败 → CI 红。这是「契约权威在 ideall」落到类型层的硬保证。
 const _contractGates = {
   info: (x: Wire["Info"]): Info => x,
   infoEvent: (x: Wire["InfoEvent"]): InfoEvent => x,

@@ -1,12 +1,12 @@
-# myos (Wonita 用户客户端) 应用服务 —— 默认开箱即用, compose 自建桥接网络:
+# ideall (Wonita 用户客户端) 应用服务 —— 默认开箱即用, compose 自建桥接网络:
 #   docker compose up -d --build
-#   curl -I -sS http://localhost:${MYOS_PORT:-5020}
+#   curl -I -sS http://localhost:${IDEALL_PORT:-5020}
 # 与同机部署的后端共用一张已存在的外部网络时, 叠加 override 示例:
 #   见 docker-compose.override.example.yml
-name: myos
+name: ideall
 
 services:
-  myos:
+  ideall:
     build:
       context: .
       dockerfile: Dockerfile
@@ -14,10 +14,10 @@ services:
         # 浏览器客户端取数的后端地址 (构建期内联进静态资源); 由部署侧 NEXT_PUBLIC_SERVER_ADDR 注入。
         NEXT_PUBLIC_SERVER_ADDR: ${NEXT_PUBLIC_SERVER_ADDR:-}
     ports:
-      - "${MYOS_PORT:-5020}:5020"
+      - "${IDEALL_PORT:-5020}:5020"
     environment:
       # 后端 (官方信息服务或自托管) API 基址; 默认指向宿主机 5021 端口上的后端。
-      - SERVER_ADDR=${MYOS_SERVER_ADDR:-http://host.docker.internal:5021}
+      - SERVER_ADDR=${IDEALL_SERVER_ADDR:-http://host.docker.internal:5021}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -34,4 +34,4 @@ services:
 
 networks:
   default:
-    name: ${MYOS_NETWORK:-myos_net}
+    name: ${IDEALL_NETWORK:-ideall_net}

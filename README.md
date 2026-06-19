@@ -1,4 +1,4 @@
-# myos
+# ideall
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
@@ -15,27 +15,27 @@
 
 ## 开源范围与官方服务
 
-本仓库（**myos**）是 **Apache 2.0** 开源的客户端。你可以自由使用、修改、自托管 UI。
+本仓库（**ideall**）是 **Apache 2.0** 开源的客户端。你可以自由使用、修改、自托管 UI。
 
-| | myos（本仓库） | Wonita 官方信息服务 |
+| | ideall（本仓库） | Wonita 官方信息服务 |
 | --- | --- | --- |
 | 内容 | Next.js 前端、本地 home、插件 | 采集、NLP、知识图谱、鉴权 API |
 | 许可 | [Apache 2.0](LICENSE) | 闭源，由官方运营 |
 | 商标 | 见 [TRADEMARK.md](TRADEMARK.md) | **Wonita** 品牌与官方数据 |
 
-- **普通用户**：安装 myos，连接 [官方 API](#连接后端-server_addr) 即可使用完整能力。
+- **普通用户**：安装 ideall，连接 [官方 API](#连接后端-server_addr) 即可使用完整能力。
 - **极客 / 开发者**：fork 本仓库改 UI、写插件；自建后端需自行部署 wonita 服务（官方不提供一键镜像）。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务；详见 [TRADEMARK.md](TRADEMARK.md)。
 
-myos 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；myos 通过 `SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
+ideall 在 Wonita 生态里是**用户侧客户端**：本地 home 中枢 + info/community/tool 三模块。信息采集、知识图谱与鉴权由**官方信息服务**（后端）提供；ideall 通过 `SERVER_ADDR` 连接（见下）。本仓库是该客户端的源码权威仓库。
 
-myos 以两种形态分发，同一套 Next.js 代码：**Web**（SSR，生产实例由 myos 自身的部署流程编排，经 `SERVER_ADDR` / `NEXT_PUBLIC_SERVER_ADDR` 指向后端数据服务）与 **App**（Tauri 跨平台桌面 / 移动客户端，随本仓库发布）。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
+ideall 以两种形态分发，同一套 Next.js 代码：**Web**（SSR，生产实例由 ideall 自身的部署流程编排，经 `SERVER_ADDR` / `NEXT_PUBLIC_SERVER_ADDR` 指向后端数据服务）与 **App**（Tauri 跨平台桌面 / 移动客户端，随本仓库发布）。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
 
 ## 快速开始
 
 ```bash
-git clone git@github.com:jinziyou/myos.git
-cd myos
+git clone git@github.com:jinziyou/ideall.git
+cd ideall
 cp .env.example .env.local   # 按需选择官方或自托管 SERVER_ADDR
 pnpm install
 pnpm dev                     # http://localhost:5020
@@ -66,11 +66,11 @@ docker compose up -d --build
 curl -I -sS http://localhost:5020
 ```
 
-默认 `docker compose up` 即可独立运行：compose 会自建桥接网络 `myos_net`，主机端口由 `MYOS_PORT` 控制（默认 `5020`），后端地址由 `MYOS_SERVER_ADDR` 控制。若要与同机部署的后端共用一张网络，叠加 `docker-compose.override.example.yml`（见该文件注释）即可接入既有外部网络。
+默认 `docker compose up` 即可独立运行：compose 会自建桥接网络 `ideall_net`，主机端口由 `IDEALL_PORT` 控制（默认 `5020`），后端地址由 `IDEALL_SERVER_ADDR` 控制。若要与同机部署的后端共用一张网络，叠加 `docker-compose.override.example.yml`（见该文件注释）即可接入既有外部网络。
 
 ## App（桌面 / 移动）
 
-myos 同一套代码经 **Tauri 2.0** 打包为跨平台客户端（Linux / Windows / macOS / iOS / Android），工程在 [`src-tauri/`](src-tauri)。App 用 Next.js 静态导出（`output: export`）+ 客户端直连后端（`NEXT_PUBLIC_SERVER_ADDR`）。
+ideall 同一套代码经 **Tauri 2.0** 打包为跨平台客户端（Linux / Windows / macOS / iOS / Android），工程在 [`src-tauri/`](src-tauri)。App 用 Next.js 静态导出（`output: export`）+ 客户端直连后端（`NEXT_PUBLIC_SERVER_ADDR`）。
 
 ```bash
 pnpm app:dev        # 桌面开发壳（加载 pnpm dev 的 localhost:5020）
@@ -85,13 +85,13 @@ pnpm app:build      # 多平台打包（需平台工具链 + 图标 pnpm tauri i
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
 | `SERVER_ADDR` | 后端 API 基址（官方信息服务或自托管） | 见 `.env.example` |
-| `MYOS_PORT` | Docker 宿主机映射端口 | `5020` |
-| `MYOS_SERVER_ADDR` | compose 注入的后端地址 | `http://host.docker.internal:5021` |
-| `MYOS_NETWORK` | compose 自建桥接网络名 | `myos_net` |
+| `IDEALL_PORT` | Docker 宿主机映射端口 | `5020` |
+| `IDEALL_SERVER_ADDR` | compose 注入的后端地址 | `http://host.docker.internal:5021` |
+| `IDEALL_NETWORK` | compose 自建桥接网络名 | `ideall_net` |
 
 ## API 类型同步 (codegen)
 
-myos 调用后端数据服务的类型来自 OpenAPI schema（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现），**不手写 DTO**：
+ideall 调用后端数据服务的类型来自 OpenAPI schema（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现），**不手写 DTO**：
 
 ```
 openapi/server.json                    ← 已提交的契约源
@@ -115,7 +115,7 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 
 ## 赞助
 
-myos 客户端免费开源；赞助用于支持客户端开发与社区维护（**不包含**官方信息服务订阅）。
+ideall 客户端免费开源；赞助用于支持客户端开发与社区维护（**不包含**官方信息服务订阅）。
 
 <!-- TODO: 启用 .github/FUNDING.yml 或填入链接 -->
 <!-- [GitHub Sponsors](https://github.com/sponsors/YOUR_USERNAME) · [爱发电](https://afdian.com/a/YOUR_ID) -->

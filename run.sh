@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# myos 本地开发启动脚本（Next.js dev, 端口 5020）。
+# ideall 本地开发启动脚本（Next.js dev, 端口 5020）。
 #
 # 用法：
-#   bash run.sh                # 启动 myos
+#   bash run.sh                # 启动 ideall
 
 set -euo pipefail
 
@@ -15,5 +15,5 @@ if [[ ! -d "node_modules" ]]; then
   echo "Tip: run 'pnpm install' in ${SCRIPT_DIR} first." >&2
 fi
 
-echo "Starting myos at http://localhost:5020 ..."
+echo "Starting ideall at http://localhost:5020 ..."
 pnpm dev

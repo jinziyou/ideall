@@ -1,10 +1,10 @@
 # 贡献指南
 
-感谢你对 **myos** 的兴趣！myos 是 Wonita 生态面向用户的开源客户端（[Apache 2.0](LICENSE)）。本指南说明贡献范围、开发流程与提交规范。
+感谢你对 **ideall** 的兴趣！ideall 是 Wonita 生态面向用户的开源客户端（[Apache 2.0](LICENSE)）。本指南说明贡献范围、开发流程与提交规范。
 
 ## 贡献范围
 
-myos 仓库只包含**客户端**代码。请将 PR 限定在以下范围：
+ideall 仓库只包含**客户端**代码。请将 PR 限定在以下范围：
 
 - ✅ UI / 交互、`home` 本地能力、`info` / `community` / `tool` 展示层
 - ✅ 插件（`plugins/agent` AI 助手、`plugins/sync` 跨端同步）
@@ -49,7 +49,7 @@ pnpm gen:api:check  # OpenAPI 契约与生成物一致
 
 ## 贡献授权与 DCO
 
-myos 当前**不使用 CLA**。你的贡献以项目相同的开源许可（Apache 2.0）纳入（inbound = outbound），**版权归你本人所有**。
+ideall 当前**不使用 CLA**。你的贡献以项目相同的开源许可（Apache 2.0）纳入（inbound = outbound），**版权归你本人所有**。
 
 为保证代码来源可追溯，每个提交须带 **DCO**（[Developer Certificate of Origin](https://developercertificate.org/)）签名：
 
@@ -59,11 +59,11 @@ git commit -s      # 自动追加 Signed-off-by: 你的名字 <你的邮箱>
 
 `Signed-off-by` 表示你确认拥有提交该代码的权利，并同意以项目许可贡献。请使用真实姓名与可用邮箱。
 
-> **维护者承诺**：myos 开源客户端不会被重新授权为非开源许可。若未来需要引入 CLA，仅在合并首个实质性外部贡献前公示，并保持本承诺。
+> **维护者承诺**：ideall 开源客户端不会被重新授权为非开源许可。若未来需要引入 CLA，仅在合并首个实质性外部贡献前公示，并保持本承诺。
 
 ## 商标
 
-代码可自由 fork，但 **Wonita / myos 商标不随源码许可转让**。fork 须改用自己的名称、不得冒充官方网络，详见 [TRADEMARK.md](TRADEMARK.md)。
+代码可自由 fork，但 **Wonita / ideall 商标不随源码许可转让**。fork 须改用自己的名称、不得冒充官方网络，详见 [TRADEMARK.md](TRADEMARK.md)。
 
 ## 行为准则
 

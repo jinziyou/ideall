@@ -64,7 +64,7 @@ function openDB(): Promise<IDBDatabase> {
     // 不处理则该 Promise 永久 pending, 冻结本页全部 home 本地读写。转成可被上层 catch 的 reject。
     req.onblocked = () => {
       dbPromise = null
-      reject(new Error("IndexedDB 升级被其它标签页阻塞, 请关闭其它 myos 标签页后重试"))
+      reject(new Error("IndexedDB 升级被其它标签页阻塞, 请关闭其它 ideall 标签页后重试"))
     }
   })
   return dbPromise

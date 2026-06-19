@@ -1,8 +1,8 @@
-// ServerPort 契约 —— myos 用自己的领域词汇定义「一个信息服务必须提供什么」。
+// ServerPort 契约 —— ideall 用自己的领域词汇定义「一个信息服务必须提供什么」。
 //
-// 这是本地优先 / 混合 P2P 定位的关键端口: myos = ordinary peer, 不被任何单一后端绑死。
+// 这是本地优先 / 混合 P2P 定位的关键端口: ideall = ordinary peer, 不被任何单一后端绑死。
 // 任何实现了 `ServerPort` 的节点 (官方 wonita 服务、第三方、未来嵌入式/局域网 peer)
-// 都能服务 myos。HTTP → wonita 服务只是「其中一个适配器」(见 components/lib/server/http-adapter)。
+// 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 components/lib/server/http-adapter)。
 //
 // 与 HubDataPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
 // ServerPort 是**同构**的 (web SSR 渲染期也要取数, 此时客户端启动闸 BootGate 尚未运行),
@@ -12,7 +12,7 @@
 import type { ApiResult } from "@/components/lib/api"
 import { httpServerAdapter } from "@/components/lib/server/http-adapter"
 
-// ── 领域类型 (myos 自有; 与 wonita 服务 wire DTO 在适配器内做编译期漂移门校验) ──────────────
+// ── 领域类型 (ideall 自有; 与 wonita 服务 wire DTO 在适配器内做编译期漂移门校验) ──────────────
 
 /** 命名实体 (NER 结果)。`label`: PER/ORG/LOC/TIME/PRODUCT/EVENT; `period` 为所属周 (周一 0 点) epoch 毫秒。 */
 export interface NameEntity {
@@ -195,7 +195,7 @@ export interface CurrentUser {
 // ── 端口 ────────────────────────────────────────────────────────────────────────
 
 /**
- * 超级节点契约 —— myos 期望「一个信息服务」提供的全部操作 (以 myos 领域词汇表达)。
+ * 超级节点契约 —— ideall 期望「一个信息服务」提供的全部操作 (以 ideall 领域词汇表达)。
  *
  * 返回约定沿用既有数据层口径以零成本对接 UI:
  *   - 列表/分页等可重试的取数返回 `ApiResult<T>` (调用方按 `ok` 分支 + toast);

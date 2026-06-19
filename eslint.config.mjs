@@ -47,7 +47,7 @@ const config = [
             {
               group: ["@/components/lib/api/server", "@protocol/server"],
               message:
-                "wire DTO 仅允许 HTTP 适配器 (components/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (myos 自有协议)",
+                "wire DTO 仅允许 HTTP 适配器 (components/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (ideall 自有协议)",
             },
           ],
         },

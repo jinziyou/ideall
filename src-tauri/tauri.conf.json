@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "myos",
+  "productName": "ideall",
   "version": "0.1.0",
-  "identifier": "org.wonita.myos",
+  "identifier": "org.wonita.ideall",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:5020",
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "myos",
+        "title": "ideall",
         "width": 1200,
         "height": 800,
         "minWidth": 360,
@@ -38,6 +38,6 @@
     ],
     "category": "Productivity",
     "shortDescription": "Wonita 用户客户端",
-    "longDescription": "myos — 本地优先的个人信息总控终端客户端 (home 中枢 + info/community/tool)。"
+    "longDescription": "ideall — 本地优先的个人信息总控终端客户端 (home 中枢 + info/community/tool)。"
   }
 }
