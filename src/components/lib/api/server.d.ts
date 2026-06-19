@@ -65,7 +65,7 @@ export interface paths {
         /**
          * GET /authorize/secret/{client_id} — 下发服务端临时 X25519 公钥 (hex 明文串)。
          * @description 注意: 响应体是裸 hex 字符串, **不可** 包成 `Json<String>` —— 否则会被加上引号,
-         *     破坏 myos 端按裸串解析的 wire 格式。
+         *     破坏 ideall 端按裸串解析的 wire 格式。
          */
         get: operations["get_server_public_key"];
         put?: never;
@@ -181,7 +181,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /info/geoip?ip= — 定位访问者 IP 所在城市 (peer community 地图默认聚焦) */
+        /**
+         * GET /info/geoip[?ip=] — 定位访问者所在城市 (peer community 地图默认聚焦)。
+         * @description 未传 `ip` 时: 优先用 Cloudflare 边缘注入的地理头 (`cf-ipcity`/`cf-iplatitude`/`cf-iplongitude`),
+         *     否则按请求来源 IP (`CF-Connecting-IP`/`X-Real-IP`/`X-Forwarded-For` 首段/直连) 查本地 City 库。
+         *     显式传 `ip` 时直接查库。定位失败 (非法/私网/无库/查不到) 时经纬度为 0, 前端据此回退全国视图。
+         */
         get: operations["get_ip_location"];
         put?: never;
         post?: never;
@@ -548,7 +553,7 @@ export interface components {
             title: string;
             url?: string;
         };
-        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (myos `type:"peer"` 的 key)。 */
+        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (ideall `type:"peer"` 的 key)。 */
         PeerPublisher: {
             /**
              * Format: int64
@@ -988,9 +993,12 @@ export interface operations {
     };
     get_ip_location: {
         parameters: {
-            query: {
-                /** @description 访问者 IP (由 peer 从 x-forwarded-for 提取后透传; 服务端不直接读 client IP, 因调用方为 myos) */
-                ip: string;
+            query?: {
+                /**
+                 * @description 访问者 IP (可选)。省略时服务端按请求来源推断 (`CF-Connecting-IP` / `X-Real-IP` /
+                 *     `X-Forwarded-For` 首段 / 直连 socket); 显式传入时优先用之 (便于联调/管理)。
+                 */
+                ip?: string;
             };
             header?: never;
             path?: never;
@@ -998,7 +1006,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description IP 地理定位结果; 定位失败 (非法/私网/网络) 时经纬度为 0 */
+            /** @description IP 地理定位结果; 定位失败时经纬度为 0 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1253,14 +1261,19 @@ export interface operations {
     };
     list_publishers: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 返回条数上限 (默认 100, 上限 200) */
+                limit?: number;
+                /** @description 跳过条数 (分页偏移, 默认 0) */
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 发布者列表 */
+            /** @description 发布者列表 (按最近发布倒序, 默认前 100) */
             200: {
                 headers: {
                     [name: string]: unknown;

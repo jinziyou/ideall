@@ -2,9 +2,9 @@
 
 ## 适用范围
 
-本策略仅覆盖 **myos 客户端**（本仓库）。
+本策略仅覆盖 **ideall 客户端**（本仓库）。
 
-- ✅ myos 前端、本地数据层、跨端同步加密（`src/components/lib/sync-crypto`）、插件、Tauri App 壳
+- ✅ ideall 前端、本地数据层、跨端同步加密（`src/components/lib/sync-crypto`）、插件、Tauri App 壳
 - ❌ **官方信息服务后端**（采集 / NLP / 知识图谱 / 鉴权 API）不在本仓库范围内；相关问题请通过官方服务渠道反馈
 
 ## 报告漏洞
@@ -21,7 +21,7 @@
 
 ## 处理流程与预期
 
-- myos 由小团队 / 个人维护，我们会尽力在合理时间内确认与响应（best-effort）
+- ideall 由小团队 / 个人维护，我们会尽力在合理时间内确认与响应（best-effort）
 - 修复发布后会在 Release notes 中致谢报告者（如你愿意具名）
 - 请给予合理的协调披露窗口，在修复发布前不公开细节
 

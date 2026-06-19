@@ -9,7 +9,7 @@ export const metadata = {
 
 /**
  * 「发现」分区布局: 把 info / community / tool 三个聚合模块统一到「发现」之下,
- * 共享顶部分区导航 + 右侧「回流去向」锚点 (§0.4 设计法则的视觉词汇)。
+ * 共享顶部分区导航 + 右侧「回流去向」锚点 (hub-and-spoke 视觉词汇: 发现订阅后回流到「我的」中枢)。
  * 各模块页面自带 <main>, 故此处只用 <div> 包裹, 避免 <main> 嵌套。
  */
 export default function DiscoverLayout({ children }: { children: React.ReactNode }) {

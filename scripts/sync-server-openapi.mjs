@@ -1,5 +1,5 @@
 /**
- * 把后端 (super/server) 导出的 openapi.json 刷新到本仓库 openapi/server.json。
+ * 把后端 (wonita 服务) 导出的 openapi.json 刷新到本仓库 openapi/server.json。
  *
  * openapi/server.json 已随仓库提交, 是类型 codegen (`pnpm gen:api`) 的契约源 ——
  * 普通使用者与贡献者**无需运行本脚本**即可 build / typecheck / 出包。

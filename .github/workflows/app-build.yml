@@ -1,6 +1,6 @@
 name: app-build
 
-# myos 跨平台 App 构建 (Tauri 2.0)。
+# ideall 跨平台 App 构建 (Tauri 2.0)。
 # 触发: 手动 (workflow_dispatch) 或推送 app-v* tag (如 app-v0.1.0)。
 # 桌面三平台经 tauri-action 出安装包并挂到 GitHub Release 草稿; Android 出 debug APK 工件。
 # iOS 需 Apple 开发者证书/描述文件, 见 docs/app.md (此处不含, 避免无证书空跑)。
@@ -72,7 +72,7 @@ jobs:
         with:
           args: ${{ matrix.args }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: "myos ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}"
+          releaseName: "ideall ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}"
           releaseDraft: true
 
   android:
@@ -110,6 +110,6 @@ jobs:
           pnpm tauri android build --debug --apk
       - uses: actions/upload-artifact@v4
         with:
-          name: myos-android-debug-apk
+          name: ideall-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error

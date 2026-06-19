@@ -3,7 +3,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Button } from "@/components/ui/button"
 import { Info, InfoEvent } from "./model"
 import { PublisherGroup } from "./derive"
-import { EntityCell, PublisherHoverCell, TimeCell, TitleCell } from "./cells"
+import { EntityCell, PublisherHoverCell, publisherLink, TimeCell, TitleCell } from "./cells"
 import { SaveToHub } from "@/components/feeders"
 import { infoDisplayTitle } from "@/components/lib/format"
 import { openExternal } from "@/components/lib/safe-url"
@@ -266,12 +266,7 @@ export const getPublisherGroupColumns = (): ColumnDef<PublisherGroup>[] => [
           <Button
             className="h-auto p-0 text-xs"
             variant="link"
-            onClick={() =>
-              window.open(
-                `/info/publisher?domain=${encodeURIComponent(publisher.domain)}`,
-                "_blank",
-              )
-            }
+            onClick={() => window.open(publisherLink(publisher.domain), "_blank")}
           >
             发布者页
           </Button>

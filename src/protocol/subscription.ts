@@ -5,7 +5,7 @@ export type SubscriptionType = "publisher" | "entity" | "tool" | "search" | "pee
 
 /**
  * 「发现」订阅 —— home 中枢从 info / community / tool 订阅的来源。
- * 本地优先: 仅订阅偏好存于 IndexedDB, 内容 (如最新文章) 实时从 super 拉取。
+ * 本地优先: 仅订阅偏好存于 IndexedDB, 内容 (如最新文章) 实时从 wonita 服务拉取。
  */
 export interface Subscription {
   id: string
