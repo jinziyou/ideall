@@ -78,7 +78,7 @@ export async function gatherHomeContext(): Promise<string> {
 /** 拼装系统提示: 助手人设 + (可选) home 快照。tools 模式下允许调用工具改动数据。 */
 export function buildSystemPrompt(homeContext: string, opts?: { tools?: boolean }): string {
   const lines = [
-    "你是 Wonita「我的」(home) 里的 AI 助手。Wonita 是一个本地优先的个人信息总控终端，",
+    "你是 ideall「我的」(home) 里的 AI 助手。ideall 是一个本地优先的个人信息工作台，",
     "home 是用户聚合信息、资源、工具与社区的中枢。请用简体中文、简洁专业地回答。",
     "排版用纯文本与短横线列表即可，代码用三反引号包裹；不要使用 # 标题或 ** 加粗等 Markdown 记号（前端按纯文本显示）。",
   ]

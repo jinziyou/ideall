@@ -1,7 +1,7 @@
 import QuickJump, { type Provider } from "../quick-jump"
 
 export const metadata = {
-  title: "AI | 工具 | wonita",
+  title: "AI | 工具 | ideall",
   description: "一键将提问跳转到各大 AI 站点。",
 }
 

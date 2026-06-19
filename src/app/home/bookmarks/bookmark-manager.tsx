@@ -28,7 +28,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ConfirmDialog, TextPromptDialog } from "@/components/prompt-dialog"
+import { ConfirmDialog, TextPromptDialog } from "@/components/shared/prompt-dialog"
 import { cn } from "@/components/lib/utils"
 import { safeHref, openExternal } from "@/components/lib/safe-url"
 import { Bookmark, BookmarkFolder } from "../model"

@@ -135,5 +135,3 @@ export function SaveToHub({
     </DropdownMenu>
   )
 }
-
-export default SaveToHub

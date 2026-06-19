@@ -1,7 +1,7 @@
 import AuthForm from "@/app/shell/auth-form"
 
 export const metadata = {
-  title: "登录 | wonita",
+  title: "登录 | ideall",
   description: "登录或注册账号，在「我的 · 发布」发布内容。",
 }
 

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { WonitaMark } from "@/components/wonita-mark"
+import { WonitaMark } from "@/components/shared/wonita-mark"
 import ThemeToggle from "./theme-toggle"
 import AccountMenu from "./account-menu"
 import CommandPalette from "./command-palette"
@@ -20,7 +20,7 @@ export function Header() {
 
       <Link href="/" className="flex items-center gap-2">
         <WonitaMark className="h-7 w-auto text-foreground" />
-        <span className="hidden font-semibold tracking-tight sm:inline">wonita</span>
+        <span className="hidden font-semibold tracking-tight sm:inline">ideall</span>
       </Link>
 
       {/* 桌面导航: 我的 (主) + 发现三 spoke (次级) */}

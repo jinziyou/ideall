@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ServiceHeader } from "@/components/system/service-header"
+import { ServiceHeader } from "@/components/shared/service-header"
 import { generateSyncCode, isValidSyncCode } from "@/components/lib/sync-crypto"
 import {
   clearSyncCode,

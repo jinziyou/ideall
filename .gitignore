@@ -5,6 +5,8 @@
 /.pnp
 .pnp.js
 .yarn/install-state.gz
+# pnpm 本地内容寻址 store (不入库; 误提交可 git rm -r --cached .pnpm-store)
+/.pnpm-store/
 
 # testing
 /coverage

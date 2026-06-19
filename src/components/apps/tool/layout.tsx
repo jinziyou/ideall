@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Bot, Compass, Search } from "lucide-react"
 
-import { AppHeader } from "@/components/app-header"
+import { AppHeader } from "@/components/shared/app-header"
 
 const tabs = [
   { href: "/tool/search", label: "搜索", icon: Search },

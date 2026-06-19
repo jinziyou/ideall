@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { TextPromptDialog } from "@/components/prompt-dialog"
+import { TextPromptDialog } from "@/components/shared/prompt-dialog"
 import { cn } from "@/components/lib/utils"
 import { FileMeta } from "../model"
 import { addFile, deleteFile, getFile, listFiles, updateFileMeta } from "../lib/files-store"

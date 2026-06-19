@@ -11,8 +11,6 @@ import {
 } from "@/components/lib/idb"
 import { notifyHubUpdated } from "./flowback"
 
-export type { NewSubscription }
-
 /** 由域名推断 favicon (Google s2 服务); 域名为空时降级为空串。 */
 export function faviconForDomain(domain: string): string {
   const host = domain.trim()

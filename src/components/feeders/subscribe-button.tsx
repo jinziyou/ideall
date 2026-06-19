@@ -85,5 +85,3 @@ export function SubscribeButton({
     </Button>
   )
 }
-
-export default SubscribeButton

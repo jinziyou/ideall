@@ -1,4 +1,4 @@
-import { AppHeader } from "@/components/app-header"
+import { AppHeader } from "@/components/shared/app-header"
 import HotEntities from "./hot-entities"
 import InfoList from "./list"
 

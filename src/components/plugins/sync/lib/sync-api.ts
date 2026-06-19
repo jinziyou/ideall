@@ -1,4 +1,4 @@
-// 同步块数据访问 (同构: web/app 共用): 直接读写 wonita 服务 /sync/{id} 的加密密文。
+// 同步块数据访问 (同构: App 客户端运行期与 pnpm dev SSR 渲染期共用): 直接读写后端 /sync/{id} 的加密密文。
 // 仅经手密文, 看不到明文 (端到端加密; 客户端 sync-crypto 已加解密)。
 
 import { SERVER_ADDR } from "@/components/lib/env"
