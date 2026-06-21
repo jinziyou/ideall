@@ -6,7 +6,7 @@ import { Rss, Search, Tag, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { SUB_SPOKE_META } from "@/components/spoke-meta"
+import { SUB_SPOKE_META } from "../lib/spoke-meta"
 import { cn } from "@/components/lib/utils"
 import { formatTimestamp } from "@/components/lib/format"
 import { safeHref } from "@/components/lib/safe-url"
@@ -49,6 +49,7 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
  */
 export default function SubscriptionFeed() {
   const [state, setState] = React.useState<Loaded | null>(null)
+  const [view, setView] = React.useState<"grid" | "list">("grid")
   const mountedRef = React.useRef(true)
   // 并发去重: 挂载 load 与同步事件 load 可能同时在飞, 仅最后发起的一次允许落 state, 防后写覆盖。
   const seqRef = React.useRef(0)
@@ -171,8 +172,45 @@ export default function SubscriptionFeed() {
       )}
 
       {feeds.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {feeds.map(({ sub, items, error }) => (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-spoke-info" />
+              订阅流 · {feeds.length} 个来源
+            </h2>
+            <div className="ml-auto inline-flex items-center gap-1 rounded-lg border bg-card p-0.5">
+              <button
+                type="button"
+                onClick={() => setView("grid")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  view === "grid"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                卡片
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  view === "list"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                列表
+              </button>
+            </div>
+          </div>
+          <div
+            className={cn(
+              view === "grid" ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3" : "flex flex-col gap-3",
+            )}
+          >
+            {feeds.map(({ sub, items, error }) => (
             <Card
               key={sub.id}
               className={cn("flex flex-col border-t-2", SUB_SPOKE_META[sub.type].topBorderClass)}
@@ -260,7 +298,8 @@ export default function SubscriptionFeed() {
               </CardContent>
             </Card>
           ))}
-        </div>
+          </div>
+        </section>
       )}
     </div>
   )

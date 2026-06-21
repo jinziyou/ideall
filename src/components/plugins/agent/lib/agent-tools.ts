@@ -162,8 +162,6 @@ export const AGENT_TOOLS = [
   },
 ]
 
-export const AGENT_TOOL_NAMES = AGENT_TOOLS.map((t) => t.function.name)
-
 /** 工具执行结果: data 回传给模型, summary 供 UI 展示。 */
 export interface ToolResult {
   ok: boolean

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Bookmark, Copy, DownloadCloud, Hexagon, RefreshCw, Search, SunMoon } from "lucide-react"
+import { Bookmark, Copy, DownloadCloud, Hexagon, RefreshCw, SunMoon } from "lucide-react"
 import { toast } from "sonner"
 import {
   CommandDialog,
@@ -21,10 +21,16 @@ import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import { HOME_SUBPAGES, SPOKES } from "@/app/nav/nav-config"
 
+/** 任意位置的触发器调它打开全局唯一命令台 (方案 3: ⌘K 浮层引擎)。 */
+const CMDK_OPEN = "ideall:command-palette-open"
+export function openCommandPalette() {
+  window.dispatchEvent(new Event(CMDK_OPEN))
+}
+
 /**
- * ⌘K 中枢命令台: 全站统一入口 —— 跳 spoke (发现下的资讯/社区/工具) 或我的各子区,
+ * ⌘K 中枢命令台 —— 全局唯一实例 (挂根布局)。浮层引擎: 跳 spoke (发现下的资讯/社区/工具) 或我的各子区,
  * 并可直接执行系统命令 (切深浅色 / 立即同步 / 复制同步码)。
- * 触发器形如搜索框, 点它或按 ⌘K / Ctrl+K 打开。
+ * 由 ⌘K / Ctrl+K 或任意 openCommandPalette() 触发器 (图标轨 / 移动顶栏 / 各页页头) 唤起。
  */
 export default function CommandPalette() {
   const router = useRouter()
@@ -44,8 +50,15 @@ export default function CommandPalette() {
         setOpen((v) => !v)
       }
     }
+    function onOpen() {
+      setOpen(true)
+    }
     document.addEventListener("keydown", onKey)
-    return () => document.removeEventListener("keydown", onKey)
+    window.addEventListener(CMDK_OPEN, onOpen)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      window.removeEventListener(CMDK_OPEN, onOpen)
+    }
   }, [])
 
   function go(href: string) {
@@ -94,77 +107,63 @@ export default function CommandPalette() {
   }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-accent sm:w-[240px] md:w-[150px] lg:w-[240px] xl:w-[300px]"
-      >
-        <Search className="h-4 w-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left">命令 / 跳转…</span>
-        <kbd className="hidden rounded border bg-muted px-1.5 font-sans text-[10px] lg:inline">
-          ⌘K
-        </kbd>
-      </button>
-
-      <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="输入命令或跳转…" />
-        <CommandList>
-          <CommandEmpty>没有匹配的命令或位置</CommandEmpty>
-          <CommandGroup heading="发现">
-            {SPOKES.map((s) => (
-              <CommandItem key={s.href} value={`发现 ${s.label}`} onSelect={() => go(s.href)}>
-                <span className={`h-2 w-2 rounded-full ${s.dot}`} />
-                {s.label}
-                <CommandShortcut className="font-mono">{s.href}</CommandShortcut>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="我的">
-            {HOME_SUBPAGES.map((p) => (
-              <CommandItem key={p.href} value={`我的 ${p.label}`} onSelect={() => go(p.href)}>
-                <p.icon className="h-4 w-4" />
-                {p.label}
-                <CommandShortcut className="font-mono">{p.href}</CommandShortcut>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="系统">
-            <CommandItem value="切换深浅色 主题 theme dark" onSelect={toggleTheme}>
-              <SunMoon className="h-4 w-4" />
-              切换深浅色
+    <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandInput placeholder="输入命令或跳转…" />
+      <CommandList>
+        <CommandEmpty>没有匹配的命令或位置</CommandEmpty>
+        <CommandGroup heading="发现">
+          {SPOKES.map((s) => (
+            <CommandItem key={s.href} value={`发现 ${s.label}`} onSelect={() => go(s.href)}>
+              <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+              {s.label}
+              <CommandShortcut className="font-mono">{s.href}</CommandShortcut>
             </CommandItem>
-            {code && (
-              <CommandItem value="立即同步 跨端 sync" onSelect={() => syncNow(code)}>
-                <RefreshCw className="h-4 w-4" />
-                立即同步
-              </CommandItem>
-            )}
-            {code && (
-              <CommandItem value="复制同步码 跨端 sync copy" onSelect={() => copySyncCode(code)}>
-                <Copy className="h-4 w-4" />
-                复制同步码
-              </CommandItem>
-            )}
-            <CommandItem value="去新建书签 收藏" onSelect={() => go("/home/bookmarks")}>
-              <Bookmark className="h-4 w-4" />
-              去新建书签
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="我的">
+          {HOME_SUBPAGES.map((p) => (
+            <CommandItem key={p.href} value={`我的 ${p.label}`} onSelect={() => go(p.href)}>
+              <p.icon className="h-4 w-4" />
+              {p.label}
+              <CommandShortcut className="font-mono">{p.href}</CommandShortcut>
             </CommandItem>
-            <CommandItem value="回到「我的」 中枢 概览 dashboard" onSelect={() => go("/home")}>
-              <Hexagon className="h-4 w-4" />
-              回到「我的」
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="系统">
+          <CommandItem value="切换深浅色 主题 theme dark" onSelect={toggleTheme}>
+            <SunMoon className="h-4 w-4" />
+            切换深浅色
+          </CommandItem>
+          {code && (
+            <CommandItem value="立即同步 跨端 sync" onSelect={() => syncNow(code)}>
+              <RefreshCw className="h-4 w-4" />
+              立即同步
             </CommandItem>
-            {isDesktop && (
-              <CommandItem value="检查更新 update 升级 upgrade" onSelect={checkUpdate}>
-                <DownloadCloud className="h-4 w-4" />
-                检查更新
-              </CommandItem>
-            )}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
-    </>
+          )}
+          {code && (
+            <CommandItem value="复制同步码 跨端 sync copy" onSelect={() => copySyncCode(code)}>
+              <Copy className="h-4 w-4" />
+              复制同步码
+            </CommandItem>
+          )}
+          <CommandItem value="去新建书签 收藏" onSelect={() => go("/home/bookmarks")}>
+            <Bookmark className="h-4 w-4" />
+            去新建书签
+          </CommandItem>
+          <CommandItem value="回到「我的」 中枢 概览 dashboard" onSelect={() => go("/home")}>
+            <Hexagon className="h-4 w-4" />
+            回到「我的」
+          </CommandItem>
+          {isDesktop && (
+            <CommandItem value="检查更新 update 升级 upgrade" onSelect={checkUpdate}>
+              <DownloadCloud className="h-4 w-4" />
+              检查更新
+            </CommandItem>
+          )}
+        </CommandGroup>
+      </CommandList>
+    </CommandDialog>
   )
 }

@@ -6,7 +6,7 @@ import { Bot, Loader2, Send, Settings, SquarePen, Trash2, Wrench, X } from "luci
 import { cn } from "@/components/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ServiceHeader } from "@/components/system/service-header"
+import { ServiceHeader } from "@/components/shared/service-header"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import {
   createThread,

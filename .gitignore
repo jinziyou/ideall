@@ -5,6 +5,8 @@
 /.pnp
 .pnp.js
 .yarn/install-state.gz
+# pnpm 本地内容寻址 store (不入库; 误提交可 git rm -r --cached .pnpm-store)
+/.pnpm-store/
 
 # testing
 /coverage
@@ -41,3 +43,6 @@ next-env.d.ts
 
 # redesign 设计探索 / 截图 scratch (本地参考, 不入库)
 /redesign-mockups/
+
+# 内部战略文档 (含竞品/变现坦白分析, 勿入公开仓库)
+/docs/strategy-internal.md
