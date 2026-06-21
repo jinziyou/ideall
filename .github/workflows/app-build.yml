@@ -29,8 +29,35 @@ env:
   NEXT_PUBLIC_EMBED_BASE: ${{ vars.NEXT_PUBLIC_EMBED_BASE || 'https://web.wonita.link' }}
 
 jobs:
+  # 判定是否构建: tag / 手动 → 总是; main 推送 → 仅当本次改动含"非文档/非配置"文件才构建
+  # (纯文档 docs/*.md / CI 配置 / .prettier* 等提交跳过全平台构建, 省 CI)。
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: decide
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # 捕获"非文档/配置"改动再判非空 (不用 grep -q, 避免其在管道下的早退/SIGPIPE 怪异退出码)。
+          app="$(git diff --name-only HEAD^ HEAD | grep -vE '^(docs/|LICENSE$|.*\.md$|\.github/|\.gitignore$|\.prettierignore$|\.prettierrc.*|\.editorconfig$)' || true)"
+          if [ -n "$app" ]; then
+            echo "含应用改动, 构建:"; printf '  %s\n' "$app"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "仅文档/配置改动 → 跳过 App 构建"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # 先建好唯一的 Release, 矩阵 job 仅上传 —— 规避 4 个并发 job 各自创建同一滚动 tag 的竞态。
   create-release:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.rel.outputs.release_id }}
@@ -73,7 +100,8 @@ jobs:
             core.setOutput('release_id', String(r.data.id))
 
   desktop:
-    needs: create-release
+    needs: [gate, create-release]
+    if: needs.gate.outputs.build == 'true'
     name: desktop (${{ matrix.label }})
     strategy:
       fail-fast: false
