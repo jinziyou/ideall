@@ -1,4 +1,5 @@
 import HomeNav from "./home-nav"
+import CommandTrigger from "@/app/shell/command-trigger"
 
 export const metadata = {
   title: "我的 | ideall",
@@ -7,19 +8,17 @@ export const metadata = {
 
 export default function HomeLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="m-2 sm:m-4">
-      <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">我的</h1>
-          <p className="text-sm text-muted-foreground">
-            本机的信息中枢，订阅、收藏、钉住都落在这里。
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-6 md:flex-row">
-          <HomeNav />
-          <section className="min-w-0 flex-1">{children}</section>
-        </div>
+    <main className="mx-auto w-full max-w-screen-2xl p-3 sm:p-5">
+      <div className="flex flex-col gap-5 md:flex-row">
+        {/* A 布局: 上下文栏 (我的子区导航 + 本地存储) */}
+        <HomeNav />
+        <section className="min-w-0 flex-1">
+          {/* 方案 3: 页头纤细命令台触发器 (⌘K 浮层引擎的显式入口) */}
+          <div className="mb-4 flex items-center gap-3">
+            <CommandTrigger className="h-9 w-full max-w-md" />
+          </div>
+          {children}
+        </section>
       </div>
     </main>
   )

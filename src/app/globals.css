@@ -25,7 +25,7 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
-  /* 单色墨灰: --pop = 关键动作填充色 (墨); spoke-* 仅做分类圆点/顶边/rail, 永不做大面积 fill */
+  /* D 皮肤: --pop = 关键动作 / 回流填充色 (靛蓝); spoke-* 仅做分类圆点 / tint / 标签, 永不大面积 fill */
   --color-pop: hsl(var(--pop));
   --color-pop-foreground: hsl(var(--pop-foreground));
   --color-flowback: hsl(var(--flowback));
@@ -84,68 +84,69 @@
 }
 
 /*
- * 设计系统: Ink 纯墨灰 (monochrome)
- * - 整体黑白灰; --primary 与 --pop 皆为墨色, 关键动作靠「墨色填充 + 字重」突出, 不靠彩色。
- * - --spoke-* 三色 (资讯蓝 / 社区绿 / 工具紫) 仅用于小圆点 / 卡顶边 / spoke rail 做功能归类, 绝不大面积 fill。
- * - --pop == --flowback == 关键动作 / 回流(收入中枢) 的语义色 (= 墨)。
+ * 设计系统: D 皮肤 (亮色软圆角便当) + A 布局 (图标轨 + 上下文栏 + ⌘K)
+ * - 亮色底 + 白卡 + 柔阴影; 友好靛蓝 (--primary / --pop) 作唯一强调色, 每屏只给一个主操作。
+ * - --spoke-* 三色 (资讯蓝 / 社区绿 / 工具紫) 仅用于小圆点 / tint / 标签, 绝不大面积 fill。
+ * - --pop == --flowback == 关键动作 / 回流(收入中枢) 的语义色 (= 靛蓝)。
+ * - 默认跟随系统 (见 components/lib/theme), 暗色见 .dark。
  */
 :root {
-  --radius: 0.625rem;
-  --background: 210 20% 99%;
-  --foreground: 215 28% 15%;
+  --radius: 1rem;
+  --background: 220 30% 96%;
+  --foreground: 222 22% 15%;
   --card: 0 0% 100%;
-  --card-foreground: 215 28% 15%;
+  --card-foreground: 222 22% 15%;
   --popover: 0 0% 100%;
-  --popover-foreground: 215 28% 15%;
-  --primary: 215 28% 18%;
-  --primary-foreground: 210 20% 99%;
-  --secondary: 210 16% 96%;
-  --secondary-foreground: 215 28% 15%;
-  --muted: 210 16% 96%;
-  --muted-foreground: 215 12% 45%;
-  --accent: 212 18% 93%;
-  --accent-foreground: 215 28% 20%;
+  --popover-foreground: 222 22% 15%;
+  --primary: 229 88% 63%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 30% 95%;
+  --secondary-foreground: 222 22% 20%;
+  --muted: 220 30% 95%;
+  --muted-foreground: 220 12% 46%;
+  --accent: 229 60% 95%;
+  --accent-foreground: 222 22% 18%;
   --destructive: 4 72% 52%;
-  --destructive-foreground: 210 20% 99%;
-  --border: 212 16% 90%;
-  --input: 212 16% 90%;
-  --ring: 215 28% 18%;
-  /* 关键动作 / 回流 语义色 (墨) + 其前景 */
-  --pop: 215 18% 28%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 26% 91%;
+  --input: 220 26% 91%;
+  --ring: 229 88% 63%;
+  /* 关键动作 / 回流 语义色 (靛蓝) + 其前景 */
+  --pop: 229 84% 60%;
   --pop-foreground: 0 0% 100%;
-  --flowback: 215 18% 28%;
-  /* spoke 分类色 (仅小色块) */
-  --spoke-info: 224 68% 58%;
-  --spoke-community: 150 46% 42%;
-  --spoke-tool: 270 50% 60%;
+  --flowback: 229 84% 60%;
+  /* spoke 分类色 (仅小色块 / tint) */
+  --spoke-info: 217 91% 60%;
+  --spoke-community: 162 72% 40%;
+  --spoke-tool: 258 85% 66%;
 }
 
 .dark {
-  --background: 215 24% 8%;
+  --background: 222 26% 9%;
   --foreground: 210 16% 92%;
-  --card: 215 20% 11%;
+  --card: 222 20% 12%;
   --card-foreground: 210 16% 92%;
-  --popover: 215 20% 11%;
+  --popover: 222 20% 12%;
   --popover-foreground: 210 16% 92%;
-  --primary: 210 16% 92%;
-  --primary-foreground: 215 28% 12%;
-  --secondary: 215 14% 17%;
+  --primary: 229 90% 67%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 16% 17%;
   --secondary-foreground: 210 16% 92%;
-  --muted: 215 14% 16%;
-  --muted-foreground: 210 12% 64%;
-  --accent: 215 16% 20%;
+  --muted: 222 16% 16%;
+  --muted-foreground: 215 14% 62%;
+  --accent: 229 32% 22%;
   --accent-foreground: 210 16% 92%;
-  --destructive: 4 60% 48%;
+  --destructive: 4 62% 50%;
   --destructive-foreground: 210 16% 92%;
-  --border: 215 12% 21%;
-  --input: 215 12% 21%;
-  --ring: 210 16% 92%;
-  --pop: 210 12% 84%;
-  --pop-foreground: 215 28% 12%;
-  --flowback: 210 12% 84%;
-  --spoke-info: 224 62% 66%;
-  --spoke-community: 150 46% 52%;
-  --spoke-tool: 270 52% 70%;
+  --border: 222 14% 20%;
+  --input: 222 14% 20%;
+  --ring: 229 90% 67%;
+  --pop: 229 84% 64%;
+  --pop-foreground: 0 0% 100%;
+  --flowback: 229 84% 64%;
+  --spoke-info: 217 88% 70%;
+  --spoke-community: 162 58% 52%;
+  --spoke-tool: 258 82% 74%;
 }
 
 @layer base {

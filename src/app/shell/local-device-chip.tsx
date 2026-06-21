@@ -16,7 +16,7 @@ function getServerSnapshot(): string | null {
  * 本地·此设备 所有权药丸 + 全站唯一的「系统状态」面板:
  * 跨端同步状态 / 本地存储用量 / 发布身份, 以及双身份说明。
  */
-export default function LocalDeviceChip() {
+export default function LocalDeviceChip({ compact = false }: { compact?: boolean }) {
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, getServerSnapshot)
   const session = React.useSyncExternalStore(subscribeSession, getSession, () => null)
   const synced = Boolean(code)
@@ -43,11 +43,14 @@ export default function LocalDeviceChip() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border bg-card py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            compact ? "px-2" : "px-2.5",
+          )}
         >
           <Lock className="h-3.5 w-3.5" />
           {synced && <span className="h-1.5 w-1.5 rounded-full bg-pop" />}
-          <span className="hidden lg:inline">本机</span>
+          {!compact && <span className="hidden lg:inline">本机</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">

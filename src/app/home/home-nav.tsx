@@ -82,10 +82,10 @@ export default function HomeNav() {
         key={href}
         href={href}
         className={cn(
-          "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2.5 text-sm transition-colors md:shrink",
+          "flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm transition-colors md:shrink",
           active
-            ? "bg-pop/10 font-medium text-foreground md:border-l-2 md:border-pop md:pl-[10px]"
-            : "hover:bg-accent/60",
+            ? "bg-primary/10 font-medium text-primary md:border-l-2 md:border-primary md:pl-[10px]"
+            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
         )}
       >
         <Icon className="h-4 w-4" />
@@ -113,7 +113,7 @@ export default function HomeNav() {
       </nav>
 
       {quota > 0 && (
-        <div className="mt-4 hidden rounded-lg border bg-card p-3 text-xs text-muted-foreground md:block">
+        <div className="mt-4 hidden rounded-2xl border bg-card p-3 text-xs text-muted-foreground md:block">
           <div className="mb-1 flex items-center gap-1.5 font-medium text-foreground">
             <HardDrive className="h-3.5 w-3.5" />
             本地存储

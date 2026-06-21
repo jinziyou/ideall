@@ -27,7 +27,7 @@ export default function ToolLayout({ children }: { children: React.ReactNode }) 
               href={href}
               className={
                 active
-                  ? "inline-flex items-center gap-1.5 border-b-2 border-foreground px-1 pb-2 text-sm font-medium text-foreground"
+                  ? "inline-flex items-center gap-1.5 border-b-2 border-primary px-1 pb-2 text-sm font-medium text-foreground"
                   : "inline-flex items-center gap-1.5 border-b-2 border-transparent px-1 pb-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
               }
             >

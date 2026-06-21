@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowUpRight, CornerDownLeft, Hexagon, Pin, Wrench } from "lucide-react"
+import { ArrowUpRight, CornerDownLeft, Hexagon, Pin, Sparkles, Wrench } from "lucide-react"
 import { cn } from "@/components/lib/utils"
 import { SUB_SPOKE_META } from "./lib/spoke-meta"
 import { SPOKES } from "@/app/nav/nav-config"
@@ -22,8 +22,6 @@ type HubData = {
   threads: number
   flow: FlowItem[]
   pinnedTools: Subscription[]
-  usage: number
-  quota: number
 }
 
 function buildFlow(
@@ -79,17 +77,6 @@ export default function HubDashboard() {
         listFiles().catch(() => []),
         countAgentThreads().catch(() => 0),
       ])
-      let usage = 0
-      let quota = 0
-      try {
-        const est = await navigator.storage?.estimate?.()
-        if (est) {
-          usage = est.usage ?? 0
-          quota = est.quota ?? 0
-        }
-      } catch {
-        /* StorageManager 不可用时省略用量 */
-      }
       if (!alive) return
       setData({
         subs,
@@ -98,12 +85,10 @@ export default function HubDashboard() {
         threads: threadCount,
         flow: buildFlow(subs, bookmarks, files),
         pinnedTools: subs.filter((s) => s.type === "tool"),
-        usage,
-        quota,
       })
     }
     load()
-    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (与头部计数同源; onHubUpdated 同听 HUB_UPDATED + SUBSCRIPTIONS_SYNCED)
+    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (onHubUpdated 同听 HUB_UPDATED + SUBSCRIPTIONS_SYNCED)
     const off = onHubUpdated(load)
     return () => {
       alive = false
@@ -114,12 +99,12 @@ export default function HubDashboard() {
   if (!data) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-[78px] animate-pulse rounded-xl border bg-muted/40" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-[78px] animate-pulse rounded-2xl border bg-muted/40" />
           ))}
         </div>
-        <div className="h-64 animate-pulse rounded-xl border bg-muted/40" />
+        <div className="h-64 animate-pulse rounded-2xl border bg-muted/40" />
       </div>
     )
   }
@@ -130,22 +115,21 @@ export default function HubDashboard() {
   if (isEmpty) return <EmptyHub />
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
+      {/* 便当: 统计磁贴 */}
       <HubStatTiles
         subs={data.subs.length - data.pinnedTools.length}
         bookmarks={data.bookmarks}
         files={data.files}
         threads={data.threads}
-        usage={data.usage}
-        quota={data.quota}
       />
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        {/* 最近回流 (脊柱) */}
-        <div className="rounded-xl border-l-2 border-l-pop border bg-card p-5 shadow-sm lg:col-span-2">
+      {/* 便当: 最近回流 (大块, 脊柱) + 右列 (去发现 / AI 快问) */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl border border-l-2 border-l-pop bg-card p-5 shadow-sm lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-sm font-semibold">最近回流</h2>
-            <span className="text-xs text-muted-foreground">· 都落在本机</span>
+            <span className="text-xs text-muted-foreground">· 实时 · 都落在本机</span>
           </div>
           {data.flow.length > 0 ? (
             <RecentFlowback items={data.flow} />
@@ -154,36 +138,57 @@ export default function HubDashboard() {
           )}
         </div>
 
-        {/* 去发现, 带东西回家 */}
-        <div className="rounded-xl border bg-card p-5 shadow-sm">
-          <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
-          <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都能回流到这里</p>
-          <div className="flex flex-col gap-2.5">
-            {SPOKES.map((s) => (
-              <Link
-                key={s.href}
-                href={s.href}
-                className="group flex items-start gap-3 rounded-lg border bg-background p-3 transition-colors hover:border-foreground/20 hover:bg-accent"
-              >
-                <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", s.dot)} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5 text-sm font-medium">
-                    <s.icon className="h-3.5 w-3.5" />
-                    {s.label}
+        <div className="flex flex-col gap-4">
+          {/* 去发现 */}
+          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+            <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
+            <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都能回流到这里</p>
+            <div className="flex flex-col gap-2.5">
+              {SPOKES.map((s) => (
+                <Link
+                  key={s.href}
+                  href={s.href}
+                  className="group flex items-start gap-3 rounded-xl border bg-background p-3 transition-colors hover:border-foreground/20 hover:bg-accent"
+                >
+                  <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", s.dot)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
+                      <s.icon className="h-3.5 w-3.5" />
+                      {s.label}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{s.hint}</span>
                   </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{s.hint}</span>
-                </span>
-                <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-              </Link>
-            ))}
+                  <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                </Link>
+              ))}
+            </div>
           </div>
+
+          {/* AI 快问 */}
+          <Link
+            href="/home/agent"
+            className="group rounded-2xl border bg-gradient-to-br from-primary/10 to-spoke-tool/5 p-5 shadow-sm transition-colors hover:border-primary/30"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">AI 快问</h2>
+              <span className="ml-auto rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">
+                BYO-key
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">问点什么，可读取中枢数据 · 自带密钥</p>
+            <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
+              打开 AI 助手
+              <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+            </span>
+          </Link>
         </div>
       </div>
 
-      {/* 已钉工具 */}
+      {/* 便当: 已钉工具 (整行) */}
       {data.pinnedTools.length > 0 && (
-        <div>
-          <div className="mb-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Pin className="h-3.5 w-3.5" />
             已钉工具
           </div>
@@ -194,7 +199,7 @@ export default function HubDashboard() {
                 href={t.key}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent"
+                className="inline-flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm transition-colors hover:bg-accent"
               >
                 <span className="grid h-5 w-5 place-items-center rounded bg-muted text-muted-foreground">
                   <Wrench className="h-3 w-3" />
@@ -212,14 +217,14 @@ export default function HubDashboard() {
 /** 空中枢: 把死屏变成产品心智模型的第一课 (hub-and-spoke 迷你示意图)。 */
 function EmptyHub() {
   return (
-    <div className="flex min-h-[55dvh] flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 px-6 py-12 text-center">
+    <div className="flex min-h-[55dvh] flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-12 text-center">
       <h3 className="text-lg font-semibold">「我的」还是空的</h3>
       <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
         去「发现」订阅或收藏，内容会回流到这里。
       </p>
 
       <div className="mt-10 flex flex-col items-center gap-3">
-        <div className="inline-flex flex-col items-center rounded-xl border-2 border-foreground/15 bg-pop/5 px-8 py-4">
+        <div className="inline-flex flex-col items-center rounded-2xl border-2 border-primary/20 bg-primary/5 px-8 py-4">
           <span className="flex items-center gap-2 text-sm font-semibold">
             <Hexagon className="h-4 w-4" />
             我的
@@ -235,13 +240,13 @@ function EmptyHub() {
             <Link
               key={s.href}
               href={s.href}
-              className="flex flex-col items-center gap-1 rounded-xl border bg-background px-6 py-4 text-center transition-colors hover:bg-accent"
+              className="flex flex-col items-center gap-1 rounded-2xl border bg-background px-6 py-4 text-center transition-colors hover:bg-accent"
             >
               <span className="flex items-center gap-1.5 text-sm font-semibold">
                 <span className={cn("h-2 w-2 rounded-full", s.dot)} />
                 {s.label}
               </span>
-              <span className="text-xs font-medium text-pop">去这里带东西回家 →</span>
+              <span className="text-xs font-medium text-primary">去这里带东西回家 →</span>
             </Link>
           ))}
         </div>
