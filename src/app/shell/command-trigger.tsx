@@ -20,7 +20,9 @@ export default function CommandTrigger({ className }: { className?: string }) {
     >
       <Search className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1 truncate text-left">命令 / 跳转 / 提问…</span>
-      <kbd className="hidden rounded border bg-muted px-1.5 font-sans text-[10px] lg:inline">⌘K</kbd>
+      <kbd className="hidden rounded border bg-muted px-1.5 font-sans text-[10px] lg:inline">
+        ⌘K
+      </kbd>
     </button>
   )
 }

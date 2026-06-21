@@ -60,40 +60,40 @@ const categories: Category[] = [
 export default function ToolNavigationPage() {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {categories.map((category) => (
-          <Card key={category.title}>
-            <CardHeader>
-              <CardTitle className="text-base">{category.title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {category.sites.map((site) => (
-                  <div key={site.name} className="relative">
-                    <a
-                      href={site.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group flex flex-col gap-0.5 rounded-xl border p-2.5 pr-7 transition-colors hover:border-spoke-tool/40 hover:bg-spoke-tool/5"
-                    >
-                      <span className="flex items-center gap-1 text-sm font-medium">
-                        {site.name}
-                        <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
-                      </span>
-                      {site.desc ? (
-                        <span className="truncate text-xs text-muted-foreground">{site.desc}</span>
-                      ) : null}
-                    </a>
-                    <PinToolButton
-                      name={site.name}
-                      url={site.url}
-                      className="absolute right-1 top-1"
-                    />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {categories.map((category) => (
+        <Card key={category.title}>
+          <CardHeader>
+            <CardTitle className="text-base">{category.title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {category.sites.map((site) => (
+                <div key={site.name} className="relative">
+                  <a
+                    href={site.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex flex-col gap-0.5 rounded-xl border p-2.5 pr-7 transition-colors hover:border-spoke-tool/40 hover:bg-spoke-tool/5"
+                  >
+                    <span className="flex items-center gap-1 text-sm font-medium">
+                      {site.name}
+                      <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
+                    </span>
+                    {site.desc ? (
+                      <span className="truncate text-xs text-muted-foreground">{site.desc}</span>
+                    ) : null}
+                  </a>
+                  <PinToolButton
+                    name={site.name}
+                    url={site.url}
+                    className="absolute right-1 top-1"
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

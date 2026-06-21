@@ -222,7 +222,10 @@ export interface ServerPort {
   register(payload: AuthCredentials): Promise<ApiResult<AuthBody>>
   getMe(token: string): Promise<ApiResult<CurrentUser>>
   /** 更新发布资料 (PUT /me/profile)。嵌入桥 `me.updateProfile` 用; token 由宿主持有, 不出 iframe。 */
-  updateProfile(token: string, patch: { name?: string; avatar?: string }): Promise<ApiResult<unknown>>
+  updateProfile(
+    token: string,
+    patch: { name?: string; avatar?: string },
+  ): Promise<ApiResult<unknown>>
 }
 
 let override: ServerPort | null = null
