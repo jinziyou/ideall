@@ -6,6 +6,8 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PinToolButton } from "@/components/feeders"
+import { openExternal } from "@/components/lib/safe-url"
+import { isTauri } from "@/components/lib/tauri"
 
 const HISTORY_LIMIT = 10
 const EMPTY_HISTORY: string[] = []
@@ -119,10 +121,10 @@ export default function QuickJump({
   function jump(provider: Provider) {
     const trimmed = keyword.trim()
     if (trimmed) recordHistory(trimmed)
-    // 支持关键词的引擎: 直接带词跳转
+    // 支持关键词的引擎: 直接带词跳转 (外链经 openExternal: App 走系统浏览器, web 走新标签)
     if (trimmed && provider.queryUrl) {
       const url = provider.queryUrl.replace("{q}", encodeURIComponent(trimmed))
-      window.open(url, "_blank", "noopener,noreferrer")
+      openExternal(url)
       return
     }
     // 不支持关键词跳转: 复制到剪贴板后打开首页, 方便用户粘贴
@@ -132,7 +134,7 @@ export default function QuickJump({
         .then(() => toast.success(`已复制关键词，到 ${provider.name} 粘贴`))
         .catch(() => toast.info("复制失败，请手动输入"))
     }
-    window.open(provider.home, "_blank", "noopener,noreferrer")
+    openExternal(provider.home)
   }
 
   function openAll() {
@@ -149,6 +151,11 @@ export default function QuickJump({
     let blocked = 0
     for (const provider of targets) {
       const url = provider.queryUrl!.replace("{q}", encodeURIComponent(trimmed))
+      // App (Tauri) 经系统浏览器打开, 无「弹窗拦截」概念; 纯浏览器才检测 window.open 是否被拦。
+      if (isTauri()) {
+        openExternal(url)
+        continue
+      }
       const win = window.open(url, "_blank", "noopener,noreferrer")
       if (!win) blocked++
     }

@@ -6,7 +6,11 @@
  *   - `ok: false` 时, `message` 为可展示给用户的错误描述
  *
  * 客户端只需检查 `ok` 字段, 失败时直接 `toast.error(result.message)`。
+ *
+ * App (Tauri) 形态经 `resolveFetch()` 用 tauri-plugin-http 绕过 webview CORS (后端只放行 wonita.link
+ * Origin, App webview 的 `tauri://localhost` 等 Origin 会被挡); 纯浏览器 / SSR 用标准 fetch。
  */
+import { resolveFetch } from "@/components/lib/tauri"
 
 export type ApiResult<T> =
   | { ok: true; data: T | null }
@@ -34,7 +38,8 @@ export async function apiFetch<T = unknown>(
 
   let response: Response
   try {
-    response = await fetch(input, init)
+    const httpFetch = await resolveFetch()
+    response = await httpFetch(input, init)
   } catch (e) {
     console.error("[apiFetch] network error:", input, e)
     return {

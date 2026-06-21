@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { ColumnDef } from "@tanstack/react-table"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
@@ -82,12 +83,8 @@ export const getInfoColumns = (): ColumnDef<Info>[] => [
     header: () => <span className="sr-only">操作</span>,
     cell: ({ row }) => (
       <div className="flex items-center justify-end gap-1">
-        <Button
-          className="h-auto p-0 text-xs"
-          variant="link"
-          onClick={() => window.open(analysisLink(row.original.url), "_blank")}
-        >
-          全面报道
+        <Button asChild className="h-auto p-0 text-xs" variant="link">
+          <Link href={analysisLink(row.original.url)}>全面报道</Link>
         </Button>
         <SaveToHub
           variant="icon"
@@ -194,12 +191,8 @@ export const getEventColumns = (): ColumnDef<InfoEvent>[] => [
       const lead = row.original.lead
       return (
         <div className="flex items-center justify-end gap-1">
-          <Button
-            className="h-auto p-0 text-xs"
-            variant="link"
-            onClick={() => window.open(analysisLink(lead.url), "_blank")}
-          >
-            全面报道
+          <Button asChild className="h-auto p-0 text-xs" variant="link">
+            <Link href={analysisLink(lead.url)}>全面报道</Link>
           </Button>
           <SaveToHub
             variant="icon"
@@ -263,12 +256,8 @@ export const getPublisherGroupColumns = (): ColumnDef<PublisherGroup>[] => [
       const { latest, publisher } = row.original
       return (
         <div className="flex items-center justify-end gap-1">
-          <Button
-            className="h-auto p-0 text-xs"
-            variant="link"
-            onClick={() => window.open(publisherLink(publisher.domain), "_blank")}
-          >
-            发布者页
+          <Button asChild className="h-auto p-0 text-xs" variant="link">
+            <Link href={publisherLink(publisher.domain)}>发布者页</Link>
           </Button>
           <SaveToHub
             variant="icon"

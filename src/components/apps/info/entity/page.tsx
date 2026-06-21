@@ -1,7 +1,7 @@
 "use client"
 
 import React, { Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { fetchLatestInfo, getEntityDetail } from "../data"
@@ -38,6 +38,7 @@ function WeeklyTrend({ weekly }: { weekly: EntityDetail["weekly"] }) {
 
 /** 共现实体: 可点击 Badge 跳实体页, 有词条的用实色突出 (更可能是有效实体)。 */
 function CoEntities({ items }: { items: EntityDetail["co_entities"] }) {
+  const router = useRouter()
   if (!items.length) return null
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -47,7 +48,8 @@ function CoEntities({ items }: { items: EntityDetail["co_entities"] }) {
           variant={e.has_entry ? "secondary" : "outline"}
           title={`${entityLabelText(e.label)} · 共同出现 ${e.count} 条`}
           className="cursor-pointer gap-1 font-normal hover:underline"
-          onClick={() => window.open(entityLink(e.label, e.name), "_blank")}
+          // App 内 SPA 导航进实体页 (经 Next router)。
+          onClick={() => router.push(entityLink(e.label, e.name))}
         >
           <span className={e.has_entry ? "" : "text-muted-foreground"}>{e.name}</span>
           <span className="text-[10px] text-muted-foreground">×{e.count}</span>

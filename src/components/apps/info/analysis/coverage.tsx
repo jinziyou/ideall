@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { ExternalLink, Newspaper } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatInfoTime, infoDisplayTitle } from "@/components/lib/format"
@@ -14,6 +15,7 @@ import { RelatedInfo } from "../model"
  * 标题跳原文, 末尾可进该来源的关联分析。
  */
 export default function CoverageList({ items }: { items: RelatedInfo[] }) {
+  const router = useRouter()
   if (!items.length) {
     return (
       <div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -40,7 +42,7 @@ export default function CoverageList({ items }: { items: RelatedInfo[] }) {
               variant="ghost"
               size="sm"
               className="h-6 shrink-0 px-2 text-xs text-muted-foreground"
-              onClick={() => window.open(analysisLink(info.url), "_blank")}
+              onClick={() => router.push(analysisLink(info.url))}
             >
               全面报道
             </Button>

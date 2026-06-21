@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { infoDisplayTitle } from "@/components/lib/format"
@@ -8,8 +9,10 @@ import { entityLink, EntityEntryLinks, partitionEntities, publisherLink } from "
 import { entityLabelText } from "@/components/lib/ner-labels"
 
 export default function InfoBasicView({ info }: { info: Info }) {
+  const router = useRouter()
   const { withEntry, others } = partitionEntities(info.labels)
-  const openEntity = (label: string, name: string) => window.open(entityLink(label, name))
+  // App 内 SPA 导航 (经 Next router); 「新标签」语义在 App 形态无意义。
+  const openEntity = (label: string, name: string) => router.push(entityLink(label, name))
   return (
     <Card>
       <CardHeader>
@@ -83,7 +86,7 @@ export default function InfoBasicView({ info }: { info: Info }) {
           <Button
             variant="link"
             className="h-auto p-0"
-            onClick={() => window.open(publisherLink(info.publisher.domain))}
+            onClick={() => router.push(publisherLink(info.publisher.domain))}
           >
             {info.publisher.domain}
             {info.publisher.name ? ` · ${info.publisher.name}` : ""}

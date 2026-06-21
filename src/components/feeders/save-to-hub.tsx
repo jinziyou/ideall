@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/components/lib/utils"
+import { openExternal } from "@/components/lib/safe-url"
 import { getHubData } from "@protocol/hub-data"
 import { flowbackToast } from "./flowback-toast"
 
@@ -118,15 +119,13 @@ export function SaveToHub({
         )}
         {hasFlow && hasLinks && <DropdownMenuSeparator />}
         {openUrl && (
-          <DropdownMenuItem onSelect={() => window.open(openUrl, "_blank", "noopener,noreferrer")}>
+          <DropdownMenuItem onSelect={() => openExternal(openUrl)}>
             <FileText className="mr-2 h-4 w-4" />
             原文
           </DropdownMenuItem>
         )}
         {analysisUrl && (
-          <DropdownMenuItem
-            onSelect={() => window.open(analysisUrl, "_blank", "noopener,noreferrer")}
-          >
+          <DropdownMenuItem onSelect={() => router.push(analysisUrl)}>
             <Network className="mr-2 h-4 w-4" />
             全面报道
           </DropdownMenuItem>

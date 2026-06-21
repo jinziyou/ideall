@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Lock } from "lucide-react"
 import { cn } from "@/components/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -100,12 +101,12 @@ export default function LocalDeviceChip({ compact = false }: { compact?: boolean
             {session ? `已登录 · ${session.user.name || session.user.email}` : "未登录"}
           </span>
         </div>
-        <a
+        <Link
           href="/home/subscriptions"
           className="mt-2.5 inline-block text-xs font-medium text-foreground hover:underline"
         >
           管理跨端同步 →
-        </a>
+        </Link>
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
           登录账号只用于社区发布，与本机数据无关。
         </p>
