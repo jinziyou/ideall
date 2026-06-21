@@ -38,6 +38,13 @@
     ],
     "category": "Productivity",
     "shortDescription": "本地优先、供应商中立的个人信息工作台",
-    "longDescription": "ideall — 本地优先的个人信息工作台 (home 中枢 + info/community/tool)。"
+    "longDescription": "ideall — 本地优先的个人信息工作台 (home 中枢 + info/community/tool)。",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/jinziyou/ideall/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBNkEyMzJCMkRGNjU0OQpSV1JKWmQreU1xS21DaStmNmJwenU1MzJjMjVSWEJwM05UOGpna1RRMlBXYlFZdmJ2MmRveUF2NQo="
+    }
   }
 }
