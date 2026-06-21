@@ -119,7 +119,7 @@ export default function PublisherMap({
             const d = p.data ?? {}
             const where = d.city || d.country
             const place = where ? `${where} · ` : ""
-            return `<b>${p.name}</b><br/>${d.domain ?? ""}<br/>${place}${d.count ?? 0} 条<br/><span style="color:#3b82f6">点击查看该发布者</span>`
+            return `<b>${p.name}</b><br/>${d.domain ?? ""}<br/>${place}${d.count ?? 0} 条<br/><span style="color:#16a37b">点击查看该发布者</span>`
           },
         },
         geo: {
@@ -138,7 +138,7 @@ export default function PublisherMap({
             data: points,
             symbolSize: (val: number[]) => 6 + (val[2] / maxCount) * 22,
             rippleEffect: { brushType: "stroke" },
-            itemStyle: { color: "#3b82f6", shadowBlur: 6, shadowColor: "#3b82f6" },
+            itemStyle: { color: "#16a37b", shadowBlur: 6, shadowColor: "#16a37b" },
             emphasis: { scale: 1.3 },
           },
         ],

@@ -59,13 +59,7 @@ const categories: Category[] = [
 
 export default function ToolNavigationPage() {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">导航</h1>
-        <p className="text-sm text-muted-foreground">常用站点快速直达。</p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {categories.map((category) => (
           <Card key={category.title}>
             <CardHeader>
@@ -79,7 +73,7 @@ export default function ToolNavigationPage() {
                       href={site.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="group flex flex-col gap-0.5 rounded-md border p-2.5 pr-7 transition-colors hover:border-primary/40 hover:bg-accent"
+                      className="group flex flex-col gap-0.5 rounded-xl border p-2.5 pr-7 transition-colors hover:border-spoke-tool/40 hover:bg-spoke-tool/5"
                     >
                       <span className="flex items-center gap-1 text-sm font-medium">
                         {site.name}
@@ -100,7 +94,6 @@ export default function ToolNavigationPage() {
             </CardContent>
           </Card>
         ))}
-      </div>
     </div>
   )
 }
