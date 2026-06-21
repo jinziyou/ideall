@@ -139,12 +139,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # tauri-action 跑 beforeBuildCommand (pnpm app:export 静态导出) + tauri build, 把产物
-      # (.dmg/.app, .deb/.rpm/.AppImage, .msi/.exe) 上传到上面建好的 Release (releaseId, 仅上传不创建)。
-      # 未签名: env 不含 APPLE_*/TAURI_SIGNING_* → 不触发签名。
+      # tauri-action 跑 beforeBuildCommand (pnpm app:export 静态导出) + tauri build, 把安装包
+      # (.dmg/.app, .deb/.rpm/.AppImage, .msi/.exe) + 自动更新产物 (.sig, latest.json) 上传到 Release。
+      # TAURI_SIGNING_*: updater 的 minisign 私钥+密码 (来自 secret) → 签名更新产物; 缺失则不出 .sig。
+      # 仍不注入 APPLE_*/Windows 证书 → OS 代码签名未启用 (出未签名安装包; 见 ① / docs/app.md)。
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: ${{ matrix.args }}
           releaseId: ${{ needs.create-release.outputs.release_id }}
@@ -189,3 +192,27 @@ jobs:
           name: ideall-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
+
+  # ③ 桌面包上传完后, 生成 SHA256SUMS 并挂回同一 Release, 供下载者校验完整性。
+  checksums:
+    needs: [gate, desktop]
+    if: needs.gate.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        run: |
+          TAG=$([ "$GITHUB_REF_TYPE" = "tag" ] && echo "$GITHUB_REF_NAME" || echo "app-edge")
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: 下载 Release 资产
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${{ steps.meta.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --dir dist --clobber
+      - name: 生成 SHA256SUMS
+        run: |
+          cd dist
+          rm -f SHA256SUMS
+          sha256sum * | tee ../SHA256SUMS
+      - name: 上传 SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.meta.outputs.tag }}" SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
