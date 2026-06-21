@@ -1,19 +1,25 @@
 name: app-build
 
 # ideall 跨平台 App 构建 (Tauri 2.0)。
-# 触发: 手动 (workflow_dispatch) 或推送 app-v* tag (如 app-v0.1.0)。
-# 桌面三平台经 tauri-action 出安装包并挂到 GitHub Release 草稿; Android 出 debug APK 工件。
+# 触发:
+#   - 推送 app-v* tag (如 app-v0.1.0) → 正式 Release 草稿 (人工审核后发布)。
+#   - 推送到 main → 滚动 edge 预发布 (tag app-edge), 永远是 main 最新可下载构建。
+#   - 手动 (workflow_dispatch) → 同 edge。
+# 桌面四目标经 tauri-action 出安装包并挂到 GitHub Release; Android (仅 tag/手动) 出 debug APK 工件。
 # iOS 需 Apple 开发者证书/描述文件, 见 docs/app.md (此处不含, 避免无证书空跑)。
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags:
       - "app-v*"
 
-# 静态导出把后端地址内联进包: 用仓库变量 NEXT_PUBLIC_SERVER_ADDR (Settings → Variables),
-# 未设则回退到官方 API 默认值 api.wonita.link。
+# 静态导出把地址内联进包 (用仓库变量覆盖, Settings → Variables; 未设则回退生产默认):
+#   NEXT_PUBLIC_SERVER_ADDR — 数据服务 (apiserver)。
+#   NEXT_PUBLIC_EMBED_BASE  — 内嵌门户 (info/community 经 iframe 嵌入的 portal); 必须设, 否则回退 localhost。
 env:
   NEXT_PUBLIC_SERVER_ADDR: ${{ vars.NEXT_PUBLIC_SERVER_ADDR || 'https://api.wonita.link' }}
+  NEXT_PUBLIC_EMBED_BASE: ${{ vars.NEXT_PUBLIC_EMBED_BASE || 'https://web.wonita.link' }}
 
 jobs:
   desktop:
@@ -71,12 +77,17 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: "ideall ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}"
-          releaseDraft: true
+          # tag 推送 → 正式 Release 草稿 (人工发布); main 推送/手动 → 滚动 edge 预发布 (直接可下载)。
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'app-edge' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('ideall {0}', github.ref_name) || 'ideall (edge · main 最新构建)' }}
+          releaseBody: ${{ github.ref_type == 'tag' && '' || format('main 分支自动构建 · commit {0}', github.sha) }}
+          releaseDraft: ${{ github.ref_type == 'tag' }}
+          prerelease: ${{ github.ref_type != 'tag' }}
 
   android:
     name: android (debug apk)
+    # 仅 tag / 手动时出 APK (main 每次推送不打 Android, 省 CI)。
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
