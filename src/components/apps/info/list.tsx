@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +41,7 @@ type ViewMode = "hot" | "publisher" | "latest"
  * 时间段筛选对三种视图同样生效 (换算 timestamp_from_to 重新拉取)。
  */
 export default function InfoList() {
+  const router = useRouter()
   const [mode, setMode] = React.useState<ViewMode>("hot")
   const [range, setRange] = React.useState("all")
 
@@ -93,7 +95,7 @@ export default function InfoList() {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" onClick={() => window.open(`/info/search`, "_blank")}>
+        <Button variant="outline" onClick={() => router.push("/info/search")}>
           查看全部
         </Button>
       </div>

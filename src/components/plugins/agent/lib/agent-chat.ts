@@ -3,6 +3,8 @@
 // key 仅存本地、随请求带 Authorization 头, 不上传任何第三方。
 // App (Tauri) 经 HTTP 插件 (Rust 侧请求) 绕过 webview CORS, 可直连任意厂商端点;
 // 纯浏览器 (web) 直连受厂商 CORS 限制 —— 本地端点 (Ollama 等) 与放行 CORS 的端点可直用。
+// CORS 绕过的 fetch 解析与数据层共用 `@/components/lib/tauri` 的 `resolveFetch()`。
+import { resolveFetch } from "@/components/lib/tauri"
 
 export interface StreamChatOptions {
   baseURL: string
@@ -51,20 +53,6 @@ async function errorMessage(res: Response): Promise<string> {
     /* 忽略解析失败 */
   }
   return `请求失败 (${res.status})`
-}
-
-// App (Tauri) 用 HTTP 插件经 Rust 发请求绕过 CORS; 纯浏览器用标准 fetch。惰性加载, 不进 web 主链路。
-let _appFetch: typeof fetch | null | undefined
-async function resolveFetch(): Promise<typeof fetch> {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return fetch
-  if (_appFetch !== undefined) return _appFetch ?? fetch
-  try {
-    const mod = await import("@tauri-apps/plugin-http")
-    _appFetch = mod.fetch as unknown as typeof fetch
-  } catch {
-    _appFetch = null
-  }
-  return _appFetch ?? fetch
 }
 
 /** 发起一次非流式补全 (智能体工具轮用); 返回 assistant 消息 (可能含 tool_calls)。出错抛异常。 */

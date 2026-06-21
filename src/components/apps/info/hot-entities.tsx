@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { entityLabelText } from "@/components/lib/ner-labels"
 import { useApiResult } from "@/components/lib/use-api-result"
@@ -38,6 +39,7 @@ function mergeTop(stats: EntityStats): { label: string; name: string; count: num
  * 增强型区块 —— 无数据 / 加载中 / 出错时整体隐藏 (return null), 不打扰事件流主链路。
  */
 export default function HotEntities() {
+  const router = useRouter()
   // silent: 失败时整块隐藏, 不 toast (否则与 InfoList 主链路的报错叠成双 toast)
   const { data, loading, error } = useApiResult<EntityStats | null>(
     () => fetchEntityStats(STAT_HOURS),
@@ -59,7 +61,8 @@ export default function HotEntities() {
             variant="secondary"
             title={`${entityLabelText(e.label)} · 提及 ${e.count} 条`}
             className="cursor-pointer gap-1 font-normal hover:underline"
-            onClick={() => window.open(entityLink(e.label, e.name), "_blank")}
+            // App 内 SPA 导航进实体页 (经 Next router)。
+            onClick={() => router.push(entityLink(e.label, e.name))}
           >
             <span>{e.name}</span>
             <span className="text-[10px] text-muted-foreground">×{e.count}</span>

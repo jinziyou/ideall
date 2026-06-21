@@ -6,6 +6,7 @@
 // (见 lib/env.ts)。
 import { SERVER_ADDR, INFO_API_URI } from "@/components/lib/env"
 import { apiFetch, type ApiResult } from "@/components/lib/api"
+import { resolveFetch } from "@/components/lib/tauri"
 import type { components } from "@/components/lib/api/server"
 import type {
   ServerPort,
@@ -206,9 +207,12 @@ export const httpServerAdapter: ServerPort = {
   },
 
   async getServerPublicKey(clientId): Promise<ApiResult<string>> {
-    // GET /authorize/secret/{clientId} 返回裸 hex 字符串 (非 JSON), 故用裸 fetch。
+    // GET /authorize/secret/{clientId} 返回裸 hex 字符串 (非 JSON), 故用裸 fetch (经 resolveFetch 绕 CORS)。
     try {
-      const r = await fetch(`${AUTH}/secret/${encodeURIComponent(clientId)}`, { cache: "no-store" })
+      const httpFetch = await resolveFetch()
+      const r = await httpFetch(`${AUTH}/secret/${encodeURIComponent(clientId)}`, {
+        cache: "no-store",
+      })
       const text = (await r.text()).trim()
       if (!r.ok) return { ok: false, status: r.status, message: text || "获取密钥失败，请重试" }
       return { ok: true, data: text }

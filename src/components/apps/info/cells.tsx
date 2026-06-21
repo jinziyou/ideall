@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -111,23 +112,20 @@ export function EntityEntryLinks({ entity }: { entity: NameEntity }) {
 }
 
 /**
- * 实体名链接: 点击新开实体页 (window.open 与 columns 各处跳转模式一致)。
+ * 实体名链接: 点击进实体页 (App 内 SPA 导航, 经 Next Link; 「新标签」语义在 App 形态无意义)。
  * 样式刻意低调 (hover 才出下划线), 不与 Badge 内已有的百科/维基外链抢视觉。
  */
 function EntityNameLink({ label, name }: { label: string; name: string }) {
   return (
-    <button
-      type="button"
+    <Link
+      href={entityLink(label, name)}
       title="查看实体页"
       className="cursor-pointer underline-offset-2 hover:underline"
-      onClick={(e) => {
-        // Badge 内与百科/维基外链并排, 阻止冒泡避免相互干扰 (外链侧已有同样处理)
-        e.stopPropagation()
-        window.open(entityLink(label, name), "_blank")
-      }}
+      // Badge 内与百科/维基外链并排, 阻止冒泡避免相互干扰 (外链侧已有同样处理)
+      onClick={(e) => e.stopPropagation()}
     >
       {name}
-    </button>
+    </Link>
   )
 }
 

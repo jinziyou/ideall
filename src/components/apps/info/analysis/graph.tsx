@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { Graph, NodeEvent, type GraphData, type IPointerEvent } from "@antv/g6"
 import { NER_LABEL_TEXT } from "@/components/lib/ner-labels"
 import { infoDisplayTitle } from "@/components/lib/format"
@@ -131,6 +132,7 @@ function buildGraph(info: Info, related: RelatedInfo[]): Built {
 }
 
 const KnowledgeGraph = ({ info, related }: Props) => {
+  const router = useRouter()
   const chartRef = useRef<HTMLDivElement | null>(null)
   const { data, categories } = useMemo(() => buildGraph(info, related), [info, related])
 
@@ -175,13 +177,14 @@ const KnowledgeGraph = ({ info, related }: Props) => {
       if (!id || id.startsWith("info:")) return
       const sep = id.indexOf(":")
       if (sep <= 0) return
-      window.open(entityLink(id.slice(0, sep), id.slice(sep + 1)), "_blank")
+      // App 内 SPA 导航进实体页 (经 Next router); webview 内 window.open(_blank) 不可靠。
+      router.push(entityLink(id.slice(0, sep), id.slice(sep + 1)))
     })
     graph.render()
     return () => {
       graph.destroy()
     }
-  }, [data])
+  }, [data, router])
 
   return (
     <div className="flex flex-col gap-2">
