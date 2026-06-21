@@ -246,4 +246,15 @@ export const httpServerAdapter: ServerPort = {
       defaultErrorMessage: "获取用户信息失败",
     })
   },
+
+  async updateProfile(token, patch) {
+    // PUT /me/profile —— apiserver 仅支持改 name (见 ProfileUpdate); avatar 预留。
+    return apiFetch(`${SERVER_ADDR}/me/profile`, {
+      method: "PUT",
+      json: { name: patch.name ?? "" },
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      defaultErrorMessage: "更新资料失败",
+    })
+  },
 }
