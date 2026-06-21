@@ -16,7 +16,10 @@ export interface Manifest {
 }
 
 /** 被嵌入应用 (wonita/portal) 基址 —— 开发默认 localhost:5024, 生产 web.wonita.link。 */
-const EMBED_BASE = (process.env.NEXT_PUBLIC_EMBED_BASE ?? "http://localhost:5024").replace(/\/$/, "")
+const EMBED_BASE = (process.env.NEXT_PUBLIC_EMBED_BASE ?? "http://localhost:5024").replace(
+  /\/$/,
+  "",
+)
 
 const EMBED_ORIGIN = (() => {
   try {

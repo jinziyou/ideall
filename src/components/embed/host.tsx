@@ -6,7 +6,12 @@ import { Loader2 } from "lucide-react"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { MessagePortTransport } from "./transport"
 import { registerGrantedResources, registerGrantedTools } from "./tools"
-import { HELLO_MESSAGE_TYPE, INIT_MESSAGE_TYPE, PROTOCOL_VERSION, type ThemeTokens } from "./protocol"
+import {
+  HELLO_MESSAGE_TYPE,
+  INIT_MESSAGE_TYPE,
+  PROTOCOL_VERSION,
+  type ThemeTokens,
+} from "./protocol"
 import type { Manifest } from "./manifest"
 
 function currentTheme(): ThemeTokens {

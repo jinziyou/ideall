@@ -211,93 +211,93 @@ export default function SubscriptionFeed() {
             )}
           >
             {feeds.map(({ sub, items, error }) => (
-            <Card
-              key={sub.id}
-              className={cn("flex flex-col border-t-2", SUB_SPOKE_META[sub.type].topBorderClass)}
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                <Link
-                  href={sourceHref(sub)}
-                  className="flex min-w-0 items-center gap-2 hover:underline"
-                >
-                  {sub.type === "publisher" ? (
-                    sub.favicon ? (
-                      // favicon 来自任意第三方域名, 用原生 img 避免为每个域名配置 next/image remotePatterns
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={sub.favicon} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
-                    ) : null
-                  ) : sub.type === "search" ? (
-                    <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  ) : sub.type === "peer" ? (
-                    <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Card
+                key={sub.id}
+                className={cn("flex flex-col border-t-2", SUB_SPOKE_META[sub.type].topBorderClass)}
+              >
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <Link
+                    href={sourceHref(sub)}
+                    className="flex min-w-0 items-center gap-2 hover:underline"
+                  >
+                    {sub.type === "publisher" ? (
+                      sub.favicon ? (
+                        // favicon 来自任意第三方域名, 用原生 img 避免为每个域名配置 next/image remotePatterns
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={sub.favicon} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
+                      ) : null
+                    ) : sub.type === "search" ? (
+                      <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : sub.type === "peer" ? (
+                      <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <CardTitle className="truncate text-sm">{sub.title}</CardTitle>
+                    {sub.type === "entity" && (
+                      <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                        {entityLabelText(sub.entityLabel)}
+                      </span>
+                    )}
+                    {sub.type === "search" && (
+                      <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                        {sub.searchDomain ? sub.searchDomain : "搜索"}
+                      </span>
+                    )}
+                    {sub.type === "peer" && (
+                      <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                        社区
+                      </span>
+                    )}
+                  </Link>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 shrink-0"
+                    onClick={() => unsubscribe(sub)}
+                    title="取消订阅"
+                  >
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">取消订阅</span>
+                  </Button>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  {error ? (
+                    <p className="text-xs text-muted-foreground">内容加载失败</p>
+                  ) : items.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">暂无最新内容</p>
                   ) : (
-                    <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  )}
-                  <CardTitle className="truncate text-sm">{sub.title}</CardTitle>
-                  {sub.type === "entity" && (
-                    <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                      {entityLabelText(sub.entityLabel)}
-                    </span>
-                  )}
-                  {sub.type === "search" && (
-                    <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                      {sub.searchDomain ? sub.searchDomain : "搜索"}
-                    </span>
-                  )}
-                  {sub.type === "peer" && (
-                    <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                      社区
-                    </span>
-                  )}
-                </Link>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 shrink-0"
-                  onClick={() => unsubscribe(sub)}
-                  title="取消订阅"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="sr-only">取消订阅</span>
-                </Button>
-              </CardHeader>
-              <CardContent className="flex-1">
-                {error ? (
-                  <p className="text-xs text-muted-foreground">内容加载失败</p>
-                ) : items.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">暂无最新内容</p>
-                ) : (
-                  <ul className="space-y-2.5">
-                    {items.map((it) => (
-                      <li key={it.key} className="flex flex-col gap-0.5">
-                        {/* it.url 来自他人 peer 发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
-                        {safeHref(it.url) ? (
-                          <a
-                            href={safeHref(it.url)}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="line-clamp-2 text-sm hover:underline"
-                          >
-                            {it.title}
-                          </a>
-                        ) : (
-                          <span className="line-clamp-2 text-sm">{it.title}</span>
-                        )}
-                        {it.body ? (
-                          <span className="line-clamp-2 text-xs text-muted-foreground">
-                            {it.body}
+                    <ul className="space-y-2.5">
+                      {items.map((it) => (
+                        <li key={it.key} className="flex flex-col gap-0.5">
+                          {/* it.url 来自他人 peer 发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
+                          {safeHref(it.url) ? (
+                            <a
+                              href={safeHref(it.url)}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="line-clamp-2 text-sm hover:underline"
+                            >
+                              {it.title}
+                            </a>
+                          ) : (
+                            <span className="line-clamp-2 text-sm">{it.title}</span>
+                          )}
+                          {it.body ? (
+                            <span className="line-clamp-2 text-xs text-muted-foreground">
+                              {it.body}
+                            </span>
+                          ) : null}
+                          <span className="text-xs text-muted-foreground">
+                            {formatTimestamp(it.time)}
                           </span>
-                        ) : null}
-                        <span className="text-xs text-muted-foreground">
-                          {formatTimestamp(it.time)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </section>
       )}

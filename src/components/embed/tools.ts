@@ -47,7 +47,11 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
       async (a) => {
         const s = getSession()
         if (!s) return fail(-32002, "not-authenticated")
-        const r = await getServerPort().publish(s.token, { title: a.title, url: a.url, body: a.body })
+        const r = await getServerPort().publish(s.token, {
+          title: a.title,
+          url: a.url,
+          body: a.body,
+        })
         return r.ok ? ok(r.data) : fail(-32000, r.message)
       },
     )
@@ -76,7 +80,9 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
     server.tool(TOOL.hubIsSubscribed, { type: z.string(), key: z.string() }, async (a) =>
       ok(await getHubData().isSubscribed(a.type as SubscriptionType, a.key)),
     )
-    server.tool(TOOL.hubListSubscriptions, {}, async () => ok(await getHubData().listSubscriptions()))
+    server.tool(TOOL.hubListSubscriptions, {}, async () =>
+      ok(await getHubData().listSubscriptions()),
+    )
   }
 
   if (has("hub.subscriptions:write")) {
@@ -127,7 +133,8 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
     server.tool(TOOL.hostOpenExternal, { url: z.string() }, async (a) => {
       try {
         const u = new URL(a.url)
-        if (u.protocol !== "http:" && u.protocol !== "https:") return fail(-32602, "blocked-protocol")
+        if (u.protocol !== "http:" && u.protocol !== "https:")
+          return fail(-32602, "blocked-protocol")
       } catch {
         return fail(-32602, "invalid-url")
       }

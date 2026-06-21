@@ -176,7 +176,9 @@ export default function HubDashboard() {
                 BYO-key
               </span>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">问点什么，可读取中枢数据 · 自带密钥</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              问点什么，可读取中枢数据 · 自带密钥
+            </p>
             <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
               打开 AI 助手
               <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
