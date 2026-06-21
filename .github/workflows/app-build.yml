@@ -5,14 +5,21 @@ name: app-build
 #   - 推送 app-v* tag (如 app-v0.1.0) → 正式 Release 草稿 (人工审核后发布)。
 #   - 推送到 main → 滚动 edge 预发布 (tag app-edge), 永远是 main 最新可下载构建。
 #   - 手动 (workflow_dispatch) → 同 edge。
-# 桌面四目标经 tauri-action 出安装包并挂到 GitHub Release; Android (仅 tag/手动) 出 debug APK 工件。
-# iOS 需 Apple 开发者证书/描述文件, 见 docs/app.md (此处不含, 避免无证书空跑)。
+# 桌面四目标经 tauri-action 出**未签名**安装包并上传到 Release; Android (仅 tag/手动) 出 debug APK 工件。
+# 未签名说明: 不向 desktop job 注入 APPLE_*/TAURI_SIGNING_* env, 故 tauri 不尝试签名
+#   (注: 把这些 env 设为空字符串反而会触发签名并失败, 故是"不注入"而非"传空")。
+#   要出签名/可自动更新的正式包: 配好对应 secrets 后在 desktop 的 env 重新注入 (见 docs/app.md)。
+# iOS 需 Apple 开发者证书/描述文件 (此处不含)。
 on:
   workflow_dispatch:
   push:
     branches: [main]
     tags:
       - "app-v*"
+
+# 创建 Release / 上传安装包需要写权限 (默认 GITHUB_TOKEN 为只读会报 "Resource not accessible")。
+permissions:
+  contents: write
 
 # 静态导出把地址内联进包 (用仓库变量覆盖, Settings → Variables; 未设则回退生产默认):
 #   NEXT_PUBLIC_SERVER_ADDR — 数据服务 (apiserver)。
@@ -22,7 +29,51 @@ env:
   NEXT_PUBLIC_EMBED_BASE: ${{ vars.NEXT_PUBLIC_EMBED_BASE || 'https://web.wonita.link' }}
 
 jobs:
+  # 先建好唯一的 Release, 矩阵 job 仅上传 —— 规避 4 个并发 job 各自创建同一滚动 tag 的竞态。
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.rel.outputs.release_id }}
+    steps:
+      - uses: actions/github-script@v7
+        id: rel
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            const isTag = context.ref.startsWith('refs/tags/')
+            const tag = isTag ? context.ref.replace('refs/tags/', '') : 'app-edge'
+            let existing = null
+            try {
+              existing = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data
+            } catch (e) {}
+            if (!isTag) {
+              // 滚动 edge: 删旧 release + tag, 重建指向当前 commit、清掉旧资产。
+              if (existing) {
+                await github.rest.repos.deleteRelease({ owner, repo, release_id: existing.id })
+                existing = null
+              }
+              try {
+                await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` })
+              } catch (e) {}
+            }
+            if (existing) {
+              core.setOutput('release_id', String(existing.id))
+              return
+            }
+            const r = await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              target_commitish: context.sha,
+              name: isTag ? `ideall ${tag}` : 'ideall (edge · main 最新构建)',
+              body: isTag ? '' : `main 分支自动构建 · ${context.sha}`,
+              draft: isTag,
+              prerelease: !isTag,
+            })
+            core.setOutput('release_id', String(r.data.id))
+
   desktop:
+    needs: create-release
     name: desktop (${{ matrix.label }})
     strategy:
       fail-fast: false
@@ -60,29 +111,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # tauri-action 自动跑 beforeBuildCommand (pnpm app:export → 静态导出) 再 tauri build,
-      # 并把产物 (.dmg/.app, .deb/.rpm/.AppImage, .msi/.exe) 上传到 Release 草稿。
+      # tauri-action 跑 beforeBuildCommand (pnpm app:export 静态导出) + tauri build, 把产物
+      # (.dmg/.app, .deb/.rpm/.AppImage, .msi/.exe) 上传到上面建好的 Release (releaseId, 仅上传不创建)。
+      # 未签名: env 不含 APPLE_*/TAURI_SIGNING_* → 不触发签名。
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 自动更新签名 (产物 .sig + latest.json); 未设则不签更新。见 docs/app.md «Phase 3»。
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS 代码签名 + 公证; 未设则出未签名 .app/.dmg (本地可跑, 对外分发会被 Gatekeeper 拦)。
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           args: ${{ matrix.args }}
-          # tag 推送 → 正式 Release 草稿 (人工发布); main 推送/手动 → 滚动 edge 预发布 (直接可下载)。
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'app-edge' }}
-          releaseName: ${{ github.ref_type == 'tag' && format('ideall {0}', github.ref_name) || 'ideall (edge · main 最新构建)' }}
-          releaseBody: ${{ github.ref_type == 'tag' && '' || format('main 分支自动构建 · commit {0}', github.sha) }}
-          releaseDraft: ${{ github.ref_type == 'tag' }}
-          prerelease: ${{ github.ref_type != 'tag' }}
+          releaseId: ${{ needs.create-release.outputs.release_id }}
 
   android:
     name: android (debug apk)
