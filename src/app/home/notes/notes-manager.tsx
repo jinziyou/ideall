@@ -258,7 +258,7 @@ export default function NotesManager() {
   }
 
   return (
-    <div className="flex flex-col gap-4 md:h-[78vh] md:flex-row">
+    <div className="flex flex-col gap-4 md:h-[calc(100dvh-6rem)] md:min-h-[34rem] md:flex-row">
       {/* 左: 笔记本筛选 + 笔记列表 (移动端选中笔记时让位给编辑器) */}
       <div
         className={cn(
@@ -266,34 +266,36 @@ export default function NotesManager() {
           selectedId && "hidden md:flex",
         )}
       >
-        {/* 笔记本筛选行 */}
-        <div className="flex items-center gap-1 overflow-x-auto">
-          <NotebookChip
-            icon={<Layers className="h-3.5 w-3.5" />}
-            label="全部"
-            count={counts.get("all") ?? 0}
-            active={active === "all"}
-            onClick={() => setActive("all")}
-          />
-          <NotebookChip
-            icon={<Inbox className="h-3.5 w-3.5" />}
-            label="未分组"
-            count={counts.get("none") ?? 0}
-            active={active === "none"}
-            onClick={() => setActive("none")}
-          />
-          {notebooks.map((nb) => (
+        {/* 笔记本筛选行: 筛选 chip 横向滚动, 「新建笔记本」固定在末端常驻可见 */}
+        <div className="flex items-center gap-1">
+          <div className="flex flex-1 items-center gap-1 overflow-x-auto pb-0.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar]:h-1.5">
             <NotebookChip
-              key={nb.id}
-              icon={<NotebookIcon className="h-3.5 w-3.5" />}
-              label={nb.name}
-              count={counts.get(nb.id) ?? 0}
-              active={active === nb.id}
-              onClick={() => setActive(nb.id)}
-              onRename={() => setRenameTarget(nb)}
-              onDelete={() => setDeleteTarget(nb)}
+              icon={<Layers className="h-3.5 w-3.5" />}
+              label="全部"
+              count={counts.get("all") ?? 0}
+              active={active === "all"}
+              onClick={() => setActive("all")}
             />
-          ))}
+            <NotebookChip
+              icon={<Inbox className="h-3.5 w-3.5" />}
+              label="未分组"
+              count={counts.get("none") ?? 0}
+              active={active === "none"}
+              onClick={() => setActive("none")}
+            />
+            {notebooks.map((nb) => (
+              <NotebookChip
+                key={nb.id}
+                icon={<NotebookIcon className="h-3.5 w-3.5" />}
+                label={nb.name}
+                count={counts.get(nb.id) ?? 0}
+                active={active === nb.id}
+                onClick={() => setActive(nb.id)}
+                onRename={() => setRenameTarget(nb)}
+                onDelete={() => setDeleteTarget(nb)}
+              />
+            ))}
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -512,8 +514,8 @@ function NoteCard({
     <div
       onClick={onOpen}
       className={cn(
-        "group flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:bg-accent/40",
-        active && "border-primary/40 bg-primary/5",
+        "group flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 text-card-foreground transition-colors hover:bg-accent/40",
+        active && "border-primary/50 bg-primary/10 ring-1 ring-primary/20",
       )}
     >
       <div className="flex items-start gap-2">

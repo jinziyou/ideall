@@ -30,6 +30,29 @@ ideall/                         # 独立仓库根 (git@github.com:jinziyou/ideal
 └── docs/app.md               # 本文件
 ```
 
+## 开发环境 / 前置依赖
+
+日常 Web 开发只需 **Node.js ≥ 22** + **pnpm 9**（见根目录 `package.json`）。Tauri 桌面/打包另需 **Rust ≥ 1.77.2** 与下表平台依赖；装完后在仓库根执行 `pnpm exec tauri info`，**Environment** 段应全绿。
+
+| 平台 | 系统依赖（概要） | 验证 |
+| --- | --- | --- |
+| **Linux / WSL** | `libwebkit2gtk-4.1-dev`、`librsvg2-dev`、`libgtk-3-dev`、`libayatana-appindicator3-dev`、`build-essential`、`libssl-dev`、`libxdo-dev`、`pkgconf` 等 | `pnpm exec tauri info` → webkit2gtk / rsvg2 ✔ |
+| **Windows** | MSVC Build Tools + WebView2 Evergreen | 同上 |
+| **macOS** | Xcode 或 Command Line Tools | 同上 |
+| **Android** | JDK、Android SDK/NDK；`pnpm tauri android init` | `rustup target add` 各 Android triple |
+| **iOS** | macOS + Xcode；`pnpm tauri ios init` | 仅 macOS 构建机 |
+
+**Linux / WSL 一键安装（Debian 系，含 Kali）：**
+
+```bash
+sudo apt-get update && sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev \
+  librsvg2-dev libgtk-3-dev pkgconf
+```
+
+WSL 图形依赖 **WSLg**；dbus/GTK 包更新后窗口仍异常时，Windows 侧 `wsl --shutdown` 后重开。详见 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)。
+
 ## 构建 / 运行命令
 
 ```bash
@@ -42,9 +65,7 @@ pnpm build          # 静态导出 → out/ (= pnpm app:export)
 pnpm app:export     # 静态导出 → out/ (= pnpm build)
 pnpm app:build      # 多平台打包 (依赖 app:export + 平台工具链/图标)
 
-# 首次需要 Rust + 平台依赖:
-#   Linux:   libwebkit2gtk-4.1-dev、build-essential 等 (见 Tauri 文档)
-#   移动端:  iOS=Xcode；Android=Android SDK/NDK，`pnpm tauri android init` / `ios init`
+# 前置依赖见 README「开发环境」与 docs/app.md「开发环境 / 前置依赖」
 ```
 
 ## 平台矩阵

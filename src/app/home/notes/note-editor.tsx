@@ -117,29 +117,32 @@ export default function NoteEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <input
-        value={title}
-        onChange={(e) => {
-          titleRef.current = e.target.value
-          setTitle(e.target.value)
-          schedule()
-        }}
-        autoFocus={!initialTitle}
-        placeholder="无标题"
-        aria-label="笔记标题"
-        className="w-full border-0 bg-transparent px-4 pt-3 text-2xl font-semibold outline-none placeholder:text-muted-foreground/50 sm:px-8"
-      />
-      <input
-        value={tags}
-        onChange={(e) => {
-          setTags(e.target.value)
-          tagsRef.current = parseTags(e.target.value)
-          schedule()
-        }}
-        placeholder="添加标签（逗号分隔）"
-        aria-label="笔记标签"
-        className="w-full border-0 bg-transparent px-4 pb-1 pt-1 text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/50 sm:px-8"
-      />
+      {/* 标题区: 固定不随正文滚动, 与正文共享同一居中阅读栏宽度 (sm 起约 704px) */}
+      <div className="shrink-0 border-b border-border/60 pt-2">
+        <input
+          value={title}
+          onChange={(e) => {
+            titleRef.current = e.target.value
+            setTitle(e.target.value)
+            schedule()
+          }}
+          autoFocus={!initialTitle}
+          placeholder="无标题"
+          aria-label="笔记标题"
+          className="w-full border-0 bg-transparent px-4 pt-2 text-2xl font-semibold leading-tight outline-none placeholder:text-muted-foreground/40 sm:px-[max(1.5rem,calc(50%-22rem))]"
+        />
+        <input
+          value={tags}
+          onChange={(e) => {
+            setTags(e.target.value)
+            tagsRef.current = parseTags(e.target.value)
+            schedule()
+          }}
+          placeholder="添加标签（逗号分隔）"
+          aria-label="笔记标签"
+          className="w-full border-0 bg-transparent px-4 pb-3 pt-1.5 text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/40 sm:px-[max(1.5rem,calc(50%-22rem))]"
+        />
+      </div>
       <Plate
         editor={editor}
         onChange={({ value }) => {
@@ -155,7 +158,7 @@ export default function NoteEditor({
           <Editor
             variant="none"
             placeholder="输入正文，输入 / 唤出命令…"
-            className="px-4 pt-2 pb-24 text-base sm:px-8"
+            className="px-4 pt-4 pb-24 text-base leading-relaxed sm:px-[max(1.5rem,calc(50%-22rem))]"
           />
         </EditorContainer>
       </Plate>
