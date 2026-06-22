@@ -5,17 +5,22 @@
 //   bookmarkFolders—— 收藏夹分组, keyPath = id
 //   subscriptions  —— 「发现」订阅 (发布者等), keyPath = id
 //   agentThreads   —— AI 助手对话线程 (消息内联存于线程文档), keyPath = id
+//   notes          —— 笔记 (类 Notion 块文档, content 内联), keyPath = id
+//   noteNotebooks  —— 笔记本分组, keyPath = id
 
 const DB_NAME = "wonita-home"
 // v2: 新增 subscriptions 仓库 (「发现」的来源订阅回流到 home)。
 // v3: 新增 agentThreads 仓库 (AI 助手对话, 本地优先)。升级时旧仓库原样保留。
-const DB_VERSION = 3
+// v4: 新增 notes + noteNotebooks 仓库 (类 Notion 块编辑笔记, 本地优先)。纯增量, 旧仓库原样保留。
+const DB_VERSION = 4
 
 export const STORE_FILES = "files"
 export const STORE_BOOKMARKS = "bookmarks"
 export const STORE_FOLDERS = "bookmarkFolders"
 export const STORE_SUBSCRIPTIONS = "subscriptions"
 export const STORE_AGENT_THREADS = "agentThreads"
+export const STORE_NOTES = "notes"
+export const STORE_NOTEBOOKS = "noteNotebooks"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -44,6 +49,12 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_AGENT_THREADS)) {
         db.createObjectStore(STORE_AGENT_THREADS, { keyPath: "id" })
+      }
+      if (!db.objectStoreNames.contains(STORE_NOTES)) {
+        db.createObjectStore(STORE_NOTES, { keyPath: "id" })
+      }
+      if (!db.objectStoreNames.contains(STORE_NOTEBOOKS)) {
+        db.createObjectStore(STORE_NOTEBOOKS, { keyPath: "id" })
       }
     }
     req.onsuccess = () => {

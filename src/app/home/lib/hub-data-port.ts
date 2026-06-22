@@ -17,6 +17,7 @@ import {
   updateBookmark,
 } from "./bookmarks-store"
 import { listFiles, updateFileMeta } from "./files-store"
+import { listNotes, getNote } from "./notes-store"
 
 export const hubDataPort: HubDataPort = {
   listSubscriptions,
@@ -32,4 +33,6 @@ export const hubDataPort: HubDataPort = {
   addFolder,
   listFiles,
   updateFileMeta,
+  listNotes,
+  getNote,
 }

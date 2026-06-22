@@ -6,6 +6,7 @@ import {
   Map,
   Megaphone,
   Newspaper,
+  NotebookPen,
   Rss,
   Wrench,
 } from "lucide-react"
@@ -55,6 +56,7 @@ export const SPOKES: NavLink[] = [
 /** 我的子区 (中枢内部分区), 供命令台 / 移动菜单跳转。 */
 export const HOME_SUBPAGES: NavLink[] = [
   { href: "/home", label: "概览", icon: LayoutDashboard },
+  { href: "/home/notes", label: "笔记", icon: NotebookPen, hint: "创建与编写笔记" },
   { href: "/home/subscriptions", label: "订阅", icon: Rss },
   { href: "/home/publications", label: "发布", icon: Megaphone },
   { href: "/home/resources", label: "资源", icon: FolderOpen },

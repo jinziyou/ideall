@@ -9,6 +9,7 @@ import { HOME_SUBPAGES, type NavLink } from "@/app/nav/nav-config"
 import { listFiles } from "./lib/files-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listSubscriptions } from "./lib/subscriptions-store"
+import { listNotes } from "./lib/notes-store"
 import { countAgentThreads } from "./lib/agent-threads-count"
 import { formatBytes } from "@/components/lib/hub-format"
 
@@ -21,6 +22,7 @@ export default function HomeNav() {
   const [subCount, setSubCount] = React.useState<number | null>(null)
   const [fileCount, setFileCount] = React.useState<number | null>(null)
   const [bookmarkCount, setBookmarkCount] = React.useState<number | null>(null)
+  const [noteCount, setNoteCount] = React.useState<number | null>(null)
   const [threadCount, setThreadCount] = React.useState<number | null>(null)
   const [usage, setUsage] = React.useState(0)
   const [quota, setQuota] = React.useState(0)
@@ -29,16 +31,18 @@ export default function HomeNav() {
     let alive = true
     async function load() {
       try {
-        const [files, bookmarks, subs, threadCount] = await Promise.all([
+        const [files, bookmarks, subs, notes, threadCount] = await Promise.all([
           listFiles(),
           listBookmarks(),
           listSubscriptions(),
+          listNotes(),
           countAgentThreads(),
         ])
         if (!alive) return
         setFileCount(files.length)
         setBookmarkCount(bookmarks.length)
         setSubCount(subs.length)
+        setNoteCount(notes.length)
         setThreadCount(threadCount)
       } catch {
         /* 本地读取失败时静默, 不影响导航 */
@@ -61,6 +65,7 @@ export default function HomeNav() {
 
   const counts: Record<string, number | null> = {
     "/home": null,
+    "/home/notes": noteCount,
     "/home/subscriptions": subCount,
     "/home/agent": threadCount,
     "/home/publications": null,
