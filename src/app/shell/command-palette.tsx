@@ -16,16 +16,16 @@ import {
 } from "@/components/ui/command"
 import { setThemeChoice } from "@/components/lib/theme"
 import { getSyncCode, subscribeSyncCode } from "@/components/lib/sync-code"
-import { checkForUpdate, inTauri } from "@/components/lib/updater"
+import { checkForUpdate } from "@/components/lib/updater"
+import { isTauri } from "@/components/lib/tauri"
+import { CMDK_OPEN, openCommandPalette } from "@/components/lib/command-palette-bus"
 import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import { HOME_SUBPAGES, SPOKES } from "@/app/nav/nav-config"
 
-/** 任意位置的触发器调它打开全局唯一命令台 (方案 3: ⌘K 浮层引擎)。 */
-const CMDK_OPEN = "ideall:command-palette-open"
-export function openCommandPalette() {
-  window.dispatchEvent(new Event(CMDK_OPEN))
-}
+// openCommandPalette / CMDK_OPEN 已抽到 @/components/lib/command-palette-bus (纯事件总线),
+// 使 components 的触发器无需反向 import app/shell; 此处 re-export 维持既有 ./command-palette 导入点。
+export { openCommandPalette }
 
 /**
  * ⌘K 中枢命令台 —— 全局唯一实例 (挂根布局)。浮层引擎: 跳 spoke (发现下的资讯/社区/工具) 或我的各子区,
@@ -39,7 +39,7 @@ export default function CommandPalette() {
   // updater 仅桌面 (Tauri) 生效; 取常量快照 (SSR / web = false), 避免 effect 内同步 setState 的级联渲染 lint。
   const isDesktop = React.useSyncExternalStore(
     () => () => {},
-    inTauri,
+    isTauri,
     () => false,
   )
 

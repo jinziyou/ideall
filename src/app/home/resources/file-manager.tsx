@@ -75,7 +75,9 @@ function downloadBlob(blob: Blob, name: string) {
   document.body.appendChild(a)
   a.click()
   a.remove()
-  URL.revokeObjectURL(url)
+  // 延后释放: a.click() 触发的下载是异步发起的, 部分引擎 (WebKitGTK/Firefox) 若同步 revoke
+  // 会拿不到 blob 导致下载失败/空文件。本项目经 Tauri webview 分发 (Linux=WebKitGTK), 风险真实。
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 /** 图片缩略图: 仅在卡片渲染时按需读取自身 Blob, 卸载时释放, 避免一次性加载所有大文件 */

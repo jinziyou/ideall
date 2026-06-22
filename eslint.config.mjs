@@ -54,6 +54,33 @@ const config = [
       ],
     },
   },
+
+  // components → app 边界: 共享代码 (components) 不得反向 import 页面/路由 (app)。
+  // 注: flat config 的 no-restricted-imports 不跨 block 合并 (后匹配者整体覆盖), 故此处需再列 wire DTO 模式,
+  // 否则 components 会丢掉上面的 wire DTO 禁令。server/api 适配器例外 (允许用 wire DTO)。
+  {
+    files: ["src/components/**/*.{ts,tsx}"],
+    ignores: ["src/components/lib/server/**", "src/components/lib/api/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/app/*", "@/app/**"],
+              message:
+                "components 是跨 app/core/plugin 的共享层, 不得反向 import app (页面/路由代码); 共享逻辑下沉到 components/lib 或经 props 注入",
+            },
+            {
+              group: ["@/components/lib/api/server", "@protocol/server"],
+              message:
+                "wire DTO 仅允许 HTTP 适配器 (components/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (ideall 自有协议)",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]
 
 export default config
