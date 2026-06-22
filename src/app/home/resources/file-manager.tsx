@@ -34,6 +34,7 @@ import { FileMeta } from "../model"
 import { addFile, deleteFile, getFile, listFiles, updateFileMeta } from "../lib/files-store"
 import { fileKind, FileKind, formatBytes, formatTime } from "@/components/lib/hub-format"
 import FilePreviewDialog from "./file-preview-dialog"
+import { useIncrementalList } from "@/components/lib/use-incremental-list"
 
 const KIND_ICON: Record<FileKind, React.ComponentType<{ className?: string }>> = {
   image: ImageIcon,
@@ -78,10 +79,35 @@ function downloadBlob(blob: Blob, name: string) {
   URL.revokeObjectURL(url)
 }
 
-/** 图片缩略图: 仅在卡片渲染时按需读取自身 Blob, 卸载时释放, 避免一次性加载所有大文件 */
+/**
+ * 图片缩略图: 仅在缩略图滚入视口后才读取自身 Blob 并建 ObjectURL, 卸载时释放。
+ * 懒加载避免列表里所有图片文件在挂载即一次性 getFile + createObjectURL (本地优先场景可达上千个)。
+ */
 function Thumbnail({ id }: { id: string }) {
   const [src, setSrc] = React.useState<string | null>(null)
+  const [visible, setVisible] = React.useState(false)
+  const placeholderRef = React.useRef<HTMLDivElement | null>(null)
+
+  // 滚入视口 (提前 200px) 才标记可见; 命中后即停止观察。
   React.useEffect(() => {
+    if (visible) return
+    const el = placeholderRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisible(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: "200px" },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [visible])
+
+  React.useEffect(() => {
+    if (!visible) return
     let url: string | null = null
     let active = true
     getFile(id).then((f) => {
@@ -93,8 +119,14 @@ function Thumbnail({ id }: { id: string }) {
       active = false
       if (url) URL.revokeObjectURL(url)
     }
-  }, [id])
-  if (!src) return <ImageIcon className="h-8 w-8 text-muted-foreground" />
+  }, [id, visible])
+
+  if (!src)
+    return (
+      <div ref={placeholderRef} className="flex h-full w-full items-center justify-center">
+        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+      </div>
+    )
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={src} alt="" className="h-full w-full object-cover" />
 }
@@ -217,6 +249,11 @@ export default function FileManager() {
       return f.name.toLowerCase().includes(q) || f.tags.some((t) => t.toLowerCase().includes(q))
     })
   }, [files, query, typeFilter])
+
+  // 增量渲染: 首屏 N 个, 滚到底自动加载更多; 切搜索/类型即回第一页。
+  const { visible, hasMore, sentinelRef, shown, total } = useIncrementalList(filtered, {
+    resetKey: `${query}|${typeFilter}`,
+  })
 
   return (
     <div className="flex flex-col gap-4">
@@ -351,7 +388,7 @@ export default function FileManager() {
         </div>
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {filtered.map((file) => (
+          {visible.map((file) => (
             <FileGridCard
               key={file.id}
               file={file}
@@ -364,7 +401,7 @@ export default function FileManager() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border">
-          {filtered.map((file, i) => (
+          {visible.map((file, i) => (
             <FileListRow
               key={file.id}
               file={file}
@@ -375,6 +412,16 @@ export default function FileManager() {
               onDelete={() => handleDelete(file)}
             />
           ))}
+        </div>
+      )}
+
+      {!loading && hasMore && (
+        <div
+          ref={sentinelRef}
+          className="flex items-center justify-center py-4 text-xs text-muted-foreground"
+        >
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          加载更多…（已显示 {shown} / {total}）
         </div>
       )}
 
