@@ -1,9 +1,10 @@
-import { Bookmark, Bot, FolderOpen, Rss } from "lucide-react"
+import { Bookmark, Bot, FolderOpen, NotebookPen, Rss } from "lucide-react"
 import type { ComponentType } from "react"
 import { cn } from "@/components/lib/utils"
 
 type Props = {
   subs: number
+  notes: number
   bookmarks: number
   files: number
   threads: number
@@ -26,6 +27,7 @@ const TILES: Tile[] = [
     tint: "bg-spoke-info/10 border-spoke-info/25",
     num: "text-spoke-info",
   },
+  { key: "notes", label: "笔记", icon: NotebookPen },
   { key: "bookmarks", label: "书签", icon: Bookmark },
   { key: "files", label: "资源", icon: FolderOpen },
   {
@@ -43,7 +45,7 @@ const TILES: Tile[] = [
  */
 export function HubStatTiles(props: Props) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {TILES.map((t) => (
         <div key={t.key} className={cn("rounded-2xl border bg-card p-4 shadow-sm", t.tint)}>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

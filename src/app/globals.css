@@ -50,6 +50,7 @@
   --animate-accordion-up: accordion-up 0.2s ease-out;
   /* 回流「收入中枢」成功时的余晖脉冲 (motion-reduce 下由组件守卫) */
   --animate-flowback: flowback-settle 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  --color-highlight: var(--highlight);
 
   @keyframes flowback-settle {
     0% {
@@ -119,6 +120,7 @@
   --spoke-info: 217 91% 60%;
   --spoke-community: 162 72% 40%;
   --spoke-tool: 258 85% 66%;
+  --highlight: oklch(0.852 0.199 91.936);
 }
 
 .dark {
@@ -147,6 +149,7 @@
   --spoke-info: 217 88% 70%;
   --spoke-community: 162 58% 52%;
   --spoke-tool: 258 82% 74%;
+  --highlight: oklch(0.852 0.199 91.936);
 }
 
 @layer base {

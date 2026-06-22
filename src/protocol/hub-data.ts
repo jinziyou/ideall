@@ -54,6 +54,51 @@ export type NewBookmark = {
   tags?: string[]
 }
 
+/** 笔记本 (笔记分组), 类似书签收藏夹 */
+export interface Notebook {
+  id: string
+  name: string
+  createdAt: number
+}
+
+/**
+ * 笔记正文 —— 类 Notion 块文档, 由块节点构成的数组 (Plate/Slate 值)。
+ * JSON 可序列化, 直存 IndexedDB。protocol 不依赖编辑器实现 (platejs), 故以结构化 unknown[] 表达;
+ * 编辑器封装层再断言为 Plate 的 Value。
+ */
+export type NoteContent = unknown[]
+
+/** 笔记 (本地优先的原创块文档) */
+export interface Note {
+  id: string
+  title: string
+  /** 块文档正文 (Plate 值) */
+  content: NoteContent
+  /** 所属笔记本 id; null 表示未分组 */
+  notebookId: string | null
+  /** 用户标签 */
+  tags: string[]
+  createdAt: number
+  /** 最后编辑时间戳, 毫秒 (列表按此倒序) */
+  updatedAt: number
+}
+
+/** 笔记列表元数据 —— 不含完整 content, 改带纯文本摘要/全文, 避免列表整块载入正文 */
+export type NoteMeta = Omit<Note, "content"> & {
+  /** 正文前若干字符的纯文本, 用于列表卡片展示 */
+  excerpt: string
+  /** 正文全文纯文本 (不含格式), 用于全文搜索 */
+  search: string
+}
+
+/** 新建笔记入参 (id/时间戳由实现补全; 均可选, content 缺省为空文档)。 */
+export type NewNote = {
+  title?: string
+  content?: NoteContent
+  notebookId?: string | null
+  tags?: string[]
+}
+
 /**
  * 中枢本地数据端口 —— core 实现 (包装 IndexedDB stores), 经 protocol 暴露给 plugin。
  * agent 插件经此读写用户的订阅 / 书签 / 收藏夹 / 资源, 而非直接依赖 core 存储 (依赖反转)。
@@ -76,6 +121,9 @@ export interface HubDataPort {
   // 资源文件
   listFiles(): Promise<FileMeta[]>
   updateFileMeta(id: string, patch: Partial<Pick<StoredFile, "name" | "tags">>): Promise<void>
+  // 笔记 (读接口, 供插件读取中枢笔记)
+  listNotes(): Promise<NoteMeta[]>
+  getNote(id: string): Promise<Note | undefined>
 }
 
 let port: HubDataPort | null = null

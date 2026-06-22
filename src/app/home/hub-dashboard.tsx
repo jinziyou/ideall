@@ -9,6 +9,7 @@ import { SPOKES } from "@/app/nav/nav-config"
 import { listSubscriptions } from "./lib/subscriptions-store"
 import { listBookmarks } from "./lib/bookmarks-store"
 import { listFiles } from "./lib/files-store"
+import { listNotes } from "./lib/notes-store"
 import { countAgentThreads } from "./lib/agent-threads-count"
 import { onHubUpdated } from "@protocol/flowback"
 import type { Subscription } from "./model"
@@ -17,6 +18,7 @@ import { RecentFlowback, type FlowItem } from "./recent-flowback"
 
 type HubData = {
   subs: Subscription[]
+  notes: number
   bookmarks: number
   files: number
   threads: number
@@ -28,8 +30,21 @@ function buildFlow(
   subs: Subscription[],
   bookmarks: { id: string; title: string; createdAt: number }[],
   files: { id: string; name: string; createdAt: number }[],
+  notes: { id: string; title: string; createdAt: number }[],
 ): FlowItem[] {
   const items: FlowItem[] = []
+  for (const n of notes) {
+    items.push({
+      // 与 订阅/书签/资源 一致, 用 createdAt (收入中枢的时间) 而非 updatedAt,
+      // 否则反复编辑同一篇会不断把它顶到回流时间线最前、挤掉真正的新增。
+      id: `note:${n.id}`,
+      ts: n.createdAt,
+      dotClass: "bg-pop",
+      label: "写笔记",
+      title: n.title || "无标题",
+      href: "/home/notes",
+    })
+  }
   for (const s of subs) {
     const m = SUB_SPOKE_META[s.type]
     items.push({
@@ -71,19 +86,21 @@ export default function HubDashboard() {
     let alive = true
     async function load() {
       // 每个 store 各自兜底: 单个仓库失败不应把整个中枢清空成「空态」(否则有数据的用户会误见 onboarding)
-      const [subs, bookmarks, files, threadCount] = await Promise.all([
+      const [subs, bookmarks, files, notes, threadCount] = await Promise.all([
         listSubscriptions().catch(() => [] as Subscription[]),
         listBookmarks().catch(() => []),
         listFiles().catch(() => []),
+        listNotes().catch(() => []),
         countAgentThreads().catch(() => 0),
       ])
       if (!alive) return
       setData({
         subs,
+        notes: notes.length,
         bookmarks: bookmarks.length,
         files: files.length,
         threads: threadCount,
-        flow: buildFlow(subs, bookmarks, files),
+        flow: buildFlow(subs, bookmarks, files, notes),
         pinnedTools: subs.filter((s) => s.type === "tool"),
       })
     }
@@ -99,8 +116,8 @@ export default function HubDashboard() {
   if (!data) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-[78px] animate-pulse rounded-2xl border bg-muted/40" />
           ))}
         </div>
@@ -110,7 +127,11 @@ export default function HubDashboard() {
   }
 
   const isEmpty =
-    data.subs.length === 0 && data.bookmarks === 0 && data.files === 0 && data.threads === 0
+    data.subs.length === 0 &&
+    data.notes === 0 &&
+    data.bookmarks === 0 &&
+    data.files === 0 &&
+    data.threads === 0
 
   if (isEmpty) return <EmptyHub />
 
@@ -119,6 +140,7 @@ export default function HubDashboard() {
       {/* 便当: 统计磁贴 */}
       <HubStatTiles
         subs={data.subs.length - data.pinnedTools.length}
+        notes={data.notes}
         bookmarks={data.bookmarks}
         files={data.files}
         threads={data.threads}
