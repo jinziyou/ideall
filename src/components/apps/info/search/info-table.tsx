@@ -14,6 +14,8 @@ export function InfoTable() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [nonce, setNonce] = React.useState(0)
+  // 列定义无状态, 仅创建一次; 否则每次 InfoTable 重渲染都新建 ColumnDef[] 引用、令 useReactTable 重建列模型。
+  const columns = React.useMemo(() => getSearchColumns(), [])
 
   // 重试在事件处理器里 reset (非 effect, 不触发同步 setState lint), 再 bump nonce 重取初始列表。
   const reload = () => {
@@ -44,7 +46,7 @@ export function InfoTable() {
 
   return (
     <DataTable
-      columns={getSearchColumns()}
+      columns={columns}
       data={data}
       loading={loading}
       error={error}

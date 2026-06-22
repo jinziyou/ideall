@@ -5,10 +5,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import { getServerPort } from "@protocol/server-port"
 import { getHubData } from "@protocol/hub-data"
-import type { NewSubscription, SubscriptionType } from "@protocol/subscription"
 import type { NewBookmark } from "@protocol/hub-data"
 import { getSession } from "@/components/lib/auth/auth-store"
 import { openExternalUrl } from "@/components/lib/tauri"
+import { safeHref } from "@/components/lib/safe-url"
 import { toast } from "sonner"
 import { TOOL, RESOURCE } from "./protocol"
 
@@ -20,6 +20,9 @@ function ok(data: unknown): ToolResult {
 function fail(code: number, message: string): ToolResult {
   return { isError: true, content: [{ type: "text", text: JSON.stringify({ code, message }) }] }
 }
+
+// 订阅类型白名单: 用 zod enum 让 handler 直接拿到领域联合 (SubscriptionType), 杜绝任意字符串写入脏订阅。
+const subType = z.enum(["publisher", "entity", "tool", "search", "peer"])
 
 export interface HostToolsCtx {
   /** ideall 内部路由跳转 (host.navigate)。 */
@@ -77,8 +80,8 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
 
   // ── hub / 本地主权数据 ──────────────────────────────────────────────────────
   if (has("hub.subscriptions:read")) {
-    server.tool(TOOL.hubIsSubscribed, { type: z.string(), key: z.string() }, async (a) =>
-      ok(await getHubData().isSubscribed(a.type as SubscriptionType, a.key)),
+    server.tool(TOOL.hubIsSubscribed, { type: subType, key: z.string() }, async (a) =>
+      ok(await getHubData().isSubscribed(a.type, a.key)),
     )
     server.tool(TOOL.hubListSubscriptions, {}, async () =>
       ok(await getHubData().listSubscriptions()),
@@ -89,7 +92,7 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
     server.tool(
       TOOL.hubAddSubscription,
       {
-        type: z.string(),
+        type: subType,
         key: z.string(),
         title: z.string(),
         favicon: z.string().optional(),
@@ -98,10 +101,10 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
         searchKeyword: z.string().optional(),
         searchDomain: z.string().optional(),
       },
-      async (a) => ok(await getHubData().addSubscription(a as NewSubscription)),
+      async (a) => ok(await getHubData().addSubscription(a)),
     )
-    server.tool(TOOL.hubRemoveSubscription, { type: z.string(), key: z.string() }, async (a) => {
-      await getHubData().removeSubscription(a.type as SubscriptionType, a.key)
+    server.tool(TOOL.hubRemoveSubscription, { type: subType, key: z.string() }, async (a) => {
+      await getHubData().removeSubscription(a.type, a.key)
       return ok({ ok: true })
     })
   }
@@ -118,6 +121,8 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
         tags: z.array(z.string()).optional(),
       },
       async (a) => {
+        // 第三方嵌入页经 MCP 传入 url: 过协议白名单 (与 agent-tools 写入边界一致), 拦 javascript:/data: 伪协议入库。
+        if (!safeHref(a.url)) return fail(-32602, "blocked-protocol")
         const hub = getHubData()
         // 去重: addBookmark 非幂等; 同 url 重复点会产生重复书签 (与 ideall SaveToHub 一致)。
         const existing = await hub.listBookmarks()

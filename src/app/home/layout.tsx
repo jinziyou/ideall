@@ -1,5 +1,5 @@
 import HomeNav from "./home-nav"
-import CommandTrigger from "@/app/shell/command-trigger"
+import CommandTrigger from "@/components/shared/command-trigger"
 
 export const metadata = {
   title: "我的 | ideall",

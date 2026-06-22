@@ -6,10 +6,7 @@
 //   3. CI 用私钥 TAURI_SIGNING_PRIVATE_KEY(+ _PASSWORD) 签名发布产物。
 // 未配置 endpoints 时返回 "error" (安静降级), 不影响使用。
 
-/** 是否在 Tauri (App) 环境。 */
-export function inTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
-}
+import { isTauri } from "@/components/lib/tauri"
 
 /** 检查更新结果: 已下载安装 / 已是最新 / 非桌面环境 / 检查失败 (含未配置 endpoints)。 */
 export type UpdateCheckResult = "updated" | "uptodate" | "unsupported" | "error"
@@ -23,7 +20,7 @@ export type UpdateCheckResult = "updated" | "uptodate" | "unsupported" | "error"
  * 供「检查更新」入口调用（本仓库默认不自动调用，由 UI 决定时机）。
  */
 export async function checkForUpdate(): Promise<UpdateCheckResult> {
-  if (!inTauri()) return "unsupported"
+  if (!isTauri()) return "unsupported"
   try {
     const { check } = await import("@tauri-apps/plugin-updater")
     const update = await check()
