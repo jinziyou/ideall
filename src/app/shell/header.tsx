@@ -2,7 +2,7 @@ import Link from "next/link"
 import { WonitaMark } from "@/components/shared/wonita-mark"
 import ThemeToggle from "./theme-toggle"
 import AccountMenu from "./account-menu"
-import CommandTrigger from "./command-trigger"
+import CommandTrigger from "@/components/shared/command-trigger"
 import MobileNav from "./mobile-nav"
 
 /**

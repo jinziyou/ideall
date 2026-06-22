@@ -38,7 +38,8 @@ export async function syncNow(code: string): Promise<SyncResult> {
 
   // 乐观并发: 携带本端读到的基线版本 PUT; 若服务端已被另一端更新 (409) → 重新 GET→合并→PUT。
   // 修复旧的"丢失更新"窗口: 另一端在本端 GET 之后、PUT 之前新增的订阅不再被无条件覆盖丢弃。
-  for (let attempt = 1; ; attempt++) {
+  let succeeded = false
+  for (let attempt = 1; attempt <= SYNC_MAX_ATTEMPTS; attempt++) {
     const got = await getSyncBlob(storageId)
     if (!got.ok) throw new Error(got.message)
     const base = got.data?.updated_at ?? 0 // 尚无数据 → 基线 0 (期望服务端也无数据)
@@ -64,12 +65,17 @@ export async function syncNow(code: string): Promise<SyncResult> {
       { iv: enc.iv, ciphertext: enc.ciphertext, updated_at: Date.now() },
       base,
     )
-    if (put.ok) break
+    if (put.ok) {
+      succeeded = true
+      break
+    }
     // 409 = 并发冲突: 另一端已抢先更新, 重新拉取合并后再试 (有界); 其它错误直接抛。
     if (put.status === 409 && attempt < SYNC_MAX_ATTEMPTS) continue
     if (put.status === 409) throw new Error("同步冲突: 多端同时修改, 请稍后重试")
     throw new Error(put.message)
   }
+  // 兜底: 正常路径循环内必 break/throw; 走到此处说明重试耗尽 (理论不可达, 防未来新增分支漏 break/throw 致空转)。
+  if (!succeeded) throw new Error("同步失败: 超过最大重试次数, 请稍后再试")
 
   // 精确统计"本地原本不存在的新 id 数"(LWW 下字段更新不算 added)。
   const localIds = new Set(local.map((s) => s.id))

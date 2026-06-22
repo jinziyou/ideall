@@ -92,7 +92,9 @@ export default function AgentPanel() {
   }, [messages])
 
   function newChat() {
-    if (sending) return
+    // 用同步 sendingRef (与 removeThread 一致): send() 进入后立即置位、setSending 要等 await 后才生效,
+    // 用异步 state sending 守卫会留出窗口让本函数在发送途中切走线程, 使消息落入错误线程。
+    if (sendingRef.current) return
     setActiveId(null)
     setMessages([])
     setInput("")
@@ -100,7 +102,7 @@ export default function AgentPanel() {
   }
 
   async function selectThread(id: string) {
-    if (sending || id === activeId) return
+    if (sendingRef.current || id === activeId) return
     try {
       const t = await getThread(id)
       if (t) {

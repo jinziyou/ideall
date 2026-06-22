@@ -104,7 +104,9 @@ function PreviewBody({
         ) : kind === "audio" ? (
           <audio src={url} controls className="w-full p-4" />
         ) : kind === "pdf" ? (
-          <iframe src={url} title={file.name} className="h-[60vh] w-full" />
+          // sandbox (无 allow-scripts/allow-same-origin): blob: 与 app 文档同源, 不沙箱则
+          // 一个 MIME 实为 text/html 却名为 .pdf 的文件会以 ideall origin 执行脚本、读 localStorage。
+          <iframe src={url} title={file.name} sandbox="" className="h-[60vh] w-full" />
         ) : kind === "text" ? (
           <pre className="w-full whitespace-pre-wrap break-words p-4 text-left text-xs">
             {text}

@@ -153,7 +153,7 @@ export default function MyPublications() {
       </Card>
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">发布</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">已发布内容</h2>
         {error ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-muted-foreground">加载失败：{error}</p>

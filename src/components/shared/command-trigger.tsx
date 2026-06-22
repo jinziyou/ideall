@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react"
 import { cn } from "@/components/lib/utils"
-import { openCommandPalette } from "./command-palette"
+import { openCommandPalette } from "@/components/lib/command-palette-bus"
 
 /**
  * 可见的命令台触发器 (药丸形) —— 方案 3 混合: ⌘K 浮层引擎 + 显式入口。

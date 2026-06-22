@@ -1,5 +1,5 @@
 import { cn } from "@/components/lib/utils"
-import CommandTrigger from "@/app/shell/command-trigger"
+import CommandTrigger from "./command-trigger"
 
 /**
  * 三 app 统一页头 —— spoke 色点 + 标题 + 一句回流定位描述, 右侧方案 3 命令台触发器 (⌘K)。

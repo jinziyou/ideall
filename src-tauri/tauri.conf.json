@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: https: http: ws: wss:; frame-src 'self' http://localhost:5024 https://web.wonita.link; worker-src 'self' blob:"
+      "csp": "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: https: http: ws: wss:; frame-src 'self' http://localhost:5024 https://web.wonita.link; worker-src 'self' blob:"
     }
   },
   "bundle": {

@@ -49,7 +49,14 @@ export async function apiFetch<T = unknown>(
     }
   }
 
-  const rawText = await response.text()
+  let rawText: string
+  try {
+    rawText = await response.text()
+  } catch (e) {
+    // body 流中断 / abort / 解码错误: 也要返回可展示错误, 不让 reject 逃逸成 unhandled rejection。
+    console.error("[apiFetch] 读取响应体失败:", input, e)
+    return { ok: false, status: response.status, message: defaultErrorMessage }
+  }
   const parsed = parseJsonSafe(rawText)
 
   if (!response.ok) {
