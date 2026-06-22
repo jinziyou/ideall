@@ -8,6 +8,7 @@ import {
   Globe,
   Inbox,
   Layers,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -44,6 +45,7 @@ import {
 import { formatTime } from "@/components/lib/hub-format"
 import BookmarkDialog from "./bookmark-dialog"
 import ImportDialog from "./import-dialog"
+import { useIncrementalList } from "@/components/lib/use-incremental-list"
 
 // 侧栏选中项: 全部 / 未分组 / 具体收藏夹 id
 type FolderFilter = "all" | "none" | string
@@ -116,6 +118,11 @@ export default function BookmarkManager() {
       )
     })
   }, [bookmarks, active, query])
+
+  // 增量渲染: 首屏 N 条, 滚到底自动加载更多; 切收藏夹/搜索即回第一页。
+  const { visible, hasMore, sentinelRef, shown, total } = useIncrementalList(filtered, {
+    resetKey: `${active}|${query}`,
+  })
 
   function openAdd() {
     setEditing(null)
@@ -254,7 +261,7 @@ export default function BookmarkManager() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((b) => (
+            {visible.map((b) => (
               <BookmarkCard
                 key={b.id}
                 bookmark={b}
@@ -264,6 +271,16 @@ export default function BookmarkManager() {
                 onMove={(folderId) => handleMove(b, folderId)}
               />
             ))}
+          </div>
+        )}
+
+        {hasMore && (
+          <div
+            ref={sentinelRef}
+            className="flex items-center justify-center py-4 text-xs text-muted-foreground"
+          >
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            加载更多…（已显示 {shown} / {total}）
           </div>
         )}
       </div>
