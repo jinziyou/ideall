@@ -160,9 +160,9 @@ export default function SubscriptionFeed() {
                 className="group inline-flex items-center gap-1.5 rounded-full border bg-card py-1 pl-2.5 pr-1.5 text-sm text-card-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-accent"
               >
                 <a
-                  href={t.key}
+                  href={safeHref(t.key)}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="inline-flex min-w-0 items-center gap-1.5"
                 >
                   {t.favicon ? (

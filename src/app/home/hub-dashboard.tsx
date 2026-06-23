@@ -14,6 +14,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { cn } from "@/components/lib/utils"
+import { safeHref } from "@/components/lib/safe-url"
 import CommandTrigger from "@/components/shared/command-trigger"
 import { SUB_SPOKE_META } from "./lib/spoke-meta"
 import { SPOKES } from "@/app/nav/nav-config"
@@ -238,7 +239,7 @@ export default function HubDashboard() {
             {data.pinnedTools.map((t) => (
               <a
                 key={t.id}
-                href={t.key}
+                href={safeHref(t.key)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm transition-colors hover:bg-accent"

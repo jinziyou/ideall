@@ -105,7 +105,12 @@ export function registerGrantedTools(
         searchKeyword: z.string().optional(),
         searchDomain: z.string().optional(),
       },
-      async (a) => ok(await getHubData().addSubscription(a)),
+      async (a) => {
+        // tool 订阅的 key 即启动 URL, 会渲染成 <a href>; 过协议白名单拦伪协议 (与 hubAddBookmark 一致),
+        // 防持权 iframe 经 MCP 注入 javascript: 工具订阅 → 用户点击触发存储型 XSS。
+        if (a.type === "tool" && !safeHref(a.key)) return fail(-32602, "blocked-protocol")
+        return ok(await getHubData().addSubscription(a))
+      },
     )
     server.tool(TOOL.hubRemoveSubscription, { type: subType, key: z.string() }, async (a) => {
       await getHubData().removeSubscription(a.type, a.key)
