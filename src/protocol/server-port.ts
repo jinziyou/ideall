@@ -48,16 +48,6 @@ export interface Info {
   publish_time: number
 }
 
-/** 同一事件的多来源报道聚类 (`POST /info/events`)。 */
-export interface InfoEvent {
-  /** 代表稿: 聚类内最新采集的一篇 */
-  lead: Info
-  /** 同事件其它来源 (不含 lead, 按采集时间倒序) */
-  related: Info[]
-  /** 报道总数 (含 lead) */
-  source_count: number
-}
-
 /** `/info/analysis` 响应项: Info 平铺 + 关联强度分数 (向后兼容按 Info 读)。 */
 export type RelatedInfo = Info & {
   /** 与目标共享的实体数 (全实体口径) */
@@ -99,15 +89,6 @@ export interface EntityDetail {
   weekly: EntityPeriodCount[]
 }
 
-/** 近 N 小时各类实体频次 (`GET /info/entity/{hour}`), 每类 top 20 的 `{name: count}`。 */
-export interface EntityStats {
-  per: Record<string, number>
-  org: Record<string, number>
-  loc: Record<string, number>
-  product: Record<string, number>
-  event: Record<string, number>
-}
-
 /** 信息查询参数。分页 `[page_size, page_index]`; 时间区间 `[from, to]` epoch 毫秒闭区间。 */
 export interface InfoQuery {
   /** 实体筛选, 每项为 `(label, name)` */
@@ -118,26 +99,6 @@ export interface InfoQuery {
   timestamp_from_to?: [number, number] | null
   /** 分页 `(page_size, page_index)` */
   page_size_offset?: [number, number] | null
-}
-
-/** 访问者 IP 地理定位结果 (社区地图默认聚焦)。定位失败时经纬度为 0。 */
-export interface IpLocation {
-  city: string
-  country: string
-  longitude: number
-  latitude: number
-}
-
-/** 发布者地理位置 (社区发布者地图)。 */
-export interface PublisherLocation {
-  domain: string
-  name: string
-  city: string
-  country: string
-  longitude: number
-  latitude: number
-  /** 该发布者的信息条数 (地图点大小依据) */
-  count: number
 }
 
 /** 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (`type:"peer"` 的 key)。 */
@@ -204,14 +165,10 @@ export interface CurrentUser {
 export interface ServerPort {
   // 信息查询
   queryInfo(params: InfoQuery): Promise<ApiResult<Info[]>>
-  queryInfoEvents(params: InfoQuery): Promise<ApiResult<InfoEvent[]>>
   getRelatedInfo(url: string): Promise<RelatedInfo[]>
   getInfo(url: string): Promise<Info | null>
   getEntityDetail(label: string, name: string): Promise<EntityDetail | null>
-  getEntityStats(hours: number): Promise<ApiResult<EntityStats>>
-  // 地理 / 社区发布层
-  getPublisherLocations(): Promise<PublisherLocation[]>
-  getVisitorLocation(): Promise<IpLocation | null>
+  // 社区发布层
   listPeers(): Promise<ApiResult<PeerPublisher[]>>
   getPeerPublications(id: string): Promise<ApiResult<Publication[]>>
   publish(token: string, draft: PublishDraft): Promise<ApiResult<Publication>>

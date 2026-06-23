@@ -11,13 +11,9 @@ import type { components } from "@/components/lib/api/server"
 import type {
   ServerPort,
   Info,
-  InfoEvent,
   RelatedInfo,
   EntityDetail,
-  EntityStats,
   InfoQuery,
-  IpLocation,
-  PublisherLocation,
   PeerPublisher,
   Publication,
   PublishDraft,
@@ -34,13 +30,9 @@ const AUTH = `${SERVER_ADDR}/authorize`
 // 编译失败 → CI 红。这是「契约权威在 ideall」落到类型层的硬保证。
 const _contractGates = {
   info: (x: Wire["Info"]): Info => x,
-  infoEvent: (x: Wire["InfoEvent"]): InfoEvent => x,
   relatedInfo: (x: Wire["RelatedInfo"]): RelatedInfo => x,
   entityDetail: (x: Wire["EntityDetail"]): EntityDetail => x,
-  entityStats: (x: Wire["EntityStats"]): EntityStats => x,
   infoQuery: (x: InfoQuery): Wire["QueryInfoParams"] => x,
-  ipLocation: (x: Wire["IpLocation"]): IpLocation => x,
-  publisherLocation: (x: Wire["PublisherLocation"]): PublisherLocation => x,
   peerPublisher: (x: Wire["PeerPublisher"]): PeerPublisher => x,
   publication: (x: Wire["Publication"]): Publication => x,
   publishDraft: (x: PublishDraft): Wire["NewPublication"] => x,
@@ -70,15 +62,6 @@ function buildQueryBody(params: InfoQuery): Wire["QueryInfoParams"] {
   return { ...params, page_size_offset: params.page_size_offset ?? DEFAULT_PAGE_SIZE_OFFSET }
 }
 
-/** 是否成功定位: 经纬度有限且非 (0,0) 占位 (与 community/model isLocated 同口径)。 */
-function isLocated(l: { longitude: number; latitude: number }): boolean {
-  return (
-    Number.isFinite(l.longitude) &&
-    Number.isFinite(l.latitude) &&
-    (l.longitude !== 0 || l.latitude !== 0)
-  )
-}
-
 export const httpServerAdapter: ServerPort = {
   async queryInfo(params) {
     const res = await apiFetch<Info[]>(`${INFO_API_URI}`, {
@@ -89,15 +72,6 @@ export const httpServerAdapter: ServerPort = {
     })
     if (res.ok && res.data?.[0]) warnIfNotMillis("Info.collect_time", res.data[0].collect_time)
     return res
-  },
-
-  async queryInfoEvents(params) {
-    return apiFetch<InfoEvent[]>(`${INFO_API_URI}/events`, {
-      method: "POST",
-      json: buildQueryBody(params),
-      cache: "no-store",
-      defaultErrorMessage: "获取事件列表失败",
-    })
   },
 
   async getRelatedInfo(url) {
@@ -137,38 +111,6 @@ export const httpServerAdapter: ServerPort = {
       return null
     }
     return res.data
-  },
-
-  async getEntityStats(hours) {
-    return apiFetch<EntityStats>(`${INFO_API_URI}/entity/${hours}`, {
-      cache: "no-store",
-      defaultErrorMessage: "获取热门实体失败",
-    })
-  },
-
-  async getPublisherLocations() {
-    const res = await apiFetch<PublisherLocation[]>(`${INFO_API_URI}/publishers/locations`, {
-      cache: "no-store",
-      defaultErrorMessage: "获取发布者位置失败",
-    })
-    if (!res.ok) {
-      console.error("[getPublisherLocations]", res.message)
-      return []
-    }
-    return Array.isArray(res.data) ? res.data : []
-  },
-
-  async getVisitorLocation() {
-    const res = await apiFetch<IpLocation>(`${INFO_API_URI}/geoip`, {
-      cache: "no-store",
-      defaultErrorMessage: "访问者定位失败",
-    })
-    if (!res.ok) {
-      console.error("[getVisitorLocation]", res.message)
-      return null
-    }
-    const loc = res.data
-    return loc && isLocated(loc) ? loc : null
   },
 
   async listPeers() {
