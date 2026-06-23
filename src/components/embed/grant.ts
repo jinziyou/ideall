@@ -8,6 +8,7 @@
 //
 // 注: 本文件是纯逻辑 (无 UI / 无 IO), now 注入便于测试; 持久化的 Grant 存储 (T1+/IndexedDB) 是 P2 的事, 此处不做。
 import type { Manifest } from "./manifest"
+import type { Permission } from "./protocol"
 
 /** 信任层级 (设计 §4): T0 一方自动 / T1 已验消费方一次性同意 / T2 任意源逐源显式配对。 */
 export type GrantTier = "first-party" | "verified" | "any-origin"
@@ -24,7 +25,7 @@ export interface Grant {
   /** 信任层级。 */
   tier: GrantTier
   /** 授权位 (宿主据此注册 tool/resource)。 */
-  permissions: string[]
+  permissions: Permission[]
   /** 授予时间 epoch 毫秒。 */
   grantedAt: number
   /** 过期时间 epoch 毫秒; null = 不过期 (一方)。 */

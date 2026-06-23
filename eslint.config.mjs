@@ -81,6 +81,42 @@ const config = [
       ],
     },
   },
+
+  // app 模块互隔 (惯例 → 强制): info / community / tool 互不 import, 跨模块协作一律经 @protocol。
+  // 注: 同前, 后匹配块整体覆盖 no-restricted-imports, 故每块须重列 components→app 与 wire DTO 两条禁令。
+  ...[
+    ["info", ["community", "tool"]],
+    ["community", ["info", "tool"]],
+    ["tool", ["info", "community"]],
+  ].map(([self, siblings]) => ({
+    files: [`src/components/apps/${self}/**/*.{ts,tsx}`],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/app/*", "@/app/**"],
+              message:
+                "components 是跨 app/core/plugin 的共享层, 不得反向 import app (页面/路由代码); 共享逻辑下沉到 components/lib 或经 props 注入",
+            },
+            {
+              group: ["@/components/lib/api/server", "@protocol/server"],
+              message:
+                "wire DTO 仅允许 HTTP 适配器 (components/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (ideall 自有协议)",
+            },
+            {
+              group: siblings.flatMap((s) => [
+                `@/components/apps/${s}`,
+                `@/components/apps/${s}/**`,
+              ]),
+              message: `${self} 不得 import 其它 app (${siblings.join("/")}); 三 app 互隔, 跨模块经 @protocol 协作 (内容解析在各自 manifest 注册)`,
+            },
+          ],
+        },
+      ],
+    },
+  })),
 ]
 
 export default config

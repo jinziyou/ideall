@@ -249,9 +249,12 @@ export const httpServerAdapter: ServerPort = {
 
   async updateProfile(token, patch) {
     // PUT /me/profile —— apiserver 仅支持改 name (见 ProfileUpdate); avatar 预留。
+    // 漂移门: 请求体显式标注 Wire["ProfileUpdate"] (同 buildQueryBody 口径) —— wonita 改 profile
+    // 字段 (改名/加必填) → gen:api 重生成 → 此处编译失败 → CI 红, 杜绝漂移静默逃逸到运行时。
+    const body: Wire["ProfileUpdate"] = { name: patch.name ?? "" }
     return apiFetch(`${SERVER_ADDR}/me/profile`, {
       method: "PUT",
-      json: { name: patch.name ?? "" },
+      json: body,
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
       defaultErrorMessage: "更新资料失败",

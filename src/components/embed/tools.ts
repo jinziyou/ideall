@@ -10,7 +10,7 @@ import { getSession } from "@/components/lib/auth/auth-store"
 import { openExternalUrl } from "@/components/lib/tauri"
 import { safeHref } from "@/components/lib/safe-url"
 import { toast } from "sonner"
-import { TOOL, RESOURCE } from "./protocol"
+import { TOOL, RESOURCE, type Permission } from "./protocol"
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
 
@@ -32,8 +32,12 @@ export interface HostToolsCtx {
 /** host.navigate 允许的内部路由前缀 (白名单, §5.2)。 */
 const NAV_ALLOW = ["/home", "/auth", "/info", "/community", "/tool"]
 
-export function registerGrantedTools(server: McpServer, perms: string[], ctx: HostToolsCtx): void {
-  const has = (p: string) => perms.includes(p)
+export function registerGrantedTools(
+  server: McpServer,
+  perms: Permission[],
+  ctx: HostToolsCtx,
+): void {
+  const has = (p: Permission) => perms.includes(p)
 
   // ── identity / 发布 ─────────────────────────────────────────────────────────
   if (has("identity:read")) {
@@ -172,8 +176,8 @@ export function registerGrantedTools(server: McpServer, perms: string[], ctx: Ho
 }
 
 /** 注册授权范围内的只读资源 (resources/read)。 */
-export function registerGrantedResources(server: McpServer, perms: string[]): void {
-  const has = (p: string) => perms.includes(p)
+export function registerGrantedResources(server: McpServer, perms: Permission[]): void {
+  const has = (p: Permission) => perms.includes(p)
   const json = (uri: string, data: unknown) => ({
     contents: [{ uri, mimeType: "application/json", text: JSON.stringify(data ?? null) }],
   })

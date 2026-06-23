@@ -1,7 +1,14 @@
 // 文件本地存储仓库 —— 基于 IndexedDB, 存原始 Blob + 元数据。
 import { FileMeta, StoredFile } from "../model"
 import { genId } from "@/components/lib/id"
-import { idbDelete, idbGet, idbGetAll, idbPut, STORE_FILES } from "@/components/lib/idb"
+import {
+  idbDelete,
+  idbGet,
+  idbGetAll,
+  idbPut,
+  idbReadModifyWrite,
+  STORE_FILES,
+} from "@/components/lib/idb"
 import { notifyHubUpdated } from "./flowback"
 
 /** 剥离 Blob, 只回元数据 —— 列表与返回值不带原始内容, 避免把所有大文件整块读入内存。 */
@@ -48,9 +55,10 @@ export async function updateFileMeta(
   id: string,
   patch: Partial<Pick<StoredFile, "name" | "tags">>,
 ): Promise<void> {
-  const existing = await getFile(id)
-  if (!existing) return
-  await idbPut(STORE_FILES, { ...existing, ...patch })
+  // 单事务读-改-写 (旧实现读、写分两事务, 改名与改标签并发时后写覆盖前写); 不改动 Blob。
+  await idbReadModifyWrite<StoredFile>(STORE_FILES, id, (current) =>
+    current ? { ...current, ...patch } : undefined,
+  )
 }
 
 export async function deleteFile(id: string): Promise<void> {

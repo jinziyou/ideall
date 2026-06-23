@@ -1,5 +1,6 @@
 // 嵌入应用 manifest —— 宿主据此校验 iframe 源 + 起对应授权集的 MCP server (§6.1)。
 // info / community 是头两个一方 (first-party) 嵌入应用, 由 wonita/portal 实现。
+import type { Permission } from "./protocol"
 
 export interface Manifest {
   id: string
@@ -11,8 +12,8 @@ export interface Manifest {
   origins: string[]
   /** 要求的最低宿主协议。 */
   minHostProtocol: string
-  /** 授权位 (宿主只注册这些 tool/resource)。 */
-  permissions: string[]
+  /** 授权位 (宿主只注册这些 tool/resource); 联合类型杜绝拼错与 has() 漂移。 */
+  permissions: Permission[]
 }
 
 /** 被嵌入应用 (wonita/portal) 基址 —— 开发默认 localhost:5024, 生产 web.wonita.link。 */

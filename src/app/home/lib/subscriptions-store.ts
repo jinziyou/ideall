@@ -3,8 +3,7 @@
 import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
 import {
-  idbBulkDelete,
-  idbBulkPut,
+  idbBulkPutDelete,
   idbGet,
   idbGetAll,
   idbPut,
@@ -101,7 +100,9 @@ export async function removeSubscription(type: SubscriptionType, key: string): P
 export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> {
   const existing = await idbGetAll<Subscription>(STORE_SUBSCRIPTIONS)
   const expired = expiredTombstoneIdsToDelete(existing, new Set(subs.map((s) => s.id)), Date.now())
-  if (subs.length) await idbBulkPut(STORE_SUBSCRIPTIONS, subs)
-  if (expired.length) await idbBulkDelete(STORE_SUBSCRIPTIONS, expired)
-  if (subs.length || expired.length) notifyHubUpdated()
+  if (subs.length || expired.length) {
+    // 写回合并全集 + 物理删过期墓碑同事务原子: 避免 put 成功后 delete 中断的「已写回但墓碑未清」中间态。
+    await idbBulkPutDelete(STORE_SUBSCRIPTIONS, subs, expired)
+    notifyHubUpdated()
+  }
 }

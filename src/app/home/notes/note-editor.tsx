@@ -65,13 +65,7 @@ export default function NoteEditor({
   })
 
   const editor = usePlateEditor({
-    plugins: [
-      ...BasicBlocksKit,
-      ...BasicMarksKit,
-      ...ListKit,
-      ...CodeBlockKit,
-      ...SlashKit,
-    ],
+    plugins: [...BasicBlocksKit, ...BasicMarksKit, ...ListKit, ...CodeBlockKit, ...SlashKit],
     value: initialContent as Value,
   })
 
