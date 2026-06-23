@@ -2,6 +2,7 @@
 // home 从 info / community / tool 订阅来源 (发布者 / 实体 / 工具 / 搜索); 仅订阅偏好存本地, 内容实时拉取。
 import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
+import { safeHref } from "@/components/lib/safe-url"
 import {
   idbBulkPutDelete,
   idbGet,
@@ -53,6 +54,11 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
   const existing = await idbGet<Subscription>(STORE_SUBSCRIPTIONS, id)
   if (existing && isLive(existing)) return existing // 活跃订阅 → 幂等
   const key = input.key.trim()
+  // tool 订阅的 key 即启动 URL, 会渲染成 <a href>; 全写入路径 (嵌入桥 / agent / 手动) 的最后一道闸:
+  // 拒非 http(s) 协议, 防伪协议 (javascript:/data:) 入库后被点击触发存储型 XSS。
+  if (input.type === "tool" && !safeHref(key)) {
+    throw new Error("工具链接必须是 http(s) 地址")
+  }
   const sub: Subscription = {
     id,
     type: input.type,
