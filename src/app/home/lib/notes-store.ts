@@ -4,6 +4,7 @@ import { Note, NoteMeta, NoteContent, Notebook, NewNote } from "../model"
 import { genId } from "@/components/lib/id"
 import {
   idbBulkPut,
+  idbCount,
   idbDelete,
   idbGet,
   idbGetAll,
@@ -38,9 +39,13 @@ export function noteText(content: NoteContent): string {
   return parts.join(" ").replace(/\s+/g, " ").trim()
 }
 
-/** 剥离完整 content, 回列表元数据 (含纯文本摘要 + 全文), 避免列表整块载入正文。 */
-function toMeta(note: Note): NoteMeta {
-  const text = noteText(note.content)
+/**
+ * 剥离完整 content, 回列表元数据 (含纯文本摘要 + 全文), 避免列表整块载入正文。
+ * withText=false 时跳过递归遍历块树取全文 (excerpt/search 留空) —— 供只需 标题/时间 的消费方
+ * (如中枢回流时间线) 省掉对每条笔记的全文 walk。
+ */
+function toMeta(note: Note, withText = true): NoteMeta {
+  const text = withText ? noteText(note.content) : ""
   return {
     id: note.id,
     title: note.title,
@@ -88,10 +93,19 @@ export async function deleteNotebook(id: string): Promise<void> {
 
 // ---- 笔记 ----
 
-/** 列出所有笔记元数据 (不含完整 content), 按最后编辑时间倒序 */
-export async function listNotes(): Promise<NoteMeta[]> {
+/**
+ * 列出所有笔记元数据 (不含完整 content), 按最后编辑时间倒序。
+ * opts.text=false 跳过全文 walk (excerpt/search 留空), 供只用 标题/时间 的消费方提速。
+ */
+export async function listNotes(opts?: { text?: boolean }): Promise<NoteMeta[]> {
+  const withText = opts?.text !== false
   const notes = await idbGetAll<Note>(STORE_NOTES)
-  return notes.map(toMeta).sort((a, b) => b.updatedAt - a.updatedAt)
+  return notes.map((n) => toMeta(n, withText)).sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/** 笔记数 —— 走 count(), 仅需数量徽标时用 (不遍历每条笔记的块树取全文)。 */
+export async function countNotes(): Promise<number> {
+  return idbCount(STORE_NOTES)
 }
 
 /** 读取单条完整笔记 (含 content) */

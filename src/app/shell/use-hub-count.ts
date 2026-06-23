@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import { listSubscriptions } from "@/app/home/lib/subscriptions-store"
-import { listBookmarks } from "@/app/home/lib/bookmarks-store"
-import { listFiles } from "@/app/home/lib/files-store"
+import { countBookmarks } from "@/app/home/lib/bookmarks-store"
+import { countFiles } from "@/app/home/lib/files-store"
 import { onHubUpdated } from "@protocol/flowback"
 
 /**
@@ -20,13 +20,14 @@ export function useHubCount(): { count: number | null; flash: boolean } {
     let flashTimer: ReturnType<typeof setTimeout> | undefined
     async function load() {
       try {
-        const [subs, bms, files] = await Promise.all([
+        // 书签/文件走 count() (不载入文件 Blob); 订阅含墓碑, 仍 listSubscriptions 过滤后计数。
+        const [subs, bmCount, fileCount] = await Promise.all([
           listSubscriptions(),
-          listBookmarks(),
-          listFiles(),
+          countBookmarks(),
+          countFiles(),
         ])
         if (!alive) return
-        const n = subs.length + bms.length + files.length
+        const n = subs.length + bmCount + fileCount
         if (prev.current !== null && n > prev.current) {
           setFlash(true)
           clearTimeout(flashTimer) // 快速连续回流时不让多枚计时器叠加

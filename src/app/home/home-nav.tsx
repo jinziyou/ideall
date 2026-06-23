@@ -6,10 +6,10 @@ import { usePathname } from "next/navigation"
 import { HardDrive } from "lucide-react"
 import { cn } from "@/components/lib/utils"
 import { HOME_SUBPAGES, type NavLink } from "@/app/nav/nav-config"
-import { listFiles } from "./lib/files-store"
-import { listBookmarks } from "./lib/bookmarks-store"
+import { countFiles } from "./lib/files-store"
+import { countBookmarks } from "./lib/bookmarks-store"
 import { listSubscriptions } from "./lib/subscriptions-store"
-import { listNotes } from "./lib/notes-store"
+import { countNotes } from "./lib/notes-store"
 import { countAgentThreads } from "./lib/agent-threads-count"
 import { formatBytes } from "@/components/lib/hub-format"
 
@@ -31,18 +31,20 @@ export default function HomeNav() {
     let alive = true
     async function load() {
       try {
-        const [files, bookmarks, subs, notes, threadCount] = await Promise.all([
-          listFiles(),
-          listBookmarks(),
+        // 仅需数量徽标: 文件/书签/笔记/对话走 count() 不反序列化记录 (尤其避免载入文件 Blob /
+        // 遍历笔记块树); 订阅含软删墓碑, 仍 listSubscriptions 过滤后计数。
+        const [fileCount, bookmarkCount, subs, noteCount, threadCount] = await Promise.all([
+          countFiles(),
+          countBookmarks(),
           listSubscriptions(),
-          listNotes(),
+          countNotes(),
           countAgentThreads(),
         ])
         if (!alive) return
-        setFileCount(files.length)
-        setBookmarkCount(bookmarks.length)
+        setFileCount(fileCount)
+        setBookmarkCount(bookmarkCount)
         setSubCount(subs.length)
-        setNoteCount(notes.length)
+        setNoteCount(noteCount)
         setThreadCount(threadCount)
       } catch {
         /* 本地读取失败时静默, 不影响导航 */
