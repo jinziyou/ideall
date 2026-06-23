@@ -3,6 +3,7 @@ import { Bookmark, BookmarkFolder } from "../model"
 import { genId } from "@/components/lib/id"
 import {
   idbBulkPut,
+  idbCount,
   idbDelete,
   idbGetAll,
   idbPut,
@@ -58,6 +59,11 @@ export async function deleteFolder(id: string): Promise<void> {
 export async function listBookmarks(): Promise<Bookmark[]> {
   const items = await idbGetAll<Bookmark>(STORE_BOOKMARKS)
   return items.sort((a, b) => b.createdAt - a.createdAt)
+}
+
+/** 书签数 —— 走 count(), 仅需数量徽标时用 (不反序列化全部书签)。 */
+export async function countBookmarks(): Promise<number> {
+  return idbCount(STORE_BOOKMARKS)
 }
 
 export type NewBookmark = {

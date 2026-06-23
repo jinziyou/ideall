@@ -54,7 +54,7 @@ function renderContent(text: string): React.ReactNode[] {
   return parts
 }
 
-export default function ChatMessage({
+function ChatMessage({
   message,
   streaming,
 }: {
@@ -63,6 +63,12 @@ export default function ChatMessage({
   streaming?: boolean
 }) {
   const isUser = message.role === "user"
+  // 记忆化富文本: 流式时整列消息会随每个 token 重渲染; 底部 React.memo + 此 useMemo 让历史消息
+  // 既不重渲染、renderContent 也只在 content 变化时重算 (不每 token 重跑 fence 正则)。
+  const rendered = React.useMemo(
+    () => (message.content ? renderContent(message.content) : null),
+    [message.content],
+  )
   return (
     <div className={cn("flex gap-3", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
@@ -110,11 +116,7 @@ export default function ChatMessage({
             })}
           </div>
         )}
-        {message.content ? (
-          renderContent(message.content)
-        ) : streaming ? (
-          <span className="text-muted-foreground">思考中…</span>
-        ) : null}
+        {rendered ?? (streaming ? <span className="text-muted-foreground">思考中…</span> : null)}
         {streaming && message.content && (
           <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-current align-middle" />
         )}
@@ -122,3 +124,7 @@ export default function ChatMessage({
     </div>
   )
 }
+
+// memo: 流式更新只改最后一条消息的引用 (agent-panel 用 map 保留其余引用不变),
+// 故历史消息命中 memo 跳过重渲染。
+export default React.memo(ChatMessage)

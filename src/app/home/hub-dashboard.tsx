@@ -101,7 +101,8 @@ export default function HubDashboard() {
         listSubscriptions().catch(() => [] as Subscription[]),
         listBookmarks().catch(() => []),
         listFiles().catch(() => []),
-        listNotes().catch(() => []),
+        // 回流时间线只用 标题/时间, 跳过对每条笔记的全文 walk
+        listNotes({ text: false }).catch(() => []),
         countAgentThreads().catch(() => 0),
       ])
       if (!alive) return
@@ -116,10 +117,16 @@ export default function HubDashboard() {
       })
     }
     load()
-    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (onHubUpdated 同听 HUB_UPDATED + SUBSCRIPTIONS_SYNCED)
-    const off = onHubUpdated(load)
+    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (onHubUpdated 同听 HUB_UPDATED + SUBSCRIPTIONS_SYNCED)。
+    // 防抖: 批量写 (如导入书签) 会密集触发事件, 合并为一次重载, 避免每次写都整库重读。
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const off = onHubUpdated(() => {
+      clearTimeout(timer)
+      timer = setTimeout(load, 250)
+    })
     return () => {
       alive = false
+      clearTimeout(timer)
       off()
     }
   }, [])

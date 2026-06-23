@@ -2,6 +2,7 @@
 import { FileMeta, StoredFile } from "../model"
 import { genId } from "@/components/lib/id"
 import {
+  idbCount,
   idbDelete,
   idbGet,
   idbGetAll,
@@ -27,6 +28,11 @@ function toMeta(f: StoredFile): FileMeta {
 export async function listFiles(): Promise<FileMeta[]> {
   const files = await idbGetAll<StoredFile>(STORE_FILES)
   return files.map(toMeta).sort((a, b) => b.createdAt - a.createdAt)
+}
+
+/** 文件数 —— 走 count(), 不把所有文件 Blob 载入内存 (仅需数量徽标时用)。 */
+export async function countFiles(): Promise<number> {
+  return idbCount(STORE_FILES)
 }
 
 /** 读取单个完整文件 (含 Blob) */
