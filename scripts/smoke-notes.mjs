@@ -35,15 +35,15 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/1-empty.png` })
   record("页面加载并水合 (无白屏)", true)
 
-  // 2. 新建笔记 → 编辑器挂载 (首次点击会触发 dev 下 Plate 懒加载块的按需编译, 故给足超时)
-  //   exact:true 关键 —— 否则「新建笔记」会子串命中侧栏的「新建笔记本」按钮。
+  // 2. 新建页面 → 编辑器挂载 (首次点击会触发 dev 下 Plate 懒加载块的按需编译, 故给足超时)
+  //   exact:true 关键 —— 否则「新建」会子串命中空态的「新建页面」按钮。
   await page
-    .getByRole("button", { name: "新建笔记", exact: true })
+    .getByRole("button", { name: "新建", exact: true })
     .first()
     .click({ timeout: 15000 })
   const titleInput = page.getByPlaceholder("无标题")
   await titleInput.waitFor({ state: "visible", timeout: 60000 })
-  record("点「新建笔记」→ 编辑器挂载 (标题框出现)", true)
+  record("点「新建」→ 编辑器挂载 (标题框出现)", true)
 
   // 3. 输入标题
   await titleInput.fill(TITLE)

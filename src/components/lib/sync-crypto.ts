@@ -5,6 +5,12 @@
 const SALT = "wonita-sync"
 const INFO_ID = "wonita-sync-id-v1"
 const INFO_ENC = "wonita-sync-enc-v1"
+// 笔记走独立的加密块 (不同 storageId + 独立密钥), 与订阅互不覆盖。
+const INFO_ID_NOTES = "wonita-sync-notes-id-v1"
+const INFO_ENC_NOTES = "wonita-sync-notes-enc-v1"
+
+/** 同步域: 订阅与笔记各占一个加密块 (不同 storageId)。默认 "subs" 保持订阅旧 storageId 不变。 */
+export type SyncScope = "subs" | "notes"
 
 const td = new TextDecoder()
 
@@ -48,20 +54,25 @@ export function isValidSyncCode(code: string): boolean {
 
 export type DerivedKeys = { storageId: string; key: CryptoKey }
 
-/** 由同步码派生 storageId (服务端查找键, 不可逆推同步码) 与 AES-GCM 密钥 (仅本地)。 */
-export async function deriveKeys(code: string): Promise<DerivedKeys> {
+/**
+ * 由同步码派生 storageId (服务端查找键, 不可逆推同步码) 与 AES-GCM 密钥 (仅本地)。
+ * scope 选择同步域: "subs" (默认, 订阅; storageId 与历史一致) / "notes" (笔记, 独立块与密钥)。
+ */
+export async function deriveKeys(code: string, scope: SyncScope = "subs"): Promise<DerivedKeys> {
   const ikm = await crypto.subtle.importKey("raw", enc(normalizeCode(code)), "HKDF", false, [
     "deriveBits",
     "deriveKey",
   ])
+  const infoId = scope === "notes" ? INFO_ID_NOTES : INFO_ID
+  const infoEnc = scope === "notes" ? INFO_ENC_NOTES : INFO_ENC
   const idBits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: enc(SALT), info: enc(INFO_ID) },
+    { name: "HKDF", hash: "SHA-256", salt: enc(SALT), info: enc(infoId) },
     ikm,
     128,
   )
   const storageId = toHex(new Uint8Array(idBits))
   const key = await crypto.subtle.deriveKey(
-    { name: "HKDF", hash: "SHA-256", salt: enc(SALT), info: enc(INFO_ENC) },
+    { name: "HKDF", hash: "SHA-256", salt: enc(SALT), info: enc(infoEnc) },
     ikm,
     { name: "AES-GCM", length: 256 },
     false,

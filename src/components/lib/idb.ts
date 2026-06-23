@@ -12,7 +12,10 @@ const DB_NAME = "wonita-home"
 // v2: 新增 subscriptions 仓库 (「发现」的来源订阅回流到 home)。
 // v3: 新增 agentThreads 仓库 (AI 助手对话, 本地优先)。升级时旧仓库原样保留。
 // v4: 新增 notes + noteNotebooks 仓库 (类 Notion 块编辑笔记, 本地优先)。纯增量, 旧仓库原样保留。
-const DB_VERSION = 4
+// v5: 笔记升级为递归页树 (notebookId→parentId + sortKey, 笔记本→根目录页)。无新仓库 (仍用 notes /
+//     noteNotebooks); 数据形态迁移走 notes-store 的懒迁移 (migrateNotesTreeOnce, 可恢复/可 toast,
+//     不在 onupgradeneeded 内做以免 abort 无恢复 UI)。版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
+const DB_VERSION = 5
 
 export const STORE_FILES = "files"
 export const STORE_BOOKMARKS = "bookmarks"

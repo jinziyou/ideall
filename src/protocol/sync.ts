@@ -1,6 +1,19 @@
 // 跨端同步契约 —— 加密同步块的形状 + 纯合并逻辑 (LWW 并集)。
 // AES/HKDF 密码学与编排在 sync 插件内; 此处只放跨端共享的契约与可独立单测的纯逻辑。
-import type { Subscription } from "./subscription"
+//
+// 合并逻辑对「可同步记录」泛型化 (SyncRecord): 订阅 (Subscription) 与笔记 (Note) 等本地优先实体
+// 都满足该形状 (id + 版本时间 + 软删墓碑), 故共用同一套 LWW 并集 / 墓碑 GC, 不各写一份。
+
+/**
+ * 可跨端同步的记录的最小形状 —— LWW 合并只需: 主键 id、版本时间 (updatedAt 缺省回退 createdAt)、
+ * 软删墓碑 (deletedAt)。订阅 / 笔记等实体结构上满足即可参与同一套合并。
+ */
+export interface SyncRecord {
+  id: string
+  createdAt: number
+  updatedAt?: number
+  deletedAt?: number
+}
 
 /** 服务端不透明存储的加密同步块 (PUT/GET /sync/{id})。 */
 export type SyncBlob = { iv: string; ciphertext: string; updated_at: number }
@@ -25,8 +38,8 @@ export function getSyncPort(): SyncPort | null {
   return syncPort
 }
 
-/** 单条订阅的「版本时间」(LWW 比较用; updatedAt 缺省回退 createdAt, 兼容存量)。 */
-function subTs(s: Subscription): number {
+/** 单条记录的「版本时间」(LWW 比较用; updatedAt 缺省回退 createdAt, 兼容存量)。 */
+function recordTs(s: SyncRecord): number {
   return s.updatedAt ?? s.createdAt
 }
 
@@ -39,12 +52,12 @@ function subTs(s: Subscription): number {
  * 删除后又重新订阅 (addSubscription 清除 deletedAt 并 bump updatedAt) 较新 → 活跃项胜 → 复活。
  * 调用方读路径需自行过滤墓碑 (见 isLive); 过期墓碑由 pruneExpiredTombstones GC。
  */
-export function unionMerge(local: Subscription[], remote: Subscription[]): Subscription[] {
-  const map = new Map<string, Subscription>()
+export function unionMerge<T extends SyncRecord>(local: T[], remote: T[]): T[] {
+  const map = new Map<string, T>()
   for (const s of remote) map.set(s.id, s)
   for (const s of local) {
     const r = map.get(s.id)
-    if (!r || subTs(s) >= subTs(r)) map.set(s.id, s) // 本地更新或并列 → 本地胜
+    if (!r || recordTs(s) >= recordTs(r)) map.set(s.id, s) // 本地更新或并列 → 本地胜
   }
   return [...map.values()]
 }
@@ -58,34 +71,30 @@ export function unionMerge(local: Subscription[], remote: Subscription[]): Subsc
 export const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000
 
 /** 是否为墓碑 (软删除项)。 */
-export function isTombstone(s: Subscription): boolean {
+export function isTombstone(s: SyncRecord): boolean {
   return s.deletedAt != null
 }
 
-/** 是否为活跃订阅 (非墓碑) —— 读路径过滤用。 */
-export function isLive(s: Subscription): boolean {
+/** 是否为活跃记录 (非墓碑) —— 读路径过滤用。 */
+export function isLive(s: SyncRecord): boolean {
   return s.deletedAt == null
 }
 
 /** 墓碑是否已过保留期 (now − deletedAt > ttl), 可安全 GC; 非墓碑恒 false。now 注入便于测试。 */
-export function isExpiredTombstone(
-  s: Subscription,
-  now: number,
-  ttlMs = TOMBSTONE_TTL_MS,
-): boolean {
+export function isExpiredTombstone(s: SyncRecord, now: number, ttlMs = TOMBSTONE_TTL_MS): boolean {
   return s.deletedAt != null && now - s.deletedAt > ttlMs
 }
 
 /**
- * GC: 移除已过保留期的墓碑; 活跃订阅与未过期墓碑保留。纯函数 (now 注入)。
+ * GC: 移除已过保留期的墓碑; 活跃记录与未过期墓碑保留。纯函数 (now 注入)。
  * 同步落地前对合并结果调用, 使本地与远端同步块都不再携带过期墓碑。
  */
-export function pruneExpiredTombstones(
-  subs: Subscription[],
+export function pruneExpiredTombstones<T extends SyncRecord>(
+  records: T[],
   now: number,
   ttlMs = TOMBSTONE_TTL_MS,
-): Subscription[] {
-  return subs.filter((s) => !isExpiredTombstone(s, now, ttlMs))
+): T[] {
+  return records.filter((s) => !isExpiredTombstone(s, now, ttlMs))
 }
 
 /**
@@ -96,7 +105,7 @@ export function pruneExpiredTombstones(
  * 仅清掉「kept 已 prune 掉、库里残留」的过期墓碑, 使本地随远端同步块一起收敛。
  */
 export function expiredTombstoneIdsToDelete(
-  existing: Subscription[],
+  existing: SyncRecord[],
   keepIds: Set<string>,
   now: number,
   ttlMs = TOMBSTONE_TTL_MS,
@@ -106,12 +115,15 @@ export function expiredTombstoneIdsToDelete(
     .map((s) => s.id)
 }
 
-/** 两订阅集合是否等价 (按 id 排序后逐项比较), 用于决定是否写回本地。 */
-export function subsEqual(a: Subscription[], b: Subscription[]): boolean {
+/** 两记录集合是否等价 (按 id 排序后逐项比较), 用于决定是否写回本地。 */
+export function recordsEqual<T extends SyncRecord>(a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false
-  const norm = (xs: Subscription[]) =>
+  const norm = (xs: T[]) =>
     [...xs].sort((x, y) => x.id.localeCompare(y.id)).map((s) => JSON.stringify(s))
   const na = norm(a)
   const nb = norm(b)
   return na.every((v, i) => v === nb[i])
 }
+
+/** @deprecated 用 recordsEqual; 保留别名以兼容订阅同步路径与现有测试。 */
+export const subsEqual = recordsEqual

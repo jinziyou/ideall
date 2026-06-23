@@ -93,7 +93,7 @@ export default function SyncPanel() {
         }
       />
       <p className="mt-2 text-xs text-muted-foreground">
-        用同步码在多设备间同步订阅，服务器只存密文。删除会跨端同步（旧删除记录 90 天后自动清理）。
+        用同步码在多设备间同步订阅与笔记，服务器只存密文。删除会跨端同步（旧删除记录 90 天后自动清理）。
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Badge
@@ -148,7 +148,7 @@ export default function SyncPanel() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                在其它设备的「我的 · 订阅」里粘贴此码。谁拿到同步码，都能读写你的订阅。
+                在其它设备的「我的 · 订阅」里粘贴此码。谁拿到同步码，都能读写你的订阅与笔记。
               </p>
             </>
           )}

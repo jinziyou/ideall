@@ -1,54 +1,29 @@
 "use client"
 
+// 笔记工作台 —— Notion 式「目录即页面」递归页树 + 块编辑器。
+// 左: 页树侧栏 (展开/折叠、添加子页、拖拽换父/重排); 右: 面包屑 + 编辑器。搜索时切为扁平结果列表。
 import * as React from "react"
 import dynamic from "next/dynamic"
 import { toast } from "sonner"
-import {
-  ChevronLeft,
-  FilePlus2,
-  FileText,
-  FolderPlus,
-  Inbox,
-  Layers,
-  Loader2,
-  MoreHorizontal,
-  Notebook as NotebookIcon,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-} from "lucide-react"
+import { ChevronLeft, ChevronRight, FilePlus2, FileText, Loader2, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { ConfirmDialog, TextPromptDialog } from "@/components/shared/prompt-dialog"
+import { ConfirmDialog } from "@/components/shared/prompt-dialog"
 import { cn } from "@/components/lib/utils"
 import { formatTime } from "@/components/lib/hub-format"
-import { useIncrementalList } from "@/components/lib/use-incremental-list"
-import { Note, NoteMeta, Notebook } from "../model"
+import { undoableDeleteToast } from "@/components/lib/undo-toast"
+import { Note, NoteMeta } from "../model"
 import {
   addNote,
-  addNotebook,
   deleteNote,
-  deleteNotebook,
+  getAncestors,
   getNote,
-  listNotebooks,
   listNotes,
-  renameNotebook,
-  restoreNote,
-  updateNote,
+  moveNote,
+  restoreSubtree,
 } from "../lib/notes-store"
-import { undoableDeleteToast } from "@/components/lib/undo-toast"
+import { PageTree, type InsertPos } from "./notes-tree"
 import type { NoteEditorSaved } from "./note-editor"
 
 // 编辑器为纯客户端组件 (Plate), 懒加载并禁用 SSR, 避开预渲染与静态导出。
@@ -62,57 +37,112 @@ const NoteEditor = dynamic(() => import("./note-editor"), {
   ),
 })
 
-// 侧栏选中项: 全部 / 未分组 / 具体笔记本 id
-type NotebookFilter = "all" | "none" | string
+const EXPANDED_KEY = "ideall:notes:expanded"
+
+/** 统计某节点的后代数 (不含自身), 供级联删除确认文案。 */
+function countDescendants(notes: NoteMeta[], id: string): number {
+  const childrenOf = new Map<string, string[]>()
+  const liveIds = new Set(notes.map((n) => n.id))
+  for (const n of notes) {
+    const ep = n.parentId != null && liveIds.has(n.parentId) ? n.parentId : null
+    if (ep == null) continue
+    const arr = childrenOf.get(ep) ?? []
+    arr.push(n.id)
+    childrenOf.set(ep, arr)
+  }
+  let count = 0
+  const queue = [...(childrenOf.get(id) ?? [])]
+  const seen = new Set<string>()
+  while (queue.length) {
+    const cur = queue.shift() as string
+    if (seen.has(cur)) continue
+    seen.add(cur)
+    count++
+    queue.push(...(childrenOf.get(cur) ?? []))
+  }
+  return count
+}
 
 export default function NotesManager() {
-  const [notebooks, setNotebooks] = React.useState<Notebook[]>([])
   const [notes, setNotes] = React.useState<NoteMeta[]>([])
-  const [active, setActive] = React.useState<NotebookFilter>("all")
   const [query, setQuery] = React.useState("")
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [loadedNote, setLoadedNote] = React.useState<Note | null>(null)
-  // 笔记本对话框状态 (替代 window.prompt/confirm)
-  const [newNotebookOpen, setNewNotebookOpen] = React.useState(false)
-  const [renameTarget, setRenameTarget] = React.useState<Notebook | null>(null)
-  const [deleteTarget, setDeleteTarget] = React.useState<Notebook | null>(null)
+  const [ancestors, setAncestors] = React.useState<NoteMeta[]>([])
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
+  const [deleteTarget, setDeleteTarget] = React.useState<{ note: NoteMeta; count: number } | null>(
+    null,
+  )
 
-  // 首次挂载加载
+  const reload = React.useCallback(async () => {
+    try {
+      setNotes(await listNotes())
+    } catch (e) {
+      toast.error("读取笔记失败", { description: String(e) })
+    }
+  }, [])
+
+  // 首次加载 + 恢复展开状态 (setState 均在 await 之后, 不在 effect 同步阶段触发)
   React.useEffect(() => {
     let alive = true
-    async function load() {
+    ;(async () => {
+      let saved: Set<string> | null = null
       try {
-        const [nb, n] = await Promise.all([listNotebooks(), listNotes()])
-        if (alive) {
-          setNotebooks(nb)
-          setNotes(n)
+        const raw = localStorage.getItem(EXPANDED_KEY)
+        if (raw) saved = new Set(JSON.parse(raw) as string[])
+      } catch {
+        /* localStorage 不可用时忽略 */
+      }
+      try {
+        const n = await listNotes()
+        if (!alive) return
+        setNotes(n)
+        // 恢复展开状态时与现存节点取交集, 丢弃已删/不存在的陈旧 id (自愈, 避免 localStorage 无限增长)
+        if (saved) {
+          const liveIds = new Set(n.map((x) => x.id))
+          setExpanded(new Set([...saved].filter((id) => liveIds.has(id))))
         }
       } catch (e) {
-        toast.error("读取笔记失败", { description: String(e) })
+        if (alive) toast.error("读取笔记失败", { description: String(e) })
       }
-    }
-    load()
+    })()
     return () => {
       alive = false
     }
   }, [])
 
-  // 选中笔记 → 拉取完整正文供编辑器初始化 (setState 仅发生在 await 之后, 不在 effect 体内同步触发)
+  // 持久化展开状态 (per-device, 绝不进 Note / 不同步)
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded]))
+    } catch {
+      /* 忽略 */
+    }
+  }, [expanded])
+
+  // 选中 → 拉完整正文 + 祖先链 (面包屑), 并自动展开祖先使其在树中可见。
+  // selectedId 为 null 时直接返回: 右侧渲染由 selectedId 守卫, loadedNote 残留不会被渲染 (免在 effect 同步 setState)。
   React.useEffect(() => {
     if (!selectedId) return
     let alive = true
-    getNote(selectedId)
-      .then((note) => {
+    Promise.all([getNote(selectedId), getAncestors(selectedId)])
+      .then(([note, chain]) => {
         if (!alive) return
         if (!note) {
-          // 笔记已不存在 (例如在另一标签页被删除, 或 id 失效): 退出选中、从列表剔除,
-          // 避免编辑区永久卡在「打开中…」转圈而无恢复路径。
           toast.error("笔记不存在或已被删除")
-          setNotes((prev) => prev.filter((n) => n.id !== selectedId))
           setSelectedId(null)
+          reload()
           return
         }
         setLoadedNote(note)
+        setAncestors(chain)
+        if (chain.length) {
+          setExpanded((prev) => {
+            const next = new Set(prev)
+            for (const a of chain) next.add(a.id)
+            return next
+          })
+        }
       })
       .catch((e) => {
         if (alive) toast.error("打开笔记失败", { description: String(e) })
@@ -120,120 +150,104 @@ export default function NotesManager() {
     return () => {
       alive = false
     }
-  }, [selectedId])
-
-  async function refreshNotebooks() {
-    try {
-      setNotebooks(await listNotebooks())
-    } catch (e) {
-      toast.error("读取笔记本失败", { description: String(e) })
-    }
-  }
-
-  const counts = React.useMemo(() => {
-    const map = new Map<NotebookFilter, number>()
-    map.set("all", notes.length)
-    map.set("none", notes.filter((n) => n.notebookId === null).length)
-    for (const nb of notebooks) {
-      map.set(nb.id, notes.filter((n) => n.notebookId === nb.id).length)
-    }
-    return map
-  }, [notes, notebooks])
+  }, [selectedId, reload])
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
-    return notes.filter((n) => {
-      if (active === "none" && n.notebookId !== null) return false
-      if (active !== "all" && active !== "none" && n.notebookId !== active) return false
-      if (!q) return true
-      return (
-        n.title.toLowerCase().includes(q) ||
-        n.search.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q))
+    if (!q) return []
+    return notes
+      .filter(
+        (n) =>
+          n.title.toLowerCase().includes(q) ||
+          n.search.toLowerCase().includes(q) ||
+          n.tags.some((t) => t.toLowerCase().includes(q)),
       )
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+  }, [notes, query])
+
+  const onToggle = React.useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
     })
-  }, [notes, active, query])
+  }, [])
 
-  const { visible, hasMore, sentinelRef, shown, total } = useIncrementalList(filtered, {
-    resetKey: `${active}|${query}`,
-  })
+  async function selectAndLoad(note: Note) {
+    setLoadedNote(note)
+    setSelectedId(note.id)
+  }
 
-  async function handleNewNote() {
-    const notebookId = active !== "all" && active !== "none" ? active : null
+  async function handleNewRoot() {
     try {
-      const note = await addNote({ notebookId })
-      const meta: NoteMeta = {
-        id: note.id,
-        title: note.title,
-        notebookId: note.notebookId,
-        tags: note.tags,
-        createdAt: note.createdAt,
-        updatedAt: note.updatedAt,
-        excerpt: "",
-        search: "",
-      }
-      setNotes((prev) => [meta, ...prev])
-      setLoadedNote(note)
-      setSelectedId(note.id)
+      const note = await addNote({ parentId: null })
+      await reload()
+      await selectAndLoad(note)
     } catch (e) {
       toast.error("新建失败", { description: String(e) })
     }
   }
 
-  // 编辑器每次自动保存后就地刷新列表项 (标题/摘要/标签/时间), 并按最近编辑重排
-  const handleSaved = React.useCallback((meta: NoteEditorSaved) => {
-    setNotes((prev) =>
-      prev
-        .map((n) =>
-          n.id === meta.id
-            ? {
-                ...n,
-                title: meta.title,
-                excerpt: meta.excerpt,
-                search: meta.search,
-                tags: meta.tags,
-                updatedAt: meta.updatedAt,
-              }
-            : n,
-        )
-        .sort((a, b) => b.updatedAt - a.updatedAt),
-    )
-  }, [])
-
-  async function handleMoveNote(note: NoteMeta, notebookId: string | null) {
-    if (note.notebookId === notebookId) return
+  async function handleAddChild(parentId: string) {
     try {
-      // updateNote 会刷新 updatedAt; 用返回值同步本地并按最近编辑重排, 避免列表与 IDB 时间/顺序脱节
-      const saved = await updateNote(note.id, { notebookId })
-      const updatedAt = saved?.updatedAt ?? note.updatedAt
-      setNotes((prev) =>
-        prev
-          .map((n) => (n.id === note.id ? { ...n, notebookId, updatedAt } : n))
-          .sort((a, b) => b.updatedAt - a.updatedAt),
-      )
+      const note = await addNote({ parentId })
+      await reload()
+      setExpanded((prev) => new Set(prev).add(parentId))
+      await selectAndLoad(note)
+    } catch (e) {
+      toast.error("新建子页失败", { description: String(e) })
+    }
+  }
+
+  async function handleMove(dragId: string, newParentId: string | null, pos?: InsertPos) {
+    try {
+      await moveNote(dragId, newParentId, pos)
+      // 移到某父下时自动展开该父, 让被移动的页可见
+      if (newParentId) setExpanded((prev) => new Set(prev).add(newParentId))
+      await reload()
     } catch (e) {
       toast.error("移动失败", { description: String(e) })
     }
   }
 
-  async function handleDeleteNote(note: NoteMeta) {
+  // 编辑器每次自动保存后就地刷新该节点 (标题/摘要/标签/时间), 免整树重取。
+  // 同步 loadedNote.title 让面包屑「当前页」段随编辑器标题实时更新 (标题即重命名, Notion 式)。
+  const handleSaved = React.useCallback((meta: NoteEditorSaved) => {
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === meta.id
+          ? {
+              ...n,
+              title: meta.title,
+              excerpt: meta.excerpt,
+              search: meta.search,
+              tags: meta.tags,
+              updatedAt: meta.updatedAt,
+            }
+          : n,
+      ),
+    )
+    setLoadedNote((prev) => (prev && prev.id === meta.id ? { ...prev, title: meta.title } : prev))
+  }, [])
+
+  function askDelete(note: NoteMeta) {
+    setDeleteTarget({ note, count: countDescendants(notes, note.id) })
+  }
+
+  async function handleDelete(note: NoteMeta) {
     try {
-      // 列表只有元数据, 先取完整正文供撤销原样写回
-      const full = await getNote(note.id)
-      await deleteNote(note.id)
-      setNotes((prev) => prev.filter((n) => n.id !== note.id))
-      if (selectedId === note.id) {
+      const captured = await deleteNote(note.id)
+      const deletedIds = new Set(captured.map((n) => n.id))
+      await reload()
+      if (selectedId && deletedIds.has(selectedId)) {
         setSelectedId(null)
         setLoadedNote(null)
       }
-      if (full) {
+      if (captured.length) {
         undoableDeleteToast(note.title || "无标题", async () => {
-          await restoreNote(full)
-          setNotes((prev) =>
-            [note, ...prev.filter((n) => n.id !== note.id)].sort(
-              (a, b) => b.updatedAt - a.updatedAt,
-            ),
-          )
+          await restoreSubtree(captured)
+          await reload()
         })
       }
     } catch (e) {
@@ -241,88 +255,17 @@ export default function NotesManager() {
     }
   }
 
-  async function handleNewNotebook(name: string) {
-    try {
-      const nb = await addNotebook(name)
-      await refreshNotebooks()
-      setActive(nb.id)
-    } catch (e) {
-      toast.error("创建失败", { description: String(e) })
-    }
-  }
-
-  async function handleRenameNotebook(nb: Notebook, name: string) {
-    if (name === nb.name) return
-    try {
-      await renameNotebook(nb.id, name)
-      await refreshNotebooks()
-    } catch (e) {
-      toast.error("重命名失败", { description: String(e) })
-    }
-  }
-
-  async function handleDeleteNotebook(nb: Notebook) {
-    try {
-      await deleteNotebook(nb.id)
-      if (active === nb.id) setActive("all")
-      await Promise.all([refreshNotebooks(), listNotes().then(setNotes)])
-    } catch (e) {
-      toast.error("删除失败", { description: String(e) })
-    }
-  }
+  const searching = query.trim().length > 0
 
   return (
     <div className="flex flex-col gap-4 md:h-[calc(100dvh-6rem)] md:min-h-[34rem] md:flex-row">
-      {/* 左: 笔记本筛选 + 笔记列表 (移动端选中笔记时让位给编辑器) */}
+      {/* 左: 搜索 + 新建 + 页树 (移动端选中页时让位给编辑器) */}
       <div
         className={cn(
           "flex w-full flex-col gap-3 md:w-80 md:shrink-0",
           selectedId && "hidden md:flex",
         )}
       >
-        {/* 笔记本筛选行: 筛选 chip 横向滚动, 「新建笔记本」固定在末端常驻可见 */}
-        <div className="flex items-center gap-1">
-          <div className="flex flex-1 items-center gap-1 overflow-x-auto pb-0.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar]:h-1.5">
-            <NotebookChip
-              icon={<Layers className="h-3.5 w-3.5" />}
-              label="全部"
-              count={counts.get("all") ?? 0}
-              active={active === "all"}
-              onClick={() => setActive("all")}
-            />
-            <NotebookChip
-              icon={<Inbox className="h-3.5 w-3.5" />}
-              label="未分组"
-              count={counts.get("none") ?? 0}
-              active={active === "none"}
-              onClick={() => setActive("none")}
-            />
-            {notebooks.map((nb) => (
-              <NotebookChip
-                key={nb.id}
-                icon={<NotebookIcon className="h-3.5 w-3.5" />}
-                label={nb.name}
-                count={counts.get(nb.id) ?? 0}
-                active={active === nb.id}
-                onClick={() => setActive(nb.id)}
-                onRename={() => setRenameTarget(nb)}
-                onDelete={() => setDeleteTarget(nb)}
-              />
-            ))}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            onClick={() => setNewNotebookOpen(true)}
-            title="新建笔记本"
-          >
-            <FolderPlus className="h-4 w-4" />
-            <span className="sr-only">新建笔记本</span>
-          </Button>
-        </div>
-
-        {/* 搜索 + 新建笔记 */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -333,67 +276,104 @@ export default function NotesManager() {
               className="pl-8"
             />
           </div>
-          <Button onClick={handleNewNote} title="新建笔记">
+          <Button onClick={handleNewRoot} title="新建页面">
             <Plus className="mr-1 h-4 w-4" />
             新建
           </Button>
         </div>
 
-        {/* 笔记列表 */}
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:pr-1">
-          {filtered.length === 0 ? (
-            <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-              {notes.length === 0 ? "还没有笔记。点「新建」写第一篇。" : "没有匹配的笔记。"}
-            </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:pr-1">
+          {searching ? (
+            filtered.length === 0 ? (
+              <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
+                没有匹配的页面。
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {filtered.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => setSelectedId(n.id)}
+                    className={cn(
+                      "flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60",
+                      selectedId === n.id && "bg-primary/10 text-primary",
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 truncate font-medium">
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      {n.title || <span className="text-muted-foreground">无标题</span>}
+                    </span>
+                    {n.excerpt && (
+                      <span className="line-clamp-1 pl-5 text-xs text-muted-foreground">
+                        {n.excerpt}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )
           ) : (
-            visible.map((n) => (
-              <NoteCard
-                key={n.id}
-                note={n}
-                notebooks={notebooks}
-                active={selectedId === n.id}
-                onOpen={() => setSelectedId(n.id)}
-                onMove={(notebookId) => handleMoveNote(n, notebookId)}
-                onDelete={() => handleDeleteNote(n)}
-              />
-            ))
-          )}
-          {hasMore && (
-            <div
-              ref={sentinelRef}
-              className="flex items-center justify-center py-4 text-xs text-muted-foreground"
-            >
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              加载更多…（已显示 {shown} / {total}）
-            </div>
+            <PageTree
+              notes={notes}
+              selectedId={selectedId}
+              expanded={expanded}
+              onSelect={setSelectedId}
+              onToggle={onToggle}
+              onAddChild={handleAddChild}
+              onDelete={askDelete}
+              onMove={handleMove}
+            />
           )}
         </div>
       </div>
 
-      {/* 右: 编辑器 (移动端未选中时让位给列表) */}
+      {/* 右: 面包屑 + 编辑器 (移动端未选中时让位给页树) */}
       <div
-        className={cn("min-w-0 flex-1 rounded-xl border bg-card", !selectedId && "hidden md:block")}
+        className={cn(
+          "flex min-w-0 flex-1 flex-col rounded-xl border bg-card",
+          !selectedId && "hidden md:flex",
+        )}
       >
         {!selectedId ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-muted-foreground">
             <FileText className="h-10 w-10 opacity-40" />
-            <p className="text-sm">选一篇笔记开始编辑，或</p>
-            <Button variant="outline" onClick={handleNewNote}>
+            <p className="text-sm">选一个页面开始编辑，或</p>
+            <Button variant="outline" onClick={handleNewRoot}>
               <FilePlus2 className="mr-2 h-4 w-4" />
-              新建笔记
+              新建页面
             </Button>
           </div>
         ) : loadedNote && loadedNote.id === selectedId ? (
           <div className="flex h-full flex-col overflow-hidden">
-            {/* 移动端返回列表 */}
-            <button
-              type="button"
-              onClick={() => setSelectedId(null)}
-              className="flex items-center gap-1 px-3 py-2 text-sm text-muted-foreground md:hidden"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              返回列表
-            </button>
+            {/* 面包屑: 移动端含返回; 祖先可点击跳转 */}
+            <div className="flex items-center gap-0.5 overflow-x-auto border-b border-border/60 px-2 py-1.5 text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-accent md:hidden"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                返回
+              </button>
+              <span className="hidden shrink-0 px-1 md:inline">根</span>
+              {ancestors.map((a) => (
+                <React.Fragment key={a.id}>
+                  <ChevronRight className="h-3 w-3 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(a.id)}
+                    className="max-w-[10rem] shrink-0 truncate rounded px-1 py-0.5 hover:bg-accent"
+                  >
+                    {a.title || "无标题"}
+                  </button>
+                </React.Fragment>
+              ))}
+              <ChevronRight className="hidden h-3 w-3 shrink-0 md:inline" />
+              <span className="max-w-[12rem] shrink-0 truncate px-1 text-foreground">
+                {loadedNote.title || "无标题"}
+              </span>
+            </div>
             <NoteEditor
               key={loadedNote.id}
               noteId={loadedNote.id}
@@ -411,188 +391,24 @@ export default function NotesManager() {
         )}
       </div>
 
-      {/* 笔记本对话框 */}
-      <TextPromptDialog
-        open={newNotebookOpen}
-        onOpenChange={setNewNotebookOpen}
-        title="新建笔记本"
-        label="名称"
-        onSubmit={(name) => handleNewNotebook(name)}
-      />
-      <TextPromptDialog
-        open={renameTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setRenameTarget(null)
-        }}
-        title="重命名笔记本"
-        label="名称"
-        defaultValue={renameTarget?.name ?? ""}
-        onSubmit={(name) => {
-          if (renameTarget) handleRenameNotebook(renameTarget, name)
-        }}
-      />
+      {/* 级联删除确认 */}
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
         destructive
-        title={`删除笔记本「${deleteTarget?.name ?? ""}」?`}
-        description="本内笔记将移到「未分组」，不会删除。"
+        title={`删除「${deleteTarget?.note.title || "无标题"}」?`}
+        description={
+          deleteTarget && deleteTarget.count > 0
+            ? `将一并删除其下 ${deleteTarget.count} 个子页面，可撤销。`
+            : "删除后可撤销。"
+        }
         confirmLabel="删除"
         onConfirm={() => {
-          if (deleteTarget) handleDeleteNotebook(deleteTarget)
+          if (deleteTarget) handleDelete(deleteTarget.note)
         }}
       />
-    </div>
-  )
-}
-
-function NotebookChip({
-  icon,
-  label,
-  count,
-  active,
-  onClick,
-  onRename,
-  onDelete,
-}: {
-  icon: React.ReactNode
-  label: string
-  count: number
-  active: boolean
-  onClick: () => void
-  onRename?: () => void
-  onDelete?: () => void
-}) {
-  return (
-    <div
-      className={cn(
-        "group flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-        active ? "border-primary/30 bg-primary/10 font-medium text-primary" : "hover:bg-accent/60",
-      )}
-    >
-      <button type="button" onClick={onClick} className="flex items-center gap-1.5">
-        {icon}
-        <span className="max-w-[8rem] truncate">{label}</span>
-        <span className="text-muted-foreground">{count}</span>
-      </button>
-      {(onRename || onDelete) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="-mr-1 grid h-4 w-4 place-items-center rounded opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-            >
-              <MoreHorizontal className="h-3 w-3" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {onRename && (
-              <DropdownMenuItem onClick={onRename}>
-                <Pencil className="mr-2 h-4 w-4" />
-                重命名
-              </DropdownMenuItem>
-            )}
-            {onDelete && (
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={onDelete}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                删除
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </div>
-  )
-}
-
-function NoteCard({
-  note,
-  notebooks,
-  active,
-  onOpen,
-  onMove,
-  onDelete,
-}: {
-  note: NoteMeta
-  notebooks: Notebook[]
-  active: boolean
-  onOpen: () => void
-  onMove: (notebookId: string | null) => void
-  onDelete: () => void
-}) {
-  return (
-    <div
-      onClick={onOpen}
-      className={cn(
-        "group flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 text-card-foreground transition-colors hover:bg-accent/40",
-        active && "border-primary/50 bg-primary/10 ring-1 ring-primary/20",
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium" title={note.title || "无标题"}>
-            {note.title || <span className="text-muted-foreground">无标题</span>}
-          </div>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => e.stopPropagation()}
-              className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-              <span className="sr-only">操作</span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Layers className="mr-2 h-4 w-4" />
-                移动到
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem disabled={note.notebookId === null} onClick={() => onMove(null)}>
-                  未分组
-                </DropdownMenuItem>
-                {notebooks.map((nb) => (
-                  <DropdownMenuItem
-                    key={nb.id}
-                    disabled={note.notebookId === nb.id}
-                    onClick={() => onMove(nb.id)}
-                  >
-                    {nb.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={onDelete}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              删除
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {note.excerpt && <p className="line-clamp-2 text-xs text-muted-foreground">{note.excerpt}</p>}
-
-      <div className="mt-auto flex flex-wrap items-center gap-1">
-        {note.tags.map((t) => (
-          <Badge key={t} variant="secondary" className="font-normal">
-            {t}
-          </Badge>
-        ))}
-        <span className="ml-auto text-xs text-muted-foreground">{formatTime(note.updatedAt)}</span>
-      </div>
     </div>
   )
 }

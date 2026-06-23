@@ -54,13 +54,6 @@ export type NewBookmark = {
   tags?: string[]
 }
 
-/** 笔记本 (笔记分组), 类似书签收藏夹 */
-export interface Notebook {
-  id: string
-  name: string
-  createdAt: number
-}
-
 /**
  * 笔记正文 —— 类 Notion 块文档, 由块节点构成的数组 (Plate/Slate 值)。
  * JSON 可序列化, 直存 IndexedDB。protocol 不依赖编辑器实现 (platejs), 故以结构化 unknown[] 表达;
@@ -68,19 +61,30 @@ export interface Notebook {
  */
 export type NoteContent = unknown[]
 
-/** 笔记 (本地优先的原创块文档) */
+/**
+ * 笔记 (本地优先的原创块文档) —— Notion 式「目录即页面」递归节点:
+ * 任一 Note 既是页面 (有 content) 又是目录 (可作其它 Note 的父), 经 parentId 无限嵌套。
+ * 结构上满足 @protocol/sync 的 SyncRecord (id + updatedAt + deletedAt), 故复用同一套 LWW 跨端合并。
+ */
 export interface Note {
   id: string
   title: string
   /** 块文档正文 (Plate 值) */
   content: NoteContent
-  /** 所属笔记本 id; null 表示未分组 */
-  notebookId: string | null
+  /** 父页面 id; null = 根页面 (取代旧 notebookId)。任意 Note 可为其它 Note 的父 → 递归页树。 */
+  parentId: string | null
+  /**
+   * 同级排序键 (fractional-indexing 字符串, 字典序即显示序; 仅在同 parentId 下比较)。
+   * 移动 / 重排只改本节点一行 → 与单行 idbPut 及跨端 LWW 同步天然兼容。
+   */
+  sortKey: string
   /** 用户标签 */
   tags: string[]
   createdAt: number
-  /** 最后编辑时间戳, 毫秒 (列表按此倒序) */
+  /** 最后编辑时间戳, 毫秒 (LWW 比较 + 同级排序回退) */
   updatedAt: number
+  /** 软删除墓碑 (epoch ms); 缺省 = 活跃。跨端同步靠墓碑传播删除 (见 @protocol/sync)。 */
+  deletedAt?: number
 }
 
 /** 笔记列表元数据 —— 不含完整 content, 改带纯文本摘要/全文, 避免列表整块载入正文 */
@@ -89,13 +93,18 @@ export type NoteMeta = Omit<Note, "content"> & {
   excerpt: string
   /** 正文全文纯文本 (不含格式), 用于全文搜索 */
   search: string
+  /** 是否有活跃子页面 (决定页树展开箭头; 由 listNotes 一次性内存聚合得出, 免逐节点 count) */
+  hasChildren: boolean
 }
 
-/** 新建笔记入参 (id/时间戳由实现补全; 均可选, content 缺省为空文档)。 */
+/** 新建笔记入参 (id/时间戳/sortKey 由实现补全; 均可选, content 缺省为空文档)。 */
 export type NewNote = {
   title?: string
   content?: NoteContent
-  notebookId?: string | null
+  /** 父页面 id; null / 缺省 = 根页面 */
+  parentId?: string | null
+  /** 插入到某兄弟之后 (拖拽 / 在某页下方新建); 缺省追加同级末尾 */
+  afterSortKey?: string | null
   tags?: string[]
 }
 
@@ -124,9 +133,16 @@ export interface HubDataPort {
   // 资源文件
   listFiles(): Promise<FileMeta[]>
   updateFileMeta(id: string, patch: Partial<Pick<StoredFile, "name" | "tags">>): Promise<void>
-  // 笔记 (读接口, 供插件读取中枢笔记)
+  // 笔记 (读接口, 供插件读取中枢笔记; 写接口暂不开放给插件)
+  /** 列出活跃笔记元数据 (过滤墓碑)。 */
   listNotes(): Promise<NoteMeta[]>
   getNote(id: string): Promise<Note | undefined>
+  /** 列出某父页下的活跃直接子页面 (元数据, 按同级序), 供树感知插件导航。 */
+  listNoteChildren(parentId: string | null): Promise<NoteMeta[]>
+  /** 列出全部笔记含墓碑 + 完整正文 —— 跨端同步合并/上传用 (读路径另有 listNotes 过滤墓碑)。 */
+  listAllNotes(): Promise<Note[]>
+  /** 跨端同步落地: 写入合并 + GC 后的权威全集 (一次事务批处理)。 */
+  bulkPutNotes(notes: Note[]): Promise<void>
 }
 
 let port: HubDataPort | null = null
