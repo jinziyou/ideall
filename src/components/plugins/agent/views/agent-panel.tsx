@@ -328,9 +328,7 @@ export default function AgentPanel() {
                   : { label: "未配置模型", tone: "warn" }
               }
             />
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              懂你的「我的」，对话只存本机
-            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">懂「我的」，对话只存本机</p>
           </div>
           <Button
             variant="ghost"
@@ -354,6 +352,8 @@ export default function AgentPanel() {
 
         <div
           ref={scrollRef}
+          // aria-live=polite: 读屏播报流式回复的新增内容 (对话日志区)
+          aria-live="polite"
           className="flex h-[calc(100dvh-35rem)] min-h-[14rem] flex-col gap-4 overflow-y-auto rounded-lg border bg-background/40 p-4 md:h-[calc(100dvh-19rem)] md:min-h-[20rem]"
         >
           {messages.length === 0 ? (

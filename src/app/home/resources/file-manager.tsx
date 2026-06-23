@@ -189,17 +189,32 @@ export default function FileManager() {
       if (!arr.length) return
       setUploading(true)
       let ok = 0
+      let failed = 0
+      let lastError = ""
       try {
+        // 逐个落库各自兜底: 中途某个失败 (如 IndexedDB 配额耗尽) 不丢弃已成功的, 也不跳过刷新
         for (const f of arr) {
-          await addFile(f)
-          ok++
+          try {
+            await addFile(f)
+            ok++
+          } catch (e) {
+            failed++
+            lastError = e instanceof Error ? e.message : String(e)
+          }
         }
         await refresh()
-        toast.success(`已添加 ${ok} 个文件`)
-      } catch (e) {
-        toast.error("保存文件失败", { description: String(e) })
       } finally {
         setUploading(false)
+      }
+      // 分级回执: 全成功 / 部分失败 / 全失败
+      if (ok && failed) {
+        toast.warning(`已添加 ${ok} 个，${failed} 个失败（可能是本机存储已满）`, {
+          description: lastError,
+        })
+      } else if (failed) {
+        toast.error("保存文件失败", { description: lastError })
+      } else {
+        toast.success(`已添加 ${ok} 个文件`)
       }
     },
     [refresh],

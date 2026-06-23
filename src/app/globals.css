@@ -160,3 +160,16 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* 尊重「减少动态」系统偏好 (N-2): 全局兜底关掉动画/过渡/平滑滚动 —— 覆盖所有 animate-spin /
+   animate-pulse / animate-flowback / 手风琴等, 无需逐组件加 motion-reduce 守卫。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
