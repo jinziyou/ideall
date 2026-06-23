@@ -352,8 +352,10 @@ export default function AgentPanel() {
 
         <div
           ref={scrollRef}
-          // aria-live=polite: 读屏播报流式回复的新增内容 (对话日志区)
+          // aria-live=polite + aria-busy: 流式中 (streamingId 非空) busy=true 抑制逐 token 播报,
+          // 收尾 busy 转 false 时读屏一次性播报终态 —— 避免每 token 打断/重排队的过度播报。
           aria-live="polite"
+          aria-busy={streamingId !== null}
           className="flex h-[calc(100dvh-35rem)] min-h-[14rem] flex-col gap-4 overflow-y-auto rounded-lg border bg-background/40 p-4 md:h-[calc(100dvh-19rem)] md:min-h-[20rem]"
         >
           {messages.length === 0 ? (
