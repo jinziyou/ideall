@@ -65,7 +65,13 @@ export function SaveToHub({
   async function doSubscribe() {
     if (!publisher?.domain) return
     try {
-      await getHubData().addSubscription({
+      const hub = getHubData()
+      // 去重: 与 doBookmark 一致, 已订阅则提示而非重复弹「已订阅」成功 toast (把重复当新增)
+      if (await hub.isSubscribed("publisher", publisher.domain)) {
+        toast.info("已订阅该发布者")
+        return
+      }
+      await hub.addSubscription({
         type: "publisher",
         key: publisher.domain,
         title: publisher.name || publisher.domain,

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/components/lib/utils"
 import { getHubData } from "@protocol/hub-data"
 import type { NewSubscription } from "@protocol/subscription"
+import { undoableToast } from "@/components/lib/undo-toast"
 import { flowbackToast } from "./flowback-toast"
 
 /**
@@ -51,17 +52,11 @@ export function SubscribeButton({
         await hub.removeSubscription(type, key)
         setSubscribed(false)
         // 订阅是长期积累的资产, 误点取消可一键撤销 (触屏无 hover, 故用可撤销 toast 而非悬停态)
-        toast.success(`已取消订阅 ${title}`, {
-          action: {
-            label: "撤销",
-            onClick: () => {
-              void getHubData()
-                .addSubscription(sub)
-                .then(() => setSubscribed(true))
-                .catch(() => toast.error("撤销失败，请重试"))
-            },
-          },
-        })
+        undoableToast(`已取消订阅 ${title}`, () =>
+          getHubData()
+            .addSubscription(sub)
+            .then(() => setSubscribed(true)),
+        )
       } else {
         await hub.addSubscription(sub)
         setSubscribed(true)
@@ -70,7 +65,7 @@ export function SubscribeButton({
         setTimeout(() => setPulse(false), 600)
       }
     } catch {
-      toast.error("操作失败，请重试")
+      toast.error(subscribed ? "取消订阅失败，请重试" : "订阅失败，请重试")
     } finally {
       setBusy(false)
     }

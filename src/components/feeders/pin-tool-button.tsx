@@ -6,6 +6,7 @@ import { Loader2, Pin } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/components/lib/utils"
 import { getHubData } from "@protocol/hub-data"
+import { undoableToast } from "@/components/lib/undo-toast"
 import { flowbackToast } from "./flowback-toast"
 
 /**
@@ -49,7 +50,12 @@ export function PinToolButton({
       if (pinned) {
         await hub.removeSubscription("tool", url)
         setPinned(false)
-        toast.success(`已取消钉住 ${name}`)
+        // 误点取消可一键撤销 (addSubscription 复活墓碑: 清 deletedAt, 保留 createdAt)
+        undoableToast(`已取消钉住 ${name}`, () =>
+          getHubData()
+            .addSubscription({ type: "tool", key: url, title: name })
+            .then(() => setPinned(true)),
+        )
       } else {
         await hub.addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
@@ -58,7 +64,7 @@ export function PinToolButton({
         setTimeout(() => setPulse(false), 600)
       }
     } catch {
-      toast.error("操作失败，请重试")
+      toast.error(pinned ? "取消钉住失败，请重试" : "钉住失败，请重试")
     } finally {
       setBusy(false)
     }

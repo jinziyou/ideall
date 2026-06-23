@@ -14,7 +14,8 @@ import { entityLabelText } from "@/components/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import type { Subscription } from "../model"
-import { listSubscriptions, removeSubscription } from "../lib/subscriptions-store"
+import { addSubscription, listSubscriptions, removeSubscription } from "../lib/subscriptions-store"
+import { undoableToast } from "@/components/lib/undo-toast"
 
 /** 每个订阅来源在订阅流里展示的最新条数。 */
 const PER_SOURCE = 5
@@ -50,6 +51,8 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
 export default function SubscriptionFeed() {
   const [state, setState] = React.useState<Loaded | null>(null)
   const [view, setView] = React.useState<"grid" | "list">("grid")
+  // 退订进行中的项 (按 sub.id): 防重复触发, 并禁用对应的取消按钮
+  const [pending, setPending] = React.useState<Set<string>>(new Set())
   const mountedRef = React.useRef(true)
   // 并发去重: 挂载 load 与同步事件 load 可能同时在飞, 仅最后发起的一次允许落 state, 防后写覆盖。
   const seqRef = React.useRef(0)
@@ -83,6 +86,8 @@ export default function SubscriptionFeed() {
   }, [load])
 
   async function unsubscribe(sub: Subscription) {
+    if (pending.has(sub.id)) return // 防重: 同一项退订进行中不再触发
+    setPending((p) => new Set(p).add(sub.id))
     try {
       await removeSubscription(sub.type, sub.key)
       setState((prev) =>
@@ -93,9 +98,19 @@ export default function SubscriptionFeed() {
             }
           : prev,
       )
-      toast.success(`已取消订阅 ${sub.title}`)
+      // 订阅是长期积累的资产, 误点可一键撤销 (addSubscription 复活墓碑: 清 deletedAt, 保留 createdAt)
+      undoableToast(`已取消订阅 ${sub.title}`, async () => {
+        await addSubscription(sub)
+        await load()
+      })
     } catch {
       toast.error("取消订阅失败，请重试")
+    } finally {
+      setPending((p) => {
+        const next = new Set(p)
+        next.delete(sub.id)
+        return next
+      })
     }
   }
 
@@ -160,8 +175,9 @@ export default function SubscriptionFeed() {
                 <button
                   type="button"
                   onClick={() => unsubscribe(t)}
+                  disabled={pending.has(t.id)}
                   aria-label={`取消钉住 ${t.title}`}
-                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -255,6 +271,7 @@ export default function SubscriptionFeed() {
                     variant="ghost"
                     className="h-7 w-7 shrink-0"
                     onClick={() => unsubscribe(sub)}
+                    disabled={pending.has(sub.id)}
                     title="取消订阅"
                   >
                     <X className="h-4 w-4" />
