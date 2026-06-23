@@ -78,7 +78,8 @@ export function PinToolButton({
       title={pinned ? "取消钉住" : "钉到「我的」"}
       aria-label={pinned ? `取消钉住 ${name}` : `钉到「我的」 ${name}`}
       className={cn(
-        "rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50",
+        // 触屏放大命中区 (角标叠在卡角, 桌面保持紧凑)
+        "rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 pointer-coarse:p-2",
         pinned && "text-pop",
         pulse && "animate-flowback motion-reduce:animate-none",
         className,

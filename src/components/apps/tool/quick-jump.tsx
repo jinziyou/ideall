@@ -237,7 +237,8 @@ export default function QuickJump({
                 <button
                   type="button"
                   onClick={() => removeHistory(item)}
-                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  // 触屏放大命中区到 ~40px (桌面保持紧凑)
+                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground pointer-coarse:p-2"
                   aria-label={`删除 ${item}`}
                 >
                   <X className="h-3 w-3" />
