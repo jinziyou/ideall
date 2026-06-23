@@ -3,9 +3,9 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { MessagePortTransport } from "./transport"
-import { registerGrantedResources, registerGrantedTools } from "./tools"
+import { createHubMcpServer } from "./hub-mcp-server"
+import { firstPartyGrant } from "./grant"
 import {
   HELLO_MESSAGE_TYPE,
   INIT_MESSAGE_TYPE,
@@ -76,9 +76,9 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       )
 
       // 能力面: 每个 iframe 一个独立 server + 独立授权集。
-      const server = new McpServer({ name: "ideall-host", version: "1.0.0" })
-      registerGrantedResources(server, manifest.permissions)
-      registerGrantedTools(server, manifest.permissions, { navigate: (r) => router.push(r) })
+      // 一方 manifest → T0 Grant (自动/不过期/不可撤), 能力层据 Grant 起 server (与 transport 解耦)。
+      const grant = firstPartyGrant(manifest, Date.now())
+      const server = createHubMcpServer(grant, { navigate: (r) => router.push(r) })
       void server.connect(new MessagePortTransport(mcp.port1))
 
       // UI 面 (uiPort): 接收页面事件 + 推送主题。
