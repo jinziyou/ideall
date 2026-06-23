@@ -50,7 +50,18 @@ export function SubscribeButton({
       if (subscribed) {
         await hub.removeSubscription(type, key)
         setSubscribed(false)
-        toast.success(`已取消订阅 ${title}`)
+        // 订阅是长期积累的资产, 误点取消可一键撤销 (触屏无 hover, 故用可撤销 toast 而非悬停态)
+        toast.success(`已取消订阅 ${title}`, {
+          action: {
+            label: "撤销",
+            onClick: () => {
+              void getHubData()
+                .addSubscription(sub)
+                .then(() => setSubscribed(true))
+                .catch(() => toast.error("撤销失败，请重试"))
+            },
+          },
+        })
       } else {
         await hub.addSubscription(sub)
         setSubscribed(true)
@@ -72,6 +83,8 @@ export function SubscribeButton({
       variant={subscribed ? "secondary" : "default"}
       disabled={subscribed === null || busy}
       onClick={toggle}
+      aria-label={subscribed ? `取消订阅 ${title}` : `订阅 ${title}`}
+      title={subscribed ? "已订阅 · 点击取消" : undefined}
       className={cn("shrink-0", pulse && "animate-flowback motion-reduce:animate-none", className)}
     >
       {busy ? (

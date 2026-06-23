@@ -33,7 +33,7 @@ export default function AppError({
             {error.digest ? <div className="mt-1 opacity-70">digest: {error.digest}</div> : null}
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => window.location.assign("/")}>
+            <Button variant="outline" onClick={() => window.location.assign("/home")}>
               回到「我的」
             </Button>
             <Button onClick={() => reset()}>重试</Button>

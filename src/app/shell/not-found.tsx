@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import CommandTrigger from "@/components/shared/command-trigger"
 
 export default function NotFound() {
   return (
@@ -8,13 +9,11 @@ export default function NotFound() {
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>404 · 这里没有东西</CardTitle>
-          <CardDescription>这个地址不在你的空间，也不在发现里。</CardDescription>
+          <CardDescription>这个地址不在「我的」，也不在「发现」里。</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            或按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd>{" "}
-            跳转到任意位置
-          </p>
+          {/* 可点击的命令台入口 (触屏也能用; ⌘K 仅在桌面尺寸显示) */}
+          <CommandTrigger className="min-w-0 flex-1" />
           <Button asChild>
             <Link href="/home">回到「我的」</Link>
           </Button>
