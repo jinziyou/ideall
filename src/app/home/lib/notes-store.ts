@@ -8,6 +8,7 @@ import {
   idbGet,
   idbGetAll,
   idbPut,
+  idbReadModifyWrite,
   STORE_NOTES,
   STORE_NOTEBOOKS,
 } from "@/components/lib/idb"
@@ -71,18 +72,15 @@ export async function addNotebook(name: string): Promise<Notebook> {
 }
 
 export async function renameNotebook(id: string, name: string): Promise<void> {
-  const notebooks = await listNotebooks()
-  const notebook = notebooks.find((n) => n.id === id)
-  if (!notebook) return
-  await idbPut(STORE_NOTEBOOKS, { ...notebook, name: name.trim() || notebook.name })
+  await idbReadModifyWrite<Notebook>(STORE_NOTEBOOKS, id, (current) =>
+    current ? { ...current, name: name.trim() || current.name } : undefined,
+  )
 }
 
 /** 删除笔记本; 其下笔记移到未分组 (notebookId = null), 不删除笔记 */
 export async function deleteNotebook(id: string): Promise<void> {
   const notes = await idbGetAll<Note>(STORE_NOTES)
-  const orphans = notes
-    .filter((n) => n.notebookId === id)
-    .map((n) => ({ ...n, notebookId: null }))
+  const orphans = notes.filter((n) => n.notebookId === id).map((n) => ({ ...n, notebookId: null }))
   if (orphans.length) await idbBulkPut(STORE_NOTES, orphans)
   await idbDelete(STORE_NOTEBOOKS, id)
   notifyHubUpdated()
@@ -128,11 +126,17 @@ export async function updateNote(
   id: string,
   patch: Partial<Pick<Note, "title" | "content" | "notebookId" | "tags">>,
 ): Promise<Note | undefined> {
-  const existing = await getNote(id)
-  if (!existing) return undefined
-  const next: Note = { ...existing, ...patch, updatedAt: Date.now() }
-  await idbPut(STORE_NOTES, next)
-  notifyHubUpdated()
+  // 单事务读-改-写: 正文自动保存与改标题并发时不丢更新 (旧实现读、写分两事务会互相覆盖)。
+  const next = await idbReadModifyWrite<Note>(STORE_NOTES, id, (current) => {
+    if (!current) return undefined
+    // 兜底归一化损坏/空正文 (与 getNote 同口径), 避免把 [] 写回库。
+    const normalized =
+      !Array.isArray(current.content) || current.content.length === 0
+        ? { ...current, content: emptyNoteContent() }
+        : current
+    return { ...normalized, ...patch, updatedAt: Date.now() }
+  })
+  if (next) notifyHubUpdated()
   return next
 }
 

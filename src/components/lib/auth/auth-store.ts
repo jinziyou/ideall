@@ -60,3 +60,16 @@ export function clearSession(): void {
   }
   listeners.forEach((l) => l())
 }
+
+// 跨标签页同步: storage 事件只在「其它」标签页触发 (本页 set/clear 已手动 notify listeners)。
+// 多窗口下另一标签页登录/登出后, 本页订阅者 (account-menu / my-publications / sync-panel) 据此实时
+// 刷新而非持续显示陈旧会话态。SSR 预渲染期无 window, 跳过。
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    // e.key 为 null = localStorage.clear(); 命中本模块 key 时失效快照缓存并通知。
+    if (e.key === null || e.key === TOKEN_KEY || e.key === USER_KEY) {
+      cache = null
+      listeners.forEach((l) => l())
+    }
+  })
+}

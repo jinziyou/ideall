@@ -6,6 +6,7 @@ import {
   idbDelete,
   idbGetAll,
   idbPut,
+  idbReadModifyWrite,
   STORE_BOOKMARKS,
   STORE_FOLDERS,
 } from "@/components/lib/idb"
@@ -39,10 +40,9 @@ export async function addFolder(name: string): Promise<BookmarkFolder> {
 }
 
 export async function renameFolder(id: string, name: string): Promise<void> {
-  const folders = await listFolders()
-  const folder = folders.find((f) => f.id === id)
-  if (!folder) return
-  await idbPut(STORE_FOLDERS, { ...folder, name: name.trim() || folder.name })
+  await idbReadModifyWrite<BookmarkFolder>(STORE_FOLDERS, id, (current) =>
+    current ? { ...current, name: name.trim() || current.name } : undefined,
+  )
 }
 
 /** 删除收藏夹; 夹内书签移动到未分组 (folderId = null) */
@@ -110,10 +110,10 @@ export async function updateBookmark(
   id: string,
   patch: Partial<Omit<Bookmark, "id" | "createdAt">>,
 ): Promise<void> {
-  const items = await listBookmarks()
-  const existing = items.find((b) => b.id === id)
-  if (!existing) return
-  await idbPut(STORE_BOOKMARKS, { ...existing, ...patch })
+  // 单事务读-改-写 + 按主键单取 (旧实现 listBookmarks 全表扫描定位一条, 量大时 O(n) 且放大竞态窗口)。
+  await idbReadModifyWrite<Bookmark>(STORE_BOOKMARKS, id, (current) =>
+    current ? { ...current, ...patch } : undefined,
+  )
 }
 
 export async function deleteBookmark(id: string): Promise<void> {

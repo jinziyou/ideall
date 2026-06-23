@@ -49,6 +49,14 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       )
       return
     }
+    // 安全断言: 嵌入源绝不可与宿主同源。iframe sandbox 含 allow-same-origin, 若 entry 误配为宿主自身源,
+    // iframe 将获宿主 localStorage (account token / 同步码) 访问能力, 击穿「token 不出宿主」隔膜。误配则中止。
+    if (typeof location !== "undefined" && entryOrigin === location.origin) {
+      console.error(
+        `[EmbedHost] entry 源 ${entryOrigin} 与宿主同源, 已中止 (嵌入源须跨域以隔离宿主 localStorage)。`,
+      )
+      return
+    }
 
     let started = false
     const cleanups: Array<() => void> = []

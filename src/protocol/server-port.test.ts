@@ -44,9 +44,6 @@ function makeMemoryServerPort(): ServerPort {
     async queryInfo() {
       return { ok: true, data: [info] }
     },
-    async queryInfoEvents() {
-      return { ok: true, data: [{ lead: info, related: [], source_count: 1 }] }
-    },
     async getRelatedInfo() {
       return [{ ...info, shared: 0, shared_entry: 0 }]
     },
@@ -64,15 +61,6 @@ function makeMemoryServerPort(): ServerPort {
         co_entities: [],
         weekly: [],
       }
-    },
-    async getEntityStats() {
-      return { ok: true, data: { per: {}, org: { 示例: 1 }, loc: {}, product: {}, event: {} } }
-    },
-    async getPublisherLocations() {
-      return []
-    },
-    async getVisitorLocation() {
-      return null
     },
     async listPeers() {
       return {

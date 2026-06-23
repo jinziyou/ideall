@@ -139,3 +139,60 @@ export async function idbBulkDelete(storeName: string, keys: IDBValidKey[]): Pro
     tx.onabort = () => reject(tx.error)
   })
 }
+
+/**
+ * 单事务读-改-写: 在同一个 readwrite 事务内 get(key) → mutate → put。
+ * 取代「先 idbGet 读、再 idbPut 写」分处两个独立事务的写法 —— 后者在并发写 (如笔记正文自动保存
+ * 与改标题同时进行, 或同步落地与编辑并发) 时, 后写会以陈旧快照覆盖前写 (丢更新)。
+ * mutate 返回 undefined 表示放弃写入 (记录不存在等), 此时不产生 put。返回写入的值 (或 undefined)。
+ */
+export async function idbReadModifyWrite<T>(
+  storeName: string,
+  key: IDBValidKey,
+  mutate: (current: T | undefined) => T | undefined,
+): Promise<T | undefined> {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite")
+    const store = tx.objectStore(storeName)
+    const getReq = store.get(key)
+    let result: T | undefined
+    getReq.onsuccess = () => {
+      try {
+        // mutate 在 get 的 onsuccess 内同步执行, 事务仍存活 → put 与 get 同事务原子。
+        const next = mutate(getReq.result as T | undefined)
+        result = next
+        if (next !== undefined) store.put(next)
+      } catch (err) {
+        reject(err)
+        tx.abort()
+      }
+    }
+    getReq.onerror = () => reject(getReq.error)
+    tx.oncomplete = () => resolve(result)
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+/**
+ * 单事务批量 put + delete —— 用于跨端同步落地: 写回合并全集与清理过期墓碑须原子,
+ * 否则 put 成功后 delete 中断会留下「已写回但墓碑未清」的中间态 (与 HubDataPort「一次事务批处理」承诺不符)。
+ */
+export async function idbBulkPutDelete<T>(
+  storeName: string,
+  puts: T[],
+  deleteKeys: IDBValidKey[],
+): Promise<void> {
+  if (!puts.length && !deleteKeys.length) return
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite")
+    const store = tx.objectStore(storeName)
+    for (const v of puts) store.put(v)
+    for (const k of deleteKeys) store.delete(k)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}

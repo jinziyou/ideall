@@ -1,8 +1,8 @@
-import * as React from 'react';
+import * as React from "react"
 
-import type { SlateLeafProps } from 'platejs/static';
+import type { SlateLeafProps } from "platejs/static"
 
-import { SlateLeaf } from 'platejs/static';
+import { SlateLeaf } from "platejs/static"
 
 export function CodeLeafStatic(props: SlateLeafProps) {
   return (
@@ -13,5 +13,5 @@ export function CodeLeafStatic(props: SlateLeafProps) {
     >
       {props.children}
     </SlateLeaf>
-  );
+  )
 }

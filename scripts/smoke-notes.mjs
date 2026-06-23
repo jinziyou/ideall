@@ -37,7 +37,10 @@ try {
 
   // 2. 新建笔记 → 编辑器挂载 (首次点击会触发 dev 下 Plate 懒加载块的按需编译, 故给足超时)
   //   exact:true 关键 —— 否则「新建笔记」会子串命中侧栏的「新建笔记本」按钮。
-  await page.getByRole("button", { name: "新建笔记", exact: true }).first().click({ timeout: 15000 })
+  await page
+    .getByRole("button", { name: "新建笔记", exact: true })
+    .first()
+    .click({ timeout: 15000 })
   const titleInput = page.getByPlaceholder("无标题")
   await titleInput.waitFor({ state: "visible", timeout: 60000 })
   record("点「新建笔记」→ 编辑器挂载 (标题框出现)", true)
@@ -76,13 +79,21 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/3-after-reload.png` })
 
   // 7. 重新打开该笔记, 确认正文回显
-  await page.getByText(TITLE, { exact: false }).first().click({ timeout: 8000 }).catch(() => {})
+  await page
+    .getByText(TITLE, { exact: false })
+    .first()
+    .click({ timeout: 8000 })
+    .catch(() => {})
   await page.waitForTimeout(1000)
   const reopened = (await page.locator('[data-slate-editor="true"]').count()) > 0
   record("重新打开笔记 → 编辑器回显", reopened)
   await page.screenshot({ path: `${SHOT_DIR}/4-reopened.png` })
 
-  record("运行期间无 page/console 错误", pageErrors.length === 0, pageErrors.slice(0, 4).join(" | "))
+  record(
+    "运行期间无 page/console 错误",
+    pageErrors.length === 0,
+    pageErrors.slice(0, 4).join(" | "),
+  )
 } catch (e) {
   record("冒烟脚本异常", false, String(e.message).split("\n")[0])
 } finally {
@@ -92,5 +103,12 @@ try {
 const passed = checks.filter((c) => c.ok).length
 console.log(`\n=== 结果: ${passed}/${checks.length} 通过 ===`)
 console.log(`截图: ${SHOT_DIR}/{1-empty,2-editor-slash,3-after-reload,4-reopened}.png`)
-if (pageErrors.length) console.log("page errors:\n" + pageErrors.slice(0, 8).map((e) => "  - " + e).join("\n"))
+if (pageErrors.length)
+  console.log(
+    "page errors:\n" +
+      pageErrors
+        .slice(0, 8)
+        .map((e) => "  - " + e)
+        .join("\n"),
+  )
 process.exit(checks.every((c) => c.ok) ? 0 : 1)

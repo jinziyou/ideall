@@ -357,10 +357,7 @@ export default function NotesManager() {
 
       {/* 右: 编辑器 (移动端未选中时让位给列表) */}
       <div
-        className={cn(
-          "min-w-0 flex-1 rounded-xl border bg-card",
-          !selectedId && "hidden md:block",
-        )}
+        className={cn("min-w-0 flex-1 rounded-xl border bg-card", !selectedId && "hidden md:block")}
       >
         {!selectedId ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-muted-foreground">
@@ -483,7 +480,10 @@ function NotebookChip({
               </DropdownMenuItem>
             )}
             {onDelete && (
-              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={onDelete}
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 删除
               </DropdownMenuItem>
@@ -557,7 +557,10 @@ function NoteCard({
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={onDelete}
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               删除
             </DropdownMenuItem>

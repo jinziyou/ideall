@@ -10,11 +10,6 @@ export function fetchLatestInfo(params: InfoQuery | Record<string, unknown>) {
   return getServerPort().queryInfo(params as InfoQuery)
 }
 
-/** 按同一事件聚类的报道列表 (`POST /info/events`)。 */
-export function fetchInfoEvents(params: InfoQuery | Record<string, unknown>) {
-  return getServerPort().queryInfoEvents(params as InfoQuery)
-}
-
 /** 某条信息的「全面报道」(`/info/analysis`): 描述同一事件的其它来源。拿不到返回空数组。 */
 export function getRelatedInfo(url: string) {
   return getServerPort().getRelatedInfo(url)
@@ -23,11 +18,6 @@ export function getRelatedInfo(url: string) {
 /** 实体详情聚合 (`GET /info/entity?label=&name=`)。拿不到返回 null。 */
 export function getEntityDetail(label: string, name: string) {
   return getServerPort().getEntityDetail(label, name)
-}
-
-/** 近 N 小时五类实体频次 (`GET /info/entity/{hour}`)。 */
-export function fetchEntityStats(hours: number) {
-  return getServerPort().getEntityStats(hours)
 }
 
 /** 单条信息详情; 拿不到返回 null。 */
