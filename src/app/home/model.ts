@@ -5,7 +5,6 @@ export type {
   FileMeta,
   BookmarkFolder,
   Bookmark,
-  Notebook,
   Note,
   NoteMeta,
   NoteContent,

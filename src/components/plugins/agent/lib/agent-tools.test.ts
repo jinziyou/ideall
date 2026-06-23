@@ -71,6 +71,9 @@ function makeMemoryHub() {
     updateFileMeta: notUsed,
     listNotes: notUsed,
     getNote: notUsed,
+    listNoteChildren: notUsed,
+    listAllNotes: notUsed,
+    bulkPutNotes: notUsed,
   }
   return { hub, bookmarks, deleteCalls: () => deleteCalls }
 }
