@@ -40,9 +40,11 @@ import {
   listBookmarks,
   listFolders,
   renameFolder,
+  restoreBookmark,
   updateBookmark,
 } from "../lib/bookmarks-store"
 import { formatTime } from "@/components/lib/hub-format"
+import { undoableDeleteToast } from "@/components/lib/undo-toast"
 import BookmarkDialog from "./bookmark-dialog"
 import ImportDialog from "./import-dialog"
 import { useIncrementalList } from "@/components/lib/use-incremental-list"
@@ -168,6 +170,12 @@ export default function BookmarkManager() {
     try {
       await deleteBookmark(b.id)
       setBookmarks((prev) => prev.filter((x) => x.id !== b.id))
+      undoableDeleteToast(b.title, async () => {
+        await restoreBookmark(b)
+        setBookmarks((prev) =>
+          [b, ...prev.filter((x) => x.id !== b.id)].sort((a, c) => c.createdAt - a.createdAt),
+        )
+      })
     } catch (e) {
       toast.error("删除失败", { description: String(e) })
     }

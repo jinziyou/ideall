@@ -48,7 +48,7 @@ function makeMemoryServerPort(): ServerPort {
       return [{ ...info, shared: 0, shared_entry: 0 }]
     },
     async getInfo() {
-      return info
+      return { ok: true as const, data: info }
     },
     async getEntityDetail(label, name) {
       return {

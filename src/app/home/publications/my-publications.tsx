@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatTimestamp } from "@/components/lib/format"
 import { safeHref } from "@/components/lib/safe-url"
+import { ConfirmDialog } from "@/components/shared/prompt-dialog"
 import { getSession, subscribeSession } from "@protocol/auth"
 import { deletePublication, getPeerPublications, publish, type Publication } from "@protocol/peer"
 
@@ -25,6 +26,8 @@ export default function MyPublications() {
   const [busy, setBusy] = React.useState(false)
   const [pubs, setPubs] = React.useState<Publication[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  // 发布是公开且不可撤销的远端动作, 删除前确认 (区别于本地书签/笔记的可撤销删除)
+  const [pendingDelete, setPendingDelete] = React.useState<Publication | null>(null)
 
   const uid = session ? String(session.user.id) : null
 
@@ -196,7 +199,7 @@ export default function MyPublications() {
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 shrink-0"
-                  onClick={() => onDelete(p.id)}
+                  onClick={() => setPendingDelete(p)}
                   title="删除"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -207,6 +210,22 @@ export default function MyPublications() {
           </ul>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null)
+        }}
+        title="删除这条发布？"
+        description={
+          pendingDelete ? `「${pendingDelete.title}」是公开发布，删除后不可恢复。` : undefined
+        }
+        confirmLabel="删除"
+        destructive
+        onConfirm={() => {
+          if (pendingDelete) onDelete(pendingDelete.id)
+        }}
+      />
     </div>
   )
 }

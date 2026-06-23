@@ -31,7 +31,15 @@ import {
 import { TextPromptDialog } from "@/components/shared/prompt-dialog"
 import { cn } from "@/components/lib/utils"
 import { FileMeta } from "../model"
-import { addFile, deleteFile, getFile, listFiles, updateFileMeta } from "../lib/files-store"
+import {
+  addFile,
+  deleteFile,
+  getFile,
+  listFiles,
+  restoreFile,
+  updateFileMeta,
+} from "../lib/files-store"
+import { undoableDeleteToast } from "@/components/lib/undo-toast"
 import { fileKind, FileKind, formatBytes, formatTime } from "@/components/lib/hub-format"
 import FilePreviewDialog from "./file-preview-dialog"
 import { useIncrementalList } from "@/components/lib/use-incremental-list"
@@ -199,9 +207,22 @@ export default function FileManager() {
 
   async function handleDelete(file: FileMeta) {
     try {
+      // 列表只有元数据, 先取完整文件 (含 Blob) 供撤销原样写回
+      const full = await getFile(file.id)
       await deleteFile(file.id)
       setFiles((prev) => prev.filter((f) => f.id !== file.id))
-      toast.success("已删除", { description: file.name })
+      if (full) {
+        undoableDeleteToast(file.name, async () => {
+          await restoreFile(full)
+          setFiles((prev) =>
+            [file, ...prev.filter((f) => f.id !== file.id)].sort(
+              (a, b) => b.createdAt - a.createdAt,
+            ),
+          )
+        })
+      } else {
+        toast.success("已删除", { description: file.name })
+      }
     } catch (e) {
       toast.error("删除失败", { description: String(e) })
     }

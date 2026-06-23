@@ -65,3 +65,9 @@ export async function deleteFile(id: string): Promise<void> {
   await idbDelete(STORE_FILES, id)
   notifyHubUpdated()
 }
+
+/** 撤销删除: 把刚删除的文件 (含 Blob) 原样写回 (保留 id/createdAt, 非新建)。 */
+export async function restoreFile(file: StoredFile): Promise<void> {
+  await idbPut(STORE_FILES, file)
+  notifyHubUpdated()
+}

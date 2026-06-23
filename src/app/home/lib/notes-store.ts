@@ -144,3 +144,9 @@ export async function deleteNote(id: string): Promise<void> {
   await idbDelete(STORE_NOTES, id)
   notifyHubUpdated()
 }
+
+/** 撤销删除: 把刚删除的笔记原样写回 (保留 id/时间/正文, 非新建)。 */
+export async function restoreNote(note: Note): Promise<void> {
+  await idbPut(STORE_NOTES, note)
+  notifyHubUpdated()
+}

@@ -120,3 +120,9 @@ export async function deleteBookmark(id: string): Promise<void> {
   await idbDelete(STORE_BOOKMARKS, id)
   notifyHubUpdated()
 }
+
+/** 撤销删除: 把刚删除的书签原样写回 (保留 id/createdAt/分组, 非新建)。 */
+export async function restoreBookmark(bookmark: Bookmark): Promise<void> {
+  await idbPut(STORE_BOOKMARKS, bookmark)
+  notifyHubUpdated()
+}
