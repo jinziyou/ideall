@@ -165,6 +165,7 @@ export default function SyncPanel() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="粘贴已有同步码"
+              aria-label="粘贴已有同步码"
               className="h-9 w-full sm:w-64"
             />
             <Button size="sm" variant="outline" onClick={joinWithCode} disabled={busy}>

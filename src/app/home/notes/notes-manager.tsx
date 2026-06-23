@@ -318,6 +318,7 @@ export default function NotesManager() {
             title="新建笔记本"
           >
             <FolderPlus className="h-4 w-4" />
+            <span className="sr-only">新建笔记本</span>
           </Button>
         </div>
 

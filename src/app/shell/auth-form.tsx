@@ -87,6 +87,7 @@ export default function AuthForm() {
           <Input
             type="email"
             placeholder="邮箱"
+            aria-label="邮箱"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
@@ -94,6 +95,7 @@ export default function AuthForm() {
           <Input
             type="password"
             placeholder="密码"
+            aria-label="密码"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete={mode === "login" ? "current-password" : "new-password"}

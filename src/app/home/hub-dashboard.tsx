@@ -206,11 +206,11 @@ export default function HubDashboard() {
               <Sparkles className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">AI 快问</h2>
               <span className="ml-auto rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">
-                BYO-key
+                自带密钥
               </span>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              问点什么，可读取中枢数据 · 自带密钥
+              问点什么，结合「我的」里的数据作答 · 密钥只存本机
             </p>
             <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
               打开 AI 助手

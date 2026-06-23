@@ -86,15 +86,15 @@ export function SaveToHub({
         variant="ghost"
         size="icon"
         className={cn("h-8 w-8", pulseCls, className)}
-        title="收入我的"
+        title="收入「我的」"
       >
         <Plus className="h-4 w-4" />
-        <span className="sr-only">收入我的</span>
+        <span className="sr-only">收入「我的」</span>
       </Button>
     ) : (
       <Button size="sm" className={cn("gap-1.5", pulseCls, className)}>
         <Plus className="h-4 w-4" />
-        收入我的
+        收入「我的」
       </Button>
     )
 

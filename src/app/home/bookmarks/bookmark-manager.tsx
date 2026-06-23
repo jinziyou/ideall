@@ -205,6 +205,7 @@ export default function BookmarkManager() {
             title="新建收藏夹"
           >
             <FolderPlus className="h-4 w-4" />
+            <span className="sr-only">新建收藏夹</span>
           </Button>
         </div>
         <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
@@ -381,6 +382,7 @@ function FolderItem({
               className="h-5 w-5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
+              <span className="sr-only">收藏夹操作</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
