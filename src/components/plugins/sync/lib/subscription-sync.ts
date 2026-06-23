@@ -1,9 +1,15 @@
 // 跨端同步编排 (sync 插件) —— 本地优先 + 端到端加密。
-// 拉远端密文 → 解密 → 与本地按 id 并集合并 → 写本地 → 加密 → 推远端。
-// 合并为并集 (LWW), 删除为尽力 (会被另一端带回已删项)。
-// 订阅读写经 @protocol/hub-data 的 HubDataPort (插件不直接依赖 core 存储)。
+// 拉远端密文 → 解密 → 与本地 (含墓碑) 按 id 并集合并 (LWW) → GC 过期墓碑 → 写本地 → 加密 → 推远端。
+// 合并为并集 (LWW); 删除以墓碑传播 (软删 deletedAt, 按 LWW 跨端收敛, 不再被对端复活); 过期墓碑 GC。
+// 取舍记录见 docs/sync-lww-tradeoff.md。订阅读写经 @protocol/hub-data 的 HubDataPort (插件不直接依赖 core 存储)。
 import type { Subscription } from "@protocol/subscription"
-import { unionMerge, subsEqual, type SyncResult } from "@protocol/sync"
+import {
+  unionMerge,
+  subsEqual,
+  isLive,
+  pruneExpiredTombstones,
+  type SyncResult,
+} from "@protocol/sync"
 import { getHubData } from "@protocol/hub-data"
 import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/components/lib/sync-crypto"
 import { getSyncBlob, putSyncBlob } from "./sync-api"
@@ -19,7 +25,9 @@ function isValidRemoteSub(s: unknown): s is Subscription {
     typeof o.id === "string" &&
     typeof o.type === "string" &&
     typeof o.key === "string" &&
-    typeof o.title === "string"
+    typeof o.title === "string" &&
+    // 墓碑亦合法 (deletedAt 缺省=活跃, 有则须为数字); 非法类型会污染 LWW 比较。
+    (o.deletedAt === undefined || typeof o.deletedAt === "number")
   )
 }
 
@@ -32,9 +40,12 @@ export async function syncNow(code: string): Promise<SyncResult> {
   const { storageId, key } = await deriveKeys(code)
   const hub = getHubData()
 
-  const local = await hub.listSubscriptions()
+  // 含墓碑读: 删除靠墓碑进合并/上传才能传播; 读路径 (UI) 另有 listSubscriptions 过滤墓碑。
+  const localAll = await hub.listAllSubscriptions()
   // merged 跨重试累积: unionMerge 是按 id 的 LWW 并集 (幂等可结合), 故每轮并入新拉到的远端即可。
-  let merged = local
+  let merged = localAll
+  // kept = merged GC 掉过期墓碑后的权威全集 (落地 + 上传的就是它); 成功后用于统计。
+  let kept = localAll
 
   // 乐观并发: 携带本端读到的基线版本 PUT; 若服务端已被另一端更新 (409) → 重新 GET→合并→PUT。
   // 修复旧的"丢失更新"窗口: 另一端在本端 GET 之后、PUT 之前新增的订阅不再被无条件覆盖丢弃。
@@ -54,12 +65,14 @@ export async function syncNow(code: string): Promise<SyncResult> {
     }
 
     merged = unionMerge(merged, remote)
-    // LWW 下即使长度不变也可能有字段更新, 故按"非等价就写回"判定。
-    if (!subsEqual(merged, local)) {
-      await hub.bulkPutSubscriptions(merged)
+    // GC: 落地/上传前剔除过期墓碑, 使本地与远端同步块都不再无限累积墓碑。
+    kept = pruneExpiredTombstones(merged, Date.now())
+    // LWW 下即使长度不变也可能有字段更新 (含墓碑), 故按"非等价就写回"判定; 写回会物理清除过期墓碑。
+    if (!subsEqual(kept, localAll)) {
+      await hub.bulkPutSubscriptions(kept)
     }
 
-    const enc = await encryptJson(key, merged)
+    const enc = await encryptJson(key, kept)
     const put = await putSyncBlob(
       storageId,
       { iv: enc.iv, ciphertext: enc.ciphertext, updated_at: Date.now() },
@@ -77,8 +90,9 @@ export async function syncNow(code: string): Promise<SyncResult> {
   // 兜底: 正常路径循环内必 break/throw; 走到此处说明重试耗尽 (理论不可达, 防未来新增分支漏 break/throw 致空转)。
   if (!succeeded) throw new Error("同步失败: 超过最大重试次数, 请稍后再试")
 
-  // 精确统计"本地原本不存在的新 id 数"(LWW 下字段更新不算 added)。
-  const localIds = new Set(local.map((s) => s.id))
-  const added = merged.filter((s) => !localIds.has(s.id)).length
-  return { total: merged.length, added }
+  // 统计以活跃订阅 (非墓碑) 为口径: total = 合并后活跃数; added = 本地原本不存在的新活跃 id 数。
+  const localLiveIds = new Set(localAll.filter(isLive).map((s) => s.id))
+  const mergedLive = kept.filter(isLive)
+  const added = mergedLive.filter((s) => !localLiveIds.has(s.id)).length
+  return { total: mergedLive.length, added }
 }

@@ -5,6 +5,7 @@ import {
   addSubscription,
   bulkPutSubscriptions,
   isSubscribed,
+  listAllSubscriptions,
   listSubscriptions,
   removeSubscription,
 } from "./subscriptions-store"
@@ -21,6 +22,7 @@ import { listNotes, getNote } from "./notes-store"
 
 export const hubDataPort: HubDataPort = {
   listSubscriptions,
+  listAllSubscriptions,
   addSubscription,
   removeSubscription,
   isSubscribed,

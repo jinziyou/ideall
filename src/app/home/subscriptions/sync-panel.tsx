@@ -93,7 +93,7 @@ export default function SyncPanel() {
         }
       />
       <p className="mt-2 text-xs text-muted-foreground">
-        用同步码在多设备间同步订阅，服务器只存密文。取消的订阅可能被另一端带回。
+        用同步码在多设备间同步订阅，服务器只存密文。删除会跨端同步（旧删除记录 90 天后自动清理）。
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Badge

@@ -105,11 +105,14 @@ export type NewNote = {
  */
 export interface HubDataPort {
   // 订阅
+  /** 列出活跃订阅 (过滤软删除墓碑)。UI / 插件读路径。 */
   listSubscriptions(): Promise<Subscription[]>
+  /** 列出全部订阅含墓碑 —— 跨端同步合并用 (墓碑须进合并/上传才能传播删除)。 */
+  listAllSubscriptions(): Promise<Subscription[]>
   addSubscription(input: NewSubscription): Promise<Subscription>
   removeSubscription(type: SubscriptionType, key: string): Promise<void>
   isSubscribed(type: SubscriptionType, key: string): Promise<boolean>
-  /** 批量写入 (跨端同步合并后整批落本地, 一次事务)。 */
+  /** 跨端同步落地: 写入合并 + GC 后的权威全集, 并物理清除集合外的过期墓碑 (一次事务批处理)。 */
   bulkPutSubscriptions(subs: Subscription[]): Promise<void>
   // 书签 / 收藏夹
   listBookmarks(): Promise<Bookmark[]>

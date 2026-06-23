@@ -25,6 +25,12 @@ export interface Subscription {
   createdAt: number
   /** 最后更新时间 (跨端 LWW 合并用; 缺省视为 createdAt, 兼容无此字段的存量数据)。 */
   updatedAt?: number
+  /**
+   * 软删除墓碑 (tombstone) 时间戳 epoch 毫秒; 缺省 = 活跃订阅。
+   * 跨端同步用: 删除写墓碑而非物理删, 让「删除」按 LWW 跨端收敛 (否则另一端会把已删项带回 = 复活)。
+   * 读路径 (listSubscriptions/isSubscribed) 过滤墓碑; 过保留期后 GC 物理清除 (见 @protocol/sync)。
+   */
+  deletedAt?: number
 }
 
 /** app 提交给中枢的「新订阅」入参 (id/favicon/createdAt 由 core 补全)。 */

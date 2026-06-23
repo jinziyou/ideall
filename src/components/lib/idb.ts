@@ -126,3 +126,16 @@ export async function idbBulkPut<T>(storeName: string, values: T[]): Promise<voi
 export async function idbDelete(storeName: string, key: IDBValidKey): Promise<void> {
   await withStore(storeName, "readwrite", (store) => store.delete(key))
 }
+
+export async function idbBulkDelete(storeName: string, keys: IDBValidKey[]): Promise<void> {
+  if (!keys.length) return
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite")
+    const store = tx.objectStore(storeName)
+    for (const k of keys) store.delete(k)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
