@@ -307,6 +307,7 @@ export default function AgentPanel() {
                   onClick={() => removeThread(t.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
+                  <span className="sr-only">删除对话</span>
                 </button>
               </div>
             )

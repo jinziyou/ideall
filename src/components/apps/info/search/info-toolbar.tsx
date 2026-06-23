@@ -82,13 +82,17 @@ export default function InfoToolbar<TData>({
     <div className="flex flex-col gap-2 py-4 md:flex-row md:flex-wrap md:items-center">
       <Input
         placeholder="按标题过滤当前结果"
+        aria-label="按标题过滤当前结果"
         value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
         onChange={(event) => table.getColumn("title")?.setFilterValue(event.target.value)}
         className="w-full md:max-w-sm"
       />
       <div className="flex items-center gap-2">
-        <label className="text-sm text-muted-foreground shrink-0">域名:</label>
+        <label htmlFor="info-filter-domain" className="text-sm text-muted-foreground shrink-0">
+          域名:
+        </label>
         <Input
+          id="info-filter-domain"
           value={domain}
           onChange={(event) => setDomain(event.target.value)}
           className="w-full md:w-48"
@@ -113,6 +117,7 @@ export default function InfoToolbar<TData>({
         <Input
           value={entityName}
           onChange={(event) => setEntityName(event.target.value)}
+          aria-label="实体名"
           className="w-full md:w-40"
           // 「全部」时禁用: 见上方 entityLabel 状态处注释 (契约要求逐项给 label)
           disabled={entityLabel === ALL_LABELS}
@@ -120,7 +125,9 @@ export default function InfoToolbar<TData>({
         />
       </div>
       <div className="flex items-center gap-2">
-        <label className="text-sm text-muted-foreground shrink-0">起止时间:</label>
+        <label htmlFor="date" className="text-sm text-muted-foreground shrink-0">
+          起止时间:
+        </label>
         <Popover>
           <PopoverTrigger asChild>
             <Button
