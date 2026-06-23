@@ -233,8 +233,9 @@ let override: ServerPort | null = null
 /**
  * 覆盖默认的 wonita 服务适配器。
  * App 形态 (嵌入式/局域网节点)、测试、或对接非官方 ServerPort 实现时调用; 默认无需注册 (见下)。
+ * 传 `null` 清除覆盖、回退默认 (测试复位用)。
  */
-export function registerServerPort(p: ServerPort): void {
+export function registerServerPort(p: ServerPort | null): void {
   override = p
 }
 
