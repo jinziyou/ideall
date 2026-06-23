@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import "@/app/globals.css"
-import { Header } from "./header"
-import Rail from "./rail"
-import BottomTabBar from "./bottom-tab-bar"
+import WorkspaceShell from "@/app/workspace/workspace-shell"
 import CommandPalette from "./command-palette"
 import { Toaster } from "@/components/ui/sonner"
 import { THEME_INIT } from "@/components/lib/theme"
@@ -33,16 +31,9 @@ export default function RootLayout({
         {/* 水合后兜底重新断言主题 (防根树重渲染抹掉 .dark) */}
         <ThemeApplier />
         <BootGate>
-          {/* A 布局: 桌面左侧图标轨 (Rail) + 内容区; 移动端顶栏 (Header) + 底部标签栏 (BottomTabBar) */}
-          <div className="flex min-h-dvh">
-            <Rail />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <Header />
-              {/* 移动端底部留出标签栏 + 中央悬浮键高度 */}
-              <div className="flex-1 pb-20 md:pb-0">{children}</div>
-            </div>
-          </div>
-          <BottomTabBar />
+          {/* Trae 风格标签工作区壳: 活动栏 + 二级侧栏 + 多标签主区 + 状态栏 (移动端降级为顶栏+底栏)。
+              各路由页是无 UI 的「开标签」标记, 内容由壳内持久挂载的 TabHost 渲染 (keep-alive)。 */}
+          <WorkspaceShell>{children}</WorkspaceShell>
           {/* ⌘K 浮层命令台: 全局唯一实例 */}
           <CommandPalette />
         </BootGate>

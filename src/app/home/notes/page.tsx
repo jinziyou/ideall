@@ -1,10 +1,2 @@
-import NotesManager from "./notes-manager"
-
-export const metadata = {
-  title: "笔记 | ideall",
-  description: "类 Notion 的块编辑笔记，只存本机。",
-}
-
-export default function NotesPage() {
-  return <NotesManager />
-}
+// 路由页 = 工作区「开标签」标记 (内容由壳内持久挂载的 TabHost 渲染, keep-alive)。
+export { default } from "@/app/workspace/open-workspace-tab"

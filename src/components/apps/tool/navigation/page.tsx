@@ -2,11 +2,7 @@ import { ExternalLink } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PinToolButton } from "@/components/feeders"
 
-export const metadata = {
-  title: "导航 | 工具 | ideall",
-  description: "常用站点导航。",
-}
-
+// 工具·导航视图 (由工作区 registry 作为标签内容渲染; 不再是独立路由页)。
 type Site = { name: string; url: string; desc?: string }
 type Category = { title: string; sites: Site[] }
 

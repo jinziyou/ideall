@@ -258,7 +258,7 @@ export default function NotesManager() {
   const searching = query.trim().length > 0
 
   return (
-    <div className="flex flex-col gap-4 md:h-[calc(100dvh-6rem)] md:min-h-[34rem] md:flex-row">
+    <div className="flex flex-col gap-4 md:h-full md:min-h-[34rem] md:flex-row">
       {/* 左: 搜索 + 新建 + 页树 (移动端选中页时让位给编辑器) */}
       <div
         className={cn(

@@ -36,6 +36,9 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+  /* 壳层专用圆角 (8px): 活动栏 / 二级侧栏 / 标签条 / 状态栏 —— 比内容便当(1rem)更收敛方正,
+     仍保留 solo 模式的柔感。内容卡片继续用 --radius-* 便当圆角。 */
+  --radius-shell: 0.5rem;
 
   --font-sans:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",

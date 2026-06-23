@@ -178,7 +178,8 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
   }, [manifest, router, reloadKey, configError, entryOrigin])
 
   return (
-    <div className="relative h-[calc(100dvh-3.5rem)] w-full">
+    // 高度由外层标签容器决定 (工作区 TabHost 提供 h-full); 不再自算视口高度。
+    <div className="relative h-full w-full">
       {effectiveStatus === "loading" && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />

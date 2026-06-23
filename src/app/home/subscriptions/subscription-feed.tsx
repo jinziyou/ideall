@@ -13,6 +13,7 @@ import { safeHref } from "@/components/lib/safe-url"
 import { entityLabelText } from "@/components/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
+import type { SubscriptionType } from "@protocol/subscription"
 import type { Subscription } from "../model"
 import { addSubscription, listSubscriptions, removeSubscription } from "../lib/subscriptions-store"
 import { undoableToast } from "@/components/lib/undo-toast"
@@ -48,7 +49,16 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
  *   - 发布者 / 实体 / 搜索 / 社区发布者(peer): 各自最新条目卡片
  * 本地优先: 订阅偏好读自 IndexedDB; 内容实时从 wonita 服务拉取。
  */
-export default function SubscriptionFeed() {
+export default function SubscriptionFeed({
+  types,
+  title = "订阅流",
+  dotClass = "bg-spoke-info",
+}: {
+  /** 仅展示这些类型的订阅 (订阅=publisher/entity/search; 关注=peer)；缺省展示全部。 */
+  types?: SubscriptionType[]
+  title?: string
+  dotClass?: string
+} = {}) {
   const [state, setState] = React.useState<Loaded | null>(null)
   const [view, setView] = React.useState<"grid" | "list">("grid")
   // 退订进行中的项 (按 sub.id): 防重复触发, 并禁用对应的取消按钮
@@ -67,11 +77,12 @@ export default function SubscriptionFeed() {
       if (fresh()) setState({ tools: [], feeds: [] })
       return
     }
-    const tools = subs.filter((s) => s.type === "tool")
-    const sources = subs.filter((s) => s.type !== "tool")
+    const visible = types ? subs.filter((s) => types.includes(s.type)) : subs
+    const tools = visible.filter((s) => s.type === "tool")
+    const sources = visible.filter((s) => s.type !== "tool")
     const feeds = await Promise.all(sources.map(loadFeed))
     if (fresh()) setState({ tools, feeds })
-  }, [])
+  }, [types])
 
   React.useEffect(() => {
     mountedRef.current = true
@@ -192,8 +203,8 @@ export default function SubscriptionFeed() {
         <section className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <h2 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-spoke-info" />
-              订阅流 · {feeds.length} 个来源
+              <span className={cn("h-1.5 w-1.5 rounded-full", dotClass)} />
+              {title} · {feeds.length} 个来源
             </h2>
             <div className="ml-auto inline-flex items-center gap-1 rounded-lg border bg-card p-0.5">
               <button

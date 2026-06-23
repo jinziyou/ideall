@@ -108,7 +108,7 @@ export default function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="跳到书签、切换主题、问 AI…" />
+      <CommandInput placeholder="跳到书签、切换主题、同步数据…" />
       <CommandList>
         <CommandEmpty>没有匹配的命令或位置</CommandEmpty>
         <CommandGroup heading="发现">

@@ -33,7 +33,7 @@ const SUGGESTIONS = [
   "我都收藏了哪些资源？帮我概括一下",
 ]
 
-export default function AgentPanel() {
+export default function AgentPanel({ compact = false }: { compact?: boolean } = {}) {
   const settings = React.useSyncExternalStore(
     subscribeAgentSettings,
     getAgentSettings,
@@ -268,8 +268,9 @@ export default function AgentPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-4 md:flex-row">
-      {/* 会话侧栏 */}
+    <div className="flex h-full flex-col gap-4 md:flex-row">
+      {/* 会话侧栏 (紧凑模式隐藏, 新对话改在标题栏) */}
+      {!compact && (
       <aside className="md:w-52 md:shrink-0">
         <Button
           variant="outline"
@@ -314,9 +315,10 @@ export default function AgentPanel() {
           })}
         </div>
       </aside>
+      )}
 
       {/* 对话区 */}
-      <section className="mx-auto flex w-full min-w-0 max-w-4xl flex-1 flex-col">
+      <section className="mx-auto flex h-full w-full min-w-0 max-w-4xl flex-1 flex-col">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             <ServiceHeader
@@ -330,15 +332,29 @@ export default function AgentPanel() {
             />
             <p className="mt-1 truncate text-xs text-muted-foreground">懂「我的」，对话只存本机</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings className="h-4 w-4" />
-            设置
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            {compact && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={newChat}
+                title="新对话"
+              >
+                <SquarePen className="h-4 w-4" />
+                <span className="sr-only">新对话</span>
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="h-4 w-4" />
+              设置
+            </Button>
+          </div>
         </div>
 
         {!configured && (
@@ -356,7 +372,7 @@ export default function AgentPanel() {
           // 收尾 busy 转 false 时读屏一次性播报终态 —— 避免每 token 打断/重排队的过度播报。
           aria-live="polite"
           aria-busy={streamingId !== null}
-          className="flex h-[calc(100dvh-35rem)] min-h-[14rem] flex-col gap-4 overflow-y-auto rounded-lg border bg-background/40 p-4 md:h-[calc(100dvh-19rem)] md:min-h-[20rem]"
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-lg border bg-background/40 p-4"
         >
           {messages.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">

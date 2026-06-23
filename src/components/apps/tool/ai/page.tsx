@@ -1,10 +1,6 @@
 import QuickJump, { type Provider } from "../quick-jump"
 
-export const metadata = {
-  title: "AI | 工具 | ideall",
-  description: "一键将提问跳转到各大 AI 站点。",
-}
-
+// 工具·AI 视图 (由工作区 registry 作为标签内容渲染; 不再是独立路由页)。
 // 支持 queryUrl 的直接带词跳转; 不支持的回退到复制关键词 + 打开首页
 const assistants: Provider[] = [
   {
