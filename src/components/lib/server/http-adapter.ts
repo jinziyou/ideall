@@ -88,16 +88,12 @@ export const httpServerAdapter: ServerPort = {
   },
 
   async getInfo(url) {
+    // 返回完整 ApiResult: 调用方 (全面报道整页) 须区分「取数失败 (可重试)」与「真不存在 (data:null)」。
     const qs = new URLSearchParams({ url })
-    const res = await apiFetch<Info>(`${INFO_API_URI}?${qs}`, {
+    return apiFetch<Info>(`${INFO_API_URI}?${qs}`, {
       cache: "no-store",
       defaultErrorMessage: "获取信息详情失败",
     })
-    if (!res.ok) {
-      console.error("[getInfo]", res.message)
-      return null
-    }
-    return res.data
   },
 
   async getEntityDetail(label, name) {

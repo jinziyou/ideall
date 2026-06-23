@@ -160,13 +160,15 @@ export interface CurrentUser {
  *
  * 返回约定沿用既有数据层口径以零成本对接 UI:
  *   - 列表/分页等可重试的取数返回 `ApiResult<T>` (调用方按 `ok` 分支 + toast);
- *   - 详情/增强类取数 (拿不到不阻塞主链路) 直接返回 `T | null` / `T[]` 并自行降级。
+ *   - 增强类取数 (拿不到不阻塞主链路) 直接返回 `T | null` / `T[]` 并自行降级。
+ *   - `getInfo` 例外: 它支撑「全面报道」整页主链路, 失败必须可与「真不存在」区分 (否则断网被误导成
+ *     「信息已移除」且无重试), 故归入 `ApiResult` 类 —— `ok:false` 为取数失败, `ok:true & data:null` 为真不存在。
  */
 export interface ServerPort {
   // 信息查询
   queryInfo(params: InfoQuery): Promise<ApiResult<Info[]>>
   getRelatedInfo(url: string): Promise<RelatedInfo[]>
-  getInfo(url: string): Promise<Info | null>
+  getInfo(url: string): Promise<ApiResult<Info>>
   getEntityDetail(label: string, name: string): Promise<EntityDetail | null>
   // 社区发布层
   listPeers(): Promise<ApiResult<PeerPublisher[]>>

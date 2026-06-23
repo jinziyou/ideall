@@ -45,8 +45,10 @@ import {
   listNotebooks,
   listNotes,
   renameNotebook,
+  restoreNote,
   updateNote,
 } from "../lib/notes-store"
+import { undoableDeleteToast } from "@/components/lib/undo-toast"
 import type { NoteEditorSaved } from "./note-editor"
 
 // 编辑器为纯客户端组件 (Plate), 懒加载并禁用 SSR, 避开预渲染与静态导出。
@@ -216,11 +218,23 @@ export default function NotesManager() {
 
   async function handleDeleteNote(note: NoteMeta) {
     try {
+      // 列表只有元数据, 先取完整正文供撤销原样写回
+      const full = await getNote(note.id)
       await deleteNote(note.id)
       setNotes((prev) => prev.filter((n) => n.id !== note.id))
       if (selectedId === note.id) {
         setSelectedId(null)
         setLoadedNote(null)
+      }
+      if (full) {
+        undoableDeleteToast(note.title || "无标题", async () => {
+          await restoreNote(full)
+          setNotes((prev) =>
+            [note, ...prev.filter((n) => n.id !== note.id)].sort(
+              (a, b) => b.updatedAt - a.updatedAt,
+            ),
+          )
+        })
       }
     } catch (e) {
       toast.error("删除失败", { description: String(e) })

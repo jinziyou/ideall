@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { Loader2 } from "lucide-react"
+import { Loader2, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { getInfo, getRelatedInfo } from "../data"
 import { Info, RelatedInfo } from "../model"
 import InfoAnalysisView from "./analysis"
@@ -14,35 +15,55 @@ function AnalysisView() {
   const [info, setInfo] = useState<Info | null>(null)
   const [related, setRelated] = useState<RelatedInfo[]>([])
   const [loading, setLoading] = useState(true)
+  // 取数失败 (区别于「真不存在」): 非空即显示「加载失败 + 重试」, 不再把断网/故障误导成「信息已移除」。
+  const [error, setError] = useState<string | null>(null)
+  const [nonce, setNonce] = useState(0)
 
   useEffect(() => {
     let active = true
     async function run() {
       // 在 async 函数内置位 (await 前), 避免 effect 体内同步 setState 的级联渲染 lint。
       setLoading(true)
+      setError(null)
       if (!url) {
         setInfo(null)
         setLoading(false)
         return
       }
-      // 关联报道与单条详情并行拉取。
-      const [rel, i] = await Promise.all([getRelatedInfo(url), getInfo(url)])
+      // 关联报道 (best-effort 降级) 与单条详情 (ApiResult) 并行拉取。
+      const [rel, res] = await Promise.all([getRelatedInfo(url), getInfo(url)])
       if (!active) return
       setRelated(rel)
-      setInfo(i)
+      if (!res.ok) {
+        setError(res.message)
+        setInfo(null)
+      } else {
+        setInfo(res.data)
+      }
       setLoading(false)
     }
     run()
     return () => {
       active = false
     }
-  }, [url])
+  }, [url, nonce])
 
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         加载中…
+      </main>
+    )
+  }
+  if (error) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+        <p>加载失败：{error}</p>
+        <Button variant="outline" size="sm" onClick={() => setNonce((n) => n + 1)}>
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          重试
+        </Button>
       </main>
     )
   }

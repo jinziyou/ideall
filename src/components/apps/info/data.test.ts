@@ -32,7 +32,7 @@ function makeInfoBackend(): ServerPort {
   }
   const backend: ServerPort = {
     queryInfo: async () => ({ ok: true, data: [MEM_INFO] }),
-    getInfo: async () => MEM_INFO,
+    getInfo: async () => ({ ok: true, data: MEM_INFO }),
     getEntityDetail: async (label: string, name: string) => ({
       label,
       name,
@@ -67,7 +67,7 @@ test("info/data.ts 经 ServerPort 取数 → 在被替换的后端上返回其�
   assert.equal(latest.ok && latest.data?.[0]?.title, "来自被替换后端")
 
   const one = await getInfo("mem://info")
-  assert.equal(one?.url, "mem://info")
+  assert.equal(one.ok && one.data?.url, "mem://info")
 
   const entity = await getEntityDetail("ORG", "示例")
   assert.equal(entity?.mention_count, 7)

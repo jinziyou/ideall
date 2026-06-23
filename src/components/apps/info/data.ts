@@ -20,7 +20,7 @@ export function getEntityDetail(label: string, name: string) {
   return getServerPort().getEntityDetail(label, name)
 }
 
-/** 单条信息详情; 拿不到返回 null。 */
+/** 单条信息详情 (全面报道整页主链路)。返回 ApiResult: `ok:false` 取数失败可重试; `ok:true & data:null` 真不存在。 */
 export function getInfo(url: string) {
   return getServerPort().getInfo(url)
 }
