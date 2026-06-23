@@ -375,7 +375,7 @@ export default function FileManager() {
             onClick={() => setView("grid")}
             title="网格视图"
             className={cn(
-              "flex h-7 w-7 items-center justify-center rounded",
+              "flex h-7 w-7 items-center justify-center rounded pointer-coarse:h-9 pointer-coarse:w-9",
               view === "grid"
                 ? "bg-secondary text-secondary-foreground"
                 : "text-muted-foreground hover:bg-accent",
@@ -388,7 +388,7 @@ export default function FileManager() {
             onClick={() => setView("list")}
             title="列表视图"
             className={cn(
-              "flex h-7 w-7 items-center justify-center rounded",
+              "flex h-7 w-7 items-center justify-center rounded pointer-coarse:h-9 pointer-coarse:w-9",
               view === "list"
                 ? "bg-secondary text-secondary-foreground"
                 : "text-muted-foreground hover:bg-accent",
@@ -489,7 +489,11 @@ function FileMenu({ onPreview, onDownload, onRename, onDelete }: FileActions) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 pointer-coarse:h-9 pointer-coarse:w-9"
+        >
           <MoreHorizontal className="h-4 w-4" />
           <span className="sr-only">操作</span>
         </Button>

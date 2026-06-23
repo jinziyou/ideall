@@ -455,7 +455,11 @@ function BookmarkCard({
         </a>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 pointer-coarse:h-9 pointer-coarse:w-9"
+            >
               <MoreHorizontal className="h-4 w-4" />
               <span className="sr-only">操作</span>
             </Button>

@@ -177,7 +177,8 @@ export default function SubscriptionFeed() {
                   onClick={() => unsubscribe(t)}
                   disabled={pending.has(t.id)}
                   aria-label={`取消钉住 ${t.title}`}
-                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  // 触屏放大命中区到 ~40px (桌面保持紧凑)
+                  className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 pointer-coarse:p-2"
                 >
                   <X className="h-3 w-3" />
                 </button>
