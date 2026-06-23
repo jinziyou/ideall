@@ -100,8 +100,13 @@ export default function AuthForm() {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
           />
-          <Button type="submit" disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          <Button type="submit" disabled={busy} aria-busy={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="sr-only">提交中…</span>
+              </>
+            ) : null}
             {mode === "login" ? "登录" : "注册"}
           </Button>
         </form>

@@ -35,7 +35,7 @@ export const SPOKES: NavLink[] = [
     label: "资讯",
     icon: Newspaper,
     dot: "bg-spoke-info",
-    hint: "订阅发布者 / 实体 · 收藏文章",
+    hint: "订阅发布者与实体 · 收藏文章",
   },
   {
     href: "/community",
@@ -49,7 +49,7 @@ export const SPOKES: NavLink[] = [
     label: "工具",
     icon: Wrench,
     dot: "bg-spoke-tool",
-    hint: "钉工具 · 存搜索为订阅",
+    hint: "钉住工具 · 把搜索存成订阅",
   },
 ]
 
