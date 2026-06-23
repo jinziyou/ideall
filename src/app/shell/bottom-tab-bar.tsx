@@ -3,13 +3,14 @@
 import type { ComponentType } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Hexagon, Sparkles } from "lucide-react"
+import { Bot, Hexagon } from "lucide-react"
 import { cn } from "@/components/lib/utils"
 import { HUB_HREF, HUB_LABEL, SPOKES } from "@/app/nav/nav-config"
 import { useHubCount } from "./use-hub-count"
-import { openCommandPalette } from "./command-palette"
 
 const AGENT_HREF = "/home/agent"
+
+const isAgentActive = (p: string) => p === AGENT_HREF || p.startsWith(AGENT_HREF + "/")
 
 type Tab = {
   href: string
@@ -75,25 +76,37 @@ function TabItem({
 }
 
 /**
- * 移动端底部标签栏 (md:hidden) —— 我的 / 资讯 / [中央 ✦ 命令台] / 社区 / 工具。
- * 中央按钮唤起 ⌘K 浮层命令台 (方案 3 移动形态)。
+ * 移动端底部标签栏 (md:hidden) —— 我的 / 资讯 / [中央 AI] / 社区 / 工具。
+ * 中央按钮直达 AI 助手 (/home/agent), 与桌面图标轨的 AI 项一致 (同图标=同目的地)。
+ * 命令台在移动端由顶栏的 CommandTrigger 提供, 不再与中央按钮混用。
  */
 export default function BottomTabBar() {
   const pathname = usePathname()
   const { count, flash } = useHubCount()
+  const agentActive = isAgentActive(pathname)
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around gap-1 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1 backdrop-blur md:hidden">
       <TabItem tab={TABS[0]} pathname={pathname} badge={count} flash={flash} />
       <TabItem tab={TABS[1]} pathname={pathname} />
-      <button
-        type="button"
-        onClick={openCommandPalette}
-        aria-label="命令台 / AI (⌘K)"
-        className="-mt-4 flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+      <Link
+        href={AGENT_HREF}
+        aria-label="AI 助手"
+        aria-current={agentActive ? "page" : undefined}
+        className="flex shrink-0 flex-col items-center justify-end gap-0.5 self-stretch px-1"
       >
-        <Sparkles className="h-5 w-5" />
-      </button>
+        <span className="-mt-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30">
+          <Bot className="h-5 w-5" />
+        </span>
+        <span
+          className={cn(
+            "text-[10px] font-medium leading-none",
+            agentActive ? "text-primary" : "text-muted-foreground",
+          )}
+        >
+          AI
+        </span>
+      </Link>
       <TabItem tab={TABS[2]} pathname={pathname} />
       <TabItem tab={TABS[3]} pathname={pathname} />
     </nav>

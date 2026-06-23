@@ -2,8 +2,19 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowUpRight, CornerDownLeft, Hexagon, Pin, Sparkles, Wrench } from "lucide-react"
+import {
+  ArrowUpRight,
+  Bookmark,
+  CornerDownLeft,
+  FolderOpen,
+  Hexagon,
+  NotebookPen,
+  Pin,
+  Sparkles,
+  Wrench,
+} from "lucide-react"
 import { cn } from "@/components/lib/utils"
+import CommandTrigger from "@/components/shared/command-trigger"
 import { SUB_SPOKE_META } from "./lib/spoke-meta"
 import { SPOKES } from "@/app/nav/nav-config"
 import { listSubscriptions } from "./lib/subscriptions-store"
@@ -151,7 +162,7 @@ export default function HubDashboard() {
         <div className="rounded-2xl border border-l-2 border-l-pop bg-card p-5 shadow-sm lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-sm font-semibold">最近回流</h2>
-            <span className="text-xs text-muted-foreground">· 实时 · 都落在本机</span>
+            <span className="text-xs text-muted-foreground">· 实时更新 · 都存在本机</span>
           </div>
           {data.flow.length > 0 ? (
             <RecentFlowback items={data.flow} />
@@ -238,47 +249,72 @@ export default function HubDashboard() {
   )
 }
 
-/** 空中枢: 把死屏变成产品心智模型的第一课 (hub-and-spoke 迷你示意图)。 */
+/** 空中枢「本机即可开始」梯队: 全部零后端 / 离线可用, 排在依赖远端的发现 spoke 之前, 保证新用户首个动作必成功。 */
+const LOCAL_STARTERS = [
+  { href: "/home/notes", label: "写笔记", icon: NotebookPen, hint: "块编辑，像 Notion" },
+  { href: "/home/bookmarks", label: "收藏书签", icon: Bookmark, hint: "可导入浏览器书签" },
+  { href: "/home/resources", label: "上传资源", icon: FolderOpen, hint: "文件只存本机" },
+]
+
+/**
+ * 空中枢: 先给「本机即可开始」的零后端抓手 (无需联网 / 账号), 再用 hub-and-spoke 示意图讲清回流心智。
+ * 「回流」在副标题里用白话点明 (收进「我的」), 命令台入口改为可点 (触屏也能用)。
+ */
 function EmptyHub() {
   return (
     <div className="flex min-h-[55dvh] flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-12 text-center">
-      <h3 className="text-lg font-semibold">「我的」还是空的</h3>
+      <span className="flex items-center gap-2 text-lg font-semibold">
+        <Hexagon className="h-5 w-5" />
+        「我的」还是空的
+      </span>
       <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
-        去「发现」订阅或收藏，内容会回流到这里。
+        在本机写点、存点，或去「发现」订阅来源 —— 内容都会收进这里（我们叫它「回流」）。
       </p>
 
-      <div className="mt-10 flex flex-col items-center gap-3">
-        <div className="inline-flex flex-col items-center rounded-2xl border-2 border-primary/20 bg-primary/5 px-8 py-4">
-          <span className="flex items-center gap-2 text-sm font-semibold">
-            <Hexagon className="h-4 w-4" />
-            我的
-          </span>
-          <span className="text-xs text-muted-foreground">数据只存本机</span>
-        </div>
-        <div className="my-1 flex items-center gap-1 text-xs text-muted-foreground">
-          <CornerDownLeft className="h-3.5 w-3.5" />
-          回流
-        </div>
+      {/* 第一梯队: 本机即可开始 (零后端, 离线可用), 确保首个动作必成功 */}
+      <div className="mt-8 w-full max-w-xl">
+        <div className="mb-2.5 text-xs font-medium text-primary">本机即可开始 · 无需联网或账号</div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {SPOKES.map((s) => (
+          {LOCAL_STARTERS.map((s) => (
             <Link
               key={s.href}
               href={s.href}
-              className="flex flex-col items-center gap-1 rounded-2xl border bg-background px-6 py-4 text-center transition-colors hover:bg-accent"
+              className="flex flex-col items-center gap-1 rounded-2xl border-2 border-primary/20 bg-primary/5 px-4 py-4 text-center transition-colors hover:border-primary/40 hover:bg-primary/10"
             >
-              <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <span className={cn("h-2 w-2 rounded-full", s.dot)} />
-                {s.label}
-              </span>
-              <span className="text-xs font-medium text-primary">去这里带东西回家 →</span>
+              <s.icon className="h-5 w-5 text-primary" />
+              <span className="text-sm font-semibold">{s.label}</span>
+              <span className="text-xs text-muted-foreground">{s.hint}</span>
             </Link>
           ))}
         </div>
       </div>
 
-      <p className="mt-8 text-xs text-muted-foreground">
-        按 <kbd className="rounded border bg-muted px-1.5 font-sans text-[10px]">⌘K</kbd> 呼出命令台
-      </p>
+      {/* 第二梯队: 从「发现」带内容回来 (依赖后端 / 远端来源) */}
+      <div className="mt-10 flex w-full max-w-xl flex-col items-center gap-3">
+        <div className="text-xs text-muted-foreground">或从「发现」带内容回来</div>
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
+          {SPOKES.map((s) => (
+            <Link
+              key={s.href}
+              href={s.href}
+              className="flex flex-col items-center gap-1 rounded-2xl border bg-background px-4 py-4 text-center transition-colors hover:bg-accent"
+            >
+              <span className="flex items-center gap-1.5 text-sm font-semibold">
+                <span className={cn("h-2 w-2 rounded-full", s.dot)} />
+                {s.label}
+              </span>
+              <span className="text-xs text-muted-foreground">{s.hint}</span>
+            </Link>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <CornerDownLeft className="h-3.5 w-3.5" />
+          订阅 / 收藏后自动收进「我的」
+        </div>
+      </div>
+
+      {/* 命令台入口: 触屏可点; ⌘K 仅桌面尺寸显示 */}
+      <CommandTrigger className="mt-8 w-full max-w-xs" />
     </div>
   )
 }

@@ -123,7 +123,9 @@ export default function HomeNav() {
             <HardDrive className="h-3.5 w-3.5" />
             本地存储
           </div>
-          <div className="mb-2">已用 {formatBytes(usage)}</div>
+          <div className="mb-2">
+            已用 {formatBytes(usage)} / 共 {formatBytes(quota)}
+          </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-all"

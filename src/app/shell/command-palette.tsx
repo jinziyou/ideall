@@ -108,7 +108,7 @@ export default function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="输入命令或跳转…" />
+      <CommandInput placeholder="跳到书签、切换主题、问 AI…" />
       <CommandList>
         <CommandEmpty>没有匹配的命令或位置</CommandEmpty>
         <CommandGroup heading="发现">
@@ -131,21 +131,31 @@ export default function CommandPalette() {
           ))}
         </CommandGroup>
         <CommandSeparator />
-        <CommandGroup heading="系统">
+        <CommandGroup heading="系统服务">
           <CommandItem value="切换深浅色 主题 theme dark" onSelect={toggleTheme}>
             <SunMoon className="h-4 w-4" />
             切换深浅色
           </CommandItem>
-          {code && (
-            <CommandItem value="立即同步 跨端 sync" onSelect={() => syncNow(code)}>
+          {/* 同步入口始终存在: 未配置同步码时给「开启」入口 (跳订阅页顶部的 SyncPanel),
+              避免新用户在唯一命令台里搜不到同步而误以为没有该功能。 */}
+          {code ? (
+            <>
+              <CommandItem value="立即同步 跨端 sync" onSelect={() => syncNow(code)}>
+                <RefreshCw className="h-4 w-4" />
+                立即同步
+              </CommandItem>
+              <CommandItem value="复制同步码 跨端 sync copy" onSelect={() => copySyncCode(code)}>
+                <Copy className="h-4 w-4" />
+                复制同步码
+              </CommandItem>
+            </>
+          ) : (
+            <CommandItem
+              value="开启跨端同步 setup sync 同步码"
+              onSelect={() => go("/home/subscriptions")}
+            >
               <RefreshCw className="h-4 w-4" />
-              立即同步
-            </CommandItem>
-          )}
-          {code && (
-            <CommandItem value="复制同步码 跨端 sync copy" onSelect={() => copySyncCode(code)}>
-              <Copy className="h-4 w-4" />
-              复制同步码
+              开启跨端同步…
             </CommandItem>
           )}
           <CommandItem value="去新建书签 收藏" onSelect={() => go("/home/bookmarks")}>

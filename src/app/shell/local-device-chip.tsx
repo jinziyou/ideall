@@ -79,7 +79,7 @@ export default function LocalDeviceChip({ compact = false }: { compact?: boolean
             <div className="flex items-center justify-between gap-2">
               <span className="shrink-0 text-xs">本地存储</span>
               <span className="font-mono text-xs tabular-nums">
-                已用 {formatBytes(storage.usage)}
+                已用 {formatBytes(storage.usage)} / 共 {formatBytes(storage.quota)}
               </span>
             </div>
             <div className="mt-1.5 h-1 rounded-full bg-muted">
