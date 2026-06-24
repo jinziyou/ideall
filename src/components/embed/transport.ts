@@ -26,3 +26,19 @@ export class MessagePortTransport implements Transport {
     this.onclose?.()
   }
 }
+
+/**
+ * 回环传输对 (LoopbackTransport, §6.4) —— 本进程内用 MessageChannel 接通 MCP server 与 client 两端。
+ * agent 与 iframe 共用 createHubMcpServer + MessagePortTransport, 仅此处把 iframe 的 postMessage 换成
+ * 进程内 MessageChannel: agent 起 server.connect(serverTransport) + client.connect(clientTransport)。
+ */
+export function createLoopbackTransports(): {
+  serverTransport: MessagePortTransport
+  clientTransport: MessagePortTransport
+} {
+  const channel = new MessageChannel()
+  return {
+    serverTransport: new MessagePortTransport(channel.port1),
+    clientTransport: new MessagePortTransport(channel.port2),
+  }
+}

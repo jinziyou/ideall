@@ -63,3 +63,26 @@ export function firstPartyGrant(manifest: Manifest, now: number): Grant {
 export function isGrantActive(grant: Grant, now: number): boolean {
   return grant.expiry == null || now < grant.expiry
 }
+
+/**
+ * 本应用 agent 的默认授权集 (§6.2): fs 读写 + 笔记写 + 标签面。
+ * **故意不含 fs.notes:read** —— agent 默认看不到既存笔记正文 (只看标题概览); 正文须 @ 引用单条 consent 注入。
+ * 也不含 identity.publish / hub.* (统一走 fs.* 文件面)。
+ */
+const AGENT_PERMISSIONS: Permission[] = ["fs:read", "fs:write", "fs.notes:write", "ui.tabs"]
+
+/**
+ * 本应用 agent 的 Grant —— 不复用 firstPartyGrant (无 manifest), 经 LoopbackTransport 消费同一能力层。
+ * 一方信任、不过期、不可撤 (本应用自带的 AI)。
+ */
+export function agentGrant(now: number): Grant {
+  return {
+    consumerId: "ideall-agent",
+    origin: "loopback",
+    tier: "first-party",
+    permissions: [...AGENT_PERMISSIONS],
+    grantedAt: now,
+    expiry: null,
+    revocable: false,
+  }
+}

@@ -25,6 +25,14 @@ export const TOOL = {
   // fs.* 统一 Node 文件面 (§6.1, 净新建): 一切皆文件 —— 跨 kind 寻址读写统一 Node 库。
   fsList: "fs.list",
   fsRead: "fs.read",
+  fsReadBlob: "fs.readBlob",
+  fsCreate: "fs.create",
+  fsWrite: "fs.write",
+  fsMove: "fs.move",
+  fsDelete: "fs.delete",
+  // ui.* 标签面 (§6.1): 让消费方把节点物化为标签。
+  uiOpenTab: "ui.openTab",
+  uiCloseTab: "ui.closeTab",
   hostNavigate: "host.navigate",
   hostOpenExternal: "host.openExternal",
   hostToast: "host.toast",

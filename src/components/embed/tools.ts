@@ -32,6 +32,10 @@ const ALL_NODE_KINDS: NodeKind[] = [...nodeKind.options]
 export interface HostToolsCtx {
   /** ideall 内部路由跳转 (host.navigate)。 */
   navigate: (route: string) => void
+  /** 打开节点标签 (ui.openTab); 不支持标签的宿主不提供 → ui 工具不注册。 */
+  openTab?: (kind: NodeKind, id: string, title: string) => void
+  /** 关闭节点标签 (ui.closeTab)。 */
+  closeTab?: (kind: NodeKind, id: string) => void
 }
 
 /** host.navigate 允许的内部路由前缀 (白名单, §5.2)。 */
@@ -171,6 +175,111 @@ export function registerGrantedTools(
         return fail(-32003, "consent-required")
       return ok(n)
     })
+    // fs.readBlob: 文件二进制 base64 (大文件不内联)。
+    server.tool(TOOL.fsReadBlob, { id: z.string() }, async (a) => {
+      const r = await getHubData().fsReadBlob(a.id)
+      return r ? ok(r) : fail(-32004, "not-found")
+    })
+  }
+
+  // fs.* 写: note 二次 gate 到 fs.notes:write (防 fs:write 绕过 notes 专属位 §6.2); 余 fs:write。
+  // 工具在持任一写位时注册, handler 内按 kind 二次校验 (notes-only 消费方只能写 note)。
+  if (has("fs:write") || has("fs.notes:write")) {
+    const canWrite = (k: NodeKind) => (k === "note" ? has("fs.notes:write") : has("fs:write"))
+    const fsWriteErr = (e: unknown) =>
+      fail(-32000, e instanceof Error ? e.message : "fs-write-failed")
+
+    server.tool(
+      TOOL.fsCreate,
+      {
+        kind: nodeKind,
+        parentId: z.string().nullable().optional(),
+        title: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+        content: z.unknown().optional(),
+      },
+      async (a) => {
+        if (!canWrite(a.kind)) return fail(-32003, "consent-required")
+        try {
+          return ok(await getHubData().fsCreateNode(a))
+        } catch (e) {
+          return fsWriteErr(e)
+        }
+      },
+    )
+
+    server.tool(
+      TOOL.fsWrite,
+      {
+        kind: nodeKind,
+        id: z.string(),
+        title: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+        content: z.unknown().optional(),
+        parentId: z.string().nullable().optional(),
+      },
+      async (a) => {
+        if (!canWrite(a.kind)) return fail(-32003, "consent-required")
+        try {
+          const n = await getHubData().fsUpdateNode(a.kind, a.id, {
+            title: a.title,
+            tags: a.tags,
+            content: a.content,
+            parentId: a.parentId,
+          })
+          return n ? ok(n) : fail(-32004, "not-found")
+        } catch (e) {
+          return fsWriteErr(e)
+        }
+      },
+    )
+
+    server.tool(
+      TOOL.fsMove,
+      {
+        kind: nodeKind,
+        id: z.string(),
+        parentId: z.string().nullable(),
+        afterSortKey: z.string().nullable().optional(),
+      },
+      async (a) => {
+        if (!canWrite(a.kind)) return fail(-32003, "consent-required")
+        try {
+          const n = await getHubData().fsMoveNode(a.kind, a.id, a.parentId, a.afterSortKey)
+          return n ? ok(n) : fail(-32004, "not-found")
+        } catch (e) {
+          return fsWriteErr(e)
+        }
+      },
+    )
+
+    server.tool(TOOL.fsDelete, { kind: nodeKind, id: z.string() }, async (a) => {
+      if (!canWrite(a.kind)) return fail(-32003, "consent-required")
+      try {
+        await getHubData().fsDeleteNode(a.kind, a.id)
+        return ok({ ok: true })
+      } catch (e) {
+        return fsWriteErr(e)
+      }
+    })
+  }
+
+  // ── ui.* 标签面 (§6.1): 把节点物化为标签 ─────────────────────────────────────
+  if (has("ui.tabs") && ctx.openTab) {
+    server.tool(
+      TOOL.uiOpenTab,
+      { kind: nodeKind, id: z.string(), title: z.string().optional() },
+      async (a) => {
+        ctx.openTab!(a.kind, a.id, a.title || a.id)
+        return ok({ ok: true })
+      },
+    )
+    if (ctx.closeTab) {
+      server.tool(TOOL.uiCloseTab, { kind: nodeKind, id: z.string() }, async (a) => {
+        ctx.closeTab!(a.kind, a.id)
+        return ok({ ok: true })
+      })
+    }
   }
 
   // ── host / 外壳能力 ─────────────────────────────────────────────────────────

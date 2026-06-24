@@ -2,7 +2,7 @@
 // 这些类型既是 core 存储模型, 又经 HubDataPort 暴露给 plugin (如 agent), 故属契约。
 // (订阅 Subscription 类型见 ./subscription)。
 import type { Subscription, SubscriptionType, NewSubscription } from "./subscription"
-import type { Node, NodeKind } from "./node"
+import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "./node"
 
 /** 本地存储的文件: 元数据 + 原始 Blob */
 export interface StoredFile {
@@ -173,6 +173,21 @@ export interface HubDataPort {
   fsListNodes(kinds: NodeKind[]): Promise<Node[]>
   /** 取单个活跃完整节点 (fs.read 后端); 不存在 / 墓碑 → undefined。 */
   fsGetNode(id: string): Promise<Node | undefined>
+  /** fs.create 后端: 按 kind 新建, 回读为 Node (file 不可创建)。 */
+  fsCreateNode(input: FsCreateInput): Promise<Node>
+  /** fs.write 后端: 按 kind 改字段, 回读为 Node。 */
+  fsUpdateNode(kind: NodeKind, id: string, patch: FsWritePatch): Promise<Node | undefined>
+  /** fs.move 后端: 改父 + 同级位置 (note 树 / bookmark 归夹)。 */
+  fsMoveNode(
+    kind: NodeKind,
+    id: string,
+    parentId: string | null,
+    afterSortKey?: string | null,
+  ): Promise<Node | undefined>
+  /** fs.delete 后端: 按 kind 删 (软删/退订/硬删)。 */
+  fsDeleteNode(kind: NodeKind, id: string): Promise<void>
+  /** fs.readBlob 后端: 文件二进制 base64 (大文件不内联, base64 空)。 */
+  fsReadBlob(id: string): Promise<{ mime: string; size: number; base64: string } | undefined>
 }
 
 let port: HubDataPort | null = null

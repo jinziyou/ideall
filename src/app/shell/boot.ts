@@ -4,7 +4,10 @@
 // 使中枢 (core) 永不直接依赖具体 app/plugin。
 import { registerContentResolver } from "@protocol/content"
 import { registerHubData } from "@protocol/hub-data"
+import { registerUiActions } from "@/components/lib/ui-actions"
 import { hubDataPort } from "@/app/home/lib/hub-data-port"
+import { openNodeTab, closeTab, tabKey } from "@/app/workspace/store"
+import { nodeTab } from "@/app/workspace/node-tab"
 import { infoManifest } from "@/components/apps/info/manifest"
 import { communityManifest } from "@/components/apps/community/manifest"
 import { syncManifest } from "@/components/plugins/sync/manifest"
@@ -17,6 +20,11 @@ export function registerAll(): void {
   booted = true
   // 中枢数据端口 (core 实现, 供 agent 等插件经 protocol 读写中枢数据)。
   registerHubData(hubDataPort)
+  // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点物化为工作区标签 (守 components↛app 边界, 由 app 注入)。
+  registerUiActions({
+    openTab: (kind, id, title) => openNodeTab({ kind, id }, title),
+    closeTab: (kind, id) => closeTab(tabKey(nodeTab({ kind, id }, ""))),
+  })
   for (const m of [infoManifest, communityManifest]) {
     for (const r of m.resolvers ?? []) registerContentResolver(r.types, r.resolve)
   }

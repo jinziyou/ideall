@@ -27,7 +27,15 @@ import {
   deleteThread,
   renameThread,
 } from "./threads-store"
-import { listNodesRaw, getNodeRaw } from "./nodes-store"
+import {
+  listNodesRaw,
+  getNodeRaw,
+  createNode,
+  updateNode,
+  moveNode,
+  deleteNode,
+  readBlobBase64,
+} from "./nodes-store"
 
 export const hubDataPort: HubDataPort = {
   listSubscriptions,
@@ -57,4 +65,9 @@ export const hubDataPort: HubDataPort = {
   renameThread,
   fsListNodes: listNodesRaw,
   fsGetNode: getNodeRaw,
+  fsCreateNode: createNode,
+  fsUpdateNode: updateNode,
+  fsMoveNode: moveNode,
+  fsDeleteNode: deleteNode,
+  fsReadBlob: readBlobBase64,
 }

@@ -65,6 +65,23 @@ export type Node = BaseNode &
 /** 取某 kind 对应的节点子类型, 如 NodeOfKind<"note">。 */
 export type NodeOfKind<K extends NodeKind> = Extract<Node, { kind: K }>
 
+/** fs.create 入参 (AI fs.* 写面 §6.1): content 用对应 kind 的 Node content 形态。 */
+export type FsCreateInput = {
+  kind: NodeKind
+  parentId?: string | null
+  title?: string
+  tags?: string[]
+  content?: unknown
+}
+
+/** fs.write 补丁 (只改给定字段)。 */
+export type FsWritePatch = {
+  title?: string
+  tags?: string[]
+  content?: unknown
+  parentId?: string | null
+}
+
 /** 笔记节点 —— 折叠步 A 唯一物理入库的 kind。 */
 export type NoteNode = NodeOfKind<"note">
 

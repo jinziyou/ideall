@@ -3,8 +3,9 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { firstPartyGrant, isGrantActive, type Grant } from "./grant"
+import { firstPartyGrant, isGrantActive, agentGrant, type Grant } from "./grant"
 import type { Manifest } from "./manifest"
+import { infoEmbedManifest, communityEmbedManifest } from "./manifest"
 
 const NOW = 1_700_000_000_000
 
@@ -45,4 +46,27 @@ test("isGrantActive: 未过期 true / 已过期 false (失效时能力层挂零�
   const g: Grant = { ...firstPartyGrant(manifest(), NOW), expiry: NOW + 1000 }
   assert.equal(isGrantActive(g, NOW + 500), true)
   assert.equal(isGrantActive(g, NOW + 1500), false)
+})
+
+// ── §6.2 隐私不变量: agentGrant 与 iframe manifest 的授权集 (锁死 §9 清单) ──
+
+test("agentGrant: 含 fs:read/fs:write/fs.notes:write/ui.tabs", () => {
+  const g = agentGrant(NOW)
+  assert.equal(g.tier, "first-party")
+  assert.equal(g.consumerId, "ideall-agent")
+  assert.equal(g.expiry, null)
+  for (const p of ["fs:read", "fs:write", "fs.notes:write", "ui.tabs"] as const) {
+    assert.ok(g.permissions.includes(p), `agentGrant 应含 ${p}`)
+  }
+})
+
+test("agentGrant **不含** fs.notes:read (既存笔记正文须 @ 引用 consent, 不默认外发)", () => {
+  assert.equal(agentGrant(NOW).permissions.includes("fs.notes:read"), false)
+})
+
+test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:write", () => {
+  for (const m of [infoEmbedManifest, communityEmbedManifest]) {
+    assert.equal(m.permissions.includes("fs.notes:read"), false, `${m.id} 不得含 fs.notes:read`)
+    assert.equal(m.permissions.includes("fs.notes:write"), false, `${m.id} 不得含 fs.notes:write`)
+  }
 })

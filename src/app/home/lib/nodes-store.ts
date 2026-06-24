@@ -1,14 +1,30 @@
 // 统一 Node 库的跨 kind 只读读取层 —— 供侧栏「一切皆文件」文件树 / places 导航。
 // 各 kind 的物理迁移仍归各自 *-store 的懒迁移 (seedXxxOnce); 此处只做协调触发 + 跨 kind 汇总读。
 // 写路径仍走各 kind 专属 store (notes-store/bookmarks-store/...), 此处不重复写逻辑。
-import type { Node, NodeKind } from "@protocol/node"
+import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node"
+import type { SubscriptionType } from "@protocol/subscription"
+import { safeHref } from "@/components/lib/safe-url"
 import { idbGet, idbGetAll, STORE_NODES } from "@/components/lib/idb"
 import { buildParentOf, effectiveParentId, type TreeItem } from "./notes-tree-util"
-import { seedNodesOnce } from "./notes-store"
-import { seedBookmarksOnce } from "./bookmarks-store"
-import { seedFilesOnce } from "./files-store"
-import { seedFeedsOnce } from "./subscriptions-store"
-import { seedThreadsOnce } from "./threads-store"
+import { seedNodesOnce, addNote, updateNote, moveNote, deleteNote } from "./notes-store"
+import {
+  seedBookmarksOnce,
+  addBookmark,
+  updateBookmark,
+  deleteBookmark,
+  addFolder,
+  renameFolder,
+  deleteFolder,
+} from "./bookmarks-store"
+import { seedFilesOnce, updateFileMeta, deleteFile, getFile } from "./files-store"
+import {
+  seedFeedsOnce,
+  addSubscription,
+  removeSubscription,
+  getSubscription,
+} from "./subscriptions-store"
+import { seedThreadsOnce, deleteThread, renameThread } from "./threads-store"
+import { feedNodeId } from "./nodes-migrate"
 
 /** 跨 kind 节点摘要 (侧栏文件树用): TreeItem + kind + 是否有活跃子节点。 */
 export interface NodeSummary extends TreeItem {
@@ -100,4 +116,180 @@ export async function getNodeRaw(id: string): Promise<Node | undefined> {
   const n = await idbGet<Node>(STORE_NODES, id)
   if (!n || n.deletedAt != null) return undefined
   return n
+}
+
+// ---- AI fs.* 写 (§6.1): 跨 kind 写按 kind 分派到各 kind 专属 store, 回读为 Node。 ----
+// content 用各 kind 的 Node content 形态 (note=Plate Value 数组; bookmark={url,description,favicon};
+// feed={type,key,...}; thread/folder/file 不经 fs.create)。写后用 getNodeRaw 回读统一 Node。
+
+/** fs.create: 按 kind 新建节点, 回读为 Node。file 不可经此创建 (需二进制上传)。 */
+export async function createNode(input: FsCreateInput): Promise<Node> {
+  let id: string
+  switch (input.kind) {
+    case "note": {
+      const n = await addNote({
+        title: input.title,
+        content: Array.isArray(input.content) ? (input.content as unknown[]) : undefined,
+        parentId: input.parentId ?? null,
+        tags: input.tags,
+      })
+      id = n.id
+      break
+    }
+    case "folder": {
+      id = (await addFolder(input.title ?? "")).id
+      break
+    }
+    case "bookmark": {
+      const c = (input.content ?? {}) as { url?: string; description?: string; favicon?: string }
+      if (typeof c.url !== "string" || !safeHref(c.url)) throw new Error("bookmark 需合法 http(s) url")
+      const b = await addBookmark({
+        url: c.url,
+        title: input.title || c.url,
+        description: c.description,
+        favicon: c.favicon,
+        folderId: input.parentId ?? null,
+        tags: input.tags,
+      })
+      id = b.id
+      break
+    }
+    case "feed": {
+      const c = (input.content ?? {}) as {
+        type?: SubscriptionType
+        key?: string
+        favicon?: string
+        entityLabel?: string
+        entityName?: string
+        searchKeyword?: string
+        searchDomain?: string
+      }
+      if (!c.type || typeof c.key !== "string" || !c.key) throw new Error("feed 需 type + key")
+      await addSubscription({
+        type: c.type,
+        key: c.key,
+        title: input.title || c.key,
+        favicon: c.favicon,
+        entityLabel: c.entityLabel,
+        entityName: c.entityName,
+        searchKeyword: c.searchKeyword,
+        searchDomain: c.searchDomain,
+      })
+      id = feedNodeId(c.type, c.key.trim())
+      break
+    }
+    case "thread":
+      throw new Error("thread 由 AI 会话自动创建, 不经 fs.create")
+    case "file":
+      throw new Error("file 不可经 fs.create 创建 (需二进制上传)")
+    default:
+      throw new Error(`未知 kind: ${input.kind}`)
+  }
+  const n = await getNodeRaw(id)
+  if (!n) throw new Error("创建后回读失败")
+  return n
+}
+
+/** fs.write: 按 kind 改节点 (只改给定字段), 回读为 Node; 不存在 → undefined。 */
+export async function updateNode(
+  kind: NodeKind,
+  id: string,
+  patch: FsWritePatch,
+): Promise<Node | undefined> {
+  switch (kind) {
+    case "note":
+      await updateNote(id, {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+        ...(Array.isArray(patch.content) ? { content: patch.content as unknown[] } : {}),
+        ...(patch.parentId !== undefined ? { parentId: patch.parentId } : {}),
+      })
+      break
+    case "bookmark": {
+      const c = (patch.content ?? {}) as { url?: string; description?: string; favicon?: string }
+      await updateBookmark(id, {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+        ...(typeof c.url === "string" ? { url: c.url } : {}),
+        ...(typeof c.description === "string" ? { description: c.description } : {}),
+        ...(typeof c.favicon === "string" ? { favicon: c.favicon } : {}),
+        ...(patch.parentId !== undefined ? { folderId: patch.parentId } : {}),
+      })
+      break
+    }
+    case "folder":
+      if (patch.title !== undefined) await renameFolder(id, patch.title)
+      break
+    case "file":
+      await updateFileMeta(id, {
+        ...(patch.title !== undefined ? { name: patch.title } : {}),
+        ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+      })
+      break
+    case "thread":
+      if (patch.title !== undefined) await renameThread(id, patch.title)
+      break
+    default:
+      return undefined // feed 无字段级更新 (订阅由 add/remove 管理)
+  }
+  return getNodeRaw(id)
+}
+
+/** fs.move: 改父 + 同级位置 (仅 note 树 / bookmark 归夹有意义; 余无操作)。 */
+export async function moveNode(
+  kind: NodeKind,
+  id: string,
+  parentId: string | null,
+  afterSortKey?: string | null,
+): Promise<Node | undefined> {
+  if (kind === "note") {
+    await moveNote(id, parentId, afterSortKey === undefined ? undefined : { afterSortKey })
+  } else if (kind === "bookmark") {
+    await updateBookmark(id, { folderId: parentId })
+  }
+  return getNodeRaw(id)
+}
+
+/** fs.delete: 按 kind 删 (note/bookmark/folder/file 软删墓碑; feed 退订墓碑; thread 硬删)。 */
+export async function deleteNode(kind: NodeKind, id: string): Promise<void> {
+  switch (kind) {
+    case "note":
+      await deleteNote(id)
+      break
+    case "bookmark":
+      await deleteBookmark(id)
+      break
+    case "folder":
+      await deleteFolder(id)
+      break
+    case "file":
+      await deleteFile(id)
+      break
+    case "thread":
+      await deleteThread(id)
+      break
+    case "feed": {
+      const sub = await getSubscription(id)
+      if (sub) await removeSubscription(sub.type, sub.key)
+      break
+    }
+  }
+}
+
+/** fs.readBlob: 读文件二进制为 base64 (含 mime/size)。大文件拒读防 token 爆炸。 */
+const BLOB_READ_CAP = 1024 * 1024 // 1MB
+export async function readBlobBase64(
+  id: string,
+): Promise<{ mime: string; size: number; base64: string } | undefined> {
+  await seedFilesOnce()
+  const f = await getFile(id)
+  if (!f) return undefined
+  if (f.size > BLOB_READ_CAP) {
+    return { mime: f.type, size: f.size, base64: "" } // 过大不内联, 仅回元数据
+  }
+  const buf = await f.blob.arrayBuffer()
+  let binary = ""
+  const bytes = new Uint8Array(buf)
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return { mime: f.type, size: f.size, base64: btoa(binary) }
 }
