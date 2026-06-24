@@ -6,7 +6,7 @@ import { z } from "zod"
 import { getServerPort } from "@protocol/server-port"
 import { getHubData } from "@protocol/hub-data"
 import type { NewBookmark } from "@protocol/hub-data"
-import { stripNode, type NodeKind } from "@protocol/node"
+import { stripNode, type Node, type NodeKind } from "@protocol/node"
 import { getSession } from "@/components/lib/auth/auth-store"
 import { openExternalUrl } from "@/components/lib/tauri"
 import { safeHref } from "@/components/lib/safe-url"
@@ -188,6 +188,9 @@ export function registerGrantedTools(
     const canWrite = (k: NodeKind) => (k === "note" ? has("fs.notes:write") : has("fs:write"))
     const fsWriteErr = (e: unknown) =>
       fail(-32000, e instanceof Error ? e.message : "fs-write-failed")
+    // 写工具的返回 Node 也须按私密读位净化: 否则持 fs.notes:write 但无 fs.notes:read 者可经 fs.write/move
+    // 的回读拿到既存 note 正文 / thread 会话 (写不等于可读)。有 fs.notes:read 才回全文。
+    const sanitize = (n: Node): Node => (has("fs.notes:read") ? n : stripNode(n))
 
     server.tool(
       TOOL.fsCreate,
@@ -201,7 +204,7 @@ export function registerGrantedTools(
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          return ok(await getHubData().fsCreateNode(a))
+          return ok(sanitize(await getHubData().fsCreateNode(a)))
         } catch (e) {
           return fsWriteErr(e)
         }
@@ -227,7 +230,7 @@ export function registerGrantedTools(
             content: a.content,
             parentId: a.parentId,
           })
-          return n ? ok(n) : fail(-32004, "not-found")
+          return n ? ok(sanitize(n)) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
         }
@@ -246,7 +249,7 @@ export function registerGrantedTools(
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
           const n = await getHubData().fsMoveNode(a.kind, a.id, a.parentId, a.afterSortKey)
-          return n ? ok(n) : fail(-32004, "not-found")
+          return n ? ok(sanitize(n)) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
         }

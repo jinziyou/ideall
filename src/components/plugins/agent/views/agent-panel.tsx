@@ -18,7 +18,7 @@ import {
   titleFromMessage,
 } from "../lib/agent-store"
 import { getAgentSettings, isConfigured, subscribeAgentSettings } from "../lib/agent-settings"
-import { buildSystemPrompt, gatherHomeContext } from "../lib/agent-context"
+import { buildSystemPrompt, gatherHomeContext, gatherReferencedContext } from "../lib/agent-context"
 import { streamChat } from "../lib/agent-chat"
 import { runAgent } from "../lib/agent-run"
 import ChatMessage from "./chat-message"
@@ -173,7 +173,9 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
     let system = ""
     try {
       const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""
-      system = buildSystemPrompt(ctx, { tools: agentMode })
+      // 对话即文件 (§6.5): 注入用户当前正在看的 note 正文 / thread 会话 (随 home 上下文开关)。
+      const referenced = cfg.includeHomeContext ? await gatherReferencedContext() : ""
+      system = buildSystemPrompt(ctx, { tools: agentMode, referenced })
     } catch {
       system = buildSystemPrompt("", { tools: agentMode })
     }

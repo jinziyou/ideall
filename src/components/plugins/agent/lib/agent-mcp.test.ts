@@ -74,3 +74,30 @@ test("fs.list(note) 剥正文 (只回标题元数据, 即便经 agent)", async (
   assert.deepEqual(items[0].content, [], "fs.list 必须剥掉 note 正文")
   await mcp.close()
 })
+
+test("fs.create(note) by agent (有 fs.notes:write 无 fs.notes:read) → 成功但返回剥正文", async () => {
+  // agent 能写 note, 但写工具的回读 Node 须按私密读位净化 —— 否则经返回值拿到既存正文 (写≠可读)。
+  registerHubData({
+    fsCreateNode: async (input: { title?: string }) => ({
+      id: "new",
+      kind: "note",
+      title: input.title ?? "新笔记",
+      parentId: null,
+      sortKey: "a0",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: [{ type: "p", children: [{ text: "落库后的正文" }] }],
+    }),
+  } as unknown as HubDataPort)
+  registerUiActions({ openTab: () => {}, closeTab: () => {} })
+  const mcp = await connectAgentMcp()
+  const r = await mcp.callTool("fs.create", {
+    kind: "note",
+    title: "X",
+    content: [{ type: "p", children: [{ text: "hi" }] }],
+  })
+  assert.equal(r.ok, true)
+  assert.deepEqual((r.data as { content: unknown[] }).content, [], "fs.create note 回读须剥正文")
+  await mcp.close()
+})
