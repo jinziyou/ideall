@@ -9,7 +9,7 @@
     "dev": "next dev -p 5020",
     "build": "next build",
     "tauri": "tauri",
-    "app:dev": "tauri dev",
+    "app:dev": "node scripts/app-dev.mjs",
     "app:export": "next build",
     "app:build": "tauri build",
     "lint": "eslint",
