@@ -14,12 +14,16 @@ import { getSyncBlob, putSyncBlob } from "./sync-api"
 
 const noteTs = (n: Note): number => n.updatedAt ?? n.createdAt
 
-/** 合并两份同 id 笔记: 整篇删除/标题/标签按 updatedAt LWW; 活跃则正文走块级合并 (§7)。 */
+const hasBlocks = (n: Note): boolean => !!n.blockMeta && Object.keys(n.blockMeta).length > 0
+
+/** 合并两份同 id 笔记: 整篇删除/标题/标签按 updatedAt LWW; 两边都已块级就绪则正文走块级合并 (§7)。 */
 export function mergeTwoNotes(a: Note, b: Note): Note {
   const winner = noteTs(a) >= noteTs(b) ? a : b
   // 较新一方是墓碑 → 整篇删除胜 (node 级 LWW, 块合并无意义)。
   if (winner.deletedAt != null) return { ...winner }
-  // 较新一方活跃 → 正文块级合并 (另一方即便是较旧墓碑, 其无活跃块, 自然被复活方内容覆盖)。
+  // 块级合并仅当两边都有 blockMeta —— 缺一方 (旧记录 / 未升级老端) 则整篇 LWW 兜底, 否则 mergeNoteContent
+  // 遇空 meta 会因无块元数据而重建出空正文 → 丢内容。两端都升级且都写过笔记后, 块级合并自然生效。
+  if (!hasBlocks(a) || !hasBlocks(b)) return { ...winner }
   const merged = mergeNoteContent(
     a.content as Block[],
     a.blockMeta ?? {},
