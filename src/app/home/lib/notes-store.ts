@@ -117,7 +117,7 @@ let seedPromise: Promise<void> | null = null
  * (加 kind:"note") 并清空旧 notes 仓库 (单一真相)。所有读写入口先 await 此函数。
  * 失败不缓存 (置回 null), 下次读路径可重试。不放 onupgradeneeded 内 (同 migrateNotesTreeOnce 理由)。
  */
-function seedNodesOnce(): Promise<void> {
+export function seedNodesOnce(): Promise<void> {
   if (!seedPromise) {
     seedPromise = doSeedNodes().catch((e) => {
       seedPromise = null

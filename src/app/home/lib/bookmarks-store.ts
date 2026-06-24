@@ -76,7 +76,7 @@ let seedPromise: Promise<void> | null = null
  * 折叠步 B 懒迁移 (模块级 once): 把旧 bookmarks/bookmarkFolders 仓库播种进 STORE_NODES 并清空旧仓库。
  * 每个读写入口先 await。失败不缓存 (置回 null) 可重试。不放 onupgradeneeded 内 (同笔记迁移理由)。
  */
-function seedBookmarksOnce(): Promise<void> {
+export function seedBookmarksOnce(): Promise<void> {
   if (!seedPromise) {
     seedPromise = doSeedBookmarks().catch((e) => {
       seedPromise = null

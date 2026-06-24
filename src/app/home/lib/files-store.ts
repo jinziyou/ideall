@@ -45,7 +45,7 @@ function nodeToMeta(n: FileNode): FileMeta {
 let seedPromise: Promise<void> | null = null
 
 /** 折叠步 B 续懒迁移 (模块级 once): 旧 files 仓库 (内联 Blob) → nodes (blobRef) + blobs (二进制), 清空旧仓库。 */
-function seedFilesOnce(): Promise<void> {
+export function seedFilesOnce(): Promise<void> {
   if (!seedPromise) {
     seedPromise = doSeedFiles().catch((e) => {
       seedPromise = null

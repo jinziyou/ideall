@@ -8,6 +8,7 @@ import * as React from "react"
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
+import type { PlaceId } from "./places"
 
 const STORAGE_KEY = "ideall:workspace:v1"
 
@@ -30,6 +31,8 @@ type State = {
   sidebarCollapsed: boolean
   /** 右侧 AI 对话栏是否展开 (AI 原生: 始终可呼出的右停靠面板)。 */
   rightPanelOpen: boolean
+  /** 「我的」侧栏当前根命名空间 (places); 仅内存态, 不持久化 (刷新回默认)。 */
+  activePlace: PlaceId
   /** 是否已从 sessionStorage 水合 (SSR/首帧前为 false, 保证与服务端快照一致)。 */
   hydrated: boolean
 }
@@ -41,6 +44,7 @@ const DEFAULT: State = {
   mode: "local",
   sidebarCollapsed: false,
   rightPanelOpen: false,
+  activePlace: "notes",
   hydrated: false,
 }
 
@@ -229,6 +233,11 @@ export function setSidebarCollapsed(v: boolean) {
   setState({ sidebarCollapsed: v })
 }
 
+/** 切换「我的」侧栏的根命名空间 (places)。 */
+export function setActivePlace(p: PlaceId) {
+  setState({ activePlace: p })
+}
+
 /** 切换左侧二级侧栏显隐 (顶栏布局开关)。 */
 export function toggleSidebar() {
   setState({ sidebarCollapsed: !state.sidebarCollapsed })
@@ -295,6 +304,13 @@ export function useRightPanelOpen() {
     subscribe,
     () => state.rightPanelOpen,
     () => DEFAULT.rightPanelOpen,
+  )
+}
+export function useActivePlace() {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => state.activePlace,
+    () => DEFAULT.activePlace,
   )
 }
 export function useHydrated() {

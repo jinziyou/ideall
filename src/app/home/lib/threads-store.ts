@@ -53,7 +53,7 @@ function threadToNode(t: Thread, sortKey: string): ThreadNode {
 let seedPromise: Promise<void> | null = null
 
 /** 折叠步 D 懒迁移 (模块级 once): 旧 agentThreads 仓库 → thread 节点, 清空旧仓库。 */
-function seedThreadsOnce(): Promise<void> {
+export function seedThreadsOnce(): Promise<void> {
   if (!seedPromise) {
     seedPromise = doSeedThreads().catch((e) => {
       seedPromise = null

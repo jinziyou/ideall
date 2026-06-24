@@ -43,7 +43,7 @@ export function faviconForUrl(url: string): string {
 let seedPromise: Promise<void> | null = null
 
 /** 折叠步 C 懒迁移 (模块级 once): 旧 subscriptions 仓库 → feed 节点 (确定性 id), 清空旧仓库。 */
-function seedFeedsOnce(): Promise<void> {
+export function seedFeedsOnce(): Promise<void> {
   if (!seedPromise) {
     seedPromise = doSeedFeeds().catch((e) => {
       seedPromise = null

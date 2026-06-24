@@ -7,6 +7,7 @@ import Link from "next/link"
 import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/components/lib/utils"
 import SidebarWebSearch from "./sidebar-web-search"
+import PlacesSidebar from "./places-sidebar"
 import { moduleById } from "./modules"
 import { tabKey, useActiveModule, useActiveId, useMode, setSidebarCollapsed } from "./store"
 
@@ -39,38 +40,43 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
-          {/* 聚合搜索引擎 (工具), 仅连接模式展示 (联网) */}
-          {mode === "connected" && <SidebarWebSearch />}
-          {mod.sidebarHint && (
-            <p className="px-2 pb-2 pt-1 text-xs leading-relaxed text-muted-foreground">
-              {mod.sidebarHint}
-            </p>
-          )}
-          <nav className="flex flex-col gap-0.5">
-            {mod.entries.map((e) => {
-              const Icon = e.icon
-              const id = tabKey(e.descriptor)
-              const active = activeId === id
-              return (
-                <Link
-                  key={id}
-                  href={e.descriptor.path || "#"}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-shell px-2.5 py-2 text-sm transition-colors",
-                    active
-                      ? "bg-primary/10 font-medium text-primary"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1 truncate text-left">{e.label}</span>
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
+        {/* 「我的」: 一切皆文件 —— places 切换 + 跨 kind 文件树; 其余模块: 既有条目列表。 */}
+        {activeModule === "home" ? (
+          <PlacesSidebar />
+        ) : (
+          <div className="flex-1 overflow-y-auto p-2">
+            {/* 聚合搜索引擎 (工具), 仅连接模式展示 (联网) */}
+            {mode === "connected" && <SidebarWebSearch />}
+            {mod.sidebarHint && (
+              <p className="px-2 pb-2 pt-1 text-xs leading-relaxed text-muted-foreground">
+                {mod.sidebarHint}
+              </p>
+            )}
+            <nav className="flex flex-col gap-0.5">
+              {mod.entries.map((e) => {
+                const Icon = e.icon
+                const id = tabKey(e.descriptor)
+                const active = activeId === id
+                return (
+                  <Link
+                    key={id}
+                    href={e.descriptor.path || "#"}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-shell px-2.5 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-primary/10 font-medium text-primary"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate text-left">{e.label}</span>
+                  </Link>
+                )
+              })}
+            </nav>
+          </div>
+        )}
       </div>
     </aside>
   )

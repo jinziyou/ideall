@@ -6,6 +6,18 @@
 // 不重挂会让环节点及其子树永远不被根遍历枚举到 → 在页树中「消失」、无法选中/删除/移到根。
 import type { NoteMeta } from "../model"
 
+/** 可建树的最小形状 (一切皆文件: 任意 kind 的节点元数据都满足)。 */
+export interface TreeItem {
+  id: string
+  title: string
+  parentId: string | null
+  sortKey: string
+}
+
+/** 泛型递归树节点。 */
+export type Tree<T> = { item: T; children: Tree<T>[] }
+
+/** 笔记专用别名 (历史): node.note 即 TreeItem。notes-tree.tsx 沿用此形状, 不 fork。 */
 export type TreeNode = { note: NoteMeta; children: TreeNode[] }
 
 /** 活跃集合的 id → parentId 映射 (parentOf.has(x) 即「x 是活跃节点」)。 */
@@ -37,31 +49,43 @@ export function effectiveParentId(
 }
 
 /** 同级稳定比较: 先按 sortKey 字典序, sortKey 并列时以 id 兜底 (跨端并发可能产生相同键)。 */
-export function cmpSibling(a: NoteMeta, b: NoteMeta): number {
+export function cmpSibling<T extends { id: string; sortKey: string }>(a: T, b: T): number {
   if (a.sortKey !== b.sortKey) return a.sortKey < b.sortKey ? -1 : 1
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
-/** 由活跃笔记元数据 (扁平) 组装递归森林: 按 effectiveParentId 分层, 同级按 sortKey 排序。 */
-export function buildNoteTree(notes: NoteMeta[]): TreeNode[] {
-  const parentOf = buildParentOf(notes)
-  const childrenOf = new Map<string | null, NoteMeta[]>()
-  for (const n of notes) {
+/**
+ * 由扁平节点元数据组装递归森林 (泛型, 一切皆文件共用): 按 effectiveParentId 分层, 同级按 sortKey 排序。
+ * 根/孤儿/环成员一律重挂到根 (见顶部不变量)。笔记树与侧栏跨 kind 树同走此逻辑, 不 fork。
+ */
+export function buildTree<T extends TreeItem>(items: T[]): Tree<T>[] {
+  const parentOf = buildParentOf(items)
+  const childrenOf = new Map<string | null, T[]>()
+  for (const n of items) {
     const ep = effectiveParentId(n.id, n.parentId, parentOf)
     const arr = childrenOf.get(ep) ?? []
     arr.push(n)
     childrenOf.set(ep, arr)
   }
   const visited = new Set<string>()
-  const build = (parentId: string | null): TreeNode[] => {
+  const build = (parentId: string | null): Tree<T>[] => {
     const kids = (childrenOf.get(parentId) ?? []).slice().sort(cmpSibling)
-    const out: TreeNode[] = []
-    for (const note of kids) {
-      if (visited.has(note.id)) continue // 防御性: 同一节点不重复挂载
-      visited.add(note.id)
-      out.push({ note, children: build(note.id) })
+    const out: Tree<T>[] = []
+    for (const item of kids) {
+      if (visited.has(item.id)) continue // 防御性: 同一节点不重复挂载
+      visited.add(item.id)
+      out.push({ item, children: build(item.id) })
     }
     return out
   }
   return build(null)
+}
+
+/** 笔记森林 (历史形状 node.note): 委托泛型 buildTree 再映射, 不重复建树逻辑。 */
+export function buildNoteTree(notes: NoteMeta[]): TreeNode[] {
+  const toNoteNode = (t: Tree<NoteMeta>): TreeNode => ({
+    note: t.item,
+    children: t.children.map(toNoteNode),
+  })
+  return buildTree(notes).map(toNoteNode)
 }
