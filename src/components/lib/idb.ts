@@ -4,7 +4,7 @@
 //   bookmarks      —— 链接收藏, keyPath = id
 //   bookmarkFolders—— 收藏夹分组, keyPath = id
 //   subscriptions  —— 「发现」订阅 (发布者等), keyPath = id 【折叠步 C 后排空, 数据迁入 nodes (kind:"feed")】
-//   agentThreads   —— AI 助手对话线程 (消息内联存于线程文档), keyPath = id
+//   agentThreads   —— AI 助手对话线程 (消息内联), keyPath = id 【折叠步 D 后排空, 数据迁入 nodes (kind:"thread")】
 //   notes          —— 笔记 (类 Notion 块文档, content 内联), keyPath = id 【折叠步 A 后排空, 数据迁入 nodes】
 //   noteNotebooks  —— 笔记本分组, keyPath = id 【已退役, 数据迁入 notes 再迁入 nodes】
 //   nodes          —— 统一 Node 库 (一切皆文件), keyPath = id; 按 kind 收纳所有内容节点 (note/bookmark/folder/file…)
@@ -26,7 +26,9 @@ const DB_NAME = "wonita-home"
 // v9: 折叠步 C (订阅迁入 nodes, kind:"feed", 确定性 id feed:type:key)。无新仓库 (零 I/O upgrade);
 //     数据迁移走 subscriptions-store 的懒迁移 (seedFeedsOnce); 同步仍走 "subs" scope (feed 节点↔旧 wire 投影)。
 //     版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
-const DB_VERSION = 9
+// v10: 折叠步 D (线程迁入 nodes, kind:"thread"; 四步折叠收官)。无新仓库 (零 I/O upgrade);
+//     数据迁移走 core threads-store 的懒迁移 (seedThreadsOnce); 本地独占故硬删、默认不同步 (无 thread sync scope)。
+const DB_VERSION = 10
 
 export const STORE_FILES = "files"
 export const STORE_BOOKMARKS = "bookmarks"

@@ -97,6 +97,19 @@ export type NoteMeta = Omit<Note, "content"> & {
   hasChildren: boolean
 }
 
+/**
+ * AI 助手对话线程 (core 存储视角) —— 消息语义属 agent 插件域, 协议层以 unknown[] 表达
+ * (同 NoteContent 不依赖编辑器实现)。插件经 HubDataPort 读写, 在边界断言 messages 为其 AgentMessage[]。
+ * 本地独占, 默认不跨端同步 (对象级 LWW 会截断 messages[]; 见 docs/design/ai-native-redesign.md §3 步 D)。
+ */
+export interface Thread {
+  id: string
+  title: string
+  messages: unknown[]
+  createdAt: number
+  updatedAt: number
+}
+
 /** 新建笔记入参 (id/时间戳/sortKey 由实现补全; 均可选, content 缺省为空文档)。 */
 export type NewNote = {
   title?: string
@@ -143,6 +156,17 @@ export interface HubDataPort {
   listAllNotes(): Promise<Note[]>
   /** 跨端同步落地: 写入合并 + GC 后的权威全集 (一次事务批处理)。 */
   bulkPutNotes(notes: Note[]): Promise<void>
+  // 对话线程 (agent 插件经此读写, 不直接依赖 core 存储; 本地独占, 默认不同步, 硬删)
+  /** 线程列表, 按最近更新倒序。 */
+  listThreads(): Promise<Thread[]>
+  getThread(id: string): Promise<Thread | undefined>
+  /** 新建空线程并落库。 */
+  createThread(): Promise<Thread>
+  /** 整体写回线程 (消息内联, 调用方在内存改好 messages 后调用); 刷新 updatedAt。 */
+  saveThread(thread: Thread): Promise<void>
+  /** 物理删除 (线程本地独占, 无需墓碑传播)。 */
+  deleteThread(id: string): Promise<void>
+  renameThread(id: string, title: string): Promise<void>
 }
 
 let port: HubDataPort | null = null

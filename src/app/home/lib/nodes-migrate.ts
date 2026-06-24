@@ -10,6 +10,7 @@ type BookmarkNode = NodeOfKind<"bookmark">
 type FolderNode = NodeOfKind<"folder">
 type FileNode = NodeOfKind<"file">
 type FeedNode = NodeOfKind<"feed">
+type ThreadNode = NodeOfKind<"thread">
 
 function asStr(x: unknown): string {
   return typeof x === "string" ? x : ""
@@ -302,4 +303,50 @@ export function planFeedsSeed(
   })
 
   return { puts: built.filter((n) => !existingNodeIds.has(n.id)), drainSubIds }
+}
+
+// ---- 折叠步 D: 线程 → thread 节点 (kind:"thread", 四步折叠收官) ----
+
+/** puts: thread 节点 (messages 以 unknown[] 透传, 不解读语义); drainThreadIds: 清旧 agentThreads 仓库。 */
+export type ThreadsSeedPlan = { puts: ThreadNode[]; drainThreadIds: string[] }
+
+/**
+ * 规划线程播种。返回 null = 旧 agentThreads 仓库为空。
+ * - 每条线程 → thread 节点 (messages 原样收进 content, 协议层不解读其语义); 线程本地独占无墓碑 (硬删)。
+ * - 补 sortKey (按 createdAt 升序; 线程列表按 updatedAt 展示, sortKey 仅供就绪); existingNodeIds 幂等; drain 全量。
+ * now 注入 (缺时间戳兜底), 便于测试确定性。
+ */
+export function planThreadsSeed(
+  rawThreads: Record<string, unknown>[],
+  existingNodeIds: Set<string>,
+  now: number,
+): ThreadsSeedPlan | null {
+  if (rawThreads.length === 0) return null
+  const built: ThreadNode[] = []
+  const drainThreadIds: string[] = []
+  for (const raw of rawThreads) {
+    const id = raw.id as string
+    if (typeof id !== "string" || !id) continue // 脏记录跳过
+    drainThreadIds.push(id)
+    const createdAt = asNum(raw.createdAt, now)
+    built.push({
+      id,
+      kind: "thread",
+      title: asStr(raw.title) || "新对话",
+      parentId: null,
+      sortKey: "",
+      tags: [],
+      createdAt,
+      updatedAt: asNum(raw.updatedAt, createdAt),
+      content: { messages: Array.isArray(raw.messages) ? raw.messages : [] },
+    })
+  }
+
+  built.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1))
+  const keys = sequentialSortKeys(built.length)
+  built.forEach((n, i) => {
+    n.sortKey = keys[i]
+  })
+
+  return { puts: built.filter((n) => !existingNodeIds.has(n.id)), drainThreadIds }
 }

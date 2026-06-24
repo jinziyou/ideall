@@ -1,11 +1,10 @@
-// 中枢仪表盘/导航的「对话」计数 —— 直接读共享 IndexedDB 的 agentThreads 仓库 (内核读自有基座),
-// 不依赖 agent 插件代码 (避免 core → plugin 反向依赖)。
-import { idbCount, STORE_AGENT_THREADS } from "@/components/lib/idb"
+// 中枢仪表盘/导航的「对话」计数 —— 折叠步 D 后线程已是 nodes 仓库的 kind:"thread" 节点 (core 拥有),
+// 经 core threads-store 计数 (core→core, 不依赖 agent 插件代码)。
+import { countThreads } from "./threads-store"
 
 export async function countAgentThreads(): Promise<number> {
   try {
-    // count() 不反序列化线程文档 (消息内联其中, 整库可达数 MB), 只回条数。
-    return await idbCount(STORE_AGENT_THREADS)
+    return await countThreads()
   } catch {
     return 0
   }

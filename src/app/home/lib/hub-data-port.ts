@@ -19,6 +19,14 @@ import {
 } from "./bookmarks-store"
 import { listFiles, updateFileMeta } from "./files-store"
 import { listNotes, getNote, listNoteChildren, listAllNotes, bulkPutNotes } from "./notes-store"
+import {
+  listThreads,
+  getThread,
+  createThread,
+  saveThread,
+  deleteThread,
+  renameThread,
+} from "./threads-store"
 
 export const hubDataPort: HubDataPort = {
   listSubscriptions,
@@ -40,4 +48,10 @@ export const hubDataPort: HubDataPort = {
   listNoteChildren,
   listAllNotes,
   bulkPutNotes,
+  listThreads,
+  getThread,
+  createThread,
+  saveThread,
+  deleteThread,
+  renameThread,
 }

@@ -74,6 +74,12 @@ function makeMemoryHub() {
     listNoteChildren: notUsed,
     listAllNotes: notUsed,
     bulkPutNotes: notUsed,
+    listThreads: notUsed,
+    getThread: notUsed,
+    createThread: notUsed,
+    saveThread: notUsed,
+    deleteThread: notUsed,
+    renameThread: notUsed,
   }
   return { hub, bookmarks, deleteCalls: () => deleteCalls }
 }

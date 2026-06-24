@@ -11,6 +11,7 @@ import {
   planBookmarksSeed,
   planFilesSeed,
   planFeedsSeed,
+  planThreadsSeed,
   subToFeedNode,
   feedNodeToSub,
   feedNodeId,
@@ -383,4 +384,64 @@ test("订阅播种: 同级 sortKey 严格递增唯一; 幂等 (已播种不重�
   const keys = full.puts.sort((a, b) => a.createdAt - b.createdAt).map((n) => n.sortKey)
   for (let i = 1; i < keys.length; i++) assert.ok(keys[i - 1] < keys[i])
   assert.equal(new Set(keys).size, keys.length)
+})
+
+// ---- 折叠步 D: 线程 ----
+
+const rawThread = (over: Record<string, unknown> = {}) => ({
+  id: "t1",
+  title: "对话一",
+  messages: [
+    { id: "m1", role: "user", content: "你好", createdAt: 1 },
+    { id: "m2", role: "assistant", content: "在", createdAt: 2 },
+  ],
+  createdAt: 400,
+  updatedAt: 450,
+  ...over,
+})
+
+test("线程播种: null = 旧仓库空", () => {
+  assert.equal(planThreadsSeed([], new Set(), NOW), null)
+})
+
+test("线程播种: messages 原样透传进 content (协议不解读语义), 字段保留", () => {
+  const plan = planThreadsSeed([rawThread()], new Set(), NOW)!
+  const node = plan.puts.find((n) => n.id === "t1")!
+  assert.equal(node.kind, "thread")
+  assert.equal(node.title, "对话一")
+  assert.equal(node.parentId, null)
+  assert.equal(node.createdAt, 400)
+  assert.equal(node.updatedAt, 450)
+  if (node.kind === "thread") {
+    assert.equal(node.content.messages.length, 2)
+    assert.deepEqual(node.content.messages[0], { id: "m1", role: "user", content: "你好", createdAt: 1 })
+  }
+  assert.deepEqual(plan.drainThreadIds, ["t1"])
+})
+
+test("线程播种: 缺 messages / 标题兜底; 同级 sortKey 递增唯一", () => {
+  const plan = planThreadsSeed(
+    [
+      { id: "a", createdAt: 10 },
+      { id: "b", createdAt: 20, title: "B" },
+    ],
+    new Set(),
+    NOW,
+  )!
+  const a = plan.puts.find((n) => n.id === "a")!
+  assert.equal(a.title, "新对话") // 缺标题兜底
+  if (a.kind === "thread") assert.deepEqual(a.content.messages, []) // 缺 messages → 空
+  const keys = plan.puts.sort((x, y) => x.createdAt - y.createdAt).map((n) => n.sortKey)
+  for (let i = 1; i < keys.length; i++) assert.ok(keys[i - 1] < keys[i])
+  assert.equal(new Set(keys).size, keys.length)
+})
+
+test("线程播种: 幂等 — 已播种不重写, drain 全量收尾 (线程无墓碑, 硬删)", () => {
+  const plan = planThreadsSeed([rawThread({ id: "t1" }), rawThread({ id: "t2" })], new Set(["t1"]), NOW)!
+  assert.equal(
+    plan.puts.find((n) => n.id === "t1"),
+    undefined,
+  )
+  assert.ok(plan.puts.find((n) => n.id === "t2"))
+  assert.deepEqual(plan.drainThreadIds.sort(), ["t1", "t2"])
 })
