@@ -80,6 +80,8 @@ function makeMemoryHub() {
     saveThread: notUsed,
     deleteThread: notUsed,
     renameThread: notUsed,
+    fsListNodes: notUsed,
+    fsGetNode: notUsed,
   }
   return { hub, bookmarks, deleteCalls: () => deleteCalls }
 }

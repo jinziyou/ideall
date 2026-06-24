@@ -74,3 +74,14 @@ const NODE_KINDS: readonly NodeKind[] = ["folder", "note", "bookmark", "file", "
 export function isNodeKind(k: string): k is NodeKind {
   return (NODE_KINDS as readonly string[]).includes(k)
 }
+
+/**
+ * 隐私净化 (单一函数, fs.list 工具与 fs://nodes 资源同点复用, 防净化漂移; 见设计 §6.3):
+ * note 剥正文 content, thread 剥 messages —— 批量列举永不回私密正文/会话 (即便消费方持 fs.notes:read)。
+ * 其余 kind (folder/bookmark/file/feed) 的 content 非私密正文, 原样返回。纯函数, 不依赖存储。
+ */
+export function stripNode(n: Node): Node {
+  if (n.kind === "note") return { ...n, content: [] }
+  if (n.kind === "thread") return { ...n, content: { messages: [] } }
+  return n
+}

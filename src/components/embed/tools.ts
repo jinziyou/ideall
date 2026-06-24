@@ -6,6 +6,7 @@ import { z } from "zod"
 import { getServerPort } from "@protocol/server-port"
 import { getHubData } from "@protocol/hub-data"
 import type { NewBookmark } from "@protocol/hub-data"
+import { stripNode, type NodeKind } from "@protocol/node"
 import { getSession } from "@/components/lib/auth/auth-store"
 import { openExternalUrl } from "@/components/lib/tauri"
 import { safeHref } from "@/components/lib/safe-url"
@@ -23,6 +24,10 @@ function fail(code: number, message: string): ToolResult {
 
 // 订阅类型白名单: 用 zod enum 让 handler 直接拿到领域联合 (SubscriptionType), 杜绝任意字符串写入脏订阅。
 const subType = z.enum(["publisher", "entity", "tool", "search", "peer"])
+
+// 节点 kind 白名单 (fs.* 文件面)。缺省 kind = 列全部命名空间。
+const nodeKind = z.enum(["folder", "note", "bookmark", "file", "feed", "thread"])
+const ALL_NODE_KINDS: NodeKind[] = [...nodeKind.options]
 
 export interface HostToolsCtx {
   /** ideall 内部路由跳转 (host.navigate)。 */
@@ -142,6 +147,32 @@ export function registerGrantedTools(
     )
   }
 
+  // ── fs.* 统一 Node 文件面 (§6, 净新建) ──────────────────────────────────────
+  if (has("fs:read")) {
+    // fs.list: 列节点元数据。note/thread 一律经 stripNode 剥正文/消息 —— 批量永不回私密内容
+    // (即便持 fs.notes:read; 正文须 fs.read 单条 + consent)。可选 parentId 过滤同级。
+    server.tool(
+      TOOL.fsList,
+      { kind: nodeKind.optional(), parentId: z.string().nullable().optional() },
+      async (a) => {
+        const kinds = a.kind ? [a.kind] : ALL_NODE_KINDS
+        let nodes = await getHubData().fsListNodes(kinds)
+        if (a.parentId !== undefined) nodes = nodes.filter((n) => n.parentId === a.parentId)
+        return ok(nodes.map(stripNode))
+      },
+    )
+    // fs.read: 读单个节点完整内容。私密内容 (note 正文 / thread 会话, 与 stripNode 同口径) 二次 gate
+    // 到 fs.notes:read (= 私密读 consent 位); 无则 consent-required (@ 引用单条单次临时注入)。余 fs:read 即可。
+    // 防 fs.read(thread) 在仅持 fs:read 时绕过 (批量已剥 messages, 单读须同等 gate, 否则会话泄漏)。
+    server.tool(TOOL.fsRead, { kind: nodeKind, id: z.string() }, async (a) => {
+      const n = await getHubData().fsGetNode(a.id)
+      if (!n || n.kind !== a.kind) return fail(-32004, "not-found")
+      if ((n.kind === "note" || n.kind === "thread") && !has("fs.notes:read"))
+        return fail(-32003, "consent-required")
+      return ok(n)
+    })
+  }
+
   // ── host / 外壳能力 ─────────────────────────────────────────────────────────
   if (has("host.external")) {
     server.tool(TOOL.hostOpenExternal, { url: z.string() }, async (a) => {
@@ -200,6 +231,12 @@ export function registerGrantedResources(server: McpServer, perms: Permission[])
   if (has("hub.bookmarks:read")) {
     server.resource("hub-bookmarks", RESOURCE.hubBookmarks, async (uri) =>
       json(uri.href, await getHubData().listBookmarks()),
+    )
+  }
+  if (has("fs:read")) {
+    // fs://nodes 全库快照: 与 fs.list 同点经 stripNode 净化 (note/thread 剥私密内容), 防净化漂移。
+    server.resource("fs-nodes", RESOURCE.fsNodes, async (uri) =>
+      json(uri.href, (await getHubData().fsListNodes(ALL_NODE_KINDS)).map(stripNode)),
     )
   }
 }

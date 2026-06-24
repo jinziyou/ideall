@@ -26,14 +26,25 @@ function section(title: string, total: number, lines: string[]): string {
 /** 汇集 home 快照文本; 全空时返回空串。 */
 export async function gatherHomeContext(): Promise<string> {
   const hub = getHubData()
-  const [subs, bookmarks, folders, files] = await Promise.all([
+  const [subs, bookmarks, folders, files, notes] = await Promise.all([
     hub.listSubscriptions().catch(() => []),
     hub.listBookmarks().catch(() => []),
     hub.listFolders().catch(() => []),
     hub.listFiles().catch(() => []),
+    hub.listNotes().catch(() => []),
   ])
 
   const blocks: string[] = []
+
+  // 隐私 (§6.3 闸1): 笔记概览**只取标题**, 绝不取 NoteMeta 的 excerpt/search (二者是正文/全文纯文本)。
+  // 正文外发须经 fs.read(note) 单条 + consent (@ 引用), 永不随概览批量泄漏。
+  blocks.push(
+    section(
+      "我的笔记",
+      notes.length,
+      notes.slice(0, CAP).map((n) => n.title || "无标题"),
+    ),
+  )
 
   blocks.push(
     section(

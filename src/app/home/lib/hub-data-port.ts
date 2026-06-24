@@ -27,6 +27,7 @@ import {
   deleteThread,
   renameThread,
 } from "./threads-store"
+import { listNodesRaw, getNodeRaw } from "./nodes-store"
 
 export const hubDataPort: HubDataPort = {
   listSubscriptions,
@@ -54,4 +55,6 @@ export const hubDataPort: HubDataPort = {
   saveThread,
   deleteThread,
   renameThread,
+  fsListNodes: listNodesRaw,
+  fsGetNode: getNodeRaw,
 }

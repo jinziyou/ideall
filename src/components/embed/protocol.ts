@@ -22,6 +22,9 @@ export const TOOL = {
   hubRemoveSubscription: "hub.removeSubscription",
   hubIsSubscribed: "hub.isSubscribed",
   hubAddBookmark: "hub.addBookmark",
+  // fs.* 统一 Node 文件面 (§6.1, 净新建): 一切皆文件 —— 跨 kind 寻址读写统一 Node 库。
+  fsList: "fs.list",
+  fsRead: "fs.read",
   hostNavigate: "host.navigate",
   hostOpenExternal: "host.openExternal",
   hostToast: "host.toast",
@@ -31,6 +34,8 @@ export const RESOURCE = {
   identityMe: "identity://me",
   hubSubscriptions: "hub://subscriptions",
   hubBookmarks: "hub://bookmarks",
+  /** 统一 Node 库快照 (note 节点剥正文, 与 fs.list 同点净化防漂移)。 */
+  fsNodes: "fs://nodes",
 } as const
 
 // ── 授权位 (§6.1) ────────────────────────────────────────────────────────────────
@@ -46,6 +51,13 @@ export const PERMISSIONS = [
   "hub.bookmarks:write",
   "host.external",
   "host.nav",
+  // fs.* 统一 Node 文件面 (§6.2)。note 的读写在共用 handler 内二次 gate 到 fs.notes:*,
+  // 防 fs:write 绕过 notes 专属位; fs:read 列 note 只回标题元数据 (正文须 fs.notes:read + 单条 consent)。
+  "fs:read",
+  "fs:write",
+  "fs.notes:read",
+  "fs.notes:write",
+  "ui.tabs",
 ] as const
 
 /** 嵌入桥授权位 —— 宿主据此注册 tool/resource (越权 = 工具不存在)。 */

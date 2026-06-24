@@ -2,6 +2,7 @@
 // 这些类型既是 core 存储模型, 又经 HubDataPort 暴露给 plugin (如 agent), 故属契约。
 // (订阅 Subscription 类型见 ./subscription)。
 import type { Subscription, SubscriptionType, NewSubscription } from "./subscription"
+import type { Node, NodeKind } from "./node"
 
 /** 本地存储的文件: 元数据 + 原始 Blob */
 export interface StoredFile {
@@ -167,6 +168,11 @@ export interface HubDataPort {
   /** 物理删除 (线程本地独占, 无需墓碑传播)。 */
   deleteThread(id: string): Promise<void>
   renameThread(id: string, title: string): Promise<void>
+  // 统一 Node 文件面 (AI fs.* §6): 跨 kind 寻址读 (原始节点, 调用方按 kind gate / stripNode 净化)。
+  /** 列出指定 kind 的活跃完整节点 (fs.list 后端)。 */
+  fsListNodes(kinds: NodeKind[]): Promise<Node[]>
+  /** 取单个活跃完整节点 (fs.read 后端); 不存在 / 墓碑 → undefined。 */
+  fsGetNode(id: string): Promise<Node | undefined>
 }
 
 let port: HubDataPort | null = null
