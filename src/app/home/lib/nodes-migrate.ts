@@ -2,12 +2,14 @@
 // 见 docs/design/ai-native-redesign.md §3 (步 A: notes; 步 B: bookmarks/folders …)。
 // 纯本地、无服务端备份, 故正确性 (零丢数据 + 幂等 + 墓碑保留) 由 nodes-migrate.test.ts 锁死。
 import type { Note } from "@protocol/hub-data"
+import type { Subscription } from "@protocol/subscription"
 import type { NoteNode, NodeOfKind } from "@protocol/node"
 import { sequentialSortKeys } from "./sort-key"
 
 type BookmarkNode = NodeOfKind<"bookmark">
 type FolderNode = NodeOfKind<"folder">
 type FileNode = NodeOfKind<"file">
+type FeedNode = NodeOfKind<"feed">
 
 function asStr(x: unknown): string {
   return typeof x === "string" ? x : ""
@@ -196,4 +198,108 @@ export function planFilesSeed(
     blobPuts: fresh.filter((b) => b.blob).map((b) => ({ key: b.node.id, blob: b.blob as Blob })),
     drainFileIds: built.map((b) => b.node.id),
   }
+}
+
+// ---- 折叠步 C: 订阅 → feed 节点 (kind:"feed", 确定性 id) ----
+// 投影助手单一真相 (迁移 + subscriptions-store 运行期共用, 防双处映射漂移)。
+
+/** 确定性 feed 节点 id: feed:type:key (绝不 genId; 两端独立创建同订阅得同 id → 跨端零 churn)。 */
+export function feedNodeId(type: string, key: string): string {
+  return `feed:${type}:${key}`
+}
+
+/** Subscription → feed 节点。sortKey 由调用方算 (迁移=顺序键, 运行期=追加键)。墓碑 deletedAt 原样带过。 */
+export function subToFeedNode(sub: Subscription, sortKey: string): FeedNode {
+  const content: FeedNode["content"] = {
+    type: sub.type,
+    key: sub.key,
+    favicon: sub.favicon ?? "",
+  }
+  if (sub.entityLabel !== undefined) content.entityLabel = sub.entityLabel
+  if (sub.entityName !== undefined) content.entityName = sub.entityName
+  if (sub.searchKeyword !== undefined) content.searchKeyword = sub.searchKeyword
+  if (sub.searchDomain !== undefined) content.searchDomain = sub.searchDomain
+  const node: FeedNode = {
+    id: feedNodeId(sub.type, sub.key),
+    kind: "feed",
+    title: sub.title,
+    parentId: null,
+    sortKey,
+    tags: [],
+    createdAt: sub.createdAt,
+    updatedAt: sub.updatedAt ?? sub.createdAt,
+    content,
+  }
+  if (sub.deletedAt !== undefined) node.deletedAt = sub.deletedAt
+  return node
+}
+
+/** feed 节点 → Subscription (反投影)。wire id 由 content.type:key 重建 = 旧确定性 id, 同步合并/旧端兼容。 */
+export function feedNodeToSub(n: FeedNode): Subscription {
+  const c = n.content
+  const sub: Subscription = {
+    id: `${c.type}:${c.key}`,
+    type: c.type,
+    key: c.key,
+    title: n.title,
+    favicon: c.favicon,
+    createdAt: n.createdAt,
+    updatedAt: n.updatedAt,
+  }
+  if (c.entityLabel !== undefined) sub.entityLabel = c.entityLabel
+  if (c.entityName !== undefined) sub.entityName = c.entityName
+  if (c.searchKeyword !== undefined) sub.searchKeyword = c.searchKeyword
+  if (c.searchDomain !== undefined) sub.searchDomain = c.searchDomain
+  if (n.deletedAt !== undefined) sub.deletedAt = n.deletedAt
+  return sub
+}
+
+/** puts: feed 节点 (含墓碑全量); drainSubIds: 播种后要从旧 subscriptions 仓库清除的 id (= type:key)。 */
+export type FeedsSeedPlan = { puts: FeedNode[]; drainSubIds: string[] }
+
+/**
+ * 规划订阅播种。返回 null = 旧 subscriptions 仓库为空。
+ * - 每条订阅 → feed 节点 (确定性 id feed:type:key); type/key/favicon 与 entity/search 专属字段收进 content;
+ *   **含墓碑全量带过来** (deletedAt 原样保留) —— 漏带 = 已删订阅在跨端合并时被对端活跃副本复活。
+ * - 补 sortKey (按 createdAt 升序); existingNodeIds 已播种的不重写 (幂等); drain 始终全量。
+ * now 注入 (缺时间戳兜底), 便于测试确定性。
+ */
+export function planFeedsSeed(
+  rawSubs: Record<string, unknown>[],
+  existingNodeIds: Set<string>,
+  now: number,
+): FeedsSeedPlan | null {
+  if (rawSubs.length === 0) return null
+  const built: FeedNode[] = []
+  const drainSubIds: string[] = []
+  for (const raw of rawSubs) {
+    const type = raw.type
+    const key = raw.key
+    if (typeof type !== "string" || typeof key !== "string" || !type || !key) continue // 脏记录跳过
+    drainSubIds.push(typeof raw.id === "string" && raw.id ? raw.id : `${type}:${key}`)
+    const createdAt = asNum(raw.createdAt, now)
+    const sub: Subscription = {
+      id: `${type}:${key}`,
+      type: type as Subscription["type"],
+      key,
+      title: asStr(raw.title) || key,
+      favicon: asStr(raw.favicon),
+      createdAt,
+      updatedAt: asNum(raw.updatedAt, createdAt),
+    }
+    if (typeof raw.entityLabel === "string") sub.entityLabel = raw.entityLabel
+    if (typeof raw.entityName === "string") sub.entityName = raw.entityName
+    if (typeof raw.searchKeyword === "string") sub.searchKeyword = raw.searchKeyword
+    if (typeof raw.searchDomain === "string") sub.searchDomain = raw.searchDomain
+    if (typeof raw.deletedAt === "number") sub.deletedAt = raw.deletedAt // 墓碑保留
+    built.push(subToFeedNode(sub, ""))
+  }
+
+  built.sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1))
+  const keys = sequentialSortKeys(built.length)
+  built.forEach((n, i) => {
+    n.sortKey = keys[i]
+  })
+
+  return { puts: built.filter((n) => !existingNodeIds.has(n.id)), drainSubIds }
 }

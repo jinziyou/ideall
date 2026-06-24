@@ -6,7 +6,16 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { planNodesSeed, planBookmarksSeed, planFilesSeed } from "./nodes-migrate"
+import {
+  planNodesSeed,
+  planBookmarksSeed,
+  planFilesSeed,
+  planFeedsSeed,
+  subToFeedNode,
+  feedNodeToSub,
+  feedNodeId,
+} from "./nodes-migrate"
+import type { Subscription } from "@protocol/subscription"
 
 const NOW = 1_700_000_000_000
 
@@ -257,4 +266,121 @@ test("文件播种: 幂等 — 已播种的节点与 blob 都不重写, drain �
   )
   assert.ok(plan.nodePuts.find((n) => n.id === "fl2"))
   assert.deepEqual(plan.drainFileIds.sort(), ["fl1", "fl2"])
+})
+
+// ---- 折叠步 C: 订阅 → feed 节点 ----
+
+const rawSub = (over: Record<string, unknown> = {}) => ({
+  id: "publisher:example.com",
+  type: "publisher",
+  key: "example.com",
+  title: "示例站",
+  favicon: "https://example.com/fav.ico",
+  createdAt: 300,
+  updatedAt: 350,
+  ...over,
+})
+
+test("订阅播种: null = 旧仓库空", () => {
+  assert.equal(planFeedsSeed([], new Set(), NOW), null)
+})
+
+test("订阅播种: 确定性 id feed:type:key (绝不 genId)", () => {
+  const plan = planFeedsSeed([rawSub()], new Set(), NOW)!
+  assert.equal(plan.puts[0].id, "feed:publisher:example.com")
+  assert.equal(plan.puts[0].id, feedNodeId("publisher", "example.com"))
+  // drain 用旧 wire id (type:key)
+  assert.deepEqual(plan.drainSubIds, ["publisher:example.com"])
+})
+
+test("订阅播种: content 投影 (type/key/favicon + entity 专属字段)", () => {
+  const plan = planFeedsSeed(
+    [
+      rawSub({
+        id: "entity:PER/张三",
+        type: "entity",
+        key: "PER/张三",
+        entityLabel: "PER",
+        entityName: "张三",
+      }),
+    ],
+    new Set(),
+    NOW,
+  )!
+  const node = plan.puts[0]
+  assert.equal(node.kind, "feed")
+  assert.equal(node.id, "feed:entity:PER/张三")
+  if (node.kind === "feed") {
+    assert.equal(node.content.type, "entity")
+    assert.equal(node.content.key, "PER/张三")
+    assert.equal(node.content.entityLabel, "PER")
+    assert.equal(node.content.entityName, "张三")
+    assert.equal(node.content.searchKeyword, undefined) // 非 search 不带
+  }
+})
+
+test("订阅播种: 含墓碑全量带过来 (deletedAt 保留, 防已删订阅复活)", () => {
+  const plan = planFeedsSeed([rawSub({ deletedAt: 999 })], new Set(), NOW)!
+  assert.equal(plan.puts[0].deletedAt, 999)
+})
+
+test("订阅投影 round-trip 无损: feedNodeToSub(subToFeedNode(sub)) === sub", () => {
+  const subs: Subscription[] = [
+    {
+      id: "publisher:a.com",
+      type: "publisher",
+      key: "a.com",
+      title: "A",
+      favicon: "f",
+      createdAt: 1,
+      updatedAt: 2,
+    },
+    {
+      id: "entity:PER/李四",
+      type: "entity",
+      key: "PER/李四",
+      title: "李四",
+      favicon: "",
+      entityLabel: "PER",
+      entityName: "李四",
+      createdAt: 3,
+      updatedAt: 4,
+    },
+    {
+      id: "search:foo",
+      type: "search",
+      key: "foo",
+      title: "搜 foo",
+      favicon: "",
+      searchKeyword: "foo",
+      searchDomain: "x.com",
+      createdAt: 5,
+      updatedAt: 6,
+      deletedAt: 7, // 墓碑也须无损
+    },
+  ]
+  for (const sub of subs) {
+    assert.deepEqual(feedNodeToSub(subToFeedNode(sub, "a0")), sub)
+  }
+})
+
+test("订阅播种: 同级 sortKey 严格递增唯一; 幂等 (已播种不重写, drain 全量)", () => {
+  const subs = [
+    rawSub({ id: "publisher:a", key: "a", createdAt: 10 }),
+    rawSub({ id: "publisher:b", key: "b", createdAt: 20 }),
+  ]
+  const plan = planFeedsSeed(subs, new Set(["feed:publisher:a"]), NOW)!
+  // 已播种 feed:publisher:a 不重写
+  assert.equal(
+    plan.puts.find((n) => n.id === "feed:publisher:a"),
+    undefined,
+  )
+  assert.ok(plan.puts.find((n) => n.id === "feed:publisher:b"))
+  // drain 全量 (旧 wire id)
+  assert.deepEqual(plan.drainSubIds.sort(), ["publisher:a", "publisher:b"])
+  // 全量重跑时 sortKey 递增唯一
+  const full = planFeedsSeed(subs, new Set(), NOW)!
+  const keys = full.puts.sort((a, b) => a.createdAt - b.createdAt).map((n) => n.sortKey)
+  for (let i = 1; i < keys.length; i++) assert.ok(keys[i - 1] < keys[i])
+  assert.equal(new Set(keys).size, keys.length)
 })
