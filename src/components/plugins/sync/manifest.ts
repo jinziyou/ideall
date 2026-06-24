@@ -12,9 +12,7 @@ export const syncManifest = {
       async syncNow(code): Promise<SyncResult> {
         // 并发同步两域; 各自本地优先 (成功侧本地已落地)。任一失败则抛其消息, 让用户得知未全同步。
         const settled = await Promise.allSettled([syncSubscriptions(code), syncNotes(code)])
-        const errs = settled.filter(
-          (r): r is PromiseRejectedResult => r.status === "rejected",
-        )
+        const errs = settled.filter((r): r is PromiseRejectedResult => r.status === "rejected")
         if (errs.length) {
           const msg = errs
             .map((e) => (e.reason instanceof Error ? e.reason.message : String(e.reason)))

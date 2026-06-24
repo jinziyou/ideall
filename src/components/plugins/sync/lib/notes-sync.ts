@@ -7,7 +7,13 @@
 // 改 changed-since / 分块上传以省带宽 —— 属性能优化, 非正确性问题。
 import type { Note } from "@protocol/hub-data"
 import { getHubData } from "@protocol/hub-data"
-import { unionMerge, recordsEqual, isLive, pruneExpiredTombstones, type SyncResult } from "@protocol/sync"
+import {
+  unionMerge,
+  recordsEqual,
+  isLive,
+  pruneExpiredTombstones,
+  type SyncResult,
+} from "@protocol/sync"
 import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/components/lib/sync-crypto"
 import { getSyncBlob, putSyncBlob } from "./sync-api"
 

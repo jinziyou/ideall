@@ -14,7 +14,12 @@ import type { WsMode } from "./types"
 
 const MODES: { id: WsMode; label: string; hint: string; dot: string }[] = [
   { id: "local", label: "本地", hint: "我的 · 订阅 · 关注 —— 只存本机", dot: "bg-primary" },
-  { id: "connected", label: "连接", hint: "资讯 · 社区 · 工具 · AI —— 联网", dot: "bg-spoke-community" },
+  {
+    id: "connected",
+    label: "连接",
+    hint: "资讯 · 社区 · 工具 · AI —— 联网",
+    dot: "bg-spoke-community",
+  },
 ]
 
 export default function ModeSwitch() {

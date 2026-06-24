@@ -3,12 +3,7 @@
 // 顶栏快捷布局切换: 左侧栏开关 + 右侧 AI 对话栏开关 (Trae/VS Code 风格)。
 import { MessageSquare, PanelLeft } from "lucide-react"
 import { cn } from "@/components/lib/utils"
-import {
-  useSidebarCollapsed,
-  useRightPanelOpen,
-  toggleSidebar,
-  toggleRightPanel,
-} from "./store"
+import { useSidebarCollapsed, useRightPanelOpen, toggleSidebar, toggleRightPanel } from "./store"
 
 export default function LayoutToggles() {
   const sidebarCollapsed = useSidebarCollapsed()

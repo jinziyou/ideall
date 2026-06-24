@@ -28,7 +28,11 @@ export default function TabHost() {
         const active = t.id === activeId
         const fill = tabLayout(t.kind) === "fill"
         return (
-          <div key={t.id} className={cn("h-full w-full", !active && "hidden")} aria-hidden={!active}>
+          <div
+            key={t.id}
+            className={cn("h-full w-full", !active && "hidden")}
+            aria-hidden={!active}
+          >
             {fill ? (
               // 桌面: 组件自管理内部滚动 (h-full); 移动: 允许整体滚动兜底 (笔记等无视口高度约束)。
               <div className="h-full w-full overflow-y-auto md:overflow-hidden">

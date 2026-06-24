@@ -52,7 +52,10 @@ export function LocalDeviceStatus() {
       <div className="mt-3 flex items-center justify-between rounded-md border bg-muted/40 px-2.5 py-2">
         <span className="text-xs">跨端同步</span>
         <span
-          className={cn("text-xs font-medium", synced ? "text-foreground" : "text-muted-foreground")}
+          className={cn(
+            "text-xs font-medium",
+            synced ? "text-foreground" : "text-muted-foreground",
+          )}
         >
           {synced ? "已开启 · 端到端加密" : "未开启"}
         </span>

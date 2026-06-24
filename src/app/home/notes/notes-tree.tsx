@@ -91,7 +91,8 @@ export function PageTree({
         onMove(id, t.parentId, { afterSortKey: targetMeta?.sortKey })
       } else {
         const ti = sibs.findIndex((s) => s.id === targetId)
-        const pos: InsertPos = ti <= 0 ? { afterSortKey: null } : { afterSortKey: sibs[ti - 1].sortKey }
+        const pos: InsertPos =
+          ti <= 0 ? { afterSortKey: null } : { afterSortKey: sibs[ti - 1].sortKey }
         onMove(id, t.parentId, pos)
       }
     },
@@ -303,7 +304,10 @@ function PageTreeRow({
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(note)}>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => onDelete(note)}
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               删除
             </DropdownMenuItem>

@@ -271,50 +271,50 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
     <div className="flex h-full flex-col gap-4 md:flex-row">
       {/* 会话侧栏 (紧凑模式隐藏, 新对话改在标题栏) */}
       {!compact && (
-      <aside className="md:w-52 md:shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          className="mb-2 w-full justify-start gap-2"
-          onClick={newChat}
-        >
-          <SquarePen className="h-4 w-4" />
-          新对话
-        </Button>
-        <div className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-          {threads.length === 0 && (
-            <p className="px-2 py-1 text-xs text-muted-foreground">还没有对话</p>
-          )}
-          {threads.map((t) => {
-            const active = t.id === activeId
-            return (
-              <div
-                key={t.id}
-                className={cn(
-                  "group flex shrink-0 items-center gap-1 rounded-md pl-3 pr-1 text-sm transition-colors md:shrink",
-                  active ? "bg-accent font-medium" : "hover:bg-accent/60",
-                )}
-              >
-                <button
-                  className="flex-1 truncate py-2 text-left"
-                  title={t.title}
-                  onClick={() => selectThread(t.id)}
+        <aside className="md:w-52 md:shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="mb-2 w-full justify-start gap-2"
+            onClick={newChat}
+          >
+            <SquarePen className="h-4 w-4" />
+            新对话
+          </Button>
+          <div className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+            {threads.length === 0 && (
+              <p className="px-2 py-1 text-xs text-muted-foreground">还没有对话</p>
+            )}
+            {threads.map((t) => {
+              const active = t.id === activeId
+              return (
+                <div
+                  key={t.id}
+                  className={cn(
+                    "group flex shrink-0 items-center gap-1 rounded-md pl-3 pr-1 text-sm transition-colors md:shrink",
+                    active ? "bg-accent font-medium" : "hover:bg-accent/60",
+                  )}
                 >
-                  {t.title}
-                </button>
-                <button
-                  className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-                  title="删除对话"
-                  onClick={() => removeThread(t.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span className="sr-only">删除对话</span>
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </aside>
+                  <button
+                    className="flex-1 truncate py-2 text-left"
+                    title={t.title}
+                    onClick={() => selectThread(t.id)}
+                  >
+                    {t.title}
+                  </button>
+                  <button
+                    className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                    title="删除对话"
+                    onClick={() => removeThread(t.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="sr-only">删除对话</span>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </aside>
       )}
 
       {/* 对话区 */}

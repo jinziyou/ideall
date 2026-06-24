@@ -96,7 +96,12 @@ export default function LocalSearchDialog({
             },
           })
         for (const f of files)
-          next.push({ id: "f" + f.id, label: f.name, group: "资源", run: () => openTab(TAB.resources) })
+          next.push({
+            id: "f" + f.id,
+            label: f.name,
+            group: "资源",
+            run: () => openTab(TAB.resources),
+          })
         setItems(next)
       } catch {
         /* 本地读取失败时静默 */

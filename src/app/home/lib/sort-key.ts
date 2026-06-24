@@ -41,7 +41,8 @@ function validateOrderKey(key: string): void {
 /** 小数部分的严格中点: 返回 m 使 a < m < b (b 为 null 表示无上界)。要求 a < b 且均不以 0 结尾。 */
 function midpoint(a: string, b: string | null): string {
   if (b !== null && a >= b) throw new Error(a + " >= " + b)
-  if (a.slice(-1) === ZERO || (b !== null && b.slice(-1) === ZERO)) throw new Error("小数部分不得以 0 结尾")
+  if (a.slice(-1) === ZERO || (b !== null && b.slice(-1) === ZERO))
+    throw new Error("小数部分不得以 0 结尾")
   if (b !== null) {
     // 跳过公共前缀 (a 不足处以 0 补齐), 在首个相异位求中点。
     let n = 0

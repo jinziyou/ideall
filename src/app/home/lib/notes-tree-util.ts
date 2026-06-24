@@ -9,7 +9,9 @@ import type { NoteMeta } from "../model"
 export type TreeNode = { note: NoteMeta; children: TreeNode[] }
 
 /** 活跃集合的 id → parentId 映射 (parentOf.has(x) 即「x 是活跃节点」)。 */
-export function buildParentOf(items: { id: string; parentId: string | null }[]): Map<string, string | null> {
+export function buildParentOf(
+  items: { id: string; parentId: string | null }[],
+): Map<string, string | null> {
   return new Map(items.map((n) => [n.id, n.parentId]))
 }
 

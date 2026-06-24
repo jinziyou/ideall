@@ -44,11 +44,7 @@ const REGISTRY: Record<string, Entry> = {
   },
   following: {
     render: () => (
-      <SubscriptionFeed
-        types={PEER_SUB_TYPES}
-        title="关注的发布者"
-        dotClass="bg-spoke-community"
-      />
+      <SubscriptionFeed types={PEER_SUB_TYPES} title="关注的发布者" dotClass="bg-spoke-community" />
     ),
     layout: "padded",
   },
