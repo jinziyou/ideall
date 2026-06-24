@@ -39,9 +39,10 @@ export default function PlacesSidebar() {
 
   const handleOpen = React.useCallback(
     (ref: NodeRef, title: string) => {
-      // 有查看器 → 开实体标签 (note 已就绪); 暂无 → 落到该命名空间管理器, 避免"暂不支持"空标签。
+      // 有查看器 → 开实体标签; 无查看器但有管理器 → 落管理器 (避"暂不支持"空标签); 都无 → 仍开实体标签兜底。
       if (resolveViewer(ref.kind)) openNodeTab(ref, title)
-      else openTab(place.manager)
+      else if (place.manager) openTab(place.manager)
+      else openNodeTab(ref, title)
     },
     [place],
   )
@@ -54,8 +55,8 @@ export default function PlacesSidebar() {
         <TopEntry d={PUBLICATIONS} icon={Megaphone} label="发布" activeId={activeId} />
       </nav>
 
-      {/* places 切换: 笔记 / 书签 / 资源 */}
-      <div className="mt-2 flex gap-1 px-2" role="tablist" aria-label="根命名空间">
+      {/* places 切换: 笔记 / 书签 / 资源 / 订阅 / 对话 (根命名空间; 多项换行) */}
+      <div className="mt-2 flex flex-wrap gap-1 px-2" role="tablist" aria-label="根命名空间">
         {PLACES.map((p) => {
           const Icon = p.icon
           const active = p.id === activePlace
@@ -68,7 +69,7 @@ export default function PlacesSidebar() {
               onClick={() => setActivePlace(p.id)}
               title={p.label}
               className={cn(
-                "flex flex-1 items-center justify-center gap-1 rounded-shell px-1.5 py-1.5 text-xs transition-colors",
+                "flex items-center gap-1 rounded-shell px-2 py-1.5 text-xs transition-colors",
                 active
                   ? "bg-primary/10 font-medium text-primary"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -91,16 +92,18 @@ export default function PlacesSidebar() {
         />
       </div>
 
-      {/* 打开该命名空间的管理器 */}
-      <div className="shrink-0 border-t p-2">
-        <button
-          type="button"
-          onClick={() => openTab(place.manager)}
-          className="w-full rounded-shell px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-        >
-          打开{place.label}管理器
-        </button>
-      </div>
+      {/* 打开该命名空间的管理器 (对话无独立管理器, 不渲染) */}
+      {place.manager && (
+        <div className="shrink-0 border-t p-2">
+          <button
+            type="button"
+            onClick={() => openTab(place.manager!)}
+            className="w-full rounded-shell px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          >
+            打开{place.label}管理器
+          </button>
+        </div>
+      )}
     </div>
   )
 }

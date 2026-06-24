@@ -113,6 +113,14 @@ export async function isSubscribed(type: SubscriptionType, key: string): Promise
   return Boolean(n && n.kind === "feed" && isLive(n)) // 墓碑 / 非 feed 视为未订阅
 }
 
+/** 读取单条订阅 (投影); 墓碑 / 非 feed kind 视为不存在。供订阅查看器自取数 (按 feed 节点 id)。 */
+export async function getSubscription(id: string): Promise<Subscription | undefined> {
+  await seedFeedsOnce()
+  const n = await idbGet<FeedNode>(STORE_NODES, id)
+  if (!n || n.kind !== "feed" || !isLive(n)) return undefined
+  return feedNodeToSub(n)
+}
+
 // ---- 写 ----
 
 /** 订阅; 活跃项已存在则原样返回 (幂等); 命中墓碑则复活 (清除 deletedAt + 新 updatedAt, 保留原 createdAt)。 */
