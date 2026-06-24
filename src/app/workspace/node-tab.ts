@@ -1,11 +1,11 @@
 // 节点标签的唯一构造器与反解 (一切皆标签): 三入口 (搜索/侧栏/AI) 必须都经 nodeTab,
 // 保证 kind 恒 "node"、params 恒 {kind,id} → tabKey 据此 entity 级去重 (同节点复用同标签)。
 //
-// P0: 刻意不设 path —— 节点标签不参与 workspace-shell 的 URL 同步, 避免在其做出
-// pathname+search 守护前重演 dc7ce06「页面自动狂切」。刷新恢复靠 sessionStorage 水合;
-// 可分享深链 (?node=kind:id) + URL 守护留 P0b。
+// path = /home/notes?node=kind:id (收敛到单一静态壳 out/home/notes.html; query 不参与 Tauri asset
+// 寻址, 深链/刷新不 404)。URL 同步由 workspace-shell 的 <UrlSync/> 守护 (pathname+search 比对 +
+// descriptorForNode 优先), 收敛靠 tabKey 命中而非 URL 串比对, 不重演 dc7ce06 狂切。
 import type { ModuleId, TabDescriptor } from "./types"
-import { isNodeKind, type NodeKind, type NodeRef } from "./node-ref"
+import { isNodeKind, refToQuery, type NodeKind, type NodeRef } from "./node-ref"
 
 /** 节点 kind → 归属模块 (驱动活动栏高亮 / 模式镜头 / 标签色点)。 */
 const MODULE_OF_KIND: Record<NodeKind, ModuleId> = {
@@ -23,6 +23,7 @@ export function nodeTab(ref: NodeRef, title: string): TabDescriptor {
     kind: "node",
     module: MODULE_OF_KIND[ref.kind],
     title: title || "无标题",
+    path: `/home/notes?node=${refToQuery(ref)}`,
     params: { kind: ref.kind, id: ref.id },
   }
 }

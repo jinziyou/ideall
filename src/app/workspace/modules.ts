@@ -21,6 +21,8 @@ import {
   Wrench,
 } from "lucide-react"
 import type { ModuleId, TabDescriptor, WsMode } from "./types"
+import { nodeTab } from "./node-tab"
+import { parseNodeQuery } from "./node-ref"
 
 export type SidebarEntry = {
   label: string
@@ -233,4 +235,14 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (pathname.startsWith("/tool"))
     return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
   return null
+}
+
+/**
+ * 由 ?node=kind:id 查询串解析出节点标签描述符; 无 node 参数或非法 → null (调用侧回退 descriptorForPath)。
+ * 与 descriptorForPath 分离 (后者只收 pathname): 节点标签共享 /home/notes 壳, 仅 query 区分。
+ */
+export function descriptorForNode(search: string): TabDescriptor | null {
+  const ref = parseNodeQuery(new URLSearchParams(search).get("node"))
+  // title 占位为 id, viewer 取数后经 renameNodeTab 修正 (不入 tabKey, 不影响去重)。
+  return ref ? nodeTab(ref, ref.id) : null
 }

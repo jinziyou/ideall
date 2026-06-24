@@ -15,3 +15,19 @@ const NODE_KINDS: readonly NodeKind[] = ["folder", "note", "bookmark", "file", "
 export function isNodeKind(k: string): k is NodeKind {
   return (NODE_KINDS as readonly string[]).includes(k)
 }
+
+/** NodeRef → 深链查询值 node=kind:id。id 经 encodeURIComponent (防 feed key / search 含 & = :)。 */
+export function refToQuery(ref: NodeRef): string {
+  return `${ref.kind}:${encodeURIComponent(ref.id)}`
+}
+
+/** 解析 ?node=kind:id → NodeRef; 非法/缺省返回 null。只切第一个冒号 (id 内含冒号也安全)。 */
+export function parseNodeQuery(raw: string | null | undefined): NodeRef | null {
+  if (!raw) return null
+  const i = raw.indexOf(":")
+  if (i <= 0) return null
+  const kind = raw.slice(0, i)
+  const id = decodeURIComponent(raw.slice(i + 1))
+  if (!isNodeKind(kind) || !id) return null
+  return { kind, id }
+}

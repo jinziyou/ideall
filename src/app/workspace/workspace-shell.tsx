@@ -7,7 +7,7 @@
 // /auth 跳出工作区, 纯页面渲染。
 
 import * as React from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Header } from "@/app/shell/header"
 import BottomTabBar from "@/app/shell/bottom-tab-bar"
 import TopBar from "./top-bar"
@@ -22,60 +22,73 @@ import {
   getTabs,
   hydrateWorkspace,
   tabKey,
+  useActiveId,
   useHydrated,
   useSidebarCollapsed,
-  useActiveId,
   useTabs,
 } from "./store"
-import { descriptorForPath } from "./modules"
+import { descriptorForNode, descriptorForPath } from "./modules"
 
-export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
+// URL 同步抽成独立子组件: 它用 useSearchParams (output:export 下必须包 <Suspense>)。
+// 仅在「真正切换标签」时把地址栏换成激活标签的规范路由 (深链 / 刷新可恢复)。
+//
+// 两道关键设计:
+//  1. 沿用 dc7ce06「页面自动狂切」消环机制: 读 store 实时快照 (getTabs()/getActiveId()),
+//     而非组件渲染闭包里的旧值 —— 路由标记 OpenWorkspaceTab 的 openTab effect 已把 activeId
+//     对齐当前 URL, 这里读实时值即可立即收敛, 不与 marker 互相用对方旧值覆盖。
+//  2. 节点标签共享 /home/notes 壳、仅 query 区分; usePathname 不含 query, 故按 pathname+search
+//     比对并「优先 descriptorForNode(search)」解析。收敛靠 tabKey(cur)===t.id 命中 (而非 URL 串
+//     比对, 避开 ":" vs "%3A" 编码不一致导致永不相等 → 每次都 replace 的狂切)。
+function UrlSync() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
-  const sidebarCollapsed = useSidebarCollapsed()
+  const hydrated = useHydrated()
   const activeId = useActiveId()
   const tabs = useTabs()
-  const hydrated = useHydrated()
+  const search = searchParams.toString()
 
-  // 客户端挂载后恢复上次的标签。
-  React.useEffect(() => {
-    hydrateWorkspace()
-  }, [])
-
-  // URL 同步: 仅在「真正切换标签」时把地址栏换成激活标签的规范路由 (深链 / 刷新可恢复)。
-  // 关键: 不抢「属于激活标签的更深路径」—— 包括嵌入应用经 host.nav 改写的 /info/* 等内部路由,
-  // 否则会与嵌入应用的导航互相打架; 也处理标签全关 → 落到 /home。
   React.useEffect(() => {
     if (pathname?.startsWith("/auth")) return
-    // 未水合前不抢路由: 此刻 store 仍是空, 避免对地址栏做任何同步。
+    // 未水合前不抢路由: 此刻 store 仍空, 避免对地址栏做任何同步。
     if (!hydrated) return
-    // 关键 (修「页面自动狂切」无限摆动): 读 store 实时快照, 而非组件渲染闭包里的旧值。
-    // 路由标记 OpenWorkspaceTab 是本壳的后代, 其 openTab effect 先于本 effect 执行 (React 子先于父),
-    // 已把 activeId 对齐到当前 pathname; 若这里仍用渲染闭包的旧 activeId, 就会把 URL 又改回旧标签,
-    // 与 marker(pathname→activeId) 形成各用对方旧值互相覆盖的无限来回 replace。读实时值即可立即收敛。
     const liveTabs = getTabs()
     const liveActiveId = getActiveId()
-    // /home/agent = 「打开右侧 AI 栏」的虚拟命令路由 (无对应标签):
-    // 开栏后把地址栏弹回当前激活标签 (或 /home), 不让 URL 停在 /home/agent。
+    // /home/agent = 「打开右侧 AI 栏」虚拟命令路由 (无对应标签): 开栏后弹回激活标签 (或 /home)。
     if (pathname?.startsWith("/home/agent")) {
       const at = liveTabs.find((x) => x.id === liveActiveId)
       router.replace(at?.path ?? "/home")
       return
     }
     if (liveTabs.length === 0) {
-      // 深链 / 刷新挂载期: hydrate 可能先于路由标记 openTab 完成 (tabs 仍空)。
-      // 若当前路径能解析成标签, 说明 marker 即将打开它 → 不抢, 保住深链 (「深链/刷新可恢复」);
-      // 仅当路径无对应标签 (真正孤儿路由) 或已是 /home 时才落 /home。
-      if (pathname !== "/home" && !descriptorForPath(pathname || "/")) router.replace("/home")
+      // 深链 / 刷新挂载期: hydrate 可能先于路由标记 openTab (tabs 仍空)。
+      // 若当前路径 / ?node= 能解析成标签 → 不抢, 保住深链; 仅真正孤儿路由或已是 /home 才落 /home。
+      const p = pathname || "/"
+      if (p !== "/home" && !descriptorForPath(p) && !descriptorForNode(search)) {
+        router.replace("/home")
+      }
       return
     }
     const t = liveTabs.find((x) => x.id === liveActiveId)
     if (!t?.path) return
-    const cur = descriptorForPath(pathname || "/")
-    // 当前 URL 已归属激活标签 (含其子路径, 如嵌入应用经 host.nav 改写的 /info/*) → 保留 URL, 不打架。
+    // 先认 node (含 query), 再认普通路径; URL 已归属激活标签 (含嵌入应用经 host.nav 改写的子路径) → 保留。
+    const cur = descriptorForNode(search) ?? descriptorForPath(pathname || "/")
     if (cur && tabKey(cur) === t.id) return
-    if (t.path !== pathname) router.replace(t.path)
-  }, [hydrated, activeId, tabs, pathname, router])
+    const curUrl = (pathname || "") + (search ? `?${search}` : "")
+    if (t.path !== curUrl) router.replace(t.path)
+  }, [hydrated, activeId, tabs, pathname, search, router])
+
+  return null
+}
+
+export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const sidebarCollapsed = useSidebarCollapsed()
+
+  // 客户端挂载后恢复上次的标签。
+  React.useEffect(() => {
+    hydrateWorkspace()
+  }, [])
 
   // 认证页: 跳出工作区壳。
   if (pathname?.startsWith("/auth")) {
@@ -84,8 +97,11 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
 
   return (
     <>
-      {/* 路由标记 (无 UI)。隐藏容器兜底任何未转成标记的页面内容。 */}
+      {/* 路由标记 (无 UI)。隐藏容器兜底任何未转成标记的页面内容。 marker 在前: 其 openTab effect 先于 UrlSync 跑。 */}
       <div className="hidden">{children}</div>
+      <React.Suspense fallback={null}>
+        <UrlSync />
+      </React.Suspense>
 
       <div className="flex h-dvh flex-col">
         {/* 移动顶栏 (md:hidden 由组件内部控制) */}
