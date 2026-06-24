@@ -7,6 +7,7 @@ import { sequentialSortKeys } from "./sort-key"
 
 type BookmarkNode = NodeOfKind<"bookmark">
 type FolderNode = NodeOfKind<"folder">
+type FileNode = NodeOfKind<"file">
 
 function asStr(x: unknown): string {
   return typeof x === "string" ? x : ""
@@ -134,5 +135,65 @@ export function planBookmarksSeed(
     puts,
     drainBookmarkIds: bookmarkNodes.map((n) => n.id),
     drainFolderIds: folderNodes.map((n) => n.id),
+  }
+}
+
+// ---- 折叠步 B 续: 文件 → nodes (kind:"file") + Blob 旁存 ----
+
+/** nodePuts: 文件节点 (存 blobRef, 不含二进制); blobPuts: 旁存的二进制; drainFileIds: 清旧 files 仓库。 */
+export type FilesSeedPlan = {
+  nodePuts: FileNode[]
+  blobPuts: { key: string; blob: Blob }[]
+  drainFileIds: string[]
+}
+
+/**
+ * 规划文件播种。返回 null = 旧 files 仓库为空 (无存量 / 已清空)。
+ * - 旧 StoredFile (内联 Blob) → 文件节点 (name→title, type/size→blobRef, blob 拆到旁存) + blob 记录 {key,blob}。
+ *   blobRef.key = 文件 id (1:1 旁存)。Blob 缺失的脏记录仍迁节点 (不丢元数据), 仅跳过 blob 旁存。
+ * - 补 sortKey (按 createdAt 升序) 与 updatedAt(=createdAt)。
+ * - existingNodeIds 已播种的节点/blob 都不重写 (幂等); drain 始终全量。
+ * now 注入 (缺时间戳兜底), 便于测试确定性。
+ */
+export function planFilesSeed(
+  rawFiles: Record<string, unknown>[],
+  existingNodeIds: Set<string>,
+  now: number,
+): FilesSeedPlan | null {
+  if (rawFiles.length === 0) return null
+
+  const built: { node: FileNode; blob?: Blob }[] = []
+  for (const raw of rawFiles) {
+    const id = raw.id as string
+    if (typeof id !== "string" || !id) continue // 无 id 脏记录跳过, 不丢 (既不迁也不 drain)
+    const blob = raw.blob instanceof Blob ? raw.blob : undefined
+    const createdAt = asNum(raw.createdAt, now)
+    const node: FileNode = {
+      id,
+      kind: "file",
+      title: asStr(raw.name) || "未命名文件",
+      parentId: null,
+      sortKey: "",
+      tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
+      createdAt,
+      updatedAt: createdAt,
+      blobRef: { store: "blobs", key: id, size: asNum(raw.size, blob ? blob.size : 0), mime: asStr(raw.type) },
+      content: null,
+    }
+    built.push({ node, blob })
+  }
+
+  // 文件均为根级 (parentId=null); 按 createdAt 升序发严格递增 sortKey。
+  built.sort((a, b) => a.node.createdAt - b.node.createdAt || (a.node.id < b.node.id ? -1 : 1))
+  const keys = sequentialSortKeys(built.length)
+  built.forEach((b, i) => {
+    b.node.sortKey = keys[i]
+  })
+
+  const fresh = built.filter((b) => !existingNodeIds.has(b.node.id))
+  return {
+    nodePuts: fresh.map((b) => b.node),
+    blobPuts: fresh.filter((b) => b.blob).map((b) => ({ key: b.node.id, blob: b.blob as Blob })),
+    drainFileIds: built.map((b) => b.node.id),
   }
 }

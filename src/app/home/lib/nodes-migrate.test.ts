@@ -6,7 +6,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { planNodesSeed, planBookmarksSeed } from "./nodes-migrate"
+import { planNodesSeed, planBookmarksSeed, planFilesSeed } from "./nodes-migrate"
 
 const NOW = 1_700_000_000_000
 
@@ -182,4 +182,79 @@ test("书签播种: 幂等 — 已播种不重写, drain 仍全量收尾", () =>
   assert.ok(plan.puts.find((n) => n.id === "b2"))
   assert.deepEqual(plan.drainBookmarkIds.sort(), ["b1", "b2"])
   assert.deepEqual(plan.drainFolderIds, ["f1"])
+})
+
+// ---- 折叠步 B 续: 文件 + Blob 旁存 ----
+
+const rawFile = (over: Record<string, unknown> = {}) => ({
+  id: "fl1",
+  name: "图.png",
+  type: "image/png",
+  size: 1234,
+  blob: new Blob(["binary"], { type: "image/png" }),
+  createdAt: 200,
+  tags: ["img"],
+  ...over,
+})
+
+test("文件播种: null = 旧仓库空", () => {
+  assert.equal(planFilesSeed([], new Set(), NOW), null)
+})
+
+test("文件播种: 节点存 blobRef (二进制拆到旁存), 投影正确", () => {
+  const plan = planFilesSeed([rawFile()], new Set(), NOW)!
+  const node = plan.nodePuts.find((n) => n.id === "fl1")!
+  assert.equal(node.kind, "file")
+  assert.equal(node.title, "图.png")
+  assert.equal(node.parentId, null)
+  assert.deepEqual(node.tags, ["img"])
+  assert.equal(node.createdAt, 200)
+  assert.equal(node.updatedAt, 200)
+  if (node.kind === "file") {
+    assert.equal(node.blobRef.store, "blobs")
+    assert.equal(node.blobRef.key, "fl1") // blobRef.key = 文件 id
+    assert.equal(node.blobRef.size, 1234)
+    assert.equal(node.blobRef.mime, "image/png")
+  }
+  // Blob 旁存, 节点不含二进制
+  assert.equal(plan.blobPuts.length, 1)
+  assert.equal(plan.blobPuts[0].key, "fl1")
+  assert.ok(plan.blobPuts[0].blob instanceof Blob)
+  assert.equal(JSON.stringify(node).includes("Blob"), false)
+  // 零丢数据: drain 全量
+  assert.deepEqual(plan.drainFileIds, ["fl1"])
+})
+
+test("文件播种: 缺 Blob 的脏记录仍迁节点 (不丢元数据), 跳过 blob 旁存; size 回退", () => {
+  const plan = planFilesSeed([rawFile({ blob: undefined, size: 0 })], new Set(), NOW)!
+  assert.ok(plan.nodePuts.find((n) => n.id === "fl1"))
+  assert.equal(plan.blobPuts.length, 0)
+})
+
+test("文件播种: 同级 sortKey 严格递增且唯一", () => {
+  const files = [
+    rawFile({ id: "a", createdAt: 10 }),
+    rawFile({ id: "b", createdAt: 20 }),
+    rawFile({ id: "c", createdAt: 30 }),
+  ]
+  const plan = planFilesSeed(files, new Set(), NOW)!
+  const keys = plan.nodePuts
+    .sort((x, y) => x.createdAt - y.createdAt)
+    .map((n) => n.sortKey)
+  for (let i = 1; i < keys.length; i++) assert.ok(keys[i - 1] < keys[i], "sortKey 应严格递增")
+  assert.equal(new Set(keys).size, keys.length, "sortKey 不得碰撞")
+})
+
+test("文件播种: 幂等 — 已播种的节点与 blob 都不重写, drain 全量收尾", () => {
+  const plan = planFilesSeed([rawFile({ id: "fl1" }), rawFile({ id: "fl2" })], new Set(["fl1"]), NOW)!
+  assert.equal(
+    plan.nodePuts.find((n) => n.id === "fl1"),
+    undefined,
+  )
+  assert.equal(
+    plan.blobPuts.find((b) => b.key === "fl1"),
+    undefined,
+  )
+  assert.ok(plan.nodePuts.find((n) => n.id === "fl2"))
+  assert.deepEqual(plan.drainFileIds.sort(), ["fl1", "fl2"])
 })

@@ -7,7 +7,8 @@
 //   agentThreads   —— AI 助手对话线程 (消息内联存于线程文档), keyPath = id
 //   notes          —— 笔记 (类 Notion 块文档, content 内联), keyPath = id 【折叠步 A 后排空, 数据迁入 nodes】
 //   noteNotebooks  —— 笔记本分组, keyPath = id 【已退役, 数据迁入 notes 再迁入 nodes】
-//   nodes          —— 统一 Node 库 (一切皆文件), keyPath = id; 按 kind 收纳所有内容节点 (步 A 仅 note)
+//   nodes          —— 统一 Node 库 (一切皆文件), keyPath = id; 按 kind 收纳所有内容节点 (note/bookmark/folder/file…)
+//   blobs          —— 文件二进制旁存 ({key,blob}, keyPath = key); 文件节点存 blobRef 指向此处, Blob 不进同步
 
 const DB_NAME = "wonita-home"
 // v2: 新增 subscriptions 仓库 (「发现」的来源订阅回流到 home)。
@@ -20,7 +21,9 @@ const DB_NAME = "wonita-home"
 //     数据形态迁移 (notes→nodes, 加 kind:"note") 走 notes-store 的懒迁移 (seedNodesOnce), 同上不在 upgrade 内做。
 // v7: 折叠步 B (书签/收藏夹迁入 nodes, kind:"bookmark"/"folder")。无新仓库 (零 I/O upgrade);
 //     数据迁移走 bookmarks-store 的懒迁移 (seedBookmarksOnce)。版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
-const DB_VERSION = 7
+// v8: 折叠步 B 续 (文件迁入 nodes, kind:"file") + 新增 blobs 仓库 (文件二进制旁存)。纯增量 (零 I/O upgrade);
+//     数据迁移走 files-store 的懒迁移 (seedFilesOnce): 把内联 Blob 拆到 blobs, 节点存 blobRef。
+const DB_VERSION = 8
 
 export const STORE_FILES = "files"
 export const STORE_BOOKMARKS = "bookmarks"
@@ -30,6 +33,7 @@ export const STORE_AGENT_THREADS = "agentThreads"
 export const STORE_NOTES = "notes"
 export const STORE_NOTEBOOKS = "noteNotebooks"
 export const STORE_NODES = "nodes"
+export const STORE_BLOBS = "blobs"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -67,6 +71,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_NODES)) {
         db.createObjectStore(STORE_NODES, { keyPath: "id" })
+      }
+      if (!db.objectStoreNames.contains(STORE_BLOBS)) {
+        db.createObjectStore(STORE_BLOBS, { keyPath: "key" })
       }
     }
     req.onsuccess = () => {
@@ -192,6 +199,26 @@ export async function idbReadModifyWrite<T>(
     }
     getReq.onerror = () => reject(getReq.error)
     tx.oncomplete = () => resolve(result)
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+/**
+ * 跨多个对象仓库的原子批量 put —— 同一 readwrite 事务写多仓, 任一失败整体回滚。
+ * 用于「同生同灭」的跨仓记录, 如文件节点 (nodes) 与其旁存 Blob (blobs): 分两事务写时,
+ * 若 Blob 已提交而节点写入中断 (如另一标签页触发版本升级关连接), 会留下无节点引用的孤儿 Blob (无 GC 路径)。
+ */
+export async function idbPutAcrossStores(
+  writes: { store: string; value: unknown }[],
+): Promise<void> {
+  if (!writes.length) return
+  const db = await openDB()
+  const stores = [...new Set(writes.map((w) => w.store))]
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, "readwrite")
+    for (const w of writes) tx.objectStore(w.store).put(w.value)
+    tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
     tx.onabort = () => reject(tx.error)
   })
