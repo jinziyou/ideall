@@ -287,3 +287,11 @@ export function useHydrated() {
     () => DEFAULT.hydrated,
   )
 }
+
+/** 非响应式实时读取 (effect 内用): 拿 store 当前快照, 而非组件渲染闭包里的旧值。 */
+export function getActiveId(): string | null {
+  return state.activeId
+}
+export function getTabs(): Tab[] {
+  return state.tabs
+}

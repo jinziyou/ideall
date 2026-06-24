@@ -18,6 +18,8 @@ import TabBar from "./tab-bar"
 import TabHost from "./tab-host"
 import StatusBar from "./status-bar"
 import {
+  getActiveId,
+  getTabs,
   hydrateWorkspace,
   tabKey,
   useHydrated,
@@ -45,26 +47,32 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   // 否则会与嵌入应用的导航互相打架; 也处理标签全关 → 落到 /home。
   React.useEffect(() => {
     if (pathname?.startsWith("/auth")) return
-    // 未水合前不抢路由: 此刻 tabs 闭包恒为空, 避免对地址栏做任何同步。
+    // 未水合前不抢路由: 此刻 store 仍是空, 避免对地址栏做任何同步。
     if (!hydrated) return
+    // 关键 (修「页面自动狂切」无限摆动): 读 store 实时快照, 而非组件渲染闭包里的旧值。
+    // 路由标记 OpenWorkspaceTab 是本壳的后代, 其 openTab effect 先于本 effect 执行 (React 子先于父),
+    // 已把 activeId 对齐到当前 pathname; 若这里仍用渲染闭包的旧 activeId, 就会把 URL 又改回旧标签,
+    // 与 marker(pathname→activeId) 形成各用对方旧值互相覆盖的无限来回 replace。读实时值即可立即收敛。
+    const liveTabs = getTabs()
+    const liveActiveId = getActiveId()
     // /home/agent = 「打开右侧 AI 栏」的虚拟命令路由 (无对应标签):
     // 开栏后把地址栏弹回当前激活标签 (或 /home), 不让 URL 停在 /home/agent。
     if (pathname?.startsWith("/home/agent")) {
-      const at = tabs.find((x) => x.id === activeId)
+      const at = liveTabs.find((x) => x.id === liveActiveId)
       router.replace(at?.path ?? "/home")
       return
     }
-    if (tabs.length === 0) {
+    if (liveTabs.length === 0) {
       // 深链 / 刷新挂载期: hydrate 可能先于路由标记 openTab 完成 (tabs 仍空)。
       // 若当前路径能解析成标签, 说明 marker 即将打开它 → 不抢, 保住深链 (「深链/刷新可恢复」);
       // 仅当路径无对应标签 (真正孤儿路由) 或已是 /home 时才落 /home。
       if (pathname !== "/home" && !descriptorForPath(pathname || "/")) router.replace("/home")
       return
     }
-    const t = tabs.find((x) => x.id === activeId)
+    const t = liveTabs.find((x) => x.id === liveActiveId)
     if (!t?.path) return
     const cur = descriptorForPath(pathname || "/")
-    // 当前 URL 已归属激活标签 (含其子路径) → 保留 URL, 不打架。
+    // 当前 URL 已归属激活标签 (含其子路径, 如嵌入应用经 host.nav 改写的 /info/*) → 保留 URL, 不打架。
     if (cur && tabKey(cur) === t.id) return
     if (t.path !== pathname) router.replace(t.path)
   }, [hydrated, activeId, tabs, pathname, router])
