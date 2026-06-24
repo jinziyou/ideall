@@ -26,7 +26,7 @@ export default function TabHost() {
     <div className="h-full w-full bg-background">
       {tabs.map((t) => {
         const active = t.id === activeId
-        const fill = tabLayout(t.kind) === "fill"
+        const fill = tabLayout(t) === "fill"
         return (
           <div
             key={t.id}

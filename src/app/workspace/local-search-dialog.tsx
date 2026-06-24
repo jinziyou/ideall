@@ -18,7 +18,7 @@ import { listNotes } from "@/app/home/lib/notes-store"
 import { listBookmarks } from "@/app/home/lib/bookmarks-store"
 import { listFiles } from "@/app/home/lib/files-store"
 import { listSubscriptions } from "@/app/home/lib/subscriptions-store"
-import { openTab } from "./store"
+import { openTab, openNodeTab } from "./store"
 import type { TabDescriptor } from "./types"
 
 type Group = "笔记" | "订阅" | "关注" | "书签" | "资源"
@@ -68,12 +68,13 @@ export default function LocalSearchDialog({
         ])
         if (!alive) return
         const next: Item[] = []
+        // 笔记: 直接打开「该篇」为独立节点标签 (一切皆标签), 而非笼统跳到笔记列表。
         for (const n of notes)
           next.push({
             id: "n" + n.id,
             label: n.title || "无标题笔记",
             group: "笔记",
-            run: () => openTab(TAB.notes),
+            run: () => openNodeTab({ kind: "note", id: n.id }, n.title || "无标题笔记"),
           })
         for (const s of subs) {
           const peer = s.type === "peer"

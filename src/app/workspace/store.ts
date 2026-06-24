@@ -6,6 +6,8 @@
 
 import * as React from "react"
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
+import { nodeTab, parseNodeParams } from "./node-tab"
+import type { NodeRef } from "./node-ref"
 
 const STORAGE_KEY = "ideall:workspace:v1"
 
@@ -125,8 +127,11 @@ export function hydrateWorkspace() {
     /* 损坏数据 → 忽略 */
   }
   if (saved) {
-    // 清洗: 丢弃 module 不在 MODE_OF 的污染/陈旧标签 (防 mode 被算成 undefined)。
-    const validTabs = saved.tabs.filter((t) => t.module in MODE_OF)
+    // 清洗: 丢弃 module 不在 MODE_OF 的污染/陈旧标签 (防 mode 被算成 undefined);
+    // 节点标签额外要求 params 能解析出合法 NodeRef (防下线某 kind / 损坏 params 留僵尸标签)。
+    const validTabs = saved.tabs.filter(
+      (t) => t.module in MODE_OF && (t.kind === "node" ? !!parseNodeParams(t.params) : true),
+    )
     const merged = [...validTabs]
     for (const t of state.tabs) if (!merged.some((x) => x.id === t.id)) merged.push(t)
     // 激活标签: marker 先跑设置的当前路由优先, 否则历史; 且必须确实存在于 merged。
@@ -160,6 +165,18 @@ export function openTab(d: TabDescriptor) {
   const exists = state.tabs.some((t) => t.id === id)
   const tabs = exists ? state.tabs : [...state.tabs, { ...d, id }]
   setState({ tabs, activeId: id, activeModule: d.module, mode: MODE_OF[d.module] })
+}
+
+/** 打开 (或激活已存在的) 一个节点标签。三入口 (搜索/侧栏/AI) 统一经此, 保证 entity 级去重。 */
+export function openNodeTab(ref: NodeRef, title: string) {
+  openTab(nodeTab(ref, title))
+}
+
+/** 节点标签取数后回填真实标题 (不改 id / 去重 key, 仅更新显示)。 */
+export function renameNodeTab(ref: NodeRef, title: string) {
+  const id = tabKey(nodeTab(ref, title))
+  if (!state.tabs.some((t) => t.id === id)) return
+  setState({ tabs: state.tabs.map((t) => (t.id === id ? { ...t, title } : t)) })
 }
 
 /** 关闭标签; 若关的是激活项, 焦点转移到相邻标签。 */
