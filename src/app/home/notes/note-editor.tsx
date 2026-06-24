@@ -13,7 +13,7 @@ import { ListKit } from "@/components/editor/plugins/list-kit"
 import { CodeBlockKit } from "@/components/editor/plugins/code-block-kit"
 import { SlashKit } from "@/components/editor/plugins/slash-kit"
 import { NoteContent } from "../model"
-import { updateNote, noteText } from "../lib/notes-store"
+import { enqueueNoteDraft } from "../lib/note-write-queue"
 
 /** 一次自动保存后回传给列表的轻量元数据 (用于就地刷新卡片, 免整列表重取)。 */
 export type NoteEditorSaved = {
@@ -69,42 +69,30 @@ export default function NoteEditor({
     value: initialContent as Value,
   })
 
-  const flush = React.useCallback(async () => {
+  // 落库交给同步写队列 (note-write-queue): 同步入队最新草稿, 由独立 worker 串行消费 + 关窗冲刷。
+  // 与组件存活解耦 → 切笔记 / 卸载 / 被 LRU 逐出 / 关窗都不丢草稿。onSaved 由 worker 落库后回调。
+  const flush = React.useCallback(() => {
     timerRef.current = null
-    try {
-      const saved = await updateNote(noteId, {
-        title: titleRef.current,
-        content: contentRef.current,
-        tags: tagsRef.current,
-      })
-      if (saved) {
-        const text = noteText(saved.content)
-        onSavedRef.current?.({
-          id: saved.id,
-          title: saved.title,
-          excerpt: text.slice(0, 160),
-          search: text,
-          tags: saved.tags,
-          updatedAt: saved.updatedAt,
-        })
-      }
-    } catch {
-      /* 自动保存失败静默, 下次编辑再试 */
-    }
+    enqueueNoteDraft(noteId, {
+      title: titleRef.current,
+      content: contentRef.current,
+      tags: tagsRef.current,
+      onSaved: onSavedRef.current,
+    })
   }, [noteId])
 
   const schedule = React.useCallback(() => {
     dirtyRef.current = true
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => void flush(), AUTOSAVE_DELAY)
+    timerRef.current = setTimeout(flush, AUTOSAVE_DELAY)
   }, [flush])
 
-  // 卸载 (切换笔记 / 离开页面) 时, 若有未落库的改动立即冲刷
+  // 卸载 (切换笔记 / 离开页面) 时, 若有未落库的改动同步入队 (worker 在卸载后继续消费)。
   React.useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current)
-        void flush()
+        flush()
       }
     }
   }, [flush])
