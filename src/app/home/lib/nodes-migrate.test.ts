@@ -6,7 +6,9 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { planNodesSeed } from "./nodes-migrate"
+import { planNodesSeed, planBookmarksSeed } from "./nodes-migrate"
+
+const NOW = 1_700_000_000_000
 
 const treeNote = (over: Record<string, unknown> = {}) => ({
   id: "n1",
@@ -80,4 +82,104 @@ test("脏记录 (无 id) 跳过: 既不播种也不 drain, 不丢", () => {
   const plan = planNodesSeed([{ title: "无 id" } as Record<string, unknown>, treeNote()], new Set())!
   assert.equal(plan.puts.length, 1)
   assert.deepEqual(plan.drainNoteIds, ["n1"])
+})
+
+// ---- 折叠步 B: 书签 + 收藏夹 ----
+
+const rawBm = (over: Record<string, unknown> = {}) => ({
+  id: "b1",
+  title: "示例",
+  url: "https://example.com",
+  description: "描述",
+  favicon: "https://example.com/favicon.ico",
+  folderId: null,
+  tags: ["t"],
+  createdAt: 100,
+  ...over,
+})
+const rawFolder = (over: Record<string, unknown> = {}) => ({
+  id: "f1",
+  name: "我的收藏夹",
+  createdAt: 50,
+  ...over,
+})
+
+test("书签播种: null = 两旧仓库都空", () => {
+  assert.equal(planBookmarksSeed([], [], new Set(), NOW), null)
+})
+
+test("书签播种: 投影正确 (folderId→parentId, url 等收进 content, title/tags 留顶层)", () => {
+  const plan = planBookmarksSeed([rawBm({ folderId: "f1" })], [rawFolder()], new Set(), NOW)!
+  const folder = plan.puts.find((n) => n.id === "f1")!
+  assert.equal(folder.kind, "folder")
+  assert.equal(folder.title, "我的收藏夹")
+  assert.equal(folder.parentId, null)
+  assert.equal(folder.createdAt, 50)
+  assert.equal(folder.updatedAt, 50) // updatedAt = createdAt
+  const bm = plan.puts.find((n) => n.id === "b1")!
+  assert.equal(bm.kind, "bookmark")
+  assert.equal(bm.title, "示例")
+  assert.equal(bm.parentId, "f1") // folderId→parentId
+  assert.deepEqual(bm.tags, ["t"])
+  assert.equal(bm.createdAt, 100)
+  assert.equal(bm.updatedAt, 100)
+  if (bm.kind === "bookmark") {
+    assert.deepEqual(bm.content, {
+      url: "https://example.com",
+      description: "描述",
+      favicon: "https://example.com/favicon.ico",
+    })
+  }
+  // 零丢数据: drain 全量
+  assert.deepEqual(plan.drainBookmarkIds, ["b1"])
+  assert.deepEqual(plan.drainFolderIds, ["f1"])
+})
+
+test("书签播种: folderId 指向不存在收藏夹 → 归根 (parentId=null)", () => {
+  const plan = planBookmarksSeed([rawBm({ folderId: "ghost" })], [], new Set(), NOW)!
+  assert.equal(plan.puts.find((n) => n.id === "b1")!.parentId, null)
+})
+
+test("书签播种: 同 parentId 组内 sortKey 严格递增且唯一", () => {
+  const bms = [
+    rawBm({ id: "b1", createdAt: 10 }),
+    rawBm({ id: "b2", createdAt: 20 }),
+    rawBm({ id: "b3", createdAt: 30 }),
+  ]
+  const plan = planBookmarksSeed(bms, [], new Set(), NOW)!
+  const keys = plan.puts
+    .filter((n) => n.parentId === null)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((n) => n.sortKey)
+  for (let i = 1; i < keys.length; i++) assert.ok(keys[i - 1] < keys[i], "sortKey 应严格递增")
+  assert.equal(new Set(keys).size, keys.length, "sortKey 不得碰撞")
+})
+
+test("书签播种: 缺时间戳兜底 now; 缺字段归一空串", () => {
+  const plan = planBookmarksSeed([{ id: "b1", url: "u" }], [], new Set(), NOW)!
+  const bm = plan.puts.find((n) => n.id === "b1")!
+  assert.equal(bm.createdAt, NOW)
+  assert.equal(bm.updatedAt, NOW)
+  assert.equal(bm.title, "u") // title 缺省回退 url
+  if (bm.kind === "bookmark") assert.equal(bm.content.description, "")
+})
+
+test("书签播种: 幂等 — 已播种不重写, drain 仍全量收尾", () => {
+  const plan = planBookmarksSeed(
+    [rawBm({ id: "b1" }), rawBm({ id: "b2" })],
+    [rawFolder({ id: "f1" })],
+    new Set(["b1", "f1"]),
+    NOW,
+  )!
+  assert.equal(
+    plan.puts.find((n) => n.id === "b1"),
+    undefined,
+  )
+  assert.equal(
+    plan.puts.find((n) => n.id === "f1"),
+    undefined,
+  )
+  assert.ok(plan.puts.find((n) => n.id === "b2"))
+  assert.deepEqual(plan.drainBookmarkIds.sort(), ["b1", "b2"])
+  assert.deepEqual(plan.drainFolderIds, ["f1"])
 })

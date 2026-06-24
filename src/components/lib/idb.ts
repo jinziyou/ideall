@@ -18,7 +18,9 @@ const DB_NAME = "wonita-home"
 //     不在 onupgradeneeded 内做以免 abort 无恢复 UI)。版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
 // v6: 新增 nodes 仓库 (统一 Node 库, 折叠步 A: 笔记播种)。纯增量 (零 I/O upgrade), 旧仓库原样保留;
 //     数据形态迁移 (notes→nodes, 加 kind:"note") 走 notes-store 的懒迁移 (seedNodesOnce), 同上不在 upgrade 内做。
-const DB_VERSION = 6
+// v7: 折叠步 B (书签/收藏夹迁入 nodes, kind:"bookmark"/"folder")。无新仓库 (零 I/O upgrade);
+//     数据迁移走 bookmarks-store 的懒迁移 (seedBookmarksOnce)。版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
+const DB_VERSION = 7
 
 export const STORE_FILES = "files"
 export const STORE_BOOKMARKS = "bookmarks"

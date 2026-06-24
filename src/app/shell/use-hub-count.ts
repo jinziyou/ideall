@@ -20,7 +20,7 @@ export function useHubCount(): { count: number | null; flash: boolean } {
     let flashTimer: ReturnType<typeof setTimeout> | undefined
     async function load() {
       try {
-        // 书签/文件走 count() (不载入文件 Blob); 订阅含墓碑, 仍 listSubscriptions 过滤后计数。
+        // 文件走 count() (不载入 Blob); 书签/订阅含墓碑, 需过滤后计数 (countBookmarks 全扫描过滤, 订阅 listSubscriptions 过滤)。
         const [subs, bmCount, fileCount] = await Promise.all([
           listSubscriptions(),
           countBookmarks(),
