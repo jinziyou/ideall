@@ -280,3 +280,10 @@ export function useRightPanelOpen() {
     () => DEFAULT.rightPanelOpen,
   )
 }
+export function useHydrated() {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => state.hydrated,
+    () => DEFAULT.hydrated,
+  )
+}

@@ -120,6 +120,8 @@ export async function updateBookmark(
   await idbReadModifyWrite<Bookmark>(STORE_BOOKMARKS, id, (current) =>
     current ? { ...current, ...patch } : undefined,
   )
+  // 与 add/bulkAdd/delete 一致: 通知中枢回流, 否则 keep-alive 的概览时间线在改名后会陈旧。
+  notifyHubUpdated()
 }
 
 export async function deleteBookmark(id: string): Promise<void> {

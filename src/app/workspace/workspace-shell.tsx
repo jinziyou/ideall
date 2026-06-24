@@ -20,6 +20,7 @@ import StatusBar from "./status-bar"
 import {
   hydrateWorkspace,
   tabKey,
+  useHydrated,
   useSidebarCollapsed,
   useActiveId,
   useTabs,
@@ -32,6 +33,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   const sidebarCollapsed = useSidebarCollapsed()
   const activeId = useActiveId()
   const tabs = useTabs()
+  const hydrated = useHydrated()
 
   // 客户端挂载后恢复上次的标签。
   React.useEffect(() => {
@@ -43,6 +45,8 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   // 否则会与嵌入应用的导航互相打架; 也处理标签全关 → 落到 /home。
   React.useEffect(() => {
     if (pathname?.startsWith("/auth")) return
+    // 未水合前不抢路由: 此刻 tabs 闭包恒为空, 避免对地址栏做任何同步。
+    if (!hydrated) return
     // /home/agent = 「打开右侧 AI 栏」的虚拟命令路由 (无对应标签):
     // 开栏后把地址栏弹回当前激活标签 (或 /home), 不让 URL 停在 /home/agent。
     if (pathname?.startsWith("/home/agent")) {
@@ -51,7 +55,10 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
       return
     }
     if (tabs.length === 0) {
-      if (pathname !== "/home") router.replace("/home")
+      // 深链 / 刷新挂载期: hydrate 可能先于路由标记 openTab 完成 (tabs 仍空)。
+      // 若当前路径能解析成标签, 说明 marker 即将打开它 → 不抢, 保住深链 (「深链/刷新可恢复」);
+      // 仅当路径无对应标签 (真正孤儿路由) 或已是 /home 时才落 /home。
+      if (pathname !== "/home" && !descriptorForPath(pathname || "/")) router.replace("/home")
       return
     }
     const t = tabs.find((x) => x.id === activeId)
@@ -60,7 +67,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
     // 当前 URL 已归属激活标签 (含其子路径) → 保留 URL, 不打架。
     if (cur && tabKey(cur) === t.id) return
     if (t.path !== pathname) router.replace(t.path)
-  }, [activeId, tabs, pathname, router])
+  }, [hydrated, activeId, tabs, pathname, router])
 
   // 认证页: 跳出工作区壳。
   if (pathname?.startsWith("/auth")) {

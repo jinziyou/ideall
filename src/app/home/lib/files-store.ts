@@ -65,6 +65,8 @@ export async function updateFileMeta(
   await idbReadModifyWrite<StoredFile>(STORE_FILES, id, (current) =>
     current ? { ...current, ...patch } : undefined,
   )
+  // 与 add/delete 一致: 通知中枢回流, 否则 keep-alive 的概览时间线在改名后会陈旧。
+  notifyHubUpdated()
 }
 
 export async function deleteFile(id: string): Promise<void> {
