@@ -101,7 +101,8 @@ export default function LocalSearchDialog({
             id: "f" + f.id,
             label: f.name,
             group: "资源",
-            run: () => openTab(TAB.resources),
+            // 文件已有查看器 → 打开「该文件」实体标签 (与笔记一致); 不再笼统跳资源管理器。
+            run: () => openNodeTab({ kind: "file", id: f.id }, f.name),
           })
         setItems(next)
       } catch {

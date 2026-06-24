@@ -13,6 +13,7 @@ import { planBookmarksSeed } from "./nodes-migrate"
 import {
   idbBulkDelete,
   idbBulkPut,
+  idbGet,
   idbGetAll,
   idbPut,
   idbReadModifyWrite,
@@ -207,6 +208,14 @@ export async function listBookmarks(): Promise<Bookmark[]> {
 export async function countBookmarks(): Promise<number> {
   await seedBookmarksOnce()
   return (await allBookmarkNodes()).filter(isLive).length
+}
+
+/** 读取单条书签 (投影); 墓碑 / 非书签 kind 视为不存在。供书签查看器自取数。 */
+export async function getBookmark(id: string): Promise<Bookmark | undefined> {
+  await seedBookmarksOnce()
+  const n = await idbGet<BookmarkNode>(STORE_NODES, id)
+  if (!n || n.kind !== "bookmark" || !isLive(n)) return undefined
+  return nodeToBookmark(n)
 }
 
 export type NewBookmark = {
