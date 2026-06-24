@@ -24,10 +24,10 @@ export interface BlockPatch {
   delete: BlockId[]
 }
 
-/** content (块数组) → id→块 映射 (只取有 id 的顶层块)。 */
+/** content (块数组) → id→块 映射 (只取有 id 的顶层块; 跳过 null/非对象防崩)。 */
 export function blockMapById(blocks: Block[]): Map<BlockId, Block> {
   const m = new Map<BlockId, Block>()
-  for (const b of blocks) if (typeof b.id === "string" && b.id) m.set(b.id, b)
+  for (const b of blocks) if (b && typeof b === "object" && typeof b.id === "string" && b.id) m.set(b.id, b)
   return m
 }
 

@@ -3,7 +3,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import type { Note } from "@protocol/hub-data"
-import { mergeTwoNotes, mergeNotes } from "./notes-sync"
+import { mergeTwoNotes, mergeNotes, isValidRemoteNote } from "./notes-sync"
 
 const blk = (id: string, text: string) => ({ id, type: "p", children: [{ text }] })
 const note = (over: Partial<Note>): Note => ({
@@ -73,6 +73,26 @@ test("无 blockMeta 的笔记 (旧记录/老端) → 整篇 LWW 兜底, 绝不�
   const c = note({ content: [blk("B1", "有meta")], blockMeta: { B1: { v: 1, by: "C", sk: "a0" } }, updatedAt: 30 })
   const out2 = mergeTwoNotes(a, c)
   assert.equal(out2.content.length, 1, "混合也不丢正文")
+})
+
+test("isValidRemoteNote: 拒投毒 content (null 元素) / 脏 blockMeta; 收合法 + 缺 blockMeta", () => {
+  const ok = note({ content: [blk("B1", "x")], blockMeta: { B1: { v: 1, by: "A", sk: "a0" } } })
+  assert.equal(isValidRemoteNote(ok), true, "合法笔记")
+  assert.equal(isValidRemoteNote(note({ content: [blk("B1", "x")] })), true, "缺 blockMeta 也合法 (旧端)")
+  // content 含 null 元素 → 拒 (否则 blockMapById 取 null.id 崩溃, 瘫痪全端同步)
+  assert.equal(isValidRemoteNote({ ...ok, content: [null, blk("B1", "x")] }), false, "拒 null content 元素")
+  // blockMeta 类型错 (v 非 number) → 拒 (否则 pickMeta NaN 比较破坏可交换性 → 合并不收敛)
+  assert.equal(
+    isValidRemoteNote({ ...ok, blockMeta: { B1: { v: "bad", by: "A", sk: "a0" } } }),
+    false,
+    "拒脏 blockMeta",
+  )
+  // del 非 number → 拒 (否则逃过墓碑 GC)
+  assert.equal(
+    isValidRemoteNote({ ...ok, blockMeta: { B1: { v: 1, by: "A", sk: "a0", del: "x" } } }),
+    false,
+    "拒脏 del",
+  )
 })
 
 test("mergeNotes: 单边笔记直取, 同 id 合并, 交换律 (集合等价)", () => {

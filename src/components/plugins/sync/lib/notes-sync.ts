@@ -58,11 +58,26 @@ function gcNotes(notes: Note[], now: number): Note[] {
   )
 }
 
+/** blockMeta 形状校验: 缺省合法 (旧端); 存在则每项须 {v:number, by:string, sk:string, del?:number}。 */
+function isValidBlockMeta(bm: unknown): boolean {
+  if (bm == null) return true
+  if (typeof bm !== "object") return false
+  for (const v of Object.values(bm as Record<string, unknown>)) {
+    if (!v || typeof v !== "object") return false
+    const m = v as Record<string, unknown>
+    if (typeof m.v !== "number" || typeof m.by !== "string" || typeof m.sk !== "string") return false
+    if (m.del !== undefined && typeof m.del !== "number") return false
+  }
+  return true
+}
+
 /**
  * 远端笔记最小结构校验。AES-GCM 已防无密钥方篡改, 但持正确同步码的某端仍可能上传缺字段/类型错误的项;
  * 尤其 id / sortKey / parentId 非法会污染 LWW 合并与树重建。过滤合并关键字段非法的项。
+ * content 须为对象数组 (null 元素会让 blockMapById 取 .id 崩溃 → 一条投毒笔记瘫痪全端同步);
+ * blockMeta 须类型正确 (脏 v 会破坏 pickMeta 的可交换性 → 合并不收敛/churn; 脏 del 会逃过墓碑 GC)。
  */
-function isValidRemoteNote(s: unknown): s is Note {
+export function isValidRemoteNote(s: unknown): s is Note {
   if (!s || typeof s !== "object") return false
   const o = s as Record<string, unknown>
   return (
@@ -71,10 +86,12 @@ function isValidRemoteNote(s: unknown): s is Note {
     (o.parentId === null || typeof o.parentId === "string") &&
     typeof o.sortKey === "string" &&
     Array.isArray(o.content) &&
+    o.content.every((it) => it != null && typeof it === "object") &&
     Array.isArray(o.tags) &&
     typeof o.createdAt === "number" &&
     typeof o.updatedAt === "number" &&
-    (o.deletedAt === undefined || typeof o.deletedAt === "number")
+    (o.deletedAt === undefined || typeof o.deletedAt === "number") &&
+    isValidBlockMeta(o.blockMeta)
   )
 }
 
