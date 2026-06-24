@@ -1,6 +1,6 @@
 # ideall 架构
 
-> 本文是 ideall 的架构权威说明，面向贡献者与集成方。产品定位与上手步骤见 [README.md](README.md)；App（桌面/移动）打包细节见 [docs/app.md](docs/app.md)；开发约定见 [CLAUDE.md](CLAUDE.md)。
+> 本文是 ideall 的架构权威说明，面向贡献者与集成方。产品定位与上手步骤见 [README.md](../README.md)；App（桌面/移动）打包细节见 [app.md](app.md)；开发约定见 [claude.md](claude.md)。
 
 ## 1. 概览
 
@@ -145,11 +145,11 @@ ideall 仅以 App 形态分发（Tauri 工程在 `src-tauri/`）：构建期 `ne
 | iOS | mobile | macOS + Xcode | `.ipa` |
 | Android | mobile | JDK + Android SDK/NDK | `.apk` / `.aab` |
 
-桌面发布走 GitHub Releases（含 `tauri-plugin-updater` 自动更新）；移动走 App Store / Google Play。完整方案、CI、签名与路线图见 [docs/app.md](docs/app.md)。
+桌面发布走 GitHub Releases（含 `tauri-plugin-updater` 自动更新）；移动走 App Store / Google Play。完整方案、CI、签名与路线图见 [app.md](app.md)。
 
 ## 8. 文档导航
 
-- [README.md](README.md) — 产品定位、模块表、快速开始、连接后端、App 打包、API 类型同步。
-- [docs/app.md](docs/app.md) — App（桌面/移动）方案、平台矩阵、CI、签名与分阶段路线图。
-- [CLAUDE.md](CLAUDE.md) — 仓库结构与开发约定（贡献者必读）。
+- [README.md](../README.md) — 产品定位、模块表、快速开始、连接后端、App 打包、API 类型同步。
+- [app.md](app.md) — App（桌面/移动）方案、平台矩阵、CI、签名与分阶段路线图。
+- [claude.md](claude.md) — 仓库结构与开发约定（贡献者必读）。
 - [.github/SECURITY.md](.github/SECURITY.md) — 安全策略与漏洞报告（含同步加密关注点）。
