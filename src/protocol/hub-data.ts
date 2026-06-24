@@ -3,6 +3,7 @@
 // (订阅 Subscription 类型见 ./subscription)。
 import type { Subscription, SubscriptionType, NewSubscription } from "./subscription"
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "./node"
+import type { BlockMetaMap } from "./note-merge"
 
 /** 本地存储的文件: 元数据 + 原始 Blob */
 export interface StoredFile {
@@ -86,6 +87,11 @@ export interface Note {
   updatedAt: number
   /** 软删除墓碑 (epoch ms); 缺省 = 活跃。跨端同步靠墓碑传播删除 (见 @protocol/sync)。 */
   deletedAt?: number
+  /**
+   * 块级并发元数据 sidecar (§7): 按顶层块 id 记 {v,by,sk,del?}, 与 content 并列。
+   * 跨端同步走块级合并 (@protocol/note-merge); 缺省 (旧记录/未迁移) 时按整篇 LWW 兜底。
+   */
+  blockMeta?: BlockMetaMap
 }
 
 /** 笔记列表元数据 —— 不含完整 content, 改带纯文本摘要/全文, 避免列表整块载入正文 */

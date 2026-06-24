@@ -1,0 +1,78 @@
+// 笔记跨端块级合并回归 (§7 ②): notes-sync 的 note 级合并 —— 整篇删除 node 级 LWW, 正文块级合并。
+// 锁死: 跨端并发改不同块无损; 较新整篇删除胜; 较旧墓碑被较新活跃复活。
+import { test } from "node:test"
+import assert from "node:assert/strict"
+import type { Note } from "@protocol/hub-data"
+import { mergeTwoNotes, mergeNotes } from "./notes-sync"
+
+const blk = (id: string, text: string) => ({ id, type: "p", children: [{ text }] })
+const note = (over: Partial<Note>): Note => ({
+  id: "n1",
+  title: "笔记",
+  content: [],
+  parentId: null,
+  sortKey: "a0",
+  tags: [],
+  createdAt: 1,
+  updatedAt: 1,
+  ...over,
+})
+
+test("跨端并发改不同块: 本端改 B1 / 远端加 B2 → 两块都在 (块级无损)", () => {
+  const a = note({
+    content: [blk("B1", "本端改")],
+    blockMeta: { B1: { v: 2, by: "A", sk: "a0" } },
+    updatedAt: 10,
+  })
+  const b = note({
+    content: [blk("B1", "原"), blk("B2", "远端加")],
+    blockMeta: { B1: { v: 1, by: "B", sk: "a0" }, B2: { v: 1, by: "B", sk: "a1" } },
+    updatedAt: 11,
+  })
+  const out = mergeTwoNotes(a, b)
+  assert.deepEqual(
+    out.content.map((x) => (x as { id: string }).id),
+    ["B1", "B2"],
+    "B1(本端改) + B2(远端加) 都保留",
+  )
+  assert.equal(
+    (out.content[0] as { children: { text: string }[] }).children[0].text,
+    "本端改",
+    "B1 取高版本 (v2)",
+  )
+  assert.equal(out.deletedAt, undefined)
+})
+
+test("较新整篇删除胜 (node 级 LWW): 远端删 (updatedAt 大) → 合并为墓碑", () => {
+  const a = note({ content: [blk("B1", "x")], blockMeta: { B1: { v: 1, by: "A", sk: "a0" } }, updatedAt: 10 })
+  const b = note({ content: [], deletedAt: 20, updatedAt: 20 })
+  const out = mergeTwoNotes(a, b)
+  assert.equal(out.deletedAt, 20, "整篇删除胜")
+})
+
+test("较旧墓碑被较新活跃复活: 本端墓碑(旧) / 远端活跃(新) → 合并为活跃内容", () => {
+  const a = note({ content: [], deletedAt: 5, updatedAt: 5 })
+  const b = note({
+    content: [blk("B1", "复活内容")],
+    blockMeta: { B1: { v: 2, by: "B", sk: "a0" } },
+    updatedAt: 20,
+  })
+  const out = mergeTwoNotes(a, b)
+  assert.equal(out.deletedAt, undefined, "较新活跃复活")
+  assert.equal((out.content[0] as { children: { text: string }[] }).children[0].text, "复活内容")
+})
+
+test("mergeNotes: 单边笔记直取, 同 id 合并, 交换律 (集合等价)", () => {
+  const a = [note({ id: "n1", content: [blk("B1", "A")], blockMeta: { B1: { v: 1, by: "A", sk: "a0" } } })]
+  const b = [
+    note({ id: "n1", content: [blk("B1", "A"), blk("B2", "B")], blockMeta: { B1: { v: 1, by: "A", sk: "a0" }, B2: { v: 1, by: "B", sk: "a1" } } }),
+    note({ id: "n2", title: "另一篇" }),
+  ]
+  const ab = mergeNotes(a, b)
+  assert.equal(ab.length, 2, "n1 合并 + n2 单边")
+  const n1 = ab.find((n) => n.id === "n1")!
+  assert.deepEqual(
+    n1.content.map((x) => (x as { id: string }).id),
+    ["B1", "B2"],
+  )
+})

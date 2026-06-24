@@ -11,6 +11,14 @@ import { planNotesTreeMigration } from "./notes-migrate"
 import { planNodesSeed } from "./nodes-migrate"
 import { effectiveParentId, buildParentOf, cmpSibling } from "./notes-tree-util"
 import {
+  seedBlockMeta,
+  diffBlocks,
+  applyBlockPatch,
+  blockMapById,
+  type Block,
+  type BlockMetaMap,
+} from "./note-blocks"
+import {
   idbBulkDelete,
   idbBulkPut,
   idbBulkPutDelete,
@@ -31,6 +39,39 @@ const KIND_NOTE: NodeKind = "note"
 /** 给一条 Note 打上 kind:"note" (写 nodes 仓库前归一)。 */
 function asNoteRow(note: Note): NoteRow {
   return { ...note, kind: "note" }
+}
+
+/** 稳定的本设备 id (块级 LWW 的 by; 跨设备 tiebreak 确定性)。 */
+let deviceIdCache: string | null = null
+function deviceId(): string {
+  if (deviceIdCache) return deviceIdCache
+  try {
+    const k = "ideall:device:v1"
+    let v = typeof localStorage !== "undefined" ? localStorage.getItem(k) : null
+    if (!v) {
+      v = genId("dev")
+      try {
+        localStorage.setItem(k, v)
+      } catch {
+        /* 隐私模式 → 仅本会话内存稳定 */
+      }
+    }
+    deviceIdCache = v
+  } catch {
+    deviceIdCache = "local"
+  }
+  return deviceIdCache
+}
+
+/** 确保笔记带稳定块 id + blockMeta (旧记录懒补; content 归一为非空)。返回归一后的 content+blockMeta。 */
+function ensureBlocks(note: NoteRow): { content: NoteContent; blockMeta: BlockMetaMap } {
+  const content =
+    Array.isArray(note.content) && note.content.length ? note.content : emptyNoteContent()
+  if (note.blockMeta && Object.keys(note.blockMeta).length) {
+    return { content, blockMeta: note.blockMeta }
+  }
+  const seeded = seedBlockMeta(note.id, content as Block[], deviceId())
+  return { content: seeded.content as NoteContent, blockMeta: seeded.blockMeta }
 }
 
 /** 空文档: 单个空段落 (Plate 段落块 type "p")。 */
@@ -282,11 +323,9 @@ export async function getNote(id: string): Promise<Note | undefined> {
   await seedNodesOnce()
   const note = await idbGet<NoteRow>(STORE_NODES, id)
   if (!note || note.kind !== KIND_NOTE || !isLive(note)) return undefined
-  // 兜底: 空/非数组正文归一为合法空文档, 避免编辑器把 [] 规范化后误判「已编辑」而无故刷新 updatedAt。
-  if (!Array.isArray(note.content) || note.content.length === 0) {
-    return { ...note, content: emptyNoteContent() }
-  }
-  return note
+  // 确保带稳定块 id + blockMeta (旧记录懒补; 编辑器据此与本地块版本对齐); 空正文归一为合法空文档。
+  const { content, blockMeta } = ensureBlocks(note)
+  return { ...note, content, blockMeta }
 }
 
 /** 活跃笔记数 (过滤墓碑) —— 数量徽标用。目录页也计入 (「目录也是文件」)。 */
@@ -310,18 +349,22 @@ export async function addNote(input: NewNote = {}): Promise<Note> {
     input.afterSortKey == null ? undefined : { afterSortKey: input.afterSortKey },
   )
   const now = Date.now()
+  const id = genId("note")
+  // 补稳定块 id + 初始 blockMeta (§7): 新笔记一落库即块级就绪, 后续编辑/同步走块级合并。
+  const seeded = seedBlockMeta(id, (input.content ?? emptyNoteContent()) as Block[], deviceId())
   const note: Note = {
-    id: genId("note"),
+    id,
     title: input.title?.trim() ?? "",
-    content: input.content ?? emptyNoteContent(),
+    content: seeded.content as NoteContent,
     parentId,
     sortKey,
     tags: input.tags ?? [],
     createdAt: now,
     updatedAt: now,
+    blockMeta: seeded.blockMeta,
   }
   await idbPut(STORE_NODES, asNoteRow(note))
-  notifyHubUpdated()
+  notifyHubUpdated({ kind: "note", id })
   return note
 }
 
@@ -333,13 +376,28 @@ export async function updateNote(
   await seedNodesOnce()
   const next = await idbReadModifyWrite<NoteRow>(STORE_NODES, id, (current) => {
     if (!current || current.kind !== KIND_NOTE) return undefined // 不存在 / 非笔记 kind → 不写
-    const normalized =
-      !Array.isArray(current.content) || current.content.length === 0
-        ? { ...current, content: emptyNoteContent() }
-        : current
-    return { ...normalized, ...patch, kind: "note", updatedAt: Date.now() }
+    const now = Date.now()
+    const base = ensureBlocks(current) // 当前存量的 content+blockMeta (带稳定块 id)
+    let content = base.content
+    let blockMeta = base.blockMeta
+    // 正文变更 → 块级补丁维护 blockMeta (§7): 相对存量算 diff, per-block v 自增, 未变块沿用旧 (sk/v)。
+    // 注: 这里 base = 存量 (非编辑器 mount-base), 故能正确递增 v 且无版本 skip; 代价是与并发追加块的
+    // 严格防夹击 (§7.3 编辑器 mount-base) 留作 P5 后续 —— 跨端合并 (主场景) 已由 notes-sync 块级合并保障。
+    if (patch.content !== undefined) {
+      // 为缺 id 的块补 id (NodeIdPlugin 通常已注入; 防御非编辑器调用方传入无 id 块)。
+      const cur = (patch.content as Block[]).map((b) =>
+        typeof b.id === "string" && b.id ? b : { ...b, id: genId("blk") },
+      )
+      const bp = diffBlocks(blockMapById(base.content as Block[]), blockMeta, cur, deviceId())
+      const applied = applyBlockPatch(base.content as Block[], blockMeta, bp, now)
+      content = applied.content as NoteContent
+      blockMeta = applied.blockMeta
+    }
+    const { content: _ignored, ...rest } = patch // content 已经块级处理, 不再原样覆盖
+    void _ignored
+    return { ...current, ...rest, content, blockMeta, kind: "note", updatedAt: now }
   })
-  if (next) notifyHubUpdated()
+  if (next) notifyHubUpdated({ kind: "note", id })
   return next
 }
 

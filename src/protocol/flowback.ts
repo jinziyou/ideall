@@ -5,21 +5,25 @@ export const HUB_UPDATED = "wonita:hub-updated"
 /** 跨端同步完成事件 (sync 插件在合并写本地后广播)。 */
 export const SUBSCRIPTIONS_SYNCED = "wonita:subscriptions-synced"
 
-export function notifyHubUpdated() {
+/** 回流 payload (§7/§9): 哪个 kind 的哪个 id 变了 —— live-merge 据此只重读该条, 不被任何 hub 写惊动。缺省=未知。 */
+export type HubUpdate = { kind?: string; id?: string }
+
+export function notifyHubUpdated(detail?: HubUpdate) {
   try {
-    window.dispatchEvent(new Event(HUB_UPDATED))
+    window.dispatchEvent(new CustomEvent(HUB_UPDATED, { detail: detail ?? {} }))
   } catch {
     /* SSR / 不支持时忽略 */
   }
 }
 
-/** 订阅回流 + 同步完成事件; 返回取消订阅函数。SSR 安全 (无 window 时为 no-op)。 */
-export function onHubUpdated(cb: () => void): () => void {
+/** 订阅回流 + 同步完成事件; cb 收到 {kind,id} payload (旧 cb 忽略入参即可)。返回取消订阅函数。SSR 安全。 */
+export function onHubUpdated(cb: (detail?: HubUpdate) => void): () => void {
   if (typeof window === "undefined") return () => {}
-  window.addEventListener(HUB_UPDATED, cb)
-  window.addEventListener(SUBSCRIPTIONS_SYNCED, cb)
+  const h = (e: Event) => cb((e as CustomEvent<HubUpdate>).detail)
+  window.addEventListener(HUB_UPDATED, h)
+  window.addEventListener(SUBSCRIPTIONS_SYNCED, h)
   return () => {
-    window.removeEventListener(HUB_UPDATED, cb)
-    window.removeEventListener(SUBSCRIPTIONS_SYNCED, cb)
+    window.removeEventListener(HUB_UPDATED, h)
+    window.removeEventListener(SUBSCRIPTIONS_SYNCED, h)
   }
 }

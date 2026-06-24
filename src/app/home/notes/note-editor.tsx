@@ -5,7 +5,9 @@
 // 经 notes-manager 以 next/dynamic({ ssr:false }) 懒加载, 避开 SSR 预渲染与静态导出。
 import * as React from "react"
 import type { Value } from "platejs"
+import { NodeIdPlugin } from "platejs"
 import { Plate, usePlateEditor } from "platejs/react"
+import { genId } from "@/components/lib/id"
 import { Editor, EditorContainer } from "@/components/ui/editor"
 import { BasicBlocksKit } from "@/components/editor/plugins/basic-blocks-kit"
 import { BasicMarksKit } from "@/components/editor/plugins/basic-marks-kit"
@@ -65,7 +67,16 @@ export default function NoteEditor({
   })
 
   const editor = usePlateEditor({
-    plugins: [...BasicBlocksKit, ...BasicMarksKit, ...ListKit, ...CodeBlockKit, ...SlashKit],
+    // NodeIdPlugin (§7.2): 顶层块稳定 id (新块用 genId("blk"); 加载内容已由 notes-store 播种 id, 此处保留 +
+    // 为新块补 id) —— 块级并发合并 (blockMeta) 据此跨编辑/跨端对齐同一块。
+    plugins: [
+      ...BasicBlocksKit,
+      ...BasicMarksKit,
+      ...ListKit,
+      ...CodeBlockKit,
+      ...SlashKit,
+      NodeIdPlugin.configure({ options: { idCreator: () => genId("blk") } }),
+    ],
     value: initialContent as Value,
   })
 

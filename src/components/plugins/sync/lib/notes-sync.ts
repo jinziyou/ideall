@@ -1,21 +1,58 @@
 // 笔记跨端同步编排 (sync 插件) —— 本地优先 + 端到端加密, 与订阅同构但走独立加密块 (notes scope)。
-// 拉远端密文 → 解密 → 与本地 (含墓碑) 按 id 并集合并 (LWW) → GC 过期墓碑 → 写本地 → 加密 → 推远端。
-// 复用 @protocol/sync 的泛型合并 (unionMerge / pruneExpiredTombstones / recordsEqual); 删除以墓碑传播。
+// 拉远端密文 → 解密 → 与本地按 id 合并 → GC 过期墓碑 → 写本地 → 加密 → 推远端。
+// 合并 (§7): 整篇删除走 node 级 LWW (deletedAt); 正文走**块级合并** (mergeNoteContent) —— 跨端并发改不同块
+// 无损、同块并发 LWW 一方胜 (§7.5); 标题/标签按整篇 updatedAt LWW。块墓碑 GC 与合并分离 (§7.4)。
 // 取舍记录见 docs/sync-lww-tradeoff.md。笔记读写经 @protocol/hub-data 的 HubDataPort (不直接依赖 core 存储)。
 //
-// 注: 当前笔记整篇随每次同步重新加密上传 (单 blob, 与订阅一致)。正文体量远大于订阅, 重度用户宜后续
-// 改 changed-since / 分块上传以省带宽 —— 属性能优化, 非正确性问题。
+// 注: 当前笔记整篇随每次同步重新加密上传 (单 blob)。块级 v 已支撑只传变更块, 改增量上传属后续性能优化。
 import type { Note } from "@protocol/hub-data"
 import { getHubData } from "@protocol/hub-data"
-import {
-  unionMerge,
-  recordsEqual,
-  isLive,
-  pruneExpiredTombstones,
-  type SyncResult,
-} from "@protocol/sync"
+import { recordsEqual, isLive, pruneExpiredTombstones, type SyncResult } from "@protocol/sync"
+import { mergeNoteContent, pruneBlockTombstones, type Block } from "@protocol/note-merge"
 import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/components/lib/sync-crypto"
 import { getSyncBlob, putSyncBlob } from "./sync-api"
+
+const noteTs = (n: Note): number => n.updatedAt ?? n.createdAt
+
+/** 合并两份同 id 笔记: 整篇删除/标题/标签按 updatedAt LWW; 活跃则正文走块级合并 (§7)。 */
+export function mergeTwoNotes(a: Note, b: Note): Note {
+  const winner = noteTs(a) >= noteTs(b) ? a : b
+  // 较新一方是墓碑 → 整篇删除胜 (node 级 LWW, 块合并无意义)。
+  if (winner.deletedAt != null) return { ...winner }
+  // 较新一方活跃 → 正文块级合并 (另一方即便是较旧墓碑, 其无活跃块, 自然被复活方内容覆盖)。
+  const merged = mergeNoteContent(
+    a.content as Block[],
+    a.blockMeta ?? {},
+    b.content as Block[],
+    b.blockMeta ?? {},
+  )
+  return {
+    ...winner,
+    content: merged.content,
+    blockMeta: merged.blockMeta,
+    createdAt: Math.min(a.createdAt, b.createdAt),
+    updatedAt: Math.max(noteTs(a), noteTs(b)),
+    deletedAt: undefined,
+  }
+}
+
+/** 按 id 合并两份笔记集 (同 id 走 mergeTwoNotes; 单边直取)。块级版的 unionMerge。 */
+export function mergeNotes(local: Note[], remote: Note[]): Note[] {
+  const map = new Map<string, Note>()
+  for (const r of remote) map.set(r.id, r)
+  for (const l of local) {
+    const r = map.get(l.id)
+    map.set(l.id, r ? mergeTwoNotes(l, r) : l)
+  }
+  return [...map.values()]
+}
+
+/** 合并后 GC: node 级过期墓碑 (剔整条) + 每条笔记的块级过期墓碑 (§7.4 单独一步)。 */
+function gcNotes(notes: Note[], now: number): Note[] {
+  return pruneExpiredTombstones(notes, now).map((n) =>
+    n.blockMeta ? { ...n, blockMeta: pruneBlockTombstones(n.blockMeta, now) } : n,
+  )
+}
 
 /**
  * 远端笔记最小结构校验。AES-GCM 已防无密钥方篡改, 但持正确同步码的某端仍可能上传缺字段/类型错误的项;
@@ -66,8 +103,8 @@ export async function syncNotes(code: string): Promise<SyncResult> {
       }
     }
 
-    merged = unionMerge(merged, remote)
-    kept = pruneExpiredTombstones(merged, Date.now())
+    merged = mergeNotes(merged, remote)
+    kept = gcNotes(merged, Date.now())
     if (!recordsEqual(kept, localAll)) {
       await hub.bulkPutNotes(kept)
     }
