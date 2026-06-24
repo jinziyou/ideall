@@ -5,8 +5,9 @@
 //   bookmarkFolders—— 收藏夹分组, keyPath = id
 //   subscriptions  —— 「发现」订阅 (发布者等), keyPath = id
 //   agentThreads   —— AI 助手对话线程 (消息内联存于线程文档), keyPath = id
-//   notes          —— 笔记 (类 Notion 块文档, content 内联), keyPath = id
-//   noteNotebooks  —— 笔记本分组, keyPath = id
+//   notes          —— 笔记 (类 Notion 块文档, content 内联), keyPath = id 【折叠步 A 后排空, 数据迁入 nodes】
+//   noteNotebooks  —— 笔记本分组, keyPath = id 【已退役, 数据迁入 notes 再迁入 nodes】
+//   nodes          —— 统一 Node 库 (一切皆文件), keyPath = id; 按 kind 收纳所有内容节点 (步 A 仅 note)
 
 const DB_NAME = "wonita-home"
 // v2: 新增 subscriptions 仓库 (「发现」的来源订阅回流到 home)。
@@ -15,7 +16,9 @@ const DB_NAME = "wonita-home"
 // v5: 笔记升级为递归页树 (notebookId→parentId + sortKey, 笔记本→根目录页)。无新仓库 (仍用 notes /
 //     noteNotebooks); 数据形态迁移走 notes-store 的懒迁移 (migrateNotesTreeOnce, 可恢复/可 toast,
 //     不在 onupgradeneeded 内做以免 abort 无恢复 UI)。版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
-const DB_VERSION = 5
+// v6: 新增 nodes 仓库 (统一 Node 库, 折叠步 A: 笔记播种)。纯增量 (零 I/O upgrade), 旧仓库原样保留;
+//     数据形态迁移 (notes→nodes, 加 kind:"note") 走 notes-store 的懒迁移 (seedNodesOnce), 同上不在 upgrade 内做。
+const DB_VERSION = 6
 
 export const STORE_FILES = "files"
 export const STORE_BOOKMARKS = "bookmarks"
@@ -24,6 +27,7 @@ export const STORE_SUBSCRIPTIONS = "subscriptions"
 export const STORE_AGENT_THREADS = "agentThreads"
 export const STORE_NOTES = "notes"
 export const STORE_NOTEBOOKS = "noteNotebooks"
+export const STORE_NODES = "nodes"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -58,6 +62,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_NOTEBOOKS)) {
         db.createObjectStore(STORE_NOTEBOOKS, { keyPath: "id" })
+      }
+      if (!db.objectStoreNames.contains(STORE_NODES)) {
+        db.createObjectStore(STORE_NODES, { keyPath: "id" })
       }
     }
     req.onsuccess = () => {
