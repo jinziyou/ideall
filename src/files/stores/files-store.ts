@@ -169,7 +169,7 @@ export async function updateFileMeta(
     if (patch.tags !== undefined) next.tags = patch.tags
     return next
   })
-  // 与 add/delete 一致: 通知「我的」回流, 否则 keep-alive 的概览时间线在改名后会陈旧。
+  // 与 add/delete 一致: 通知「我的」更新, 否则 keep-alive 的概览时间线在改名后会陈旧。
   notifyFilesUpdated()
 }
 

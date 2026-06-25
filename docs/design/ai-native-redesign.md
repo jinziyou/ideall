@@ -103,7 +103,7 @@ export type Node = BaseNode & (
 |---|---|---|
 | **A** notes 播种 | 加 `kind:"note"`,`nodes-store` = `notes-store` 泛化(notes 是第一次折叠) | 无(已在同步) |
 | **B** bookmarks/files | 随机 id + 从未同步 → 首次同步**只会重复不会 LWW 丢**;补 `updatedAt=createdAt/sortKey`;硬删改软删;Blob 拆 `STORE_BLOBS` | 仅重复(按 URL/hash 去重启发式,不静默自动合并) |
-| **C** subscriptions | **保留确定性 id `feed:type:key`,绝不 genId**;同步边界 `feed 节点 ↔ 旧 Subscription wire` 投影,`"subs"` scope 零改;**含墓碑全量带过来**(漏带=已删订阅复活) | 一次性归一 churn(老记录补 updatedAt) |
+| **C** subscriptions | **保留确定性 id `feed:type:key`,绝不 genId**;同步边界 `feed 节点 ↔ 旧 Subscription wire` 投影,`"subs"` scope 零改;**含墓碑全量带过来**(漏带=已删关注复活) | 一次性归一 churn(老记录补 updatedAt) |
 | **D** threads | 跨 plugin/core 边界,agent 插件改经 `FilesPort` 消费(修依赖反转破例);同步默认关(对象 LWW 截断 messages[]);本地独占故硬删 | 默认不同步 |
 
 `nodes-store` 读写主体见独立实现(`listNodes(kind)/listChildren/getNode/readBlob/getAncestors/createNode/updateNode(RMW)/moveNode/deleteNode({soft})/restoreNodes`),三处按 kind 分叉:`nodeText`(全文摘要)、file 的 Blob 旁存、content 归一化。树工具(`effectiveParentId/buildParentOf/cmpSibling`)、`computeSortKey`、`collectSubtreeIds` 逐字复用。
@@ -168,7 +168,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 `LoopbackTransport` 照 `MessagePortTransport` 用 `MessageChannel` 本进程实现;agent 启动 `agentGrant` → `createLocalMcpServer` → `server.connect(loopback)`;`runAgent` 把 `AGENT_TOOLS`→MCP `tools/list`、`executeTool`→`callToolSafe`,保 8 轮循环 / `toolEvents` / BYO-key(现有 `executeTool` 本就是 async+await,异步往返无破坏;`fail()` 的 `isError:true` 不抛)。退化点:`summarize(name,data)` 要按工具名映射中文文案,否则 `toolEvents` 退化成原始 JSON。
 
 ### 6.5 对话即文件
-`thread` 已是节点(步 D),`@上次的方案讨论` → 解析 NodeRef → `fs.read`(gated)→ 注入上下文 → 跨线程记忆,无需向量库。AI 栏订阅 `activeId` 作隐式上下文(经只读端口,不让 agent 直 import workspace store)。
+`thread` 已是节点(步 D),`@上次的方案讨论` → 解析 NodeRef → `fs.read`(gated)→ 注入上下文 → 跨线程记忆,无需向量库。AI 栏关注 `activeId` 作隐式上下文(经只读端口,不让 agent 直 import workspace store)。
 
 ---
 
@@ -246,7 +246,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 
 **仍开放(实现期/后续定)**:
 - `thread` 删除:硬删 + 会话内撤销(倾向)vs 软删墓碑。
-- peer 订阅(关注)归属:全挂 `/feeds` + 按 type 分组(倾向)vs `root:following` 保两位置心智。
+- peer 关注(关注)归属:全挂 `/feeds` + 按 type 分组(倾向)vs `root:following` 保两位置心智。
 - feed 是否按 type 建确定性子目录(倾向先扁平)。
 - `thread` 同步若开启:消息级 append-merge(独立 scope)。
 - Blob 大文件 E2E 同步:独立通道,远期。

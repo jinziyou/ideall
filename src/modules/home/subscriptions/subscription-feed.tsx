@@ -22,15 +22,15 @@ import {
 } from "@/files/stores/subscriptions-store"
 import { undoableToast } from "@/lib/undo-toast"
 
-/** 每个订阅来源在订阅流里展示的最新条数。 */
+/** 每个关注来源在关注流里展示的最新条数。 */
 const PER_SOURCE = 5
-/** 搜索订阅本地过滤前先拉取的窗口大小 (服务端无关键词搜索, 故客户端在此窗口内按标题过滤)。 */
+/** 搜索关注本地过滤前先拉取的窗口大小 (服务端无关键词搜索, 故客户端在此窗口内按标题过滤)。 */
 const SEARCH_WINDOW = 200
 
 type SourceFeed = { sub: Subscription; items: FeedItem[]; error: boolean }
 type Loaded = { tools: Subscription[]; feeds: SourceFeed[] }
 
-/** 订阅来源对应的内链。 */
+/** 关注来源对应的内链。 */
 function sourceHref(sub: Subscription): string {
   if (sub.type === "publisher") return `/info/publisher?domain=${encodeURIComponent(sub.key)}`
   if (sub.type === "search") return "/info/search"
@@ -48,24 +48,24 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
 }
 
 /**
- * 订阅流 —— 把 home 已订阅的来源汇聚到「我的」:
+ * 关注流 —— 把 home 已关注的来源汇聚到「我的」:
  *   - 工具 (tool): 顶部「已钉工具」快捷启动区 (无内容流, 点开即跳)
  *   - 发布者 / 实体 / 搜索 / 社区发布者(peer): 各自最新条目卡片
- * 本地优先: 订阅偏好读自 IndexedDB; 内容实时从 wonita 服务拉取。
+ * 本地优先: 关注偏好读自 IndexedDB; 内容实时从 wonita 服务拉取。
  */
 export default function SubscriptionFeed({
   types,
-  title = "订阅流",
+  title = "关注流",
   dotClass = "bg-spoke-info",
 }: {
-  /** 仅展示这些类型的订阅 (订阅=publisher/entity/search; 关注=peer)；缺省展示全部。 */
+  /** 仅展示这些类型的关注来源 (publisher/entity/search/peer)；缺省展示全部。 */
   types?: SubscriptionType[]
   title?: string
   dotClass?: string
 } = {}) {
   const [state, setState] = React.useState<Loaded | null>(null)
   const [view, setView] = React.useState<"grid" | "list">("grid")
-  // 退订进行中的项 (按 sub.id): 防重复触发, 并禁用对应的取消按钮
+  // 取消关注进行中的项 (按 sub.id): 防重复触发, 并禁用对应的取消按钮
   const [pending, setPending] = React.useState<Set<string>>(new Set())
   const mountedRef = React.useRef(true)
   // 并发去重: 挂载 load 与同步事件 load 可能同时在飞, 仅最后发起的一次允许落 state, 防后写覆盖。
@@ -91,7 +91,7 @@ export default function SubscriptionFeed({
   React.useEffect(() => {
     mountedRef.current = true
     load()
-    // 跨端同步完成后刷新订阅流 (SyncPanel 广播)
+    // 跨端同步完成后刷新关注流 (SyncPanel 广播)
     const onSynced = () => load()
     window.addEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
     return () => {
@@ -101,7 +101,7 @@ export default function SubscriptionFeed({
   }, [load])
 
   async function unsubscribe(sub: Subscription) {
-    if (pending.has(sub.id)) return // 防重: 同一项退订进行中不再触发
+    if (pending.has(sub.id)) return // 防重: 同一项取消关注进行中不再触发
     setPending((p) => new Set(p).add(sub.id))
     try {
       await removeSubscription(sub.type, sub.key)
@@ -113,13 +113,13 @@ export default function SubscriptionFeed({
             }
           : prev,
       )
-      // 订阅是长期积累的资产, 误点可一键撤销 (addSubscription 复活墓碑: 清 deletedAt, 保留 createdAt)
-      undoableToast(`已取消订阅 ${sub.title}`, async () => {
+      // 关注是长期积累的资产, 误点可一键撤销 (addSubscription 复活墓碑: 清 deletedAt, 保留 createdAt)
+      undoableToast(`已取消关注 ${sub.title}`, async () => {
         await addSubscription(sub)
         await load()
       })
     } catch {
-      toast.error("取消订阅失败，请重试")
+      toast.error("取消关注失败，请重试")
     } finally {
       setPending((p) => {
         const next = new Set(p)
@@ -130,7 +130,7 @@ export default function SubscriptionFeed({
   }
 
   if (state === null) {
-    return <p className="py-12 text-center text-sm text-muted-foreground">加载订阅中…</p>
+    return <p className="py-12 text-center text-sm text-muted-foreground">加载关注中…</p>
   }
 
   const { tools, feeds } = state
@@ -140,7 +140,7 @@ export default function SubscriptionFeed({
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <Rss className="h-8 w-8 text-muted-foreground" />
         <p className="max-w-sm text-sm text-muted-foreground">
-          还没有订阅。去「发现」订阅，内容会回流到这里。
+          还没有关注。去「发现」关注，内容会汇入这里。
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           <Button asChild size="sm">
@@ -288,10 +288,10 @@ export default function SubscriptionFeed({
                     className="h-7 w-7 shrink-0"
                     onClick={() => unsubscribe(sub)}
                     disabled={pending.has(sub.id)}
-                    title="取消订阅"
+                    title="取消关注"
                   >
                     <X className="h-4 w-4" />
-                    <span className="sr-only">取消订阅</span>
+                    <span className="sr-only">取消关注</span>
                   </Button>
                 </CardHeader>
                 <CardContent className="flex-1">

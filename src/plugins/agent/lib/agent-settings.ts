@@ -12,7 +12,7 @@ export interface AgentSettings {
   model: string
   /** 用户的 API Key (仅存本地) */
   apiKey: string
-  /** 是否把 home 数据 (订阅/书签/资源) 作上下文一并发送 */
+  /** 是否把 home 数据 (关注/书签/资源) 作上下文一并发送 */
   includeHomeContext: boolean
 }
 

@@ -17,7 +17,7 @@ afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-/** 构造一条最小合法订阅 (createdAt=updatedAt=ts)。 */
+/** 构造一条最小合法关注 (createdAt=updatedAt=ts)。 */
 function sub(id: string, ts: number, extra: Partial<Subscription> = {}): Subscription {
   return {
     id,
@@ -90,7 +90,7 @@ test("syncNow: 空服务端 → 上传本地, 统计正确", async () => {
   assert.ok(server.blob, "服务端应已写入密文")
 })
 
-test("syncNow: 跨端并集合并 (LWW) —— 拉到对端订阅并落地本地", async () => {
+test("syncNow: 跨端并集合并 (LWW) —— 拉到对端关注并落地本地", async () => {
   const server = makeServer()
   const { key } = await deriveKeys(CODE)
   // 设备 A 先上传 [a]

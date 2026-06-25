@@ -22,7 +22,7 @@ type Tile = {
 const TILES: Tile[] = [
   {
     key: "subs",
-    label: "订阅",
+    label: "关注",
     icon: Rss,
     tint: "bg-spoke-info/10 border-spoke-info/25",
     num: "text-spoke-info",
@@ -41,7 +41,7 @@ const TILES: Tile[] = [
 
 /**
  * 「我的」「所有权一览」便当磁贴 —— 纯本地计数, tabular-nums 给工程感;
- * 订阅 / 对话以发现模块色 / 强调色微 tint 表达分类。本地存储用量见左侧上下文栏。
+ * 关注 / 对话以发现模块色 / 强调色微 tint 表达分类。本地存储用量见左侧上下文栏。
  */
 export function StatTiles(props: Props) {
   return (

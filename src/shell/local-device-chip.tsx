@@ -46,7 +46,7 @@ export function LocalDeviceStatus() {
         本机
       </div>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        订阅、书签等数据只存本机，默认
+        关注、书签等数据只存本机，默认
         <b className="font-medium text-foreground">不上传服务器</b>。
       </p>
       <div className="mt-3 flex items-center justify-between rounded-md border bg-muted/40 px-2.5 py-2">

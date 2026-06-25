@@ -1,7 +1,7 @@
 /**
  * NER 命名实体 label → 中文 的全站统一口径。
  *
- * 同时服务 home 订阅流 (subscription-feed) 与 (discover)/info 模块 (实体页 / 关系图谱),
+ * 同时服务 home 关注流 (subscription-feed) 与 (discover)/info 模块 (实体页 / 关系图谱),
  * 故放在 `src/components/lib/` 供跨模块复用, 避免各处各写一份导致文案漂移。
  */
 

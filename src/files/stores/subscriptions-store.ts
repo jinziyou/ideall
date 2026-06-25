@@ -1,8 +1,8 @@
-// 「发现」订阅本地存储仓库 —— 折叠步 C 后物理统一到 nodes 仓库 (kind:"feed", 确定性 id feed:type:key)。
+// 「发现」关注本地存储仓库 —— 折叠步 C 后物理统一到 nodes 仓库 (kind:"feed", 确定性 id feed:type:key)。
 // 对外仍以 Subscription 域类型呈现 (节点↔Subscription 投影在本仓库边界), 消费方零改;
 // **同步零改**: subscription-sync 仍走 "subs" scope, 经 listAllSubscriptions/bulkPutSubscriptions 读写,
 // 本仓库把 feed 节点投影回旧 Subscription wire (id 由 content.type:key 重建 = 旧确定性 id, 跨端 LWW 一致)。
-// 删除走软删墓碑 (deletedAt), 含墓碑全量参与同步合并 (漏带 = 已删订阅被对端复活)。
+// 删除走软删墓碑 (deletedAt), 含墓碑全量参与同步合并 (漏带 = 已删关注被对端复活)。
 import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
@@ -43,7 +43,7 @@ export function faviconForUrl(url: string): string {
   }
 }
 
-// ---- 懒迁移: 折叠步 C —— 订阅播种进 nodes 仓库 (含墓碑全量) ----
+// ---- 懒迁移: 折叠步 C —— 关注播种进 nodes 仓库 (含墓碑全量) ----
 
 let seedPromise: Promise<void> | null = null
 
@@ -86,7 +86,7 @@ function maxKey(nodes: { sortKey: string }[]): string | null {
   return keys.length ? keys[keys.length - 1] : null
 }
 
-/** 自 after 起一个严格递增追加键 (订阅列表按 createdAt 展示, sortKey 仅供就绪)。 */
+/** 自 after 起一个严格递增追加键 (关注列表按 createdAt 展示, sortKey 仅供就绪)。 */
 function nextKey(after: string | null): string {
   try {
     return sortKeyBetween(after, null)
@@ -97,7 +97,7 @@ function nextKey(after: string | null): string {
 
 // ---- 读 (投影 feed 节点 → Subscription) ----
 
-/** 列出活跃订阅 (过滤墓碑)。UI / 插件 / 嵌入桥读路径。 */
+/** 列出活跃关注 (过滤墓碑)。UI / 插件 / 嵌入桥读路径。 */
 export async function listSubscriptions(): Promise<Subscription[]> {
   await seedFeedsOnce()
   return (await allFeedNodes())
@@ -106,7 +106,7 @@ export async function listSubscriptions(): Promise<Subscription[]> {
     .sort((a, b) => b.createdAt - a.createdAt)
 }
 
-/** 列出全部订阅含墓碑 —— 仅跨端同步合并用 (墓碑需进合并/上传才能传播删除)。 */
+/** 列出全部关注含墓碑 —— 仅跨端同步合并用 (墓碑需进合并/上传才能传播删除)。 */
 export async function listAllSubscriptions(): Promise<Subscription[]> {
   await seedFeedsOnce()
   return (await allFeedNodes()).map(feedNodeToSub)
@@ -115,10 +115,10 @@ export async function listAllSubscriptions(): Promise<Subscription[]> {
 export async function isSubscribed(type: SubscriptionType, key: string): Promise<boolean> {
   await seedFeedsOnce()
   const n = await idbGet<FeedNode>(STORE_NODES, feedNodeId(type, key.trim()))
-  return Boolean(n && n.kind === "feed" && isLive(n)) // 墓碑 / 非 feed 视为未订阅
+  return Boolean(n && n.kind === "feed" && isLive(n)) // 墓碑 / 非 feed 视为未关注
 }
 
-/** 读取单条订阅 (投影); 墓碑 / 非 feed kind 视为不存在。供订阅查看器自取数 (按 feed 节点 id)。 */
+/** 读取单条关注 (投影); 墓碑 / 非 feed kind 视为不存在。供关注查看器自取数 (按 feed 节点 id)。 */
 export async function getSubscription(id: string): Promise<Subscription | undefined> {
   await seedFeedsOnce()
   const n = await idbGet<FeedNode>(STORE_NODES, id)
@@ -128,14 +128,14 @@ export async function getSubscription(id: string): Promise<Subscription | undefi
 
 // ---- 写 ----
 
-/** 订阅; 活跃项已存在则原样返回 (幂等); 命中墓碑则复活 (清除 deletedAt + 新 updatedAt, 保留原 createdAt)。 */
+/** 关注; 活跃项已存在则原样返回 (幂等); 命中墓碑则复活 (清除 deletedAt + 新 updatedAt, 保留原 createdAt)。 */
 export async function addSubscription(input: NewSubscription): Promise<Subscription> {
   await seedFeedsOnce()
   const key = input.key.trim()
   const id = feedNodeId(input.type, key)
   const existing = await idbGet<FeedNode>(STORE_NODES, id)
   if (existing && existing.kind === "feed" && isLive(existing)) return feedNodeToSub(existing) // 活跃 → 幂等
-  // tool 订阅的 key 即启动 URL, 会渲染成 <a href>; 全写入路径 (嵌入桥 / agent / 手动) 的最后一道闸:
+  // tool 关注的 key 即启动 URL, 会渲染成 <a href>; 全写入路径 (嵌入桥 / agent / 手动) 的最后一道闸:
   // 拒非 http(s) 协议, 防伪协议 (javascript:/data:) 入库后被点击触发存储型 XSS。
   if (input.type === "tool" && !safeHref(key)) {
     throw new Error("工具链接必须是 http(s) 地址")
@@ -158,7 +158,7 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
     ...(input.type === "search"
       ? { searchKeyword: input.searchKeyword, searchDomain: input.searchDomain }
       : {}),
-    // 复活墓碑时保留原 createdAt (概念上同一订阅又回来了); 全新订阅则取 now。
+    // 复活墓碑时保留原 createdAt (概念上同一关注又回来了); 全新关注则取 now。
     createdAt: existing?.createdAt ?? Date.now(),
     updatedAt: Date.now(), // 新 updatedAt 保证 LWW 胜过墓碑 (复活) / 旧远端项
   }
@@ -170,14 +170,14 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
 }
 
 /**
- * 退订 —— 软删除: 写墓碑 (deletedAt) 而非物理删, 并 bump updatedAt 使其按 LWW 胜过对端旧副本,
- * 从而让删除跨端收敛。未订阅 / 已是墓碑则幂等无操作。
+ * 取消关注 —— 软删除: 写墓碑 (deletedAt) 而非物理删, 并 bump updatedAt 使其按 LWW 胜过对端旧副本,
+ * 从而让删除跨端收敛。未关注 / 已是墓碑则幂等无操作。
  */
 export async function removeSubscription(type: SubscriptionType, key: string): Promise<void> {
   await seedFeedsOnce()
   const id = feedNodeId(type, key.trim())
   const existing = await idbGet<FeedNode>(STORE_NODES, id)
-  if (!existing || existing.kind !== "feed" || !isLive(existing)) return // 未订阅 / 已墓碑 → 幂等
+  if (!existing || existing.kind !== "feed" || !isLive(existing)) return // 未关注 / 已墓碑 → 幂等
   const now = Date.now()
   await idbPut(STORE_NODES, { ...existing, deletedAt: now, updatedAt: now })
   notifyFilesUpdated()
@@ -196,7 +196,7 @@ export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> 
     const nid = feedNodeId(sub.type, sub.key)
     let sk = keyById.get(nid)
     if (!sk) {
-      sk = nextKey(lastKey) // 新订阅 → 追加键; 已存在 → 复用其 sortKey (不重排)
+      sk = nextKey(lastKey) // 新关注 → 追加键; 已存在 → 复用其 sortKey (不重排)
       lastKey = sk
     }
     return subToFeedNode(sub, sk)

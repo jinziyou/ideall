@@ -66,7 +66,7 @@ export default function InfoToolbar<TData>({
     }
   }
 
-  // 「订阅此搜索」: 把当前标题关键词 (+ 可选域名) 存为本地搜索订阅 (本地优先, 订阅流里客户端按标题过滤)
+  // 「关注此搜索」: 把当前标题关键词 (+ 可选域名) 存为本地搜索关注 (本地优先, 关注流里客户端按标题过滤)
   const titleKeyword = ((table.getColumn("title")?.getFilterValue() as string) ?? "").trim()
   const domainTrim = domain.trim()
   const searchKey = domainTrim ? `${titleKeyword}@${domainTrim}` : titleKeyword

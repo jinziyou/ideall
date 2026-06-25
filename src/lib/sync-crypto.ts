@@ -1,15 +1,15 @@
 // 跨端同步的客户端密码学 (浏览器 WebCrypto)。
-// 由「同步码」(高熵随机串) 派生 storageId + 加密密钥; 明文 (订阅列表) 只在浏览器内 AES-GCM 加密,
+// 由「同步码」(高熵随机串) 派生 storageId + 加密密钥; 明文 (关注列表) 只在浏览器内 AES-GCM 加密,
 // 上传的只有密文 —— wonita 服务读不到内容 (端到端加密)。
 
 const SALT = "wonita-sync"
 const INFO_ID = "wonita-sync-id-v1"
 const INFO_ENC = "wonita-sync-enc-v1"
-// 笔记走独立的加密块 (不同 storageId + 独立密钥), 与订阅互不覆盖。
+// 笔记走独立的加密块 (不同 storageId + 独立密钥), 与关注互不覆盖。
 const INFO_ID_NOTES = "wonita-sync-notes-id-v1"
 const INFO_ENC_NOTES = "wonita-sync-notes-enc-v1"
 
-/** 同步域: 订阅与笔记各占一个加密块 (不同 storageId)。默认 "subs" 保持订阅旧 storageId 不变。 */
+/** 同步域: 关注与笔记各占一个加密块 (不同 storageId)。默认 "subs" 保持关注旧 storageId 不变。 */
 export type SyncScope = "subs" | "notes"
 
 const td = new TextDecoder()
@@ -56,7 +56,7 @@ export type DerivedKeys = { storageId: string; key: CryptoKey }
 
 /**
  * 由同步码派生 storageId (服务端查找键, 不可逆推同步码) 与 AES-GCM 密钥 (仅本地)。
- * scope 选择同步域: "subs" (默认, 订阅; storageId 与历史一致) / "notes" (笔记, 独立块与密钥)。
+ * scope 选择同步域: "subs" (默认, 关注; storageId 与历史一致) / "notes" (笔记, 独立块与密钥)。
  */
 export async function deriveKeys(code: string, scope: SyncScope = "subs"): Promise<DerivedKeys> {
   const ikm = await crypto.subtle.importKey("raw", enc(normalizeCode(code)), "HKDF", false, [

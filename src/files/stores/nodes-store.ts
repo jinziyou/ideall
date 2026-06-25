@@ -230,7 +230,7 @@ export async function updateNode(
       if (patch.title !== undefined) await renameThread(id, patch.title)
       break
     default:
-      return undefined // feed 无字段级更新 (订阅由 add/remove 管理)
+      return undefined // feed 无字段级更新 (关注由 add/remove 管理)
   }
   return getNodeRaw(id)
 }
@@ -250,7 +250,7 @@ export async function moveNode(
   return getNodeRaw(id)
 }
 
-/** fs.delete: 按 kind 删 (note/bookmark/folder/file 软删墓碑; feed 退订墓碑; thread 硬删)。 */
+/** fs.delete: 按 kind 删 (note/bookmark/folder/file 软删墓碑; feed 取消关注墓碑; thread 硬删)。 */
 export async function deleteNode(kind: NodeKind, id: string): Promise<void> {
   switch (kind) {
     case "note":

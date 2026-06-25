@@ -77,8 +77,8 @@ export default function AuthForm() {
         <CardTitle>{mode === "login" ? "登录" : "注册"}</CardTitle>
         <CardDescription>
           {mode === "login"
-            ? "登录后可在「我的 · 发布」发布内容，供他人订阅。"
-            : "注册后可在「我的 · 发布」发布内容，供他人订阅。"}
+            ? "登录后可在「我的 · 发布」发布内容，供他人关注。"
+            : "注册后可在「我的 · 发布」发布内容，供他人关注。"}
           密码在浏览器加密后才发送。
         </CardDescription>
       </CardHeader>

@@ -28,7 +28,7 @@ import AgentSettingsDialog from "./agent-settings-dialog"
 const HISTORY_LIMIT = 20
 
 const SUGGESTIONS = [
-  "根据我订阅的来源，最近值得关注什么？",
+  "根据我关注的来源，最近值得关注什么？",
   "帮我把书签按主题归归类，给个方案",
   "我都收藏了哪些资源？帮我概括一下",
 ]
@@ -383,7 +383,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
               </div>
               <div className="space-y-1">
                 <p className="font-medium">问问关于「我的」的事</p>
-                <p className="text-sm text-muted-foreground">结合本机的订阅、书签、资源作答</p>
+                <p className="text-sm text-muted-foreground">结合本机的关注、书签、资源作答</p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((s) => (
@@ -426,7 +426,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
               智能体模式
             </button>
             {agentMode && (
-              <span className="text-xs text-muted-foreground">助手可读写你的订阅、书签、资源</span>
+              <span className="text-xs text-muted-foreground">助手可读写你的关注、书签、资源</span>
             )}
           </div>
           <div className="flex items-end gap-2">
@@ -436,7 +436,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
               value={input}
               placeholder={
                 agentMode
-                  ? "让助手整理本机的订阅、书签、资源…（Enter 发送）"
+                  ? "让助手整理本机的关注、书签、资源…（Enter 发送）"
                   : "输入消息，Enter 发送，Shift+Enter 换行"
               }
               className="max-h-40 min-h-[2.75rem] resize-none"

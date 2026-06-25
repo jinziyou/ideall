@@ -27,11 +27,11 @@ ideall 是**开源、本地优先、供应商中立的个人信息终端**（独
 - **community / peer 发布降级为远期可选赌注**(Follow、腾讯 ima 已大规模占据), 验证本地产品留存后再投。
 - 完整战略见 jinziyou 私有仓库 `docs/ideall-strategy.md`(内部, 不入本公开仓库)。
 
-**home 是「我的」(本机数据区); info / community / tool 是三个发现模块, 其内容经订阅 / 关注回流到「我的」**:
-「我的」通过**订阅**把「发现」里的来源 (发布者 / 实体 / 工具 / 搜索 / 社区发布者 peer) 回流到
-`/home/subscriptions` 订阅流; 订阅偏好本地优先 (IndexedDB), 内容实时拉取。
+**home 是「我的」(本机数据区); info / community / tool 是三个发现模块, 其内容经关注汇入「我的」**:
+「我的」通过**关注**把「发现」里的来源 (发布者 / 实体 / 工具 / 搜索 / 社区发布者 peer) 关注到
+`/home/subscriptions` 关注流; 关注偏好本地优先 (IndexedDB), 内容实时拉取。
 **跨端同步 (端到端加密, 无账号)**: 同步码在浏览器派生 storageId + AES 密钥, 只上传密文。
-**社区 = 用户/peer 发布层 (账号)**: 登录后发布内容成为社区发布者, 他人订阅其发布进订阅流。
+**社区 = 用户/peer 发布层 (账号)**: 登录后发布内容成为社区发布者, 他人关注其发布进关注流。
 **账号 (公开发布身份) 与跨端同步的无账号同步码是两套独立身份**。
 
 ## 架构: 终端分层 (src/ 下)
@@ -46,11 +46,11 @@ src/ 已按终端分层重组: 路由薄标记 / 终端外壳 / 一切皆标签 
 | **shell** | `@/shell/*` | 终端外壳 —— 活动栏 / 二级侧栏 / 标签条 / 状态栏 / 命令台 / 主题 / account / mobile-nav / nav-config + `boot` (组合根, 唯一允许 import 各 manifest 处) / `boot-gate` (启动闸) |
 | **workspace** | `@/workspace/*` | 一切皆标签 —— `tab-host` (keep-alive 多标签) / `registry` (kind→渲染) / store / `viewers` (按 kind: note/file/bookmark/feed/thread) / `modules` (模块配置单一真相源) / node-ref / node-tab / node-tree / places (根命名空间) / local-search |
 | **files** | `@/files/*` | 一切皆文件 —— 统一 Node 数据层。`stores/` (各 kind store + `nodes-store` 跨 kind 协调层); `migrate/` (懒迁移 plan*); 顶层 Node 原语: note-blocks / sort-key / notes-tree-util / note-write-queue / flowback / `files-port` (FilesPort 实现) / bookmark-import / spoke-meta |
-| **modules** | `@/modules/*` | 功能模块 —— `home` (「我的」: 本机笔记/书签/资源/订阅/对话的功能 UI = overview/notes/bookmarks/resources/publications/subscriptions) / `info` / `community` / `tool` |
+| **modules** | `@/modules/*` | 功能模块 —— `home` (「我的」: 本机笔记/书签/资源/关注/对话的功能 UI = overview/notes/bookmarks/resources/publications/subscriptions) / `info` / `community` / `tool` |
 | **plugins** | `@/plugins/*` | 插件 —— `agent` (AI 环境层, BYO-key) / `sync` (跨端 E2E 同步) / `embed` (嵌入页 + AI 共用的 Grant→`createLocalMcpServer` 能力链路) |
 | **protocol** | `@protocol/*` | 契约 / 端口 (纯类型 / 纯函数, 不含 UI): node (统一 Node 联合) / files (FilesPort + 投影域类型 Note/Bookmark/StoredFile/Subscription/Thread) / note-merge / subscription / content / flowback / sync (SyncPort) / server-port (ServerPort) / peer / auth |
 | **ui** | `@/ui/*` | shadcn 原语 + 块编辑器 (`editor/`) |
-| **shared** | `@/shared/*` | 跨层共享 UI + 回流反馈 (`feeders/`: save-to-mine / subscribe-button / pin-tool-button) |
+| **shared** | `@/shared/*` | 跨层共享 UI + 关注反馈 (`feeders/`: save-to-mine / subscribe-button / pin-tool-button) |
 | **lib** | `@/lib/*` | 纯工具 —— utils/format/node-format/idb/id/sync-crypto/auth/api (wire DTO 生成物)/server (HTTP 适配器)/ui-actions/active-node/safe-url/theme/env/tauri/updater... |
 
 **别名**: `@/*` → `src/*`; `@protocol/*` → `src/protocol/*` (其余层一律 `@/<layer>/...`; app 路由用 `@/app/*`、`@/app/globals.css`)。
@@ -63,10 +63,10 @@ ESLint 强制四条边界:
 
 ### 依赖反转 (模块经 protocol 而非互相直连)
 
-- **内容 feed**: 「我的」订阅流调 `@protocol/content` 的 `resolveSubscription`; info/community 在各自 `manifest.ts`
+- **内容 feed**: 「我的」关注流调 `@protocol/content` 的 `resolveSubscription`; info/community 在各自 `manifest.ts`
   注册 resolver (info 管 publisher/entity/search, community 管 peer)。
 - **本机文件数据**: 反馈组件 (`@/shared/feeders`) 与 agent 插件经 `@protocol/files` 的 `getFilesPort()`
-  (FilesPort, 在 boot 注册实现) 读写订阅/书签/资源, 不直接依赖底层 Node 存储。
+  (FilesPort, 在 boot 注册实现) 读写关注/书签/资源, 不直接依赖底层 Node 存储。
 - **跨端同步**: 「我的」同步面板调 `@protocol/sync` 的 `getSyncPort()`; sync 插件 `manifest.ts` 注册 SyncPort。
 - **后端取数 (wonita 服务数据服务)**: 所有信息/发布/鉴权取数经 `@protocol/server-port` 的 `getServerPort()`
   (ServerPort, 后端数据服务契约 + 自有领域类型), 默认实现是 `@/lib/server` 的 HTTP 适配器

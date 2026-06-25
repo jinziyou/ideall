@@ -1,5 +1,5 @@
 // safeHref 是全站「外部/跨用户 URL → <a href>/window.open」前的伪协议白名单单点收口
-// (agent-tools / embed bridge / 工具订阅 / cells 外链等共同信任的那道闸)。这里用经典绕过向量
+// (agent-tools / embed bridge / 工具关注 / cells 外链等共同信任的那道闸)。这里用经典绕过向量
 // 锁死它的行为, 守住「javascript:/data: 等伪协议绝不渲染成可点链接」这条防存储型 XSS 的不变量。
 import { test } from "node:test"
 import assert from "node:assert/strict"

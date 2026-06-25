@@ -11,7 +11,7 @@
 
 ## 背景:反向取数已存在于嵌入桥
 
-`src/plugins/embed/`(`host.tsx` + `tools.ts` + `manifest.ts` + `protocol.ts`)已实现一个方向:ideall 内嵌 wonita portal(`<iframe src="${NEXT_PUBLIC_EMBED_BASE}/info">`),**ideall 跑 `McpServer`(宿主)、portal 是 MCP client(访客)**,ideall 按 manifest 的 `permissions` 只注册被授权的工具/资源。于是内嵌页能向 ideall「反问」本地数据(订阅/书签/身份),据此渲染「已订阅」「保存到我的」「发布」。
+`src/plugins/embed/`(`host.tsx` + `tools.ts` + `manifest.ts` + `protocol.ts`)已实现一个方向:ideall 内嵌 wonita portal(`<iframe src="${NEXT_PUBLIC_EMBED_BASE}/info">`),**ideall 跑 `McpServer`(宿主)、portal 是 MCP client(访客)**,ideall 按 manifest 的 `permissions` 只注册被授权的工具/资源。于是内嵌页能向 ideall「反问」本地数据(关注/书签/身份),据此渲染「已关注」「保存到我的」「发布」。
 
 安全模型:数据全程留本地(IndexedDB,不上 wonita 服务器)、**token 永不出宿主**(发布类工具在 ideall 侧 handler 取 token 调 ServerPort)、跨域 + 源白名单握手 + 按授权位最小暴露。
 
@@ -84,7 +84,7 @@ Consent 五原则:
 1. **默认拒绝**:T0 之外一律不预授。
 2. **用户在 ideall 内发起配对**:批准动作起于主权面(ideall),不是 web 页 —— 防恶意站点静默诱导授权。
 3. **按消费方 / 按权限 / 可吊销 / 会过期**:ideall 设置里一个「已连接的应用」面板(每个消费方能做什么、最后访问时间、一键撤销)。
-4. **读写分离**:读订阅 ≠ 以你身份发布。写永远更高门槛 + 边界校验。
+4. **读写分离**:读关注 ≠ 以你身份发布。写永远更高门槛 + 边界校验。
 5. **敏感能力锁死**:`identity.publish`(以你身份行动)、任何碰 token 的 —— 绝不自动授给非一方;token 永远宿主侧执行。
 
 ## 5. 能力面按敏感度分级

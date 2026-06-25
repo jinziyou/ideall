@@ -48,7 +48,7 @@ export default function PlacesSidebar() {
         <TopEntry d={PUBLICATIONS} icon={Megaphone} label="发布" activeId={activeId} />
       </nav>
 
-      {/* places 切换: 笔记 / 书签 / 资源 / 订阅 / 对话 (根命名空间; 多项换行) */}
+      {/* places 切换: 笔记 / 书签 / 资源 / 关注 / 对话 (根命名空间; 多项换行) */}
       <div className="mt-2 flex flex-wrap gap-1 px-2" role="tablist" aria-label="根命名空间">
         {PLACES.map((p) => {
           const Icon = p.icon

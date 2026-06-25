@@ -2,7 +2,7 @@
 // 对外仍以 Bookmark / BookmarkFolder 域类型呈现 (节点↔域类型投影在本仓库边界完成), 消费方零改:
 //   - 书签节点: folderId→parentId, url/description/favicon 收进 content, title/tags 留顶层;
 //   - 收藏夹节点: name→title, 根级 (parentId=null);
-//   - 删除走软删墓碑 (deletedAt, 与笔记/订阅一致), 读路径过滤墓碑 —— 当前用于撤销跨刷新稳健, 并为后续同步就绪。
+//   - 删除走软删墓碑 (deletedAt, 与笔记/关注一致), 读路径过滤墓碑 —— 当前用于撤销跨刷新稳健, 并为后续同步就绪。
 // 本切片不开同步 (维持现状未同步); sortKey/updatedAt 已补齐, 墓碑 GC 随 bookmark-sync 落地 (与笔记同纪律)。
 import { Bookmark, BookmarkFolder } from "@/modules/home/model"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
@@ -297,7 +297,7 @@ export async function updateBookmark(
     if (patch.folderId !== undefined) next.parentId = patch.folderId
     return next
   })
-  // 与 add/bulkAdd/delete 一致: 通知「我的」回流, 否则 keep-alive 的概览时间线在改名后会陈旧。
+  // 与 add/bulkAdd/delete 一致: 通知「我的」更新, 否则 keep-alive 的概览时间线在改名后会陈旧。
   notifyFilesUpdated()
 }
 

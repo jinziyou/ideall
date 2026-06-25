@@ -1,6 +1,6 @@
 // sync 插件 manifest —— 向「我的」注册 SyncPort (跨端同步编排)。
 // core 的同步面板经 @protocol/sync 的 getSyncPort() 调用, 不直接依赖本插件。
-// 一次 syncNow 同步两个独立加密块: 订阅 + 笔记 (各自 storageId, 互不覆盖)。
+// 一次 syncNow 同步两个独立加密块: 关注 + 笔记 (各自 storageId, 互不覆盖)。
 import { registerSyncPort, type SyncResult } from "@protocol/sync"
 import { syncNow as syncSubscriptions } from "./lib/subscription-sync"
 import { syncNotes } from "./lib/notes-sync"

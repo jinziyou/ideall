@@ -136,7 +136,7 @@ export default function CommandPalette() {
             <SunMoon className="h-4 w-4" />
             切换深浅色
           </CommandItem>
-          {/* 同步入口始终存在: 未配置同步码时给「开启」入口 (跳订阅页顶部的 SyncPanel),
+          {/* 同步入口始终存在: 未配置同步码时给「开启」入口 (跳关注页顶部的 SyncPanel),
               避免新用户在唯一命令台里搜不到同步而误以为没有该功能。 */}
           {code ? (
             <>

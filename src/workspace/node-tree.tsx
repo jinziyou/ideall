@@ -44,7 +44,7 @@ export function NodeTree({
 
   // kinds 数组按值稳定化作 effect 依赖 (避免父组件每渲染新数组引用导致重复加载)。
   // 切换 place 由父组件以 key=place.id 重挂本组件 → 自然回到加载态 + 清空展开集 (无需 effect 内 setState),
-  // 故 kindKey 在单次挂载内恒定; effect 仅负责首载 + 订阅 FILES_UPDATED 刷新。
+  // 故 kindKey 在单次挂载内恒定; effect 仅负责首载 + 关注 FILES_UPDATED 刷新。
   const kindKey = kinds.join(",")
   React.useEffect(() => {
     let alive = true
@@ -58,7 +58,7 @@ export function NodeTree({
         })
     }
     load()
-    // 任意回流到「我的」/ 跨端同步后实时刷新文件树。
+    // 任意汇入「我的」/ 跨端同步后实时刷新文件树。
     const off = onFilesUpdated(load)
     return () => {
       alive = false

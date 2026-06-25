@@ -30,7 +30,7 @@ const EMBED_ORIGIN = (() => {
   }
 })()
 
-/** 资讯嵌入应用: 公共语料页面直连, 故不需 data.info:read; 仅需订阅/收藏回写 + 外链/导航。 */
+/** 资讯嵌入应用: 公共语料页面直连, 故不需 data.info:read; 仅需关注/收藏回写 + 外链/导航。 */
 export const infoEmbedManifest: Manifest = {
   id: "info",
   name: "Wonita 资讯",

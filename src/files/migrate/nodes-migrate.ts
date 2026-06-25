@@ -208,10 +208,10 @@ export function planFilesSeed(
   }
 }
 
-// ---- 折叠步 C: 订阅 → feed 节点 (kind:"feed", 确定性 id) ----
+// ---- 折叠步 C: 关注 → feed 节点 (kind:"feed", 确定性 id) ----
 // 投影助手单一真相 (迁移 + subscriptions-store 运行期共用, 防双处映射漂移)。
 
-/** 确定性 feed 节点 id: feed:type:key (绝不 genId; 两端独立创建同订阅得同 id → 跨端零 churn)。 */
+/** 确定性 feed 节点 id: feed:type:key (绝不 genId; 两端独立创建同关注得同 id → 跨端零 churn)。 */
 export function feedNodeId(type: string, key: string): string {
   return `feed:${type}:${key}`
 }
@@ -266,9 +266,9 @@ export function feedNodeToSub(n: FeedNode): Subscription {
 export type FeedsSeedPlan = { puts: FeedNode[]; drainSubIds: string[] }
 
 /**
- * 规划订阅播种。返回 null = 旧 subscriptions 仓库为空。
- * - 每条订阅 → feed 节点 (确定性 id feed:type:key); type/key/favicon 与 entity/search 专属字段收进 content;
- *   **含墓碑全量带过来** (deletedAt 原样保留) —— 漏带 = 已删订阅在跨端合并时被对端活跃副本复活。
+ * 规划关注播种。返回 null = 旧 subscriptions 仓库为空。
+ * - 每条关注 → feed 节点 (确定性 id feed:type:key); type/key/favicon 与 entity/search 专属字段收进 content;
+ *   **含墓碑全量带过来** (deletedAt 原样保留) —— 漏带 = 已删关注在跨端合并时被对端活跃副本复活。
  * - 补 sortKey (按 createdAt 升序); existingNodeIds 已播种的不重写 (幂等); drain 始终全量。
  * now 注入 (缺时间戳兜底), 便于测试确定性。
  */

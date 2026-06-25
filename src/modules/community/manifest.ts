@@ -1,5 +1,5 @@
-// community 模块 manifest —— 向「我的」注册「社区发布者 (peer)」订阅的内容解析器。
-// 「我的」订阅流经此拉取某 peer 的最新发布, 不再直接依赖 peer 拉取细节。
+// community 模块 manifest —— 向「我的」注册「社区发布者 (peer)」关注的内容解析器。
+// 「我的」关注流经此拉取某 peer 的最新发布, 不再直接依赖 peer 拉取细节。
 import type { SubscriptionType } from "@protocol/subscription"
 import type { ContentResolver, FeedItem, ResolverRegistration } from "@protocol/content"
 import { getPeerPublications } from "@protocol/peer"

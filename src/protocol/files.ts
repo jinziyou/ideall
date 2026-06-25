@@ -1,6 +1,6 @@
 // 「我的」本地数据契约 —— core 拥有的本地优先实体 (资源 / 书签 / 收藏夹)。
 // 这些类型既是 core 存储模型, 又经 FilesPort 暴露给 plugin (如 agent), 故属契约。
-// (订阅 Subscription 类型见 ./subscription)。
+// (关注 Subscription 类型见 ./subscription)。
 import type { Subscription, SubscriptionType, NewSubscription } from "./subscription"
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "./node"
 import type { BlockMetaMap } from "./note-merge"
@@ -130,13 +130,13 @@ export type NewNote = {
 
 /**
  * 「我的」本地数据端口 —— core 实现 (包装 IndexedDB stores), 经 protocol 暴露给 plugin。
- * agent 插件经此读写用户的订阅 / 书签 / 收藏夹 / 资源, 而非直接依赖 core 存储 (依赖反转)。
+ * agent 插件经此读写用户的关注 / 书签 / 收藏夹 / 资源, 而非直接依赖 core 存储 (依赖反转)。
  */
 export interface FilesPort {
-  // 订阅
-  /** 列出活跃订阅 (过滤软删除墓碑)。UI / 插件读路径。 */
+  // 关注
+  /** 列出活跃关注 (过滤软删除墓碑)。UI / 插件读路径。 */
   listSubscriptions(): Promise<Subscription[]>
-  /** 列出全部订阅含墓碑 —— 跨端同步合并用 (墓碑须进合并/上传才能传播删除)。 */
+  /** 列出全部关注含墓碑 —— 跨端同步合并用 (墓碑须进合并/上传才能传播删除)。 */
   listAllSubscriptions(): Promise<Subscription[]>
   addSubscription(input: NewSubscription): Promise<Subscription>
   removeSubscription(type: SubscriptionType, key: string): Promise<void>
@@ -190,7 +190,7 @@ export interface FilesPort {
     parentId: string | null,
     afterSortKey?: string | null,
   ): Promise<Node | undefined>
-  /** fs.delete 后端: 按 kind 删 (软删/退订/硬删)。 */
+  /** fs.delete 后端: 按 kind 删 (软删/取消关注/硬删)。 */
   fsDeleteNode(kind: NodeKind, id: string): Promise<void>
   /** fs.readBlob 后端: 文件二进制 base64 (大文件不内联, base64 空)。 */
   fsReadBlob(id: string): Promise<{ mime: string; size: number; base64: string } | undefined>

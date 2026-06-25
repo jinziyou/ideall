@@ -18,7 +18,7 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
   const mod = moduleById(activeModule)
 
   return (
-    // 折叠用 width/opacity 过渡 (始终挂载, 避免布局抖动); 内层固定 w-60 防折叠动画时回流。
+    // 折叠用 width/opacity 过渡 (始终挂载, 避免布局抖动); 内层固定 w-60 防折叠动画时重排。
     <aside
       aria-hidden={collapsed}
       className={cn(

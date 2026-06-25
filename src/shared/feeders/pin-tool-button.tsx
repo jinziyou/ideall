@@ -10,7 +10,7 @@ import { undoableToast } from "@/lib/undo-toast"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 「钉到「我的」」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 订阅为 home 的快捷启动项。
+ * 「钉到「我的」」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 关注为 home 的快捷启动项。
  * 经 protocol 的 FilesPort 写入 (本地优先)。图标按钮形态, 作为工具卡的角标叠加。
  */
 export function PinToolButton({
@@ -19,7 +19,7 @@ export function PinToolButton({
   className,
 }: {
   name: string
-  /** 启动 URL, 兼作订阅去重键 */
+  /** 启动 URL, 兼作关注去重键 */
   url: string
   className?: string
 }) {

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-// 全局在线/离线感知 (B-2) —— 包 navigator.onLine + online/offline 事件, 供同步面板 / 订阅流 /
+// 全局在线/离线感知 (B-2) —— 包 navigator.onLine + online/offline 事件, 供同步面板 / 关注流 /
 // EmbedHost 等取数路径在断网时优先给「离线」提示 + 重试, 而非把失败误导成「内容已删除 / 不存在」。
 // 本地优先能力 (笔记 / 书签 / 资源) 不受影响, 仅用于远端取数的失败归因。
 

@@ -1,10 +1,10 @@
 "use client"
 
-// 顶栏「本地搜索」: 在本机数据 (笔记 / 订阅 / 关注 / 书签 / 资源) 中按标题检索。
-// 选中: 笔记/资源/订阅/关注 → 打开对应模块标签; 书签 → 直接打开其网址。
+// 顶栏「本地搜索」: 在本机数据 (笔记 / 关注 / 书签 / 资源) 中按标题检索。
+// 选中: 笔记/资源/关注 → 打开对应模块标签; 书签 → 直接打开其网址。
 
 import * as React from "react"
-import { Bookmark, FolderOpen, NotebookPen, Rss, UserRound } from "lucide-react"
+import { Bookmark, FolderOpen, NotebookPen, Rss } from "lucide-react"
 import {
   CommandDialog,
   CommandEmpty,
@@ -21,14 +21,13 @@ import { listSubscriptions } from "@/files/stores/subscriptions-store"
 import { openTab, openNodeTab } from "./store"
 import type { TabDescriptor } from "./types"
 
-type Group = "笔记" | "订阅" | "关注" | "书签" | "资源"
+type Group = "笔记" | "关注" | "书签" | "资源"
 type Item = { id: string; label: string; group: Group; run: () => void }
 
-const ORDER: Group[] = ["笔记", "订阅", "关注", "书签", "资源"]
+const ORDER: Group[] = ["笔记", "关注", "书签", "资源"]
 const ICON: Record<Group, React.ComponentType<{ className?: string }>> = {
   笔记: NotebookPen,
-  订阅: Rss,
-  关注: UserRound,
+  关注: Rss,
   书签: Bookmark,
   资源: FolderOpen,
 }
@@ -40,10 +39,9 @@ const TAB: Record<string, TabDescriptor> = {
   subscriptions: {
     kind: "subscriptions",
     module: "subscriptions",
-    title: "订阅",
+    title: "关注",
     path: "/home/subscriptions",
   },
-  following: { kind: "following", module: "following", title: "关注", path: "/home/following" },
 }
 
 export default function LocalSearchDialog({
@@ -77,12 +75,11 @@ export default function LocalSearchDialog({
             run: () => openNodeTab({ kind: "note", id: n.id }, n.title || "无标题笔记"),
           })
         for (const s of subs) {
-          const peer = s.type === "peer"
           next.push({
             id: "s" + s.id,
-            label: s.title || "未命名订阅",
-            group: peer ? "关注" : "订阅",
-            run: () => openTab(peer ? TAB.following : TAB.subscriptions),
+            label: s.title || "未命名关注",
+            group: "关注",
+            run: () => openTab(TAB.subscriptions),
           })
         }
         for (const b of bms)
@@ -120,7 +117,7 @@ export default function LocalSearchDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="本地搜索"
-      description="搜索本机的笔记 / 订阅 / 关注 / 书签 / 资源"
+      description="搜索本机的笔记 / 关注 / 书签 / 资源"
     >
       <CommandInput placeholder="搜索本地内容…" />
       <CommandList>

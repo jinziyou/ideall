@@ -7,8 +7,8 @@ import { countFiles } from "@/files/stores/files-store"
 import { onFilesUpdated } from "@protocol/flowback"
 
 /**
- * 「我的」回流计数 (订阅 + 书签 + 文件)。每次回流 (FILES_UPDATED / SUBSCRIPTIONS_SYNCED) 实时刷新,
- * 数值增加时 flash 一下 (供「我的」导航项挂回流 badge)。原 nav-link 内联逻辑抽出, 供 rail / 底栏共用。
+ * 「我的」收进计数 (关注 + 书签 + 文件)。每次写入 (FILES_UPDATED / SUBSCRIPTIONS_SYNCED) 实时刷新,
+ * 数值增加时 flash 一下 (供「我的」导航项挂收进 badge)。原 nav-link 内联逻辑抽出, 供 rail / 底栏共用。
  */
 export function useNodeCount(): { count: number | null; flash: boolean } {
   const [count, setCount] = React.useState<number | null>(null)
@@ -20,7 +20,7 @@ export function useNodeCount(): { count: number | null; flash: boolean } {
     let flashTimer: ReturnType<typeof setTimeout> | undefined
     async function load() {
       try {
-        // 文件走 count() (不载入 Blob); 书签/订阅含墓碑, 需过滤后计数 (countBookmarks 全扫描过滤, 订阅 listSubscriptions 过滤)。
+        // 文件走 count() (不载入 Blob); 书签/关注含墓碑, 需过滤后计数 (countBookmarks 全扫描过滤, 关注 listSubscriptions 过滤)。
         const [subs, bmCount, fileCount] = await Promise.all([
           listSubscriptions(),
           countBookmarks(),
@@ -30,7 +30,7 @@ export function useNodeCount(): { count: number | null; flash: boolean } {
         const n = subs.length + bmCount + fileCount
         if (prev.current !== null && n > prev.current) {
           setFlash(true)
-          clearTimeout(flashTimer) // 快速连续回流时不让多枚计时器叠加
+          clearTimeout(flashTimer) // 快速连续关注时不让多枚计时器叠加
           flashTimer = setTimeout(() => {
             if (alive) setFlash(false)
           }, 650)

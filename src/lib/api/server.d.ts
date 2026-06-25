@@ -354,7 +354,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /peers — 社区发布者列表 (公开, 供 community 浏览订阅)。 */
+        /** GET /peers — 社区发布者列表 (公开, 供 community 浏览关注)。 */
         get: operations["list_publishers"];
         put?: never;
         post?: never;
@@ -553,7 +553,7 @@ export interface components {
             title: string;
             url?: string;
         };
-        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (ideall `type:"peer"` 的 key)。 */
+        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即关注键 (ideall `type:"peer"` 的 key)。 */
         PeerPublisher: {
             /**
              * Format: int64
@@ -651,7 +651,7 @@ export interface components {
             shared_entry: number;
         };
         SyncBlob: {
-            /** @description 密文 (base64); 明文为客户端订阅列表 JSON, 服务端不可读 */
+            /** @description 密文 (base64); 明文为客户端关注列表 JSON, 服务端不可读 */
             ciphertext: string;
             /** @description AES-GCM 初始向量 (base64) */
             iv: string;

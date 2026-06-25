@@ -46,16 +46,16 @@ export const PLACES: Place[] = [
   },
   {
     id: "feeds",
-    label: "订阅",
+    label: "关注",
     icon: Rss,
     kinds: ["feed"],
     manager: {
       kind: "subscriptions",
       module: "subscriptions",
-      title: "订阅",
+      title: "关注",
       path: "/home/subscriptions",
     },
-    emptyHint: "还没有订阅。去「发现」订阅，内容会回流到这里。",
+    emptyHint: "还没有关注。去「发现」关注，内容会汇入这里。",
   },
   {
     id: "threads",

@@ -13,8 +13,9 @@ import type { Tab } from "./types"
 import { resolveViewer } from "./node-viewers"
 import { parseNodeParams } from "./node-tab"
 
-// 订阅流按类型切分: 订阅(资讯回流) = publisher/entity/search; 关注(社区回流) = peer。
-const INFO_SUB_TYPES: SubscriptionType[] = ["publisher", "entity", "search"]
+// 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
+const FOLLOW_TYPES: SubscriptionType[] = ["publisher", "entity", "search", "peer"]
+// /home/following 深链回退视图 (社区 peer); 活动栏入口已并入统一「关注」。
 const PEER_SUB_TYPES: SubscriptionType[] = ["peer"]
 
 const Overview = React.lazy(() => import("@/modules/home/overview"))
@@ -39,7 +40,7 @@ const REGISTRY: Record<string, Entry> = {
     render: () => (
       <div className="flex flex-col gap-6">
         <SyncPanel />
-        <SubscriptionFeed types={INFO_SUB_TYPES} title="订阅流" dotClass="bg-spoke-info" />
+        <SubscriptionFeed types={FOLLOW_TYPES} title="关注流" dotClass="bg-spoke-info" />
       </div>
     ),
     layout: "padded",

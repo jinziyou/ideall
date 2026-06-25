@@ -13,7 +13,7 @@ import { useMode, setMode } from "./store"
 import type { WsMode } from "./types"
 
 const MODES: { id: WsMode; label: string; hint: string; dot: string }[] = [
-  { id: "local", label: "本地", hint: "我的 · 订阅 · 关注 —— 只存本机", dot: "bg-primary" },
+  { id: "local", label: "本地", hint: "我的 · 关注 · 关注 —— 只存本机", dot: "bg-primary" },
   {
     id: "connected",
     label: "连接",

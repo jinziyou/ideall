@@ -101,7 +101,7 @@ export interface InfoQuery {
   page_size_offset?: [number, number] | null
 }
 
-/** 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (`type:"peer"` 的 key)。 */
+/** 社区发布者 (用户) 公开档案 + 发布数。`id` 即关注键 (`type:"peer"` 的 key)。 */
 export interface PeerPublisher {
   /** 用户节点 id (= JWT claims.id) */
   id: number

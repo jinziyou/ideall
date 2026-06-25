@@ -1,7 +1,7 @@
 // 跨端同步编排 (sync 插件) —— 本地优先 + 端到端加密。
 // 拉远端密文 → 解密 → 与本地 (含墓碑) 按 id 并集合并 (LWW) → GC 过期墓碑 → 写本地 → 加密 → 推远端。
 // 合并为并集 (LWW); 删除以墓碑传播 (软删 deletedAt, 按 LWW 跨端收敛, 不再被对端复活); 过期墓碑 GC。
-// 取舍记录见 docs/sync-lww-tradeoff.md。订阅读写经 @protocol/files 的 FilesPort (插件不直接依赖 core 存储)。
+// 取舍记录见 docs/sync-lww-tradeoff.md。关注读写经 @protocol/files 的 FilesPort (插件不直接依赖 core 存储)。
 import type { Subscription } from "@protocol/subscription"
 import {
   unionMerge,
@@ -48,7 +48,7 @@ export async function syncNow(code: string): Promise<SyncResult> {
   let kept = localAll
 
   // 乐观并发: 携带本端读到的基线版本 PUT; 若服务端已被另一端更新 (409) → 重新 GET→合并→PUT。
-  // 修复旧的"丢失更新"窗口: 另一端在本端 GET 之后、PUT 之前新增的订阅不再被无条件覆盖丢弃。
+  // 修复旧的"丢失更新"窗口: 另一端在本端 GET 之后、PUT 之前新增的关注不再被无条件覆盖丢弃。
   let succeeded = false
   for (let attempt = 1; attempt <= SYNC_MAX_ATTEMPTS; attempt++) {
     const got = await getSyncBlob(storageId)
@@ -90,7 +90,7 @@ export async function syncNow(code: string): Promise<SyncResult> {
   // 兜底: 正常路径循环内必 break/throw; 走到此处说明重试耗尽 (理论不可达, 防未来新增分支漏 break/throw 致空转)。
   if (!succeeded) throw new Error("同步失败: 超过最大重试次数, 请稍后再试")
 
-  // 统计以活跃订阅 (非墓碑) 为口径: total = 合并后活跃数; added = 本地原本不存在的新活跃 id 数。
+  // 统计以活跃关注 (非墓碑) 为口径: total = 合并后活跃数; added = 本地原本不存在的新活跃 id 数。
   const localLiveIds = new Set(localAll.filter(isLive).map((s) => s.id))
   const mergedLive = kept.filter(isLive)
   const added = mergedLive.filter((s) => !localLiveIds.has(s.id)).length

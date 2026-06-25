@@ -137,7 +137,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
             checked={form.includeHomeContext}
             onChange={(e) => setForm((f) => ({ ...f, includeHomeContext: e.target.checked }))}
           />
-          <span>把本机的订阅、书签、资源作为上下文发送</span>
+          <span>把本机的关注、书签、资源作为上下文发送</span>
         </label>
       </div>
 

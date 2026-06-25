@@ -18,8 +18,8 @@ import { getFilesPort } from "@protocol/files"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 统一回流原语「收入我的」(反馈原语) —— 把发现模块上的任意条目 (文章 / 事件 / 链接) 落进本地的「我的」。
- * 按传入的能力渲染菜单项: 收藏到书签 / 订阅发布者; 另带原文 / 全面报道 直达。
+ * 统一「收入我的」原语「收入我的」(反馈原语) —— 把发现模块上的任意条目 (文章 / 事件 / 链接) 落进本地的「我的」。
+ * 按传入的能力渲染菜单项: 收藏到书签 / 关注发布者; 另带原文 / 全面报道 直达。
  * 经 protocol 的 FilesPort 写入, 广播 FILES_UPDATED 让头部计数 +1。
  */
 export function SaveToMine({
@@ -66,9 +66,9 @@ export function SaveToMine({
     if (!publisher?.domain) return
     try {
       const hub = getFilesPort()
-      // 去重: 与 doBookmark 一致, 已订阅则提示而非重复弹「已订阅」成功 toast (把重复当新增)
+      // 去重: 与 doBookmark 一致, 已关注则提示而非重复弹「已关注」成功 toast (把重复当新增)
       if (await hub.isSubscribed("publisher", publisher.domain)) {
-        toast.info("已订阅该发布者")
+        toast.info("已关注该发布者")
         return
       }
       await hub.addSubscription({
@@ -77,11 +77,11 @@ export function SaveToMine({
         title: publisher.name || publisher.domain,
       })
       pop()
-      flowbackToast(`已订阅 ${publisher.name || publisher.domain}`, () =>
+      flowbackToast(`已关注 ${publisher.name || publisher.domain}`, () =>
         router.push("/home/subscriptions"),
       )
     } catch {
-      toast.error("订阅失败，请重试")
+      toast.error("关注失败，请重试")
     }
   }
 
@@ -120,7 +120,7 @@ export function SaveToMine({
         {publisher?.domain && (
           <DropdownMenuItem onSelect={doSubscribe}>
             <Rss className="mr-2 h-4 w-4" />
-            订阅发布者
+            关注发布者
           </DropdownMenuItem>
         )}
         {hasFlow && hasLinks && <DropdownMenuSeparator />}

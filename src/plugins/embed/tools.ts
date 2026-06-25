@@ -22,7 +22,7 @@ function fail(code: number, message: string): ToolResult {
   return { isError: true, content: [{ type: "text", text: JSON.stringify({ code, message }) }] }
 }
 
-// 订阅类型白名单: 用 zod enum 让 handler 直接拿到领域联合 (SubscriptionType), 杜绝任意字符串写入脏订阅。
+// 关注类型白名单: 用 zod enum 让 handler 直接拿到领域联合 (SubscriptionType), 杜绝任意字符串写入脏关注。
 const subType = z.enum(["publisher", "entity", "tool", "search", "peer"])
 
 // 节点 kind 白名单 (fs.* 文件面)。缺省 kind = 列全部命名空间。
@@ -115,8 +115,8 @@ export function registerGrantedTools(
         searchDomain: z.string().optional(),
       },
       async (a) => {
-        // tool 订阅的 key 即启动 URL, 会渲染成 <a href>; 过协议白名单拦伪协议 (与 hubAddBookmark 一致),
-        // 防持权 iframe 经 MCP 注入 javascript: 工具订阅 → 用户点击触发存储型 XSS。
+        // tool 关注的 key 即启动 URL, 会渲染成 <a href>; 过协议白名单拦伪协议 (与 hubAddBookmark 一致),
+        // 防持权 iframe 经 MCP 注入 javascript: 工具关注 → 用户点击触发存储型 XSS。
         if (a.type === "tool" && !safeHref(a.key)) return fail(-32602, "blocked-protocol")
         return ok(await getFilesPort().addSubscription(a))
       },

@@ -3,7 +3,7 @@
 //   files          —— 文件 (含 Blob), keyPath = id
 //   bookmarks      —— 链接收藏, keyPath = id
 //   bookmarkFolders—— 收藏夹分组, keyPath = id
-//   subscriptions  —— 「发现」订阅 (发布者等), keyPath = id 【折叠步 C 后排空, 数据迁入 nodes (kind:"feed")】
+//   subscriptions  —— 「发现」关注 (发布者等), keyPath = id 【折叠步 C 后排空, 数据迁入 nodes (kind:"feed")】
 //   agentThreads   —— AI 助手对话线程 (消息内联), keyPath = id 【折叠步 D 后排空, 数据迁入 nodes (kind:"thread")】
 //   notes          —— 笔记 (类 Notion 块文档, content 内联), keyPath = id 【折叠步 A 后排空, 数据迁入 nodes】
 //   noteNotebooks  —— 笔记本分组, keyPath = id 【已退役, 数据迁入 notes 再迁入 nodes】
@@ -11,7 +11,7 @@
 //   blobs          —— 文件二进制旁存 ({key,blob}, keyPath = key); 文件节点存 blobRef 指向此处, Blob 不进同步
 
 const DB_NAME = "wonita-home"
-// v2: 新增 subscriptions 仓库 (「发现」的来源订阅回流到 home)。
+// v2: 新增 subscriptions 仓库 (「发现」的来源关注后汇入 home)。
 // v3: 新增 agentThreads 仓库 (AI 助手对话, 本地优先)。升级时旧仓库原样保留。
 // v4: 新增 notes + noteNotebooks 仓库 (类 Notion 块编辑笔记, 本地优先)。纯增量, 旧仓库原样保留。
 // v5: 笔记升级为递归页树 (notebookId→parentId + sortKey, 笔记本→根目录页)。无新仓库 (仍用 notes /
@@ -23,7 +23,7 @@ const DB_NAME = "wonita-home"
 //     数据迁移走 bookmarks-store 的懒迁移 (seedBookmarksOnce)。版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
 // v8: 折叠步 B 续 (文件迁入 nodes, kind:"file") + 新增 blobs 仓库 (文件二进制旁存)。纯增量 (零 I/O upgrade);
 //     数据迁移走 files-store 的懒迁移 (seedFilesOnce): 把内联 Blob 拆到 blobs, 节点存 blobRef。
-// v9: 折叠步 C (订阅迁入 nodes, kind:"feed", 确定性 id feed:type:key)。无新仓库 (零 I/O upgrade);
+// v9: 折叠步 C (关注迁入 nodes, kind:"feed", 确定性 id feed:type:key)。无新仓库 (零 I/O upgrade);
 //     数据迁移走 subscriptions-store 的懒迁移 (seedFeedsOnce); 同步仍走 "subs" scope (feed 节点↔旧 wire 投影)。
 //     版本号 +1 仅为让旧代码标签页主动让位 (onversionchange)。
 // v10: 折叠步 D (线程迁入 nodes, kind:"thread"; 四步折叠收官)。无新仓库 (零 I/O upgrade);

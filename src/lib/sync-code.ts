@@ -12,7 +12,7 @@ export function getSyncCode(): string | null {
   }
 }
 
-/** 订阅同步码变化 (供 useSyncExternalStore); 写入/清除时通知。 */
+/** 监听同步码变化 (供 useSyncExternalStore); 写入/清除时通知。 */
 export function subscribeSyncCode(cb: () => void): () => void {
   codeListeners.add(cb)
   return () => {
@@ -38,7 +38,7 @@ export function clearSyncCode(): void {
   codeListeners.forEach((l) => l())
 }
 
-// 跨标签页同步: 另一标签页写入/清除同步码后, 本页订阅者 (设备药丸 / 同步面板) 实时刷新。
+// 跨标签页同步: 另一标签页写入/清除同步码后, 本页监听者 (设备药丸 / 同步面板) 实时刷新。
 // storage 事件只在其它标签页触发 (本页 set/clear 已手动 notify)。SSR 期无 window, 跳过。
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {

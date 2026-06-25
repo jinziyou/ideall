@@ -13,9 +13,9 @@ import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 
 /**
- * 跨端同步面板 —— 用同步码在多设备间同步订阅 (端到端加密)。
+ * 跨端同步面板 —— 用同步码在多设备间同步关注 (端到端加密)。
  * 同步码存本地 (useSyncExternalStore 读取); 已开启则进面板时自动同步一次。
- * 同步完成广播 `wonita:subscriptions-synced`, 订阅流监听后刷新。
+ * 同步完成广播 `wonita:subscriptions-synced`, 关注流监听后刷新。
  */
 export default function SyncPanel() {
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, () => null)
@@ -88,7 +88,7 @@ export default function SyncPanel() {
         }
       />
       <p className="mt-2 text-xs text-muted-foreground">
-        用同步码在多设备间同步订阅与笔记，服务器只存密文。删除会跨端同步（旧删除记录 90
+        用同步码在多设备间同步关注与笔记，服务器只存密文。删除会跨端同步（旧删除记录 90
         天后自动清理）。
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -97,7 +97,7 @@ export default function SyncPanel() {
           className="gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
         >
           <Lock className="h-3 w-3" />
-          订阅明文 · 只存本机
+          关注明文 · 只存本机
         </Badge>
         <Badge
           variant="outline"
@@ -144,7 +144,7 @@ export default function SyncPanel() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                在其它设备的「我的 · 订阅」里粘贴此码。谁拿到同步码，都能读写你的订阅与笔记。
+                在其它设备的「我的 · 关注」里粘贴此码。谁拿到同步码，都能读写你的关注与笔记。
               </p>
             </>
           )}

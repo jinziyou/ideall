@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils"
 import CommandTrigger from "./command-trigger"
 
 /**
- * 三 app 统一页头 —— spoke 色点 + 标题 + 一句回流定位描述, 右侧方案 3 命令台触发器 (⌘K)。
+ * 三 app 统一页头 —— spoke 色点 + 标题 + 一句定位描述, 右侧方案 3 命令台触发器 (⌘K)。
  * dotClass 由各 app 以静态字面量传入 (bg-spoke-info / bg-spoke-community / bg-spoke-tool)。
  */
 export function AppHeader({

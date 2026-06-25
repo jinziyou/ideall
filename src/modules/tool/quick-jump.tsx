@@ -12,7 +12,7 @@ import { isTauri } from "@/lib/tauri"
 const HISTORY_LIMIT = 10
 const EMPTY_HISTORY: string[] = []
 
-// localStorage 历史的轻量存储: 用 useSyncExternalStore 订阅, 既避免 SSR 水合不一致,
+// localStorage 历史的轻量存储: 用 useSyncExternalStore 监听, 既避免 SSR 水合不一致,
 // 又能在同标签页内写入后即时刷新 (storage 事件只跨标签页触发, 故自维护通知)。
 const listeners = new Set<() => void>()
 const cache = new Map<string, { raw: string | null; value: string[] }>()

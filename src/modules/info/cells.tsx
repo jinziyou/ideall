@@ -169,7 +169,7 @@ export function EntityCell({ entities }: { entities: NameEntity[] | undefined })
   )
 }
 
-/** 发布者单元格 (hover 显示域名, 并可就地订阅该发布者)。 */
+/** 发布者单元格 (hover 显示域名, 并可就地关注该发布者)。 */
 export function PublisherHoverCell({ publisher }: { publisher: Publisher | undefined }) {
   if (!publisher) return <span className="text-muted-foreground">-</span>
   return (

@@ -3,7 +3,7 @@ import { ChevronRight, CornerDownLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/node-format"
 
-/** 一条「回流」记录: 把发现模块的对象 / 资源收入「我的」的一次动作。 */
+/** 一条「关注」记录: 把发现模块的对象 / 资源收入「我的」的一次动作。 */
 export type FlowItem = {
   id: string
   ts: number
@@ -31,7 +31,7 @@ function groupOf(ts: number): GroupName {
 }
 
 /**
- * 「最近回流」时间线 —— 重设计的脊柱: 回流第一次有了肉眼可见的落点。
+ * 「最近关注」时间线 —— 重设计的脊柱: 关注第一次有了肉眼可见的落点。
  * 跨 subscriptions / bookmarks / files 按时间倒序合并, 分今天 / 本周 / 更早。
  */
 export function RecentFlowback({ items }: { items: FlowItem[] }) {

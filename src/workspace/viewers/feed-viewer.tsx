@@ -1,7 +1,7 @@
 "use client"
 
-// 节点查看器: 订阅 (feed)。自取数 (getSubscription) + 经协议内容解析 (resolveSubscription) 拉取单源最新条目。
-// tool 类订阅无内容流, 改为「打开工具」启动入口。条目外链经 safeHref 协议白名单 (防伪协议 XSS)。
+// 节点查看器: 关注 (feed)。自取数 (getSubscription) + 经协议内容解析 (resolveSubscription) 拉取单源最新条目。
+// tool 类关注无内容流, 改为「打开工具」启动入口。条目外链经 safeHref 协议白名单 (防伪协议 XSS)。
 import * as React from "react"
 import { ExternalLink, Loader2, Rss } from "lucide-react"
 import { Button } from "@/ui/button"
@@ -40,7 +40,7 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
           return
         }
         setSub(s)
-        renameNodeTab({ kind: "feed", id: nodeId }, s.title || s.key || "订阅")
+        renameNodeTab({ kind: "feed", id: nodeId }, s.title || s.key || "关注")
         if (s.type === "tool") {
           setItems([]) // 工具无内容流 (下方改为启动入口)
           return
@@ -66,7 +66,7 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
   }, [nodeId])
 
   if (missing) {
-    return <div className="p-6 text-sm text-muted-foreground">该订阅不存在或已取消。</div>
+    return <div className="p-6 text-sm text-muted-foreground">该关注不存在或已取消。</div>
   }
   if (!sub) {
     return (

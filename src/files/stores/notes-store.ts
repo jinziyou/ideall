@@ -1,7 +1,7 @@
 // 笔记本地存储仓库 —— 基于 IndexedDB。Notion 式「目录即页面」递归页树:
 // 每个 Note 既是页面又是目录, 经 parentId 无限嵌套; 同级以 sortKey (fractional index) 排序。
 // 照 bookmarks-store / files-store 的本地优先模式: 列表只回元数据 + 摘要, 完整正文按需单取。
-// 删除走软删墓碑 (deletedAt, 与订阅一致), 以便跨端传播删除; 读路径过滤墓碑。
+// 删除走软删墓碑 (deletedAt, 与关注一致), 以便跨端传播删除; 读路径过滤墓碑。
 import { Note, NoteMeta, NoteContent, NewNote } from "@/modules/home/model"
 import type { NodeKind } from "@protocol/node"
 import { genId } from "@/lib/id"

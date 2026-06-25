@@ -15,7 +15,7 @@ import { getSession, subscribeSession } from "@protocol/auth"
 import { deletePublication, getPeerPublications, publish, type Publication } from "@protocol/peer"
 
 /**
- * 「我的 · 发布」: 登录用户发布内容 (供社区订阅) + 管理自己的发布。
+ * 「我的 · 发布」: 登录用户发布内容 (供社区关注) + 管理自己的发布。
  * 自己的发布列表复用公开端点 GET /peer/{id}/publications (id = 当前用户)。
  */
 export default function MyPublications() {
@@ -71,7 +71,7 @@ export default function MyPublications() {
         <div className="space-y-1">
           <p className="font-medium">发布要用账号身份，与本机数据、同步码无关</p>
           <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-            登录后发布内容，供他人订阅。
+            登录后发布内容，供他人关注。
           </p>
         </div>
         <Button asChild size="sm">
@@ -134,7 +134,7 @@ export default function MyPublications() {
               公开 · 经服务器
             </Badge>
           </div>
-          <CardDescription>发布是公开的，任何人都能订阅。</CardDescription>
+          <CardDescription>发布是公开的，任何人都能关注。</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onPublish} className="flex flex-col gap-2">

@@ -1,6 +1,6 @@
 // 工作区模块配置 (单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 两种模式 (模式切换):
-//   本地(local): 我的(home) · 订阅(subscriptions) · 关注(following) —— 只存本机的个人数据
+//   本地(local): 我的(home) · 关注(subscriptions) · 关注(following) —— 只存本机的个人数据
 //   连接(connected): 资讯(info) · 社区(community) · 工具(tool) · AI(agent) —— 联网的发现/工具/AI
 
 import type { ComponentType } from "react"
@@ -17,7 +17,6 @@ import {
   NotebookPen,
   Rss,
   Search,
-  UserRound,
   Wrench,
 } from "lucide-react"
 import type { ModuleId, TabDescriptor, WsMode } from "./types"
@@ -88,43 +87,24 @@ export const MODULES: ModuleConfig[] = [
     entries: homeEntries,
   },
   {
+    // 关注 = 全部动态来源 (发布者 / 实体 / 搜索 / 社区发布者 peer) 的统一入口; 内容汇入「我的」。
+    // 旧的「关注」(资讯源) 与「关注」(社区 peer) 两个入口已合并到这里。
     id: "subscriptions",
     mode: "local",
-    label: "订阅",
+    label: "关注",
     icon: Rss,
     colorClass: "text-spoke-info",
-    sidebarTitle: "订阅",
-    sidebarHint: "已订阅的发布者 / 实体 / 搜索，内容回流到本机。",
+    sidebarTitle: "关注",
+    sidebarHint: "关注的发布者 / 实体 / 搜索 / 社区发布者，内容汇入「我的」。",
     entries: [
       {
-        label: "订阅流",
+        label: "关注流",
         icon: Rss,
         descriptor: {
           kind: "subscriptions",
           module: "subscriptions",
-          title: "订阅",
-          path: "/home/subscriptions",
-        },
-      },
-    ],
-  },
-  {
-    id: "following",
-    mode: "local",
-    label: "关注",
-    icon: UserRound,
-    colorClass: "text-spoke-community",
-    sidebarTitle: "关注",
-    sidebarHint: "关注的社区发布者，他们的发布回流到本机。",
-    entries: [
-      {
-        label: "关注的发布者",
-        icon: UserRound,
-        descriptor: {
-          kind: "following",
-          module: "following",
           title: "关注",
-          path: "/home/following",
+          path: "/home/subscriptions",
         },
       },
     ],
@@ -137,7 +117,7 @@ export const MODULES: ModuleConfig[] = [
     icon: Newspaper,
     colorClass: "text-spoke-info",
     sidebarTitle: "资讯",
-    sidebarHint: "聚合发布者与实体资讯，订阅与收藏回流到「我的」。",
+    sidebarHint: "聚合发布者与实体资讯，关注与收藏汇入「我的」。",
     entries: [
       {
         label: "资讯主页",
@@ -154,7 +134,7 @@ export const MODULES: ModuleConfig[] = [
     icon: MapIcon,
     colorClass: "text-spoke-community",
     sidebarTitle: "社区",
-    sidebarHint: "发现社区发布者并关注，他们的发布回流到「关注」。",
+    sidebarHint: "发现社区发布者并关注，他们的发布汇入「我的」。",
     entries: [
       {
         label: "社区主页",
@@ -171,7 +151,7 @@ export const MODULES: ModuleConfig[] = [
     icon: Wrench,
     colorClass: "text-spoke-tool",
     sidebarTitle: "工具",
-    sidebarHint: "搜索 / AI / 导航，钉住的工具回流到「我的」。",
+    sidebarHint: "搜索 / AI / 导航，钉住的工具汇入「我的」。",
     entries: [
       {
         label: "搜索",
@@ -222,11 +202,17 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
     return {
       kind: "subscriptions",
       module: "subscriptions",
-      title: "订阅",
+      title: "关注",
       path: "/home/subscriptions",
     }
   if (pathname.startsWith("/home/following"))
-    return { kind: "following", module: "following", title: "关注", path: "/home/following" }
+    // 关注已合并入 subscriptions 模块; /home/following 仍可达, 解析到统一「关注」标签。
+    return {
+      kind: "subscriptions",
+      module: "subscriptions",
+      title: "关注",
+      path: "/home/subscriptions",
+    }
   if (pathname.startsWith("/home")) return homeEntries[0].descriptor
   if (pathname.startsWith("/info"))
     return { kind: "info", module: "info", title: "资讯", path: "/info" }

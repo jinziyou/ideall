@@ -12,7 +12,7 @@ import { undoableToast } from "@/lib/undo-toast"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 订阅开关 (反馈原语) —— 把「发现」里的来源 (发布者 / 实体 / peer) 订阅回「我的」(home)。
+ * 关注开关 (反馈原语) —— 把「发现」里的来源 (发布者 / 实体 / peer) 关注回「我的」(home)。
  * 经 protocol 的 FilesPort 写入 (本地优先, 浏览器 IndexedDB), 发现模块不直接依赖底层存储。
  * 可在 info / community 等模块复用。
  */
@@ -27,7 +27,7 @@ export function SubscribeButton({
 }) {
   const { type, key, title } = sub
   const router = useRouter()
-  // null = 尚未读出本地订阅状态 (按钮先禁用, 避免误判已/未订阅)
+  // null = 尚未读出本地关注状态 (按钮先禁用, 避免误判已/未关注)
   const [subscribed, setSubscribed] = React.useState<boolean | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [pulse, setPulse] = React.useState(false)
@@ -51,8 +51,8 @@ export function SubscribeButton({
       if (subscribed) {
         await hub.removeSubscription(type, key)
         setSubscribed(false)
-        // 订阅是长期积累的资产, 误点取消可一键撤销 (触屏无 hover, 故用可撤销 toast 而非悬停态)
-        undoableToast(`已取消订阅 ${title}`, () =>
+        // 关注是长期积累的资产, 误点取消可一键撤销 (触屏无 hover, 故用可撤销 toast 而非悬停态)
+        undoableToast(`已取消关注 ${title}`, () =>
           getFilesPort()
             .addSubscription(sub)
             .then(() => setSubscribed(true)),
@@ -60,12 +60,12 @@ export function SubscribeButton({
       } else {
         await hub.addSubscription(sub)
         setSubscribed(true)
-        flowbackToast(`已订阅 ${title}`, () => router.push("/home/subscriptions"))
+        flowbackToast(`已关注 ${title}`, () => router.push("/home/subscriptions"))
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }
     } catch {
-      toast.error(subscribed ? "取消订阅失败，请重试" : "订阅失败，请重试")
+      toast.error(subscribed ? "取消关注失败，请重试" : "关注失败，请重试")
     } finally {
       setBusy(false)
     }
@@ -78,8 +78,8 @@ export function SubscribeButton({
       variant={subscribed ? "secondary" : "default"}
       disabled={subscribed === null || busy}
       onClick={toggle}
-      aria-label={subscribed ? `取消订阅 ${title}` : `订阅 ${title}`}
-      title={subscribed ? "已订阅 · 点击取消" : undefined}
+      aria-label={subscribed ? `取消关注 ${title}` : `关注 ${title}`}
+      title={subscribed ? "已关注 · 点击取消" : undefined}
       className={cn("shrink-0", pulse && "animate-flowback motion-reduce:animate-none", className)}
     >
       {busy ? (
@@ -89,7 +89,7 @@ export function SubscribeButton({
       ) : (
         <Plus className="h-4 w-4" />
       )}
-      {subscribed ? "已订阅" : "订阅"}
+      {subscribed ? "已关注" : "关注"}
     </Button>
   )
 }

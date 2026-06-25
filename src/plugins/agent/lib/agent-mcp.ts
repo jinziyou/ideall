@@ -80,7 +80,7 @@ const KIND_LABEL: Record<string, string> = {
   bookmark: "书签",
   folder: "收藏夹",
   file: "文件",
-  feed: "订阅",
+  feed: "关注",
   thread: "对话",
 }
 function nodeLabel(d: Record<string, unknown> | undefined): string {

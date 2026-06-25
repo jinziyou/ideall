@@ -1,4 +1,4 @@
-// 登录会话本地存储 (token + 当前用户), localStorage; 供 useSyncExternalStore 订阅。
+// 登录会话本地存储 (token + 当前用户), localStorage; 供 useSyncExternalStore 监听。
 // 这是公开发布身份, 与「跨端同步」的无账号同步码 (plugins/sync/lib/subscription-sync) 是两套独立身份。
 
 import type { CurrentUser } from "./auth-api"
@@ -62,7 +62,7 @@ export function clearSession(): void {
 }
 
 // 跨标签页同步: storage 事件只在「其它」标签页触发 (本页 set/clear 已手动 notify listeners)。
-// 多窗口下另一标签页登录/登出后, 本页订阅者 (account-menu / my-publications / sync-panel) 据此实时
+// 多窗口下另一标签页登录/登出后, 本页监听者 (account-menu / my-publications / sync-panel) 据此实时
 // 刷新而非持续显示陈旧会话态。SSR 预渲染期无 window, 跳过。
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {

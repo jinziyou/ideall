@@ -1,5 +1,5 @@
-// info 模块 manifest —— 向「我的」注册「发布者 / 实体 / 搜索」三类订阅的内容解析器。
-// 「我的」订阅流经此拉取最新文章, 不再直接 import info 的 action (依赖反转)。
+// info 模块 manifest —— 向「我的」注册「发布者 / 实体 / 搜索」三类关注的内容解析器。
+// 「我的」关注流经此拉取最新文章, 不再直接 import info 的 action (依赖反转)。
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import type { ContentResolver, FeedItem, ResolveCtx, ResolverRegistration } from "@protocol/content"
 import { fetchLatestInfo } from "./data"

@@ -5,7 +5,7 @@ import { Info } from "./model"
 import { EntityCell, PublisherHoverCell, TimeCell, TitleCell } from "./cells"
 import { SaveToMine } from "@/shared/feeders"
 
-/** Info.publisher → SaveToMine 的 publisher 入参 (domain 缺失时不提供订阅项)。 */
+/** Info.publisher → SaveToMine 的 publisher 入参 (domain 缺失时不提供关注项)。 */
 function pubOf(info: Info): { domain: string; name?: string } | undefined {
   const domain = info.publisher?.domain
   return domain ? { domain, name: info.publisher?.name ?? undefined } : undefined
@@ -92,7 +92,7 @@ export const getInfoColumns = (): ColumnDef<Info>[] => [
   },
 ]
 
-/** 搜索结果表格列 (/info/search): 行操作菜单 = 收入「我的」(收藏 / 订阅 / 原文 / 全面报道)。 */
+/** 搜索结果表格列 (/info/search): 行操作菜单 = 收入「我的」(收藏 / 关注 / 原文 / 全面报道)。 */
 export const getSearchColumns = (): ColumnDef<Info>[] => [
   {
     accessorKey: "title",

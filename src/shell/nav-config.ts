@@ -28,28 +28,28 @@ export type NavLink = {
 export const HOME_HREF = "/home"
 export const HOME_LABEL = "我的"
 
-/** 三个发现模块: 内容经订阅/关注回流到「我的」, 各带一个分类色点。 */
+/** 三个发现模块: 内容经关注汇入「我的」, 各带一个分类色点。 */
 export const SPOKES: NavLink[] = [
   {
     href: "/info",
     label: "资讯",
     icon: Newspaper,
     dot: "bg-spoke-info",
-    hint: "订阅发布者与实体 · 收藏文章",
+    hint: "关注发布者与实体 · 收藏文章",
   },
   {
     href: "/community",
     label: "社区",
     icon: Map,
     dot: "bg-spoke-community",
-    hint: "订阅社区发布者 · 接收他人发布",
+    hint: "关注社区发布者 · 接收他人发布",
   },
   {
     href: "/tool",
     label: "工具",
     icon: Wrench,
     dot: "bg-spoke-tool",
-    hint: "钉住工具 · 把搜索存成订阅",
+    hint: "钉住工具 · 把搜索存成关注",
   },
 ]
 
@@ -57,7 +57,7 @@ export const SPOKES: NavLink[] = [
 export const HOME_SUBPAGES: NavLink[] = [
   { href: "/home", label: "概览", icon: LayoutDashboard },
   { href: "/home/notes", label: "笔记", icon: NotebookPen, hint: "创建与编写笔记" },
-  { href: "/home/subscriptions", label: "订阅", icon: Rss },
+  { href: "/home/subscriptions", label: "关注", icon: Rss },
   { href: "/home/publications", label: "发布", icon: Megaphone },
   { href: "/home/resources", label: "资源", icon: FolderOpen },
   { href: "/home/bookmarks", label: "书签", icon: Bookmark },

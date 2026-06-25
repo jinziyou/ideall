@@ -47,8 +47,8 @@ function buildFlow(
   const items: FlowItem[] = []
   for (const n of notes) {
     items.push({
-      // 与 订阅/书签/资源 一致, 用 createdAt (收进「我的」的时间) 而非 updatedAt,
-      // 否则反复编辑同一篇会不断把它顶到回流时间线最前、挤掉真正的新增。
+      // 与 关注/书签/资源 一致, 用 createdAt (收进「我的」的时间) 而非 updatedAt,
+      // 否则反复编辑同一篇会不断把它顶到关注时间线最前、挤掉真正的新增。
       id: `note:${n.id}`,
       ts: n.createdAt,
       dotClass: "bg-pop",
@@ -102,7 +102,7 @@ export default function Overview() {
         listSubscriptions().catch(() => [] as Subscription[]),
         listBookmarks().catch(() => []),
         listFiles().catch(() => []),
-        // 回流时间线只用 标题/时间, 跳过对每条笔记的全文 walk
+        // 关注时间线只用 标题/时间, 跳过对每条笔记的全文 walk
         listNotes({ text: false }).catch(() => []),
         countAgentThreads().catch(() => 0),
       ])
@@ -118,7 +118,7 @@ export default function Overview() {
       })
     }
     load()
-    // 同会话内任意回流 / 跨端同步后刷新仪表盘 (onFilesUpdated 同听 FILES_UPDATED + SUBSCRIPTIONS_SYNCED)。
+    // 同会话内任意关注 / 跨端同步后刷新仪表盘 (onFilesUpdated 同听 FILES_UPDATED + SUBSCRIPTIONS_SYNCED)。
     // 防抖: 批量写 (如导入书签) 会密集触发事件, 合并为一次重载, 避免每次写都整库重读。
     let timer: ReturnType<typeof setTimeout> | undefined
     const off = onFilesUpdated(() => {
@@ -165,17 +165,17 @@ export default function Overview() {
         threads={data.threads}
       />
 
-      {/* 便当: 最近回流 (大块, 脊柱) + 右列 (去发现 / AI 快问) */}
+      {/* 便当: 最近关注 (大块, 脊柱) + 右列 (去发现 / AI 快问) */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-l-2 border-l-pop bg-card p-5 shadow-sm lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
-            <h2 className="text-sm font-semibold">最近回流</h2>
+            <h2 className="text-sm font-semibold">最近关注</h2>
             <span className="text-xs text-muted-foreground">· 实时更新 · 都存在本机</span>
           </div>
           {data.flow.length > 0 ? (
             <RecentFlowback items={data.flow} />
           ) : (
-            <p className="text-sm text-muted-foreground">还没有回流记录。去「发现」订阅或收藏。</p>
+            <p className="text-sm text-muted-foreground">还没有关注记录。去「发现」关注或收藏。</p>
           )}
         </div>
 
@@ -183,7 +183,7 @@ export default function Overview() {
           {/* 去发现 */}
           <div className="rounded-2xl border bg-card p-5 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
-            <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都能回流到这里</p>
+            <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都能汇入这里</p>
             <div className="flex flex-col gap-2.5">
               {SPOKES.map((s) => (
                 <Link
@@ -265,8 +265,8 @@ const LOCAL_STARTERS = [
 ]
 
 /**
- * 空「我的」: 先给「本机即可开始」的零后端抓手 (无需联网 / 账号), 再用发现模块→回流的示意图讲清回流心智。
- * 「回流」在副标题里用白话点明 (收进「我的」), 命令台入口改为可点 (触屏也能用)。
+ * 空「我的」: 先给「本机即可开始」的零后端抓手 (无需联网 / 账号), 再用发现模块→关注的示意图讲清关注心智。
+ * 「关注」在副标题里用白话点明 (收进「我的」), 命令台入口改为可点 (触屏也能用)。
  */
 function EmptyOverview() {
   return (
@@ -276,7 +276,7 @@ function EmptyOverview() {
         「我的」还是空的
       </span>
       <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
-        在本机写点、存点，或去「发现」订阅来源 —— 内容都会收进这里（我们叫它「回流」）。
+        在本机写点、存点，或去「发现」关注来源 —— 内容都会收进这里。
       </p>
 
       {/* 第一梯队: 本机即可开始 (零后端, 离线可用), 确保首个动作必成功 */}
@@ -317,7 +317,7 @@ function EmptyOverview() {
         </div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <CornerDownLeft className="h-3.5 w-3.5" />
-          订阅 / 收藏后自动收进「我的」
+          关注 / 收藏后自动收进「我的」
         </div>
       </div>
 

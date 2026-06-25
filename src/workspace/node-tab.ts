@@ -10,7 +10,7 @@ import { isNodeKind, refToQuery, type NodeKind, type NodeRef } from "./node-ref"
 /**
  * 节点 kind → 归属模块 (驱动活动栏高亮 / 模式镜头 / 标签色点)。
  * 全部本地 node kind 归 "home": 它们都经「我的」的 places 文件树打开, 归 home 保持 places 侧栏连贯,
- * 且不切走镜头 (thread 归 local 视图、移除 agent 的 connected 归属, 见设计 §1; feed 同理不跳订阅模块)。
+ * 且不切走镜头 (thread 归 local 视图、移除 agent 的 connected 归属, 见设计 §1; feed 同理不跳关注模块)。
  */
 const MODULE_OF_KIND: Record<NodeKind, ModuleId> = {
   note: "home",
