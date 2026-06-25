@@ -28,6 +28,7 @@ const BookmarkManager = React.lazy(() => import("@/modules/home/bookmarks/bookma
 const ToolSearch = React.lazy(() => import("@/modules/tool/search/page"))
 const ToolAi = React.lazy(() => import("@/modules/tool/ai/page"))
 const ToolNavigation = React.lazy(() => import("@/modules/tool/navigation/page"))
+const BrowserView = React.lazy(() => import("./browser-view"))
 
 export type TabLayout = "padded" | "fill"
 
@@ -59,6 +60,7 @@ const REGISTRY: Record<string, Entry> = {
   "tool-search": { render: () => <ToolSearch />, layout: "padded" },
   "tool-ai": { render: () => <ToolAi />, layout: "padded" },
   "tool-navigation": { render: () => <ToolNavigation />, layout: "padded" },
+  "browser-view": { render: () => <BrowserView />, layout: "fill" },
 }
 
 const Spinner = (

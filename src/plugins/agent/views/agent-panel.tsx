@@ -56,6 +56,9 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null)
   // 同步的发送中标志, 防止 sending 状态异步生效前的重入 (连按 Enter 创建孤儿线程)
   const sendingRef = React.useRef(false)
+  // 输入法 (IME) 组合中标志: Tauri 的 WebKitGTK webview 下 keydown 的 isComposing 不可靠 (组合中常为 false),
+  // 仅凭它会让中文选词/确认候选的 Enter 被误判为发送、打断组合 → 改用 compositionstart/end 维护此 ref 兜底。
+  const composingRef = React.useRef(false)
 
   const refreshThreads = React.useCallback(async () => {
     try {
@@ -263,7 +266,8 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
   }
 
   function onComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // 组合中 (拼音选词 / 确认候选) 的 Enter 不应发送; isComposing 在 WebKitGTK 不可靠, 叠加 composingRef 兜底。
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !composingRef.current) {
       e.preventDefault()
       send()
     }
@@ -441,6 +445,12 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
               }
               className="max-h-40 min-h-[2.75rem] resize-none"
               onChange={(e) => setInput(e.target.value)}
+              onCompositionStart={() => {
+                composingRef.current = true
+              }}
+              onCompositionEnd={() => {
+                composingRef.current = false
+              }}
               onKeyDown={onComposerKeyDown}
             />
             {sending ? (

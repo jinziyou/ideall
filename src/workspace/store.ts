@@ -17,9 +17,11 @@ const MODE_OF: Record<ModuleId, WsMode> = {
   home: "local",
   subscriptions: "local",
   following: "local",
+  search: "local",
+  tool: "local",
   info: "connected",
   community: "connected",
-  tool: "connected",
+  browser: "connected",
   agent: "connected",
 }
 

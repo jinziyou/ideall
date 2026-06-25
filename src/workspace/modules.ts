@@ -1,7 +1,8 @@
 // 工作区模块配置 (单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 两种模式 (模式切换):
-//   本地(local): 我的(home) · 关注(subscriptions) · 关注(following) —— 只存本机的个人数据
-//   连接(connected): 资讯(info) · 社区(community) · 工具(tool) · AI(agent) —— 联网的发现/工具/AI
+//   本地(local): 我的(home) · 关注(subscriptions) · 搜索(search) · 工具(tool) —— 本机数据 + 常用工具
+//   连接(connected): 资讯(info) · 社区(community) —— 联网的发现
+// 注: 「搜索」= 聚合搜索 (跳外部搜索引擎); 顶栏的「本地搜索」负责搜本机内容, 两者职责分离。
 
 import type { ComponentType } from "react"
 import {
@@ -9,6 +10,7 @@ import {
   Bot,
   Compass,
   FolderOpen,
+  Globe,
   Hexagon,
   LayoutDashboard,
   Map as MapIcon,
@@ -109,6 +111,49 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
+  {
+    // 搜索 = 聚合搜索 (选引擎输词, 跳转各大外部搜索引擎); 与顶栏「本地搜索」职责分离。
+    id: "search",
+    mode: "local",
+    label: "搜索",
+    icon: Search,
+    colorClass: "text-spoke-tool",
+    sidebarTitle: "搜索",
+    sidebarHint: "聚合搜索：选引擎输词，一键跳转各大搜索引擎（搜本机内容请用顶栏搜索）。",
+    entries: [
+      {
+        label: "打开搜索页",
+        icon: Search,
+        descriptor: { kind: "tool-search", module: "search", title: "搜索", path: "/tool/search" },
+      },
+    ],
+  },
+  {
+    id: "tool",
+    mode: "local",
+    label: "工具",
+    icon: Wrench,
+    colorClass: "text-spoke-tool",
+    sidebarTitle: "工具",
+    sidebarHint: "AI / 导航，钉住的工具汇入「我的」。",
+    entries: [
+      {
+        label: "AI",
+        icon: Bot,
+        descriptor: { kind: "tool-ai", module: "tool", title: "AI", path: "/tool/ai" },
+      },
+      {
+        label: "导航",
+        icon: Compass,
+        descriptor: {
+          kind: "tool-navigation",
+          module: "tool",
+          title: "导航",
+          path: "/tool/navigation",
+        },
+      },
+    ],
+  },
   // —— 连接 ——
   {
     id: "info",
@@ -145,35 +190,15 @@ export const MODULES: ModuleConfig[] = [
     ],
   },
   {
-    id: "tool",
+    // 浏览器 = 内嵌 webview 浏览任意外站, 工具条 ☆ 收藏当前页 → 本地书签 (仅桌面 App; 见 browser-launcher.tsx / src-tauri lib.rs)。
+    id: "browser",
     mode: "connected",
-    label: "工具",
-    icon: Wrench,
-    colorClass: "text-spoke-tool",
-    sidebarTitle: "工具",
-    sidebarHint: "搜索 / AI / 导航，钉住的工具汇入「我的」。",
-    entries: [
-      {
-        label: "搜索",
-        icon: Search,
-        descriptor: { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" },
-      },
-      {
-        label: "AI",
-        icon: Bot,
-        descriptor: { kind: "tool-ai", module: "tool", title: "AI", path: "/tool/ai" },
-      },
-      {
-        label: "导航",
-        icon: Compass,
-        descriptor: {
-          kind: "tool-navigation",
-          module: "tool",
-          title: "导航",
-          path: "/tool/navigation",
-        },
-      },
-    ],
+    label: "浏览器",
+    icon: Globe,
+    colorClass: "text-spoke-community",
+    sidebarTitle: "浏览器",
+    sidebarHint: "浏览网页，把收藏的页面汇入书签（仅桌面 App）。",
+    entries: [],
   },
   // 注: AI 不再作为活动栏模块/标签, 改为右侧常驻对话栏 (AI 原生)；见 right-ai-panel.tsx。
 ]
@@ -219,7 +244,7 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (pathname.startsWith("/community"))
     return { kind: "community", module: "community", title: "社区", path: "/community" }
   if (pathname.startsWith("/tool"))
-    return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
+    return { kind: "tool-search", module: "search", title: "搜索", path: "/tool/search" }
   return null
 }
 

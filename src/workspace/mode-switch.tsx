@@ -1,61 +1,52 @@
 "use client"
 
-// 顶栏左上角模式切换 (现代面板式下拉): 本地 ⇄ 连接。
-import { Check, ChevronDown } from "lucide-react"
+// 顶栏左上角模式切换 (Trae 式分段切换按钮): 本地 ⇄ 连接。
+// 两段并排, 激活段抬升 (bg-background + 阴影); 点另一段即切模式。各段 hint 经 title 悬浮提示保留。
 import { cn } from "@/lib/utils"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu"
 import { useMode, setMode } from "./store"
 import type { WsMode } from "./types"
 
 const MODES: { id: WsMode; label: string; hint: string; dot: string }[] = [
-  { id: "local", label: "本地", hint: "我的 · 关注 · 关注 —— 只存本机", dot: "bg-primary" },
-  {
-    id: "connected",
-    label: "连接",
-    hint: "资讯 · 社区 · 工具 · AI —— 联网",
-    dot: "bg-spoke-community",
-  },
+  { id: "local", label: "本地", hint: "我的 · 关注 · 工具 —— 本机数据 + 常用工具", dot: "bg-primary" },
+  { id: "connected", label: "连接", hint: "资讯 · 社区 —— 联网发现", dot: "bg-spoke-community" },
 ]
 
 export default function ModeSwitch() {
   const mode = useMode()
-  const cur = MODES.find((m) => m.id === mode) ?? MODES[0]
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 rounded-shell px-2 py-1 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-        >
-          <span className={cn("h-2 w-2 rounded-full", cur.dot)} />
-          {cur.label}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-60">
-        {MODES.map((m) => (
-          <DropdownMenuItem
+    <div
+      role="tablist"
+      aria-label="工作区模式"
+      className="flex shrink-0 items-center gap-0.5 rounded-shell bg-secondary/60 p-0.5"
+    >
+      {MODES.map((m) => {
+        const active = m.id === mode
+        return (
+          <button
             key={m.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            title={m.hint}
             onClick={() => setMode(m.id)}
-            className="flex items-start gap-2"
+            className={cn(
+              "flex items-center gap-1.5 rounded-[0.375rem] px-2.5 py-1 text-sm font-medium transition-colors",
+              active
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
           >
-            <span className={cn("mt-1 h-2 w-2 shrink-0 rounded-full", m.dot)} />
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-1.5 text-sm font-medium">
-                {m.label}
-                {m.id === mode && <Check className="h-3.5 w-3.5 text-primary" />}
-              </span>
-              <span className="block text-xs text-muted-foreground">{m.hint}</span>
-            </span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full transition-colors",
+                active ? m.dot : "bg-muted-foreground/40",
+              )}
+            />
+            {m.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }

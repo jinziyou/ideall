@@ -42,3 +42,50 @@ export async function openExternalUrl(href: string): Promise<void> {
   const mod = await import("@tauri-apps/plugin-opener")
   await mod.openUrl(href)
 }
+
+/** 主窗口内容区矩形 (CSS 像素, 相对窗口), 同步给内嵌浏览器子 webview。 */
+export type BrowserBounds = { x: number; y: number; w: number; h: number }
+
+async function tauriInvoke(cmd: string, args?: Record<string, unknown>): Promise<void> {
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke(cmd, args)
+}
+
+// —— 内嵌浏览器 (路线 A): 主窗口控制原生子 webview; 全部经自定义命令, 外站子 webview 零授权。 ——
+/** 打开内嵌浏览器子 webview, 加载 url, 定位到主窗口内容区 bounds (仅 Tauri 桌面)。 */
+export function openBrowserView(url: string, bounds: BrowserBounds): Promise<void> {
+  return tauriInvoke("open_browser_view", { url, b: bounds })
+}
+/** 同步子 webview 矩形 (内容区随窗口/侧栏变化时调用)。 */
+export function browserSetBounds(bounds: BrowserBounds): Promise<void> {
+  return tauriInvoke("browser_set_bounds", { b: bounds })
+}
+/** 地址栏导航。 */
+export function browserNavigate(url: string): Promise<void> {
+  return tauriInvoke("browser_navigate", { url })
+}
+export function browserBack(): Promise<void> {
+  return tauriInvoke("browser_back")
+}
+export function browserForward(): Promise<void> {
+  return tauriInvoke("browser_forward")
+}
+export function browserReload(): Promise<void> {
+  return tauriInvoke("browser_reload")
+}
+export function browserHide(): Promise<void> {
+  return tauriInvoke("browser_hide")
+}
+export function browserShow(): Promise<void> {
+  return tauriInvoke("browser_show")
+}
+export function browserClose(): Promise<void> {
+  return tauriInvoke("browser_close")
+}
+
+/** 监听内嵌浏览器当前 URL 变化 (on_navigation / on_page_load emit); 返回取消监听; 非 Tauri 为 no-op。 */
+export async function onBrowserUrl(cb: (url: string) => void): Promise<() => void> {
+  if (!isTauri()) return () => {}
+  const { listen } = await import("@tauri-apps/api/event")
+  return listen<string>("browser://url", (e) => cb(e.payload))
+}

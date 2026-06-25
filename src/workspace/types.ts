@@ -10,6 +10,8 @@ export type ModuleId =
   | "following"
   | "info"
   | "community"
+  | "browser"
+  | "search"
   | "tool"
   | "agent"
 
