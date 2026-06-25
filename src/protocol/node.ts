@@ -3,7 +3,7 @@
 //   - kind 为主辨识 (不设顶层 mime; file 用 blobRef.mime);
 //   - 可辨识联合杀掉 content:unknown 的类型逃逸; note 的 unknown[] 是协议纯度被迫且合理的妥协;
 //   - 折叠分步进行 (§3): 步 A 仅 note 物理入库, 其余 kind 类型先就位、随后续折叠落库。
-import type { NoteContent } from "./hub-data"
+import type { NoteContent } from "./files"
 import type { SubscriptionType } from "./subscription"
 
 export type NodeKind = "folder" | "note" | "bookmark" | "file" | "feed" | "thread"

@@ -1,4 +1,4 @@
-import AuthForm from "@/app/shell/auth-form"
+import AuthForm from "@/shell/auth-form"
 
 export const metadata = {
   title: "登录 | ideall",

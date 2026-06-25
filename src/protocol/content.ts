@@ -1,5 +1,5 @@
-// 订阅内容解析契约 —— 中枢订阅流要为「任意订阅类型」渲染最新条目, 但不应直接依赖某个 app。
-// 各 app 为自己拥有的订阅类型注册一个 resolver; 中枢按 sub.type 派发 (依赖反转)。
+// 订阅内容解析契约 —— 「我的」订阅流要为「任意订阅类型」渲染最新条目, 但不应直接依赖某个 app。
+// 各 app 为自己拥有的订阅类型注册一个 resolver; 「我的」按 sub.type 派发 (依赖反转)。
 import type { Subscription, SubscriptionType } from "./subscription"
 
 /** 归一化的订阅流条目 (info 文章 / peer 发布共用一种渲染)。 */

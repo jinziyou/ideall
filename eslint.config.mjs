@@ -1,16 +1,36 @@
 import nextConfig from "eslint-config-next"
 
-// 扁平布局 (app 路由+实现 / components 共享代码 / protocol 契约) 后, 原 OS 式分层边界解除;
-// 仅保留 protocol 纯度: 契约/端口层不得反向依赖 UI 与页面代码 (允许 @/components/lib 纯工具)。
+// 个人信息终端 · 分层边界。顶层目录即架构层:
+//   app(Next 路由薄标记) / shell(终端外壳) / workspace(一切皆标签) / files(一切皆文件·统一 Node 数据层) /
+//   modules(功能模块 home·info·community·tool) / plugins(agent·sync·embed) / protocol(契约/端口) /
+//   ui(原语+编辑器) / shared(跨层共享 UI) / lib(纯工具)。
+// ESLint 强制四条边界:
+//  (1) protocol 纯度 —— 契约/端口层只依赖 @/lib 纯工具叶子, 不得 import 任何 frame/功能/UI 层。
+//  (2) wire DTO 边界 —— 后端 openapi 生成类型 (@/lib/api/server) 仅 HTTP 适配器 (@/lib/server) 可 import。
+//  (3) app 路由不可被反向 import —— app/ 仅是「开标签」薄标记, 复用/功能层经 @protocol 端口协作。
+//  (4) modules 三应用互隔 —— info/community/tool 互不 import, 跨模块一律经 @protocol。
+// 注: flat config 的 no-restricted-imports 后匹配块整体覆盖 (不跨块合并), 故每块都重列适用禁令。
+
+const WIRE_DTO = {
+  group: ["@/lib/api/server", "@protocol/server"],
+  message:
+    "wire DTO 仅允许后端 HTTP 适配器 (@/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (ideall 自有协议)",
+}
+
+const NO_APP = {
+  group: ["@/app/**", "!@/app/globals.css"],
+  message:
+    "app/ 仅 Next 路由薄标记 (开标签); 复用/功能层不得反向 import 路由代码, 共享逻辑下沉 @/lib 或经 @protocol 端口注入",
+}
+
 const config = [
   ...nextConfig,
   {
-    // src/components/lib/api/server.d.ts 是 openapi-typescript 生成的, 不该被 lint
-    ignores: [".next/**", "node_modules/**", "public/**", "src/components/lib/api/**"],
+    // @/lib/api/server.d.ts 是 openapi-typescript 生成物, 不该被 lint
+    ignores: [".next/**", "node_modules/**", "public/**", "src/lib/api/**"],
   },
 
-  // protocol: 纯契约/端口/纯函数, 只依赖 @/components/lib (纯工具叶子); 不得 import UI 或 app,
-  // 也不得依赖 wonita 服务的 wire DTO —— 领域类型在 @protocol/server-port 自有定义。
+  // (1) protocol: 纯契约/端口/纯函数, 只依赖 @/lib 纯工具叶子; 不得 import frame/功能/UI 层, 也不得碰 wire DTO。
   {
     files: ["src/protocol/**/*.{ts,tsx}"],
     rules: {
@@ -19,98 +39,52 @@ const config = [
         {
           patterns: [
             {
-              group: ["@/app/*", "@/components/*", "!@/components/lib", "!@/components/lib/**"],
+              group: [
+                "@/app/**",
+                "@/shell/**",
+                "@/workspace/**",
+                "@/files/**",
+                "@/modules/**",
+                "@/plugins/**",
+                "@/ui/**",
+                "@/shared/**",
+              ],
               message:
-                "protocol 是纯契约/端口层, 只依赖 @/components/lib 纯工具; 不得 import UI 或页面代码",
+                "protocol 是纯契约/端口层, 只依赖 @/lib 纯工具; 不得 import frame/功能/UI 层 (领域类型自有定义)",
             },
-            {
-              group: ["@/components/lib/api/server", "@protocol/server"],
-              message:
-                "protocol 不得依赖 wonita 服务 wire DTO (openapi 生成类型); 领域类型在 @protocol/server-port 自有定义, wire→domain 映射收敛在 components/lib/server 适配器内",
-            },
+            WIRE_DTO,
           ],
         },
       ],
     },
   },
 
-  // wire DTO 边界: wonita 服务的 openapi 生成类型 (@/components/lib/api/server) 仅允许
-  // HTTP 适配器 (components/lib/server) import; 业务代码一律用 @protocol/server-port 领域类型。
+  // (2)+(3) 基线 (除 HTTP 适配器 / 生成物 / protocol 外的所有 src): wire DTO 边界 + 不得反向 import app 路由。
   {
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/components/lib/server/**", "src/components/lib/api/**", "src/protocol/**"],
+    ignores: ["src/lib/server/**", "src/lib/api/**", "src/protocol/**"],
     rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["@/components/lib/api/server", "@protocol/server"],
-              message:
-                "wire DTO 仅允许 HTTP 适配器 (components/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (ideall 自有协议)",
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { patterns: [WIRE_DTO, NO_APP] }],
     },
   },
 
-  // components → app 边界: 共享代码 (components) 不得反向 import 页面/路由 (app)。
-  // 注: flat config 的 no-restricted-imports 不跨 block 合并 (后匹配者整体覆盖), 故此处需再列 wire DTO 模式,
-  // 否则 components 会丢掉上面的 wire DTO 禁令。server/api 适配器例外 (允许用 wire DTO)。
-  {
-    files: ["src/components/**/*.{ts,tsx}"],
-    ignores: ["src/components/lib/server/**", "src/components/lib/api/**"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["@/app/*", "@/app/**"],
-              message:
-                "components 是跨 app/core/plugin 的共享层, 不得反向 import app (页面/路由代码); 共享逻辑下沉到 components/lib 或经 props 注入",
-            },
-            {
-              group: ["@/components/lib/api/server", "@protocol/server"],
-              message:
-                "wire DTO 仅允许 HTTP 适配器 (components/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (ideall 自有协议)",
-            },
-          ],
-        },
-      ],
-    },
-  },
-
-  // app 模块互隔 (惯例 → 强制): info / community / tool 互不 import, 跨模块协作一律经 @protocol。
-  // 注: 同前, 后匹配块整体覆盖 no-restricted-imports, 故每块须重列 components→app 与 wire DTO 两条禁令。
+  // (4) modules 三应用互隔: info / community / tool 互不 import; 跨模块经 @protocol 协作 (内容解析在各自 manifest 注册)。
   ...[
     ["info", ["community", "tool"]],
     ["community", ["info", "tool"]],
     ["tool", ["info", "community"]],
   ].map(([self, siblings]) => ({
-    files: [`src/components/apps/${self}/**/*.{ts,tsx}`],
+    files: [`src/modules/${self}/**/*.{ts,tsx}`],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
+            WIRE_DTO,
+            NO_APP,
             {
-              group: ["@/app/*", "@/app/**"],
-              message:
-                "components 是跨 app/core/plugin 的共享层, 不得反向 import app (页面/路由代码); 共享逻辑下沉到 components/lib 或经 props 注入",
-            },
-            {
-              group: ["@/components/lib/api/server", "@protocol/server"],
-              message:
-                "wire DTO 仅允许 HTTP 适配器 (components/lib/server) import; 业务代码用 @protocol/server-port 领域类型 (ideall 自有协议)",
-            },
-            {
-              group: siblings.flatMap((s) => [
-                `@/components/apps/${s}`,
-                `@/components/apps/${s}/**`,
-              ]),
-              message: `${self} 不得 import 其它 app (${siblings.join("/")}); 三 app 互隔, 跨模块经 @protocol 协作 (内容解析在各自 manifest 注册)`,
+              group: siblings.flatMap((s) => [`@/modules/${s}`, `@/modules/${s}/**`]),
+              message: `${self} 不得 import 其它应用模块 (${siblings.join("/")}); 三应用互隔, 跨模块经 @protocol 协作`,
             },
           ],
         },

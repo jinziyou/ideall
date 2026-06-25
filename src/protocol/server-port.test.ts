@@ -18,11 +18,11 @@ import {
   type Info,
   type Publication,
 } from "./server-port"
-// 缺省回退断言需引用参考适配器 —— protocol 规则允许依赖 @/components/lib/** 叶子 (见 eslint 配置)。
-import { httpServerAdapter } from "@/components/lib/server/http-adapter"
+// 缺省回退断言需引用参考适配器 —— protocol 规则允许依赖 @/lib/** 叶子 (见 eslint 配置)。
+import { httpServerAdapter } from "@/lib/server/http-adapter"
 // 经真实业务 facade 驱动写/鉴权路径, 证明消费方 (不止端口) 也不与 wonita 绑死 (读路径解耦见 info/data.test.ts)。
-import { publish, deletePublication, getPeerPublications } from "@/components/lib/peer-api"
-import { login } from "@/components/lib/auth/auth-api"
+import { publish, deletePublication, getPeerPublications } from "@/lib/peer-api"
+import { login } from "@/lib/auth/auth-api"
 
 // ── 一个完全独立于 wonita 的内存后端 (中立性的可执行证明) ──────────────────────────────────────
 // 仅用 @protocol/server-port 的领域类型, 不碰任何 wire DTO / HTTP / 官方端点。

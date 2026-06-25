@@ -4,13 +4,13 @@
 // 任何实现了 `ServerPort` 的节点 (官方 wonita 服务、第三方、未来嵌入式/局域网 peer)
 // 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 components/lib/server/http-adapter)。
 //
-// 与 HubDataPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
+// 与 FilesPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
 // ServerPort 是**同构**的 (SSR 预渲染期也要取数 —— `pnpm dev` 与导出前预渲染, 此时客户端启动闸 BootGate 尚未运行),
 // 故 `getServerPort()` 默认回退到官方 HTTP 适配器; App 形态 / 测试 / 未来其它节点可经
 // `registerServerPort()` 覆盖。领域类型在此自有定义, **不依赖** wonita 服务的 wire DTO
 // (openapi 生成的 `lib/api/server.d.ts`); wire→domain 的映射与漂移门收敛在 HTTP 适配器内。
-import type { ApiResult } from "@/components/lib/api"
-import { httpServerAdapter } from "@/components/lib/server/http-adapter"
+import type { ApiResult } from "@/lib/api"
+import { httpServerAdapter } from "@/lib/server/http-adapter"
 
 // ── 领域类型 (ideall 自有; 与 wonita 服务 wire DTO 在适配器内做编译期漂移门校验) ──────────────
 

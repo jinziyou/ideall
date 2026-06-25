@@ -4,7 +4,7 @@
 export type SubscriptionType = "publisher" | "entity" | "tool" | "search" | "peer"
 
 /**
- * 「发现」订阅 —— home 中枢从 info / community / tool 订阅的来源。
+ * 「发现」订阅 —— home「我的」从 info / community / tool 订阅的来源。
  * 本地优先: 仅订阅偏好存于 IndexedDB, 内容 (如最新文章) 实时经 ServerPort (默认 wonita 服务) 拉取。
  */
 export interface Subscription {
@@ -33,7 +33,7 @@ export interface Subscription {
   deletedAt?: number
 }
 
-/** app 提交给中枢的「新订阅」入参 (id/favicon/createdAt 由 core 补全)。 */
+/** app 提交给「我的」的「新订阅」入参 (id/favicon/createdAt 由 core 补全)。 */
 export type NewSubscription = {
   type: SubscriptionType
   key: string

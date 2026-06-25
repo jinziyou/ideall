@@ -13,7 +13,7 @@ src-tauri/target
 .claude
 
 # 生成文件 (由 openapi-typescript / sync 脚本产出, 勿手动格式化)
-src/components/lib/api/server.d.ts
+src/lib/api/server.d.ts
 openapi
 pnpm-lock.yaml
 

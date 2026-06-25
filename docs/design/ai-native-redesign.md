@@ -1,6 +1,7 @@
-# ideall 总体重构设计 — AI 原生个人空间 · 一切皆文件 · 一切皆标签
+# ideall 总体重构设计 — 个人信息终端 · 一切皆文件 · 一切皆标签
 
 > **状态**:设计稿(2026-06-24 起多轮对话 + 多代理对抗验证产出),**已全部落码**(P2→P5,统一 Node 库 / 一切皆标签 UI / `fs.*` AI 层 / 笔记块级合并)。本文是该重构的权威设计依据。
+> 代码已按终端分层重组(shell/workspace/files/modules/plugins/ui/shared/lib),文中 `文件:函数` 路径锚点为重组前位置,现行结构见 [architecture.md](../architecture.md) §3.3。
 > **关系**:现行架构见 [architecture.md](../architecture.md);本文是在其之上的下一代方向,**落地结果已回写** architecture.md §2(统一 Node)/§3.4(fs.* AI 层)/§6(不变量 8–10)。本文保留为完整推导与雷区清单。
 > 所有用户可见文案与代码注释用简体中文。文中 `文件:函数` 锚点指向现有代码的改动点。
 
@@ -8,7 +9,7 @@
 
 ## 0. 范围与方法
 
-把 ideall 从「本地优先的个人信息工作台」重新定位为 **AI 原生的个人空间**,用两条统一隐喻贯穿:
+把 ideall 重新定位为开源、本地优先、供应商中立的 **个人信息终端**,用两条统一隐喻贯穿(AI 原生是贯穿其中的设计思想之一):
 
 - **一切皆文件**(功能组织,借 Linux VFS):所有内容收敛为单一命名空间里的可寻址节点。
 - **一切皆标签**(UI):打开任意「文件」即开一个标签,标签是通用查看器/编辑器。
@@ -30,12 +31,12 @@
 
 | 不变量 | 本重构如何保持 |
 |---|---|
-| 供应商中立 | `NodeRef`/`Node`/viewer 注册表/`fs.*` 契约在 `protocol`/`embed`;AI 经 `HubMcp`(基于 `HubDataPort`)读写;BYO-key 直连任意端点。无新后端依赖。 |
+| 供应商中立 | `NodeRef`/`Node`/viewer 注册表/`fs.*` 契约在 `protocol`/`embed`;AI 经 `LocalMcp`(基于 `FilesPort`)读写;BYO-key 直连任意端点。无新后端依赖。 |
 | 个人数据默认不上传 | 寻址/`fs.*` 全走本地 IndexedDB;笔记正文默认**不进** AI 上下文(§6.3);同步仍走既有 E2E 密文块。 |
 | 协议纯度(ESLint) | `node-ref.ts`/`node.ts` 纯类型;viewer 注册表的组件是 `()=>import()` thunk;`content` 的 `note`/`thread` 分支用 `unknown[]` 不依赖 platejs。 |
 | wire DTO 边界 | 不触碰 HTTP 适配器;`/discover` 远程内容仍经 `ServerPort` 领域类型。 |
 | 两套独立身份 | `identity.publish` 独立权限位,token 宿主持有,**不被** `fs:write` 覆盖(§6.2)。 |
-| 零后端可用 | `note/bookmark/file/thread/tool` + agent(BYO-key)全离线;`thread` 归 local 视图,`MODE_OF` 移除 agent 的 connected 归属。 |
+| 零后端可用 | `note/bookmark/file/thread/tool` + agent(BYO-key)全离线;`thread` 归 local 视图,`MODE_OF` 移除 agent 的 connected 归属。wonita 是默认且经 `ServerPort` 可换/可自建的后端。 |
 | 跨端同步 LWW + 墓碑 | `Node` 满足 `SyncRecord`,`unionMerge`/`pruneExpiredTombstones`/`expiredTombstoneIdsToDelete` 逐字复用;按 kind 分区(§8)。 |
 
 ---
@@ -103,7 +104,7 @@ export type Node = BaseNode & (
 | **A** notes 播种 | 加 `kind:"note"`,`nodes-store` = `notes-store` 泛化(notes 是第一次折叠) | 无(已在同步) |
 | **B** bookmarks/files | 随机 id + 从未同步 → 首次同步**只会重复不会 LWW 丢**;补 `updatedAt=createdAt/sortKey`;硬删改软删;Blob 拆 `STORE_BLOBS` | 仅重复(按 URL/hash 去重启发式,不静默自动合并) |
 | **C** subscriptions | **保留确定性 id `feed:type:key`,绝不 genId**;同步边界 `feed 节点 ↔ 旧 Subscription wire` 投影,`"subs"` scope 零改;**含墓碑全量带过来**(漏带=已删订阅复活) | 一次性归一 churn(老记录补 updatedAt) |
-| **D** threads | 跨 plugin/core 边界,agent 插件改经 `HubDataPort` 消费(修依赖反转破例);同步默认关(对象 LWW 截断 messages[]);本地独占故硬删 | 默认不同步 |
+| **D** threads | 跨 plugin/core 边界,agent 插件改经 `FilesPort` 消费(修依赖反转破例);同步默认关(对象 LWW 截断 messages[]);本地独占故硬删 | 默认不同步 |
 
 `nodes-store` 读写主体见独立实现(`listNodes(kind)/listChildren/getNode/readBlob/getAncestors/createNode/updateNode(RMW)/moveNode/deleteNode({soft})/restoreNodes`),三处按 kind 分叉:`nodeText`(全文摘要)、file 的 Blob 旁存、content 归一化。树工具(`effectiveParentId/buildParentOf/cmpSibling`)、`computeSortKey`、`collectSubtreeIds` 逐字复用。
 
@@ -140,7 +141,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 
 ## 6. AI 层:fs.* 工具面 + 隐私(已对抗验证)
 
-**核心**:agent 与 iframe 共用同一条 `Grant → createHubMcpServer → Transport` 能力链路,agent 只是换 `LoopbackTransport`(MessageChannel 本进程)的消费方。`fs.*` 是**净新建**(不是合并旧 `agent-tools`)。
+**核心**:agent 与 iframe 共用同一条 `Grant → createLocalMcpServer → Transport` 能力链路,agent 只是换 `LoopbackTransport`(MessageChannel 本进程)的消费方。`fs.*` 是**净新建**(不是合并旧 `agent-tools`)。
 
 ### 6.1 工具契约(映射 `nodes-store` API)
 
@@ -154,7 +155,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 | `host.openExternal` | `{url}` | `host.external` | 改用 `safeHref` 共用单函数(消除与 `embed/tools.ts:149` 的白名单漂移) |
 
 ### 6.2 权限模型
-`embed/protocol.ts:PERMISSIONS` 加 `fs:read/fs:write/fs.notes:read/fs.notes:write/ui.tabs`。`createHubMcpServer` 逻辑不改(透传 `grant.permissions`)。**`note` 的读写在共用 handler 内二次 gate 到 `fs.notes:*`**(防 `fs:write` 绕过 notes 专属位)。`identity.publish` if 块与 `fs:write` 块**平行不合并**。`agentGrant`(本应用 agent,不复用 `firstPartyGrant`,无 manifest)默认集含 `fs:read/fs:write/fs.notes:write/ui.tabs`,**默认不含 `fs.notes:read`**。
+`embed/protocol.ts:PERMISSIONS` 加 `fs:read/fs:write/fs.notes:read/fs.notes:write/ui.tabs`。`createLocalMcpServer` 逻辑不改(透传 `grant.permissions`)。**`note` 的读写在共用 handler 内二次 gate 到 `fs.notes:*`**(防 `fs:write` 绕过 notes 专属位)。`identity.publish` if 块与 `fs:write` 块**平行不合并**。`agentGrant`(本应用 agent,不复用 `firstPartyGrant`,无 manifest)默认集含 `fs:read/fs:write/fs.notes:write/ui.tabs`,**默认不含 `fs.notes:read`**。
 
 ### 6.3 隐私三道闸(用户锁定:概览含标题、正文须 @ 引用)
 雷1 `fix-holds`,穷举十条泄漏路径全 gate。关键陷阱:**`NoteMeta` 的 `excerpt`+`search` 是正文/全文纯文本**(hub-data.ts:91-95)——
@@ -164,7 +165,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 工具结果回传:能进 `role:"tool"` 消息发给模型的正文只有 `fs.read(note)` 一条,已被 consent gate;`fs.create` 回的是 AI 自己刚写的内容,非既存私密正文。iframe manifest 永不含 `fs.notes:read`。
 
 ### 6.4 LoopbackTransport + runAgent→MCP(雷2 `fix-holds`)
-`LoopbackTransport` 照 `MessagePortTransport` 用 `MessageChannel` 本进程实现;agent 启动 `agentGrant` → `createHubMcpServer` → `server.connect(loopback)`;`runAgent` 把 `AGENT_TOOLS`→MCP `tools/list`、`executeTool`→`callToolSafe`,保 8 轮循环 / `toolEvents` / BYO-key(现有 `executeTool` 本就是 async+await,异步往返无破坏;`fail()` 的 `isError:true` 不抛)。退化点:`summarize(name,data)` 要按工具名映射中文文案,否则 `toolEvents` 退化成原始 JSON。
+`LoopbackTransport` 照 `MessagePortTransport` 用 `MessageChannel` 本进程实现;agent 启动 `agentGrant` → `createLocalMcpServer` → `server.connect(loopback)`;`runAgent` 把 `AGENT_TOOLS`→MCP `tools/list`、`executeTool`→`callToolSafe`,保 8 轮循环 / `toolEvents` / BYO-key(现有 `executeTool` 本就是 async+await,异步往返无破坏;`fail()` 的 `isError:true` 不抛)。退化点:`summarize(name,data)` 要按工具名映射中文文案,否则 `toolEvents` 退化成原始 JSON。
 
 ### 6.5 对话即文件
 `thread` 已是节点(步 D),`@上次的方案讨论` → 解析 NodeRef → `fs.read`(gated)→ 注入上下文 → 跨线程记忆,无需向量库。AI 栏订阅 `activeId` 作隐式上下文(经只读端口,不让 agent 直 import workspace store)。
@@ -222,7 +223,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 - [ ] `callToolSafe` 注释更正(应用级 `isError` 不抛,只协议/传输级抛)。
 
 **note 块级合并**
-- [ ] `flowback` 的 `HUB_UPDATED` 加 `{kind,id}` payload(否则 live-merge 分不清哪条笔记变更 + 任何 hub 写都触发重读)。
+- [ ] `flowback` 的 `FILES_UPDATED` 加 `{kind,id}` payload(否则 live-merge 分不清哪条笔记变更 + 任何节点写都触发重读)。
 - [ ] `baseBlocksRef` 取"首次 onChange 规范化后"的值,非原始 `initialContent`(防加载期 normalize 伪脏 → 伪 v bump 污染 LWW)。
 - [ ] sk 只对"物理顺序相对前块变了"的块重算,未移动块沿用 `blockMeta[id].sk`。
 - [ ] `applyBlockPatch` upsert 加 v 守卫:`v = max(u.v, curMeta[id].v+1)`,仅 `u.v >` 现有才覆盖(防 live-merge 并入的高版本块被陈旧 base 低版本 upsert 复活)。
@@ -257,4 +258,4 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 
 - [architecture.md](../architecture.md) — 架构权威说明(本设计的落地结果已回写其 §2/§3.4/§6)。
 - [sync-lww-tradeoff.md](../sync-lww-tradeoff.md) — LWW 取舍记录(块级合并沿用同纪律)。
-- [local-data-provider.md](../local-data-provider.md) — `HubDataPort`/embed MCP/Grant(AI 层地基)。
+- [local-data-provider.md](../local-data-provider.md) — `FilesPort`/embed MCP/Grant(AI 层地基)。

@@ -5,10 +5,22 @@ import assert from "node:assert/strict"
 
 import { stripNode, isNodeKind, type Node } from "./node"
 
-const base = { id: "x", parentId: null, sortKey: "a0", title: "T", tags: [], createdAt: 1, updatedAt: 1 }
+const base = {
+  id: "x",
+  parentId: null,
+  sortKey: "a0",
+  title: "T",
+  tags: [],
+  createdAt: 1,
+  updatedAt: 1,
+}
 
 test("stripNode: note 剥正文 content (title 等元数据保留)", () => {
-  const note: Node = { ...base, kind: "note", content: [{ type: "p", children: [{ text: "私密正文" }] }] }
+  const note: Node = {
+    ...base,
+    kind: "note",
+    content: [{ type: "p", children: [{ text: "私密正文" }] }],
+  }
   const s = stripNode(note)
   assert.equal(s.kind, "note")
   assert.equal(s.title, "T")
@@ -18,15 +30,27 @@ test("stripNode: note 剥正文 content (title 等元数据保留)", () => {
 })
 
 test("stripNode: thread 剥 messages (会话私密)", () => {
-  const thread: Node = { ...base, kind: "thread", content: { messages: [{ role: "user", content: "秘密" }] } }
+  const thread: Node = {
+    ...base,
+    kind: "thread",
+    content: { messages: [{ role: "user", content: "秘密" }] },
+  }
   const s = stripNode(thread)
   if (s.kind === "thread") assert.deepEqual(s.content.messages, [])
 })
 
 test("stripNode: bookmark/feed/file/folder 原样 (content 非私密正文)", () => {
-  const bm: Node = { ...base, kind: "bookmark", content: { url: "https://x", description: "d", favicon: "" } }
+  const bm: Node = {
+    ...base,
+    kind: "bookmark",
+    content: { url: "https://x", description: "d", favicon: "" },
+  }
   assert.deepEqual(stripNode(bm), bm)
-  const feed: Node = { ...base, kind: "feed", content: { type: "publisher", key: "x.com", favicon: "" } }
+  const feed: Node = {
+    ...base,
+    kind: "feed",
+    content: { type: "publisher", key: "x.com", favicon: "" },
+  }
   assert.deepEqual(stripNode(feed), feed)
   const folder: Node = { ...base, kind: "folder", content: null }
   assert.deepEqual(stripNode(folder), folder)

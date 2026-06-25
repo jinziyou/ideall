@@ -1,1 +1,1 @@
-export { default } from "@/app/shell/loading"
+export { default } from "@/shell/loading"

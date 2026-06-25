@@ -19,7 +19,8 @@ export type Block = { id?: string } & Record<string, unknown>
 function blockMapById(blocks: Block[]): Map<BlockId, Block> {
   const m = new Map<BlockId, Block>()
   // 防御: 跳过 null / 非对象元素 (污染数据), 取 .id 不崩。
-  for (const b of blocks) if (b && typeof b === "object" && typeof b.id === "string" && b.id) m.set(b.id, b)
+  for (const b of blocks)
+    if (b && typeof b === "object" && typeof b.id === "string" && b.id) m.set(b.id, b)
   return m
 }
 
