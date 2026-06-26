@@ -114,7 +114,7 @@ export function effectivePermissions(grant: Grant): Permission[] {
  * 的 egress 守卫 (https-only + 私网/元数据 IP 拦截 + 重定向逐跳复检 + 体积/超时/去凭证), 而非 consent 闸;
  * 抓取内容由 agent 系统提示标注「数据非指令」防间接提示注入 (见 agent-context.ts)。
  */
-const AGENT_PERMISSIONS: Permission[] = [
+export const AGENT_PERMISSIONS: Permission[] = [
   "fs:read",
   "fs:write",
   "fs.notes:write",
@@ -126,13 +126,17 @@ const AGENT_PERMISSIONS: Permission[] = [
 /**
  * 本应用 agent 的 Grant —— 不复用 firstPartyGrant (无 manifest), 经 LoopbackTransport 消费同一能力层。
  * 一方信任、不过期、不可撤 (本应用自带的 AI)。
+ * permissions: 工作区可传入子集**收窄**能力 (与默认集取交集, 绝不可越权 / 扩权); 缺省 (右栏随手对话) = 全部默认能力。
  */
-export function agentGrant(now: number): Grant {
+export function agentGrant(now: number, permissions?: Permission[]): Grant {
+  const perms = permissions
+    ? AGENT_PERMISSIONS.filter((p) => permissions.includes(p))
+    : [...AGENT_PERMISSIONS]
   return {
     consumerId: "ideall-agent",
     origin: "loopback",
     tier: "first-party",
-    permissions: [...AGENT_PERMISSIONS],
+    permissions: perms,
     grantedAt: now,
     expiry: null,
     revocable: false,

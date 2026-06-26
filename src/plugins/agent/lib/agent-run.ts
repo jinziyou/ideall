@@ -3,7 +3,7 @@
 // §6.4: 工具来自 agent 的 LoopbackTransport MCP 会话 (与 iframe 同一条 Grant→createLocalMcpServer 链路),
 // AGENT_TOOLS→tools/list、executeTool→callTool; 隐私/权限 gate 与 iframe 完全一致。
 import { requestCompletion } from "./agent-chat"
-import { connectAgentMcp, summarizeTool } from "./agent-mcp"
+import { connectAgentMcp, summarizeTool, type ConnectAgentOpts } from "./agent-mcp"
 import type { AgentToolEvent } from "./model"
 
 const MAX_ROUNDS = 8
@@ -17,6 +17,8 @@ export interface RunAgentOptions {
   signal?: AbortSignal
   /** 每执行一个工具回调一次 (用于实时展示) */
   onToolEvent?: (ev: AgentToolEvent) => void
+  /** 工作区能力收窄 (能力位子集 / 工具白名单); 缺省 = 全部默认能力。 */
+  mcp?: ConnectAgentOpts
 }
 
 export interface RunAgentResult {
@@ -35,7 +37,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   const messages: unknown[] = [...opts.messages]
   const toolEvents: AgentToolEvent[] = []
   // 起 loopback MCP 会话 (与 iframe 同一能力层); finally 释放端口。
-  const mcp = await connectAgentMcp()
+  const mcp = await connectAgentMcp(opts.mcp)
   try {
     for (let round = 0; round < MAX_ROUNDS; round++) {
       if (opts.signal?.aborted) return { content: "", toolEvents }

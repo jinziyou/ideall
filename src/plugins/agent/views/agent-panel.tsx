@@ -16,6 +16,7 @@ import {
 import { ServiceHeader } from "@/shared/service-header"
 import { BUILTIN_SKILLS, type AgentSkill } from "../lib/agent-skills"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
+import type { ConnectAgentOpts } from "../lib/agent-mcp"
 import {
   createThread,
   deleteThread,
@@ -41,13 +42,45 @@ const SUGGESTIONS = [
   "我都收藏了哪些资源？帮我概括一下",
 ]
 
-export default function AgentPanel({ compact = false }: { compact?: boolean } = {}) {
+/** 一次运行解析出的连接 + 已组装系统提示 + 能力收窄 (工作区 / 精确模式在此注入)。 */
+export interface ResolvedRun {
+  baseURL: string
+  model: string
+  apiKey: string
+  /** 已组装好的系统提示 (工作区 / 精确模式在此给出最终文本)。 */
+  system: string
+  /** 工作区能力收窄 (传给 runAgent → connectAgentMcp)。 */
+  mcp?: ConnectAgentOpts
+}
+
+export interface AgentPanelProps {
+  compact?: boolean
+  /** 工作区注入: 决定模型 / 系统提示 / 能力 (精确模式在此覆盖)。缺省 = 右栏默认行为 (全局设置 + 默认拼装)。 */
+  resolveRun?: (useAgent: boolean) => Promise<ResolvedRun | null>
+  /** 配置态 (false → 显示未配置 banner / 拦截发送)。缺省取全局 isConfigured。 */
+  configured?: boolean
+  /** 模型名 (状态栏展示)。缺省取全局 settings.model。 */
+  modelLabel?: string
+  /** 技能列表 (工作区可筛选)。缺省 = 全部内置技能。 */
+  skills?: AgentSkill[]
+  /** 设置入口点击 (工作区改为打开模型组面板)。缺省打开内置全局设置 Dialog。 */
+  onOpenSettings?: () => void
+}
+
+export default function AgentPanel({
+  compact = false,
+  resolveRun,
+  configured: configuredProp,
+  modelLabel,
+  skills = BUILTIN_SKILLS,
+  onOpenSettings,
+}: AgentPanelProps = {}) {
   const settings = React.useSyncExternalStore(
     subscribeAgentSettings,
     getAgentSettings,
     getAgentSettings,
   )
-  const configured = isConfigured(settings)
+  const configured = configuredProp ?? isConfigured(settings)
 
   const [threads, setThreads] = React.useState<AgentThread[]>([])
   const [activeId, setActiveId] = React.useState<string | null>(null)
@@ -67,6 +100,11 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
   // 输入法 (IME) 组合中标志: Tauri 的 WebKitGTK webview 下 keydown 的 isComposing 不可靠 (组合中常为 false),
   // 仅凭它会让中文选词/确认候选的 Enter 被误判为发送、打断组合 → 改用 compositionstart/end 维护此 ref 兜底。
   const composingRef = React.useRef(false)
+
+  function openSettings() {
+    if (onOpenSettings) onOpenSettings()
+    else setSettingsOpen(true)
+  }
 
   const refreshThreads = React.useCallback(async () => {
     try {
@@ -149,10 +187,9 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
     const text = (override ?? input).trim()
     if (!text || sendingRef.current) return
     const useAgent = opts?.agentMode ?? agentMode
-    const cfg = getAgentSettings()
-    if (!isConfigured(cfg)) {
-      toast.error("请先在设置中填写 API Key")
-      setSettingsOpen(true)
+    if (!configured) {
+      toast.error("请先配置模型（API Key）")
+      openSettings()
       return
     }
     sendingRef.current = true
@@ -183,18 +220,40 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
       return
     }
 
-    // 组装发送给模型的消息: 系统提示 (可选 home 上下文 + 是否开放工具) + 截断后的历史
-    let system = ""
+    // 解析本次运行: 工作区经 resolveRun 注入 (模型 + 系统提示 + 能力收窄, 含精确模式覆盖);
+    // 右栏默认行为 = 全局设置 + 默认拼装 (可选 home 上下文 + 是否开放工具)。
+    let runCfg: ResolvedRun
     try {
-      const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""
-      // 对话即文件 (§6.5): 注入用户当前正在看的 note 正文 / thread 会话 (随 home 上下文开关)。
-      const referenced = cfg.includeHomeContext ? await gatherReferencedContext() : ""
-      system = buildSystemPrompt(ctx, { tools: useAgent, referenced })
-    } catch {
-      system = buildSystemPrompt("", { tools: useAgent })
+      if (resolveRun) {
+        const r = await resolveRun(useAgent)
+        if (!r) {
+          toast.error("请先配置模型（API Key）")
+          openSettings()
+          sendingRef.current = false
+          return
+        }
+        runCfg = r
+      } else {
+        const cfg = getAgentSettings()
+        let system = ""
+        try {
+          const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""
+          // 对话即文件 (§6.5): 注入用户当前正在看的 note 正文 / thread 会话 (随 home 上下文开关)。
+          const referenced = cfg.includeHomeContext ? await gatherReferencedContext() : ""
+          system = buildSystemPrompt(ctx, { tools: useAgent, referenced })
+        } catch {
+          system = buildSystemPrompt("", { tools: useAgent })
+        }
+        runCfg = { baseURL: cfg.baseURL, model: cfg.model, apiKey: cfg.apiKey, system }
+      }
+    } catch (e) {
+      toast.error("无法准备发送", { description: String(e) })
+      sendingRef.current = false
+      return
     }
+
     const apiMessages = [
-      { role: "system", content: system },
+      { role: "system", content: runCfg.system },
       ...convo.slice(-HISTORY_LIMIT).map((m) => ({ role: m.role, content: m.content })),
     ]
 
@@ -212,11 +271,12 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
       if (useAgent) {
         // 智能体: 工具调用循环 (非流式), 工具事件实时回填到该助手消息
         const res = await runAgent({
-          baseURL: cfg.baseURL,
-          model: cfg.model,
-          apiKey: cfg.apiKey,
+          baseURL: runCfg.baseURL,
+          model: runCfg.model,
+          apiKey: runCfg.apiKey,
           messages: apiMessages,
           signal: controller.signal,
+          mcp: runCfg.mcp,
           onToolEvent: (ev) => {
             toolEvents = [...toolEvents, ev]
             setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, toolEvents } : m)))
@@ -227,9 +287,9 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
       } else {
         // 普通对话: 流式
         await streamChat({
-          baseURL: cfg.baseURL,
-          model: cfg.model,
-          apiKey: cfg.apiKey,
+          baseURL: runCfg.baseURL,
+          model: runCfg.model,
+          apiKey: runCfg.apiKey,
           messages: apiMessages,
           signal: controller.signal,
           onDelta: (d) => {
@@ -242,7 +302,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
       // 智能体中止会抛 AbortError —— 视为「停止」, 保留已生成内容, 不报错。
       if (!(e instanceof DOMException && e.name === "AbortError") && !controller.signal.aborted) {
         const msg = e instanceof Error ? e.message : String(e)
-        toast.error(agentMode ? "智能体出错" : "对话出错", { description: msg })
+        toast.error(useAgent ? "智能体出错" : "对话出错", { description: msg })
         if (!acc) acc = `（请求出错：${msg}）`
       }
     } finally {
@@ -287,9 +347,9 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
   // 技能 = 一条预置提示, 点选即执行 (而非只预填)。needsActiveNode 类先校验当前节点 + 数据上下文开关。
   function runSkill(skill: AgentSkill) {
     if (sendingRef.current) return
-    if (!isConfigured(getAgentSettings())) {
-      toast.error("请先在设置中填写 API Key")
-      setSettingsOpen(true)
+    if (!configured) {
+      toast.error("请先配置模型（API Key）")
+      openSettings()
       return
     }
     if (skill.needsActiveNode) {
@@ -297,7 +357,8 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
         toast.error("请先打开一篇笔记或一段对话，技能才能读到当前内容")
         return
       }
-      if (!getAgentSettings().includeHomeContext) {
+      // 右栏默认行为下校验「带上我的数据」开关; 工作区由 resolveRun 自管数据注入, 此处不拦。
+      if (!resolveRun && !getAgentSettings().includeHomeContext) {
         toast.error("请在设置中开启「带上我的数据」，技能才能读到当前内容")
         return
       }
@@ -364,7 +425,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
               title="AI 助手"
               status={
                 configured
-                  ? { label: `就绪 · ${settings.model}`, tone: "ok" }
+                  ? { label: `就绪 · ${modelLabel ?? settings.model}`, tone: "ok" }
                   : { label: "未配置模型", tone: "warn" }
               }
             />
@@ -383,12 +444,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
                 <span className="sr-only">新对话</span>
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setSettingsOpen(true)}
-            >
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={openSettings}>
               <Settings className="h-4 w-4" />
               设置
             </Button>
@@ -398,7 +454,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
         {!configured && (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-l-2 border-l-pop bg-muted/40 px-4 py-3 text-sm">
             <span>填入你的 API Key 开始使用，密钥只存本机。</span>
-            <Button size="sm" onClick={() => setSettingsOpen(true)}>
+            <Button size="sm" onClick={openSettings}>
               去设置
             </Button>
           </div>
@@ -474,7 +530,12 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-60">
-                {BUILTIN_SKILLS.map((s) => (
+                {skills.length === 0 && (
+                  <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                    本工作区未启用技能
+                  </DropdownMenuItem>
+                )}
+                {skills.map((s) => (
                   <DropdownMenuItem
                     key={s.id}
                     onSelect={() => runSkill(s)}
