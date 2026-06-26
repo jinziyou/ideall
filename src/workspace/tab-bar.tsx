@@ -12,7 +12,6 @@ import type { ModuleId } from "./types"
 const DOT: Record<ModuleId, string> = {
   home: "bg-primary",
   subscriptions: "bg-spoke-info",
-  following: "bg-spoke-community",
   info: "bg-spoke-info",
   community: "bg-spoke-community",
   browser: "bg-spoke-tool",

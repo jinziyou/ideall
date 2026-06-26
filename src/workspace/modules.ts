@@ -5,23 +5,9 @@
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎); 顶栏的「本地搜索」负责搜本机内容, 两者职责分离。
 
 import type { ComponentType } from "react"
-import {
-  Bookmark,
-  Bot,
-  Compass,
-  FolderOpen,
-  Globe,
-  Hexagon,
-  LayoutDashboard,
-  Map as MapIcon,
-  Megaphone,
-  Newspaper,
-  NotebookPen,
-  Rss,
-  Search,
-  Wrench,
-} from "lucide-react"
+import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"
 import type { ModuleId, TabDescriptor, WsMode } from "./types"
+import { MODULE_META } from "./module-meta"
 import { nodeTab } from "./node-tab"
 import { parseNodeQuery } from "./node-ref"
 
@@ -46,18 +32,18 @@ export type ModuleConfig = {
 
 const homeEntries: SidebarEntry[] = [
   {
-    label: "概览",
-    icon: LayoutDashboard,
+    label: MODULE_META.overview.label,
+    icon: MODULE_META.overview.icon,
     descriptor: { kind: "home-overview", module: "home", title: "概览", path: "/home" },
   },
   {
-    label: "笔记",
-    icon: NotebookPen,
+    label: MODULE_META.notes.label,
+    icon: MODULE_META.notes.icon,
     descriptor: { kind: "home-notes", module: "home", title: "笔记", path: "/home/notes" },
   },
   {
-    label: "发布",
-    icon: Megaphone,
+    label: MODULE_META.publications.label,
+    icon: MODULE_META.publications.icon,
     descriptor: {
       kind: "home-publications",
       module: "home",
@@ -66,13 +52,13 @@ const homeEntries: SidebarEntry[] = [
     },
   },
   {
-    label: "资源",
-    icon: FolderOpen,
+    label: MODULE_META.resources.label,
+    icon: MODULE_META.resources.icon,
     descriptor: { kind: "home-resources", module: "home", title: "资源", path: "/home/resources" },
   },
   {
-    label: "书签",
-    icon: Bookmark,
+    label: MODULE_META.bookmarks.label,
+    icon: MODULE_META.bookmarks.icon,
     descriptor: { kind: "home-bookmarks", module: "home", title: "书签", path: "/home/bookmarks" },
   },
 ]
@@ -93,15 +79,15 @@ export const MODULES: ModuleConfig[] = [
     // 旧的「关注」(资讯源) 与「关注」(社区 peer) 两个入口已合并到这里。
     id: "subscriptions",
     mode: "local",
-    label: "关注",
-    icon: Rss,
-    colorClass: "text-spoke-info",
+    label: MODULE_META.subscriptions.label,
+    icon: MODULE_META.subscriptions.icon,
+    colorClass: MODULE_META.subscriptions.tintClass,
     sidebarTitle: "关注",
     sidebarHint: "关注的发布者 / 实体 / 搜索 / 社区发布者，内容汇入「我的」。",
     entries: [
       {
         label: "关注流",
-        icon: Rss,
+        icon: MODULE_META.subscriptions.icon,
         descriptor: {
           kind: "subscriptions",
           module: "subscriptions",
@@ -131,9 +117,9 @@ export const MODULES: ModuleConfig[] = [
   {
     id: "tool",
     mode: "local",
-    label: "工具",
-    icon: Wrench,
-    colorClass: "text-spoke-tool",
+    label: MODULE_META.tool.label,
+    icon: MODULE_META.tool.icon,
+    colorClass: MODULE_META.tool.tintClass,
     sidebarTitle: "工具",
     sidebarHint: "AI / 导航，钉住的工具汇入「我的」。",
     entries: [
@@ -158,15 +144,15 @@ export const MODULES: ModuleConfig[] = [
   {
     id: "info",
     mode: "connected",
-    label: "资讯",
-    icon: Newspaper,
-    colorClass: "text-spoke-info",
+    label: MODULE_META.info.label,
+    icon: MODULE_META.info.icon,
+    colorClass: MODULE_META.info.tintClass,
     sidebarTitle: "资讯",
     sidebarHint: "聚合发布者与实体资讯，关注与收藏汇入「我的」。",
     entries: [
       {
         label: "资讯主页",
-        icon: Newspaper,
+        icon: MODULE_META.info.icon,
         descriptor: { kind: "info", module: "info", title: "资讯", path: "/info" },
         hint: "聚合资讯（嵌入应用）",
       },
@@ -175,15 +161,15 @@ export const MODULES: ModuleConfig[] = [
   {
     id: "community",
     mode: "connected",
-    label: "社区",
-    icon: MapIcon,
-    colorClass: "text-spoke-community",
+    label: MODULE_META.community.label,
+    icon: MODULE_META.community.icon,
+    colorClass: MODULE_META.community.tintClass,
     sidebarTitle: "社区",
     sidebarHint: "发现社区发布者并关注，他们的发布汇入「我的」。",
     entries: [
       {
         label: "社区主页",
-        icon: MapIcon,
+        icon: MODULE_META.community.icon,
         descriptor: { kind: "community", module: "community", title: "社区", path: "/community" },
         hint: "社区发布（嵌入应用）",
       },

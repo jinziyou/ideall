@@ -7,7 +7,6 @@ export type WsMode = "local" | "connected"
 export type ModuleId =
   | "home"
   | "subscriptions"
-  | "following"
   | "info"
   | "community"
   | "browser"

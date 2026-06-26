@@ -137,10 +137,10 @@ export default function Overview() {
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-[78px] animate-pulse rounded-2xl border bg-muted/40" />
+            <div key={i} className="h-[78px] animate-pulse rounded-lg border bg-muted/40" />
           ))}
         </div>
-        <div className="h-64 animate-pulse rounded-2xl border bg-muted/40" />
+        <div className="h-64 animate-pulse rounded-lg border bg-muted/40" />
       </div>
     )
   }
@@ -167,7 +167,7 @@ export default function Overview() {
 
       {/* 便当: 最近关注 (大块, 脊柱) + 右列 (去发现 / AI 快问) */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-l-2 border-l-pop bg-card p-5 shadow-sm lg:col-span-2">
+        <div className="rounded-lg border border-l-2 border-l-pop bg-card p-5 shadow-sm lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">
             <h2 className="text-sm font-semibold">最近关注</h2>
             <span className="text-xs text-muted-foreground">· 实时更新 · 都存在本机</span>
@@ -181,7 +181,7 @@ export default function Overview() {
 
         <div className="flex flex-col gap-4">
           {/* 去发现 */}
-          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="rounded-lg border bg-card p-5 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold">去发现，带东西回家</h2>
             <p className="mb-4 text-xs text-muted-foreground">资讯 · 社区 · 工具，都能汇入这里</p>
             <div className="flex flex-col gap-2.5">
@@ -208,7 +208,7 @@ export default function Overview() {
           {/* AI 快问 */}
           <Link
             href="/home/agent"
-            className="group rounded-2xl border bg-gradient-to-br from-primary/10 to-spoke-tool/5 p-5 shadow-sm transition-colors hover:border-primary/30"
+            className="group rounded-lg border bg-gradient-to-br from-primary/10 to-spoke-tool/5 p-5 shadow-sm transition-colors hover:border-primary/30"
           >
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
@@ -230,7 +230,7 @@ export default function Overview() {
 
       {/* 便当: 已钉工具 (整行) */}
       {data.pinnedTools.length > 0 && (
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="rounded-lg border bg-card p-5 shadow-sm">
           <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Pin className="h-3.5 w-3.5" />
             已钉工具
@@ -270,7 +270,7 @@ const LOCAL_STARTERS = [
  */
 function EmptyOverview() {
   return (
-    <div className="flex min-h-[55dvh] flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-12 text-center">
+    <div className="flex min-h-[55dvh] flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 px-6 py-12 text-center">
       <span className="flex items-center gap-2 text-lg font-semibold">
         <Hexagon className="h-5 w-5" />
         「我的」还是空的
@@ -287,7 +287,7 @@ function EmptyOverview() {
             <Link
               key={s.href}
               href={s.href}
-              className="flex flex-col items-center gap-1 rounded-2xl border-2 border-primary/20 bg-primary/5 px-4 py-4 text-center transition-colors hover:border-primary/40 hover:bg-primary/10"
+              className="flex flex-col items-center gap-1 rounded-lg border-2 border-primary/20 bg-primary/5 px-4 py-4 text-center transition-colors hover:border-primary/40 hover:bg-primary/10"
             >
               <s.icon className="h-5 w-5 text-primary" />
               <span className="text-sm font-semibold">{s.label}</span>
@@ -305,7 +305,7 @@ function EmptyOverview() {
             <Link
               key={s.href}
               href={s.href}
-              className="flex flex-col items-center gap-1 rounded-2xl border bg-background px-4 py-4 text-center transition-colors hover:bg-accent"
+              className="flex flex-col items-center gap-1 rounded-lg border bg-background px-4 py-4 text-center transition-colors hover:bg-accent"
             >
               <span className="flex items-center gap-1.5 text-sm font-semibold">
                 <span className={cn("h-2 w-2 rounded-full", s.dot)} />

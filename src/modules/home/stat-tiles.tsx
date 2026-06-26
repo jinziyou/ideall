@@ -47,7 +47,7 @@ export function StatTiles(props: Props) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {TILES.map((t) => (
-        <div key={t.key} className={cn("rounded-2xl border bg-card p-4 shadow-sm", t.tint)}>
+        <div key={t.key} className={cn("rounded-lg border bg-card p-4 shadow-sm", t.tint)}>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <t.icon className="h-3.5 w-3.5" />
             {t.label}

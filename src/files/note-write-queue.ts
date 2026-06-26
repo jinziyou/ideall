@@ -8,7 +8,16 @@
 // visibilitychange/pagehide 关窗时, 事件循环被掐断, await updateNote 来不及把 microtask 跑到
 // IndexedDB 提交点 → 丢草稿。写队列把落库与组件存活解耦, 并显式覆盖关窗边界。
 import { noteText, updateNote } from "@/files/stores/notes-store"
-import type { NoteEditorSaved } from "@/modules/home/notes/note-editor"
+
+/** 一次落库后回传给列表的轻量元数据 (用于就地刷新卡片, 免整列表重取)。写队列是其产出方, 故类型在此自有定义。 */
+export type NoteEditorSaved = {
+  id: string
+  title: string
+  excerpt: string
+  search: string
+  tags: string[]
+  updatedAt: number
+}
 
 type Draft = {
   title: string

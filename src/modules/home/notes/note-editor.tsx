@@ -16,16 +16,9 @@ import { CodeBlockKit } from "@/ui/editor/plugins/code-block-kit"
 import { SlashKit } from "@/ui/editor/plugins/slash-kit"
 import { NoteContent } from "../model"
 import { enqueueNoteDraft } from "@/files/note-write-queue"
-
-/** 一次自动保存后回传给列表的轻量元数据 (用于就地刷新卡片, 免整列表重取)。 */
-export type NoteEditorSaved = {
-  id: string
-  title: string
-  excerpt: string
-  search: string
-  tags: string[]
-  updatedAt: number
-}
+// 保存回传元数据类型下沉到数据层 (写队列是其产出方); 此处再导出以兼容现有 ./note-editor 引用。
+import type { NoteEditorSaved } from "@/files/note-write-queue"
+export type { NoteEditorSaved }
 
 const AUTOSAVE_DELAY = 600
 

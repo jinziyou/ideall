@@ -15,8 +15,6 @@ import { parseNodeParams } from "./node-tab"
 
 // 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
 const FOLLOW_TYPES: SubscriptionType[] = ["publisher", "entity", "search", "peer"]
-// /home/following 深链回退视图 (社区 peer); 活动栏入口已并入统一「关注」。
-const PEER_SUB_TYPES: SubscriptionType[] = ["peer"]
 
 const Overview = React.lazy(() => import("@/modules/home/overview"))
 const NotesManager = React.lazy(() => import("@/modules/home/notes/notes-manager"))
@@ -43,12 +41,6 @@ const REGISTRY: Record<string, Entry> = {
         <SyncPanel />
         <SubscriptionFeed types={FOLLOW_TYPES} title="关注流" dotClass="bg-spoke-info" />
       </div>
-    ),
-    layout: "padded",
-  },
-  following: {
-    render: () => (
-      <SubscriptionFeed types={PEER_SUB_TYPES} title="关注的发布者" dotClass="bg-spoke-community" />
     ),
     layout: "padded",
   },

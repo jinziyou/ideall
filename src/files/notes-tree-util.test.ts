@@ -11,7 +11,7 @@ import {
   type TreeItem,
   type TreeNode,
 } from "@/files/notes-tree-util"
-import type { NoteMeta } from "@/modules/home/model"
+import type { NoteMeta } from "@protocol/files"
 
 function meta(id: string, parentId: string | null, sortKey: string): NoteMeta {
   return {

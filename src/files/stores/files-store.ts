@@ -4,7 +4,7 @@
 //   - 删除走软删墓碑 (deletedAt) + 物理删 Blob (墓碑只留轻量节点, 大二进制不随墓碑常驻);
 //     撤销 = 节点复活 + 从快照重放 Blob (restoreFile 入参 StoredFile 含 blob)。
 // 本切片不开同步; sortKey/updatedAt 已补齐。Blob 大文件 E2E 同步属远期独立通道。
-import { FileMeta, StoredFile } from "@/modules/home/model"
+import { FileMeta, StoredFile } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"

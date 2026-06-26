@@ -36,7 +36,7 @@ export default function ModeSwitch() {
             title={m.hint}
             onClick={() => setMode(m.id)}
             className={cn(
-              "flex items-center gap-1.5 rounded-[0.375rem] px-2.5 py-1 text-sm font-medium transition-colors",
+              "flex items-center gap-1.5 rounded-shell px-2.5 py-1 text-sm font-medium transition-colors",
               active
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",

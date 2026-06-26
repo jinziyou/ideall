@@ -130,7 +130,7 @@ function NodeRow({
           isFolder ? onToggle(it.id) : onOpen({ kind: it.kind, id: it.id }, it.title)
         }
         style={{ paddingLeft: `${depth * 14 + 4}px` }}
-        className="group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1 text-sm transition-colors hover:bg-accent/60"
+        className="group flex cursor-pointer items-center gap-1 rounded-shell py-1 pr-1 text-sm transition-colors hover:bg-accent/60"
       >
         <button
           type="button"

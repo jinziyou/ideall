@@ -1,6 +1,6 @@
 "use client"
 
-// 底部状态栏: 当前模块 + 打开标签数 + 命令台入口 (系统健康面板在活动栏底部的本机芯片)。
+// 底部状态栏: 当前模块 + 打开标签数 + 命令台入口 (本机设备状态/健康在设置菜单弹层 settings-menu 内)。
 
 import { Command } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -12,7 +12,6 @@ import type { ModuleId } from "./types"
 const DOT: Record<ModuleId, string> = {
   home: "bg-primary",
   subscriptions: "bg-spoke-info",
-  following: "bg-spoke-community",
   info: "bg-spoke-info",
   community: "bg-spoke-community",
   browser: "bg-spoke-tool",
@@ -34,17 +33,15 @@ export default function StatusBar() {
         {mode === "local" ? "本地" : "连接"} · {mod.label}
       </span>
       <span className="tabular-nums">{tabs.length} 个标签</span>
-      {/* 命令台仅连接模式提供 (本地模式去除命令台) */}
-      {mode === "connected" && (
-        <button
-          type="button"
-          onClick={openCommandPalette}
-          className="ml-auto flex items-center gap-1 transition-colors hover:text-foreground"
-        >
-          <Command className="h-3 w-3" />
-          命令台 ⌘K
-        </button>
-      )}
+      {/* 命令台入口本地/连接两模式常驻可见; ⌘K 键位本就全局可用, 这里只是补回可见分区。 */}
+      <button
+        type="button"
+        onClick={openCommandPalette}
+        className="ml-auto flex items-center gap-1 transition-colors hover:text-foreground"
+      >
+        <Command className="h-3 w-3" />
+        命令台 ⌘K
+      </button>
     </footer>
   )
 }

@@ -53,7 +53,7 @@ function TabItem({
       href={tab.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1 text-[10px] font-medium",
+        "flex flex-1 flex-col items-center gap-0.5 rounded-shell py-1 text-[10px] font-medium",
         active ? "text-primary" : "text-muted-foreground",
       )}
     >
@@ -95,7 +95,7 @@ export default function BottomTabBar() {
         aria-current={agentActive ? "page" : undefined}
         className="flex shrink-0 flex-col items-center justify-end gap-0.5 self-stretch px-1"
       >
-        <span className="-mt-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30">
+        <span className="flex h-12 w-12 items-center justify-center rounded-shell bg-primary text-primary-foreground">
           <Bot className="h-5 w-5" />
         </span>
         <span

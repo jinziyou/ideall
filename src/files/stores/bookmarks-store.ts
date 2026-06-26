@@ -4,7 +4,7 @@
 //   - 收藏夹节点: name→title, 根级 (parentId=null);
 //   - 删除走软删墓碑 (deletedAt, 与笔记/关注一致), 读路径过滤墓碑 —— 当前用于撤销跨刷新稳健, 并为后续同步就绪。
 // 本切片不开同步 (维持现状未同步); sortKey/updatedAt 已补齐, 墓碑 GC 随 bookmark-sync 落地 (与笔记同纪律)。
-import { Bookmark, BookmarkFolder } from "@/modules/home/model"
+import { Bookmark, BookmarkFolder } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"

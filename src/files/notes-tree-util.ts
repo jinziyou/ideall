@@ -4,7 +4,7 @@
 //   - 孤儿 (parentId 指向已删/不存在的节点);
 //   - 环成员 (沿 parentId 上溯会回到自身 —— 跨端并发 move 可合并出 A.parentId=B & B.parentId=A 的双向环)。
 // 不重挂会让环节点及其子树永远不被根遍历枚举到 → 在页树中「消失」、无法选中/删除/移到根。
-import type { NoteMeta } from "@/modules/home/model"
+import type { NoteMeta } from "@protocol/files"
 
 /** 可建树的最小形状 (一切皆文件: 任意 kind 的节点元数据都满足)。 */
 export interface TreeItem {
