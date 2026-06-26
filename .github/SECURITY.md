@@ -42,6 +42,7 @@
 - **CSP `connect-src` 收窄为 `'self' tauri:`**：穷尽分析确认 webview 内零 `fetch`/XHR/WebSocket（所有远端请求走 Rust `plugin-http`），故收窄不影响数据加载，缩小 XSS 经 webview 直连外传的面。
 - **`fs.readBlob` 私密读闸（`fs.blobs:read`）**：文件二进制读与 note 正文同级 consent —— 无 `fs.blobs:read` 返回 `consent-required(-32003)`；`agentGrant` 不含该位，agent 默认不能无授权把上传文件读出外发模型端点。
 - **嵌入「已连接的应用」面板 + 一键断开**：设置齿轮内列出运行期已建桥的嵌入应用（origin + 已授权限），可吊销其宿主能力面（断 MCP server，页面仍在但失去全部 host 工具）。
+- **agent `ui.openTab` 自激活隔离**：工作区记录激活来源（user/agent），active-node 端口对 agent 经 `ui.openTab` 自激活的节点返回 `null` —— agent 无法把任意笔记设为活动标签再经 `referenced-context` 自喂其正文给模型端点（软绕 `fs.notes:read` consent）；用户手动点回该标签即恢复为已同意。
 
 ## 已知取舍（有意接受，非疏漏）
 
@@ -50,5 +51,4 @@
 - **Tauri `http:default` 放行任意 URL（webview `connect-src` 已收窄）**：webview `connect-src` 现为 `'self' tauri:`（见本轮加固），但 App 出站实际走 Rust `plugin-http`，其 `capabilities/default.json` 放行 `https://*`/`http://*` 是 BYO-key 任意端点 + 自建后端的必需放宽——故 XSS 仍可经 `plugin-http` 外传，且不受 webview CSP 约束。**路线**：若未来 BYO 端点可枚举/白名单化，再收窄 `http:default`；当前为有意接受的残余面。
 - **E2E 同步密码学**：AES-256-GCM + 每次随机 IV + HKDF 域分离，后端读不到/伪造不了明文（单测钉死）。固定共享 `salt` + 单轮 HKDF **安全当且仅当同步码为 128bit 机器随机**——禁口令式/用户自拟低熵码（`join` 只应粘贴本 App 生成的码）。当前无前向保密 / 密钥轮换，「关闭同步」不删服务端密文。写入侧无密码学授权（`storageId` 即 bearer 写能力，泄露可 DoS）；`updated_at` 未进 AAD（不可信后端可回滚/扣留旧密文）。**路线**：写授权 MAC、AAD 绑 `storageId`+单调版本、码轮换 + 删云端、`join` 前熵校验。
 - **嵌入应用一方自动授权（现可见 + 可吊销）**：`info`/`community` 一方 manifest 仍自动获发布/改资料/增删关注书签等能力，无连接时逐次 consent。但现已**运行期可见 + 可一键吊销**（见本轮加固「已连接的应用」面板），被嵌页失陷时用户可即时断开。**路线**：连接时的逐次 consent 弹窗（T1+ 接入前）。
-- **agent `ui.openTab` 自激活注入（`fs.readBlob` 已加闸）**：`fs.readBlob` 现受 `fs.blobs:read` 同级 consent 闸（见本轮加固）。剩余：agent 持 `ui.tabs`，可 `ui.openTab` 把某节点设为活动标签，下一轮 `gatherReferencedContext` 即把其正文经「打开即隐式同意」注入模型——软绕过显式 consent。**路线**：`referenced-context` 注入只认「用户手动激活」的节点（在 active-node 记录激活来源 user vs agent）。
 - **X25519 登录口令加密**：仅防传输中被动记录，**不替代 TLS、不对服务端或主动 MITM 保密**（服务端持临时私钥解密；临时公钥未签名/钉定）。真正的口令机密性来自 TLS。**路线**：对临时公钥做服务端长期密钥签名 + 客户端校验。

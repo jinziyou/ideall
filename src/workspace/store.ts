@@ -24,9 +24,15 @@ const MODE_OF: Record<ModuleId, WsMode> = {
   agent: "connected",
 }
 
+/** 激活来源: user=用户(侧栏/搜索/标签/路由) · agent=AI 经 ui.openTab。 */
+type ActiveSource = "user" | "agent"
+
 type State = {
   tabs: Tab[]
   activeId: string | null
+  /** 当前激活节点的激活来源。隐私: agent 经 ui.openTab 自激活的节点**不计入**「打开即隐式同意」——
+   *  防 agent 用 ui.openTab 把任意笔记设为活动标签, 再经 referenced-context 自喂其正文给模型端点 (软绕 consent)。 */
+  activeSource: ActiveSource
   activeModule: ModuleId
   mode: WsMode
   sidebarCollapsed: boolean
@@ -41,6 +47,7 @@ type State = {
 const DEFAULT: State = {
   tabs: [],
   activeId: null,
+  activeSource: "user",
   activeModule: "home",
   mode: "local",
   sidebarCollapsed: false,
@@ -146,6 +153,8 @@ export function hydrateWorkspace() {
       ...state,
       tabs: merged,
       activeId: activeTab ? activeTab.id : null,
+      // 恢复的激活标签视作 user (原本由用户导航而来); 不持久化 source, 防 agent 自激活态跨刷新泄漏。
+      activeSource: "user",
       // 模块/模式由激活标签派生, 保证三者自洽 (避免与 URL 短暂错位)。
       activeModule: activeTab
         ? activeTab.module
@@ -164,17 +173,19 @@ export function hydrateWorkspace() {
 
 // —— 动作 ——
 
-/** 打开 (或激活已存在的) 标签。同时把模式镜头同步到该标签所属模式。 */
-export function openTab(d: TabDescriptor) {
+/** 打开 (或激活已存在的) 标签。同时把模式镜头同步到该标签所属模式。
+ *  source 默认 user (UI/路由触发); agent 经 ui.openTab 打开时传 "agent" —— 仅影响隐式同意, 不改打开行为。 */
+export function openTab(d: TabDescriptor, source: ActiveSource = "user") {
   const id = tabKey(d)
   const exists = state.tabs.some((t) => t.id === id)
   const tabs = exists ? state.tabs : [...state.tabs, { ...d, id }]
-  setState({ tabs, activeId: id, activeModule: d.module, mode: MODE_OF[d.module] })
+  setState({ tabs, activeId: id, activeModule: d.module, mode: MODE_OF[d.module], activeSource: source })
 }
 
-/** 打开 (或激活已存在的) 一个节点标签。三入口 (搜索/侧栏/AI) 统一经此, 保证 entity 级去重。 */
-export function openNodeTab(ref: NodeRef, title: string) {
-  openTab(nodeTab(ref, title))
+/** 打开 (或激活已存在的) 一个节点标签。三入口 (搜索/侧栏/AI) 统一经此, 保证 entity 级去重。
+ *  AI (boot.ts 的 ui.openTab) 传 source="agent" —— 该节点不计入「打开即隐式同意」(隐私)。 */
+export function openNodeTab(ref: NodeRef, title: string, source: ActiveSource = "user") {
+  openTab(nodeTab(ref, title), source)
 }
 
 /** 节点标签取数后回填真实标题 (不改 id / 去重 key, 仅更新显示)。 */
@@ -201,13 +212,14 @@ export function closeTab(id: string) {
       mode = MODE_OF[next.module]
     }
   }
-  setState({ tabs, activeId, activeModule, mode })
+  setState({ tabs, activeId, activeModule, mode, activeSource: "user" })
 }
 
 export function setActiveTab(id: string) {
   const t = state.tabs.find((x) => x.id === id)
   if (!t) return
-  setState({ activeId: id, activeModule: t.module, mode: MODE_OF[t.module] })
+  // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
+  setState({ activeId: id, activeModule: t.module, mode: MODE_OF[t.module], activeSource: "user" })
 }
 
 /** 选中模块 (展开其二级侧栏)。 */
@@ -325,6 +337,10 @@ export function useHydrated() {
 /** 非响应式实时读取 (effect 内用): 拿 store 当前快照, 而非组件渲染闭包里的旧值。 */
 export function getActiveId(): string | null {
   return state.activeId
+}
+/** 当前激活节点的激活来源 (user / agent)。隐私: active-node 端口对 agent 自激活的节点返回 null, 不计入隐式同意。 */
+export function getActiveSource(): ActiveSource {
+  return state.activeSource
 }
 export function getTabs(): Tab[] {
   return state.tabs
