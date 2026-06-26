@@ -115,6 +115,20 @@ test("isValidRemoteNote: 拒投毒 content (null 元素) / 脏 blockMeta; 收合
   )
 })
 
+test("isValidRemoteNote: 拒远未来时间戳 (防永久钉死 LWW / 不死墓碑)", () => {
+  const now = 1_000_000_000_000
+  const far = now + 10 * 24 * 60 * 60 * 1000 // now + 10 天, 超 1 天容差
+  const ok = note({ createdAt: now - 2000, updatedAt: now - 1000 })
+  assert.equal(isValidRemoteNote(ok, now), true, "现实时间戳合法")
+  assert.equal(isValidRemoteNote({ ...ok, updatedAt: far }, now), false, "拒远未来 updatedAt")
+  assert.equal(isValidRemoteNote({ ...ok, deletedAt: far }, now), false, "拒远未来 deletedAt(不死墓碑)")
+  assert.equal(
+    isValidRemoteNote({ ...ok, blockMeta: { B1: { v: 1, by: "A", sk: "a0", del: far } } }, now),
+    false,
+    "拒远未来块墓碑 del",
+  )
+})
+
 test("mergeNotes: 单边笔记直取, 同 id 合并, 交换律 (集合等价)", () => {
   const a = [
     note({ id: "n1", content: [blk("B1", "A")], blockMeta: { B1: { v: 1, by: "A", sk: "a0" } } }),

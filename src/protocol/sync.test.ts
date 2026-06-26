@@ -10,6 +10,8 @@ import {
   isExpiredTombstone,
   pruneExpiredTombstones,
   expiredTombstoneIdsToDelete,
+  isSaneSyncTimestamp,
+  MAX_FUTURE_SKEW_MS,
   TOMBSTONE_TTL_MS,
 } from "./sync"
 import type { Subscription } from "@protocol/subscription"
@@ -91,6 +93,20 @@ test("unionMerge: 远端墓碑较新 → 本端活跃项被删除收敛", () => 
   // 另一端删除 a@300 (墓碑) 拉到本端, 本端活跃 a@100 → 墓碑胜 → 本端读路径将过滤掉。
   const m = unionMerge([sub("a", "本地A", 100)], [tomb("a", 300)])
   assert.equal(isTombstone(m[0]), true)
+})
+
+test("isSaneSyncTimestamp: 过去/现在/容差内为真; 远未来/负数/非数字为假 (防远未来时间戳钉死 LWW)", () => {
+  const now = 1_000_000_000_000
+  assert.equal(isSaneSyncTimestamp(now - 999, now), true)
+  assert.equal(isSaneSyncTimestamp(now, now), true)
+  assert.equal(isSaneSyncTimestamp(now + MAX_FUTURE_SKEW_MS, now), true) // 容差边界内
+  assert.equal(isSaneSyncTimestamp(now + MAX_FUTURE_SKEW_MS + 1, now), false) // 超容差未来 → 拒
+  assert.equal(isSaneSyncTimestamp(253402300800000, now), false) // 公元 9999 类远未来 → 拒
+  assert.equal(isSaneSyncTimestamp(-1, now), false)
+  assert.equal(isSaneSyncTimestamp(NaN, now), false)
+  assert.equal(isSaneSyncTimestamp(Infinity, now), false)
+  assert.equal(isSaneSyncTimestamp("123", now), false)
+  assert.equal(isSaneSyncTimestamp(undefined, now), false)
 })
 
 test("isExpiredTombstone: 过保留期 true / 未过 false / 非墓碑 false", () => {

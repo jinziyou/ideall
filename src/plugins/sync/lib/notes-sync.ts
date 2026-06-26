@@ -7,7 +7,13 @@
 // 注: 当前笔记整篇随每次同步重新加密上传 (单 blob)。块级 v 已支撑只传变更块, 改增量上传属后续性能优化。
 import type { Note } from "@protocol/files"
 import { getFilesPort } from "@protocol/files"
-import { recordsEqual, isLive, pruneExpiredTombstones, type SyncResult } from "@protocol/sync"
+import {
+  recordsEqual,
+  isLive,
+  isSaneSyncTimestamp,
+  pruneExpiredTombstones,
+  type SyncResult,
+} from "@protocol/sync"
 import { mergeNoteContent, pruneBlockTombstones, type Block } from "@protocol/note-merge"
 import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/lib/sync-crypto"
 import { getSyncBlob, putSyncBlob } from "./sync-api"
@@ -58,8 +64,9 @@ function gcNotes(notes: Note[], now: number): Note[] {
   )
 }
 
-/** blockMeta 形状校验: 缺省合法 (旧端); 存在则每项须 {v:number, by:string, sk:string, del?:number}。 */
-function isValidBlockMeta(bm: unknown): boolean {
+/** blockMeta 形状校验: 缺省合法 (旧端); 存在则每项须 {v:number, by:string, sk:string, del?:number}。
+ *  块墓碑 del 须有界 (远未来 del 会逃过块墓碑 GC 成不死块墓碑), 与 node 级 deletedAt 同口径。 */
+function isValidBlockMeta(bm: unknown, now: number): boolean {
   if (bm == null) return true
   if (typeof bm !== "object") return false
   for (const v of Object.values(bm as Record<string, unknown>)) {
@@ -67,7 +74,7 @@ function isValidBlockMeta(bm: unknown): boolean {
     const m = v as Record<string, unknown>
     if (typeof m.v !== "number" || typeof m.by !== "string" || typeof m.sk !== "string")
       return false
-    if (m.del !== undefined && typeof m.del !== "number") return false
+    if (m.del !== undefined && !isSaneSyncTimestamp(m.del, now)) return false
   }
   return true
 }
@@ -78,7 +85,7 @@ function isValidBlockMeta(bm: unknown): boolean {
  * content 须为对象数组 (null 元素会让 blockMapById 取 .id 崩溃 → 一条投毒笔记瘫痪全端同步);
  * blockMeta 须类型正确 (脏 v 会破坏 pickMeta 的可交换性 → 合并不收敛/churn; 脏 del 会逃过墓碑 GC)。
  */
-export function isValidRemoteNote(s: unknown): s is Note {
+export function isValidRemoteNote(s: unknown, now: number = Date.now()): s is Note {
   if (!s || typeof s !== "object") return false
   const o = s as Record<string, unknown>
   return (
@@ -89,10 +96,11 @@ export function isValidRemoteNote(s: unknown): s is Note {
     Array.isArray(o.content) &&
     o.content.every((it) => it != null && typeof it === "object") &&
     Array.isArray(o.tags) &&
-    typeof o.createdAt === "number" &&
-    typeof o.updatedAt === "number" &&
-    (o.deletedAt === undefined || typeof o.deletedAt === "number") &&
-    isValidBlockMeta(o.blockMeta)
+    // 时间戳须有界 (防远未来 updatedAt 永久赢 LWW 钉死被投毒笔记 / 远未来 deletedAt 造不死墓碑)。
+    isSaneSyncTimestamp(o.createdAt, now) &&
+    isSaneSyncTimestamp(o.updatedAt, now) &&
+    (o.deletedAt === undefined || isSaneSyncTimestamp(o.deletedAt, now)) &&
+    isValidBlockMeta(o.blockMeta, now)
   )
 }
 
@@ -104,6 +112,7 @@ export async function syncNotes(code: string): Promise<SyncResult> {
   if (!isValidSyncCode(code)) throw new Error("同步码格式不正确")
   const { storageId, key } = await deriveKeys(code, "notes")
   const hub = getFilesPort()
+  const now = Date.now() // 入站时间戳上界基准 (整次同步用同一基准即可, 窗口远大于同步耗时)
 
   // 含墓碑 + 完整正文读: 删除靠墓碑进合并/上传才能传播; 读路径 (UI) 另有 listNotes 过滤墓碑。
   const localAll = await hub.listAllNotes()
@@ -119,7 +128,7 @@ export async function syncNotes(code: string): Promise<SyncResult> {
     if (got.data) {
       try {
         const decoded = await decryptJson<unknown[]>(key, got.data.iv, got.data.ciphertext)
-        if (Array.isArray(decoded)) remote = decoded.filter(isValidRemoteNote)
+        if (Array.isArray(decoded)) remote = decoded.filter((x) => isValidRemoteNote(x, now))
       } catch {
         throw new Error("解密失败：同步码可能不一致")
       }

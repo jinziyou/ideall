@@ -7,6 +7,7 @@ import {
   unionMerge,
   subsEqual,
   isLive,
+  isSaneSyncTimestamp,
   pruneExpiredTombstones,
   type SyncResult,
 } from "@protocol/sync"
@@ -15,10 +16,12 @@ import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/lib/syn
 import { getSyncBlob, putSyncBlob } from "./sync-api"
 
 /**
- * 远端项最小结构校验。AES-GCM 已防无密钥方篡改, 但持正确同步码的某端仍可能上传缺字段/类型错误的项;
+ * 远端项最小结构校验。AES-GCM 已防无密钥方篡改, 但持正确同步码的某端 (失陷/老旧) 仍可能上传缺字段/类型错误的项;
  * 尤其 id 缺失会让 unionMerge 以 undefined 作 Map 键、导致多条相互覆盖。过滤合并关键字段非法的项。
+ * 时间戳须有界 (isSaneSyncTimestamp): 远未来 createdAt/updatedAt 会永远赢 LWW 钉死被投毒项, 远未来 deletedAt
+ * 会造 GC 清不掉的不死墓碑。向后兼容: 字段缺省仍放行 (缺时间戳的项 recordTs=NaN, 本就赢不了 LWW), 只拒非法值。
  */
-function isValidRemoteSub(s: unknown): s is Subscription {
+function isValidRemoteSub(s: unknown, now: number): s is Subscription {
   if (!s || typeof s !== "object") return false
   const o = s as Record<string, unknown>
   return (
@@ -26,8 +29,10 @@ function isValidRemoteSub(s: unknown): s is Subscription {
     typeof o.type === "string" &&
     typeof o.key === "string" &&
     typeof o.title === "string" &&
-    // 墓碑亦合法 (deletedAt 缺省=活跃, 有则须为数字); 非法类型会污染 LWW 比较。
-    (o.deletedAt === undefined || typeof o.deletedAt === "number")
+    (o.createdAt === undefined || isSaneSyncTimestamp(o.createdAt, now)) &&
+    (o.updatedAt === undefined || isSaneSyncTimestamp(o.updatedAt, now)) &&
+    // 墓碑亦合法 (deletedAt 缺省=活跃, 有则须为有界数字); 非法/远未来类型会污染 LWW 比较或造不死墓碑。
+    (o.deletedAt === undefined || isSaneSyncTimestamp(o.deletedAt, now))
   )
 }
 
@@ -39,6 +44,7 @@ export async function syncNow(code: string): Promise<SyncResult> {
   if (!isValidSyncCode(code)) throw new Error("同步码格式不正确")
   const { storageId, key } = await deriveKeys(code)
   const hub = getFilesPort()
+  const now = Date.now() // 入站时间戳上界基准 (整次同步用同一基准即可, 窗口远大于同步耗时)
 
   // 含墓碑读: 删除靠墓碑进合并/上传才能传播; 读路径 (UI) 另有 listSubscriptions 过滤墓碑。
   const localAll = await hub.listAllSubscriptions()
@@ -58,7 +64,7 @@ export async function syncNow(code: string): Promise<SyncResult> {
     if (got.data) {
       try {
         const decoded = await decryptJson<unknown[]>(key, got.data.iv, got.data.ciphertext)
-        if (Array.isArray(decoded)) remote = decoded.filter(isValidRemoteSub)
+        if (Array.isArray(decoded)) remote = decoded.filter((x) => isValidRemoteSub(x, now))
       } catch {
         throw new Error("解密失败：同步码可能不一致")
       }

@@ -44,6 +44,23 @@ function recordTs(s: SyncRecord): number {
 }
 
 /**
+ * 允许的时钟前偏移: 接受不超过 now + 此值的时间戳, 容多端 NTP 漂移, 拒绝更远的未来。
+ * 取 1 天 (远大于任何合理时钟漂移), 仍足以瓦解「远未来时间戳永久钉死 LWW」攻击 ——
+ * 被投毒项的领先优势至多维持约 1 天, 其后正常 (now 时间戳) 的编辑/删除即可盖过。
+ */
+export const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000
+
+/**
+ * 同步时间戳合理性: 有限非负数字, 且不超过 now + 容许时钟偏移。now 注入便于测试。
+ * 防御「持正确同步码但失陷/老旧的对端上传远未来时间戳」—— 它会永远赢得 recordTs LWW,
+ * 钉死一条被投毒的记录, 或造一条 GC 永远清不掉、合法删除/复活也盖不过的不死墓碑。
+ * 入站校验 (isValidRemoteSub/isValidRemoteNote) 用它对每条远端记录的时间戳设上界。
+ */
+export function isSaneSyncTimestamp(ts: unknown, now: number): boolean {
+  return typeof ts === "number" && Number.isFinite(ts) && ts >= 0 && ts <= now + MAX_FUTURE_SKEW_MS
+}
+
+/**
  * 按 id 取并集, 同 id 取 updatedAt 较新者胜 (LWW; 并列本地优先, 保证稳定)。
  * 旧实现无条件本地优先, 会静默丢弃远端对已有关注的字段更新。
  *

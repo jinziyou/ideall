@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: https: http: ws: wss:; frame-src 'self' https://www.wonita.link https://wonita.link http://www.wonita.link http://wonita.link; worker-src 'self' blob:"
+      "csp": "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: https: http: ws: wss:; frame-src 'self' https://www.wonita.link https://wonita.link; worker-src 'self' blob:"
     }
   },
   "bundle": {
@@ -37,7 +37,7 @@
       "icons/icon.ico"
     ],
     "category": "Productivity",
-    "shortDescription": "本地优先、供应商中立的个人信息终端",
+    "shortDescription": "本地优先的个人信息终端",
     "longDescription": "ideall — 本地优先的个人信息终端，一切皆文件·一切皆标签页 (home「我的」+ info/community/tool)。",
     "createUpdaterArtifacts": true
   },
