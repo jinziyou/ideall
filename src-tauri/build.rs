@@ -5,6 +5,8 @@ fn main() {
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(
             tauri_build::AppManifest::new().commands(&[
+                // agent 出站守卫 (两端通用); 其余为桌面内嵌浏览器命令。
+                "agent_guarded_fetch",
                 "open_browser_view",
                 "browser_set_bounds",
                 "browser_navigate",

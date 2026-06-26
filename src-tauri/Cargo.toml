@@ -21,6 +21,11 @@ tauri-plugin-opener = "2"
 tauri-plugin-http = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# agent 出站守卫 (agent_guarded_fetch 命令): 自带 reqwest client 做 resolve_to_addrs 钉连 + 解压, 闭合名解析 SSRF。
+# rustls-tls 纯 Rust 跨平台 (含移动端) 免系统 OpenSSL; gzip/br/deflate 解压后计字节挡解压炸弹。
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "deflate", "http2"] }
+# DNS 解析 (lookup_host) 校验所有解析 IP; tauri 已用 tokio, 此处仅显式启用 net feature。
+tokio = { version = "1", features = ["net"] }
 
 # 桌面自动更新 (移动端走应用商店, updater 仅桌面生效)。
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

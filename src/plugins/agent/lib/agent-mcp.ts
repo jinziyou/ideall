@@ -117,6 +117,14 @@ export function summarizeTool(name: string, ok: boolean, data: unknown): string 
       return "已关闭标签"
     case "host.toast":
       return "已提示"
+    case "web.search": {
+      const n = Array.isArray((d as { results?: unknown[] }).results)
+        ? (d as { results: unknown[] }).results.length
+        : 0
+      return n ? `已联网搜索到 ${n} 条结果` : "联网搜索：暂无结果"
+    }
+    case "web.fetch":
+      return `已读取网页${typeof d.title === "string" && d.title ? `「${d.title}」` : ""}`
     default:
       return `已执行 ${name}`
   }

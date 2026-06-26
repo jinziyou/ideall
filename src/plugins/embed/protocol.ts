@@ -36,6 +36,9 @@ export const TOOL = {
   hostNavigate: "host.navigate",
   hostOpenExternal: "host.openExternal",
   hostToast: "host.toast",
+  // web.* agent 联网面 (出站): 把 `/tool` 搜索升级为真·抓取并返回数据。egress 守卫在 @/lib/web-search。
+  webSearch: "web.search",
+  webFetch: "web.fetch",
 } as const
 
 export const RESOURCE = {
@@ -70,6 +73,10 @@ export const PERMISSIONS = [
   // (PDF/图片等) 读出外发模型端点。
   "fs.blobs:read",
   "ui.tabs",
+  // web.* 出站联网 (§egress): 经守卫 (https-only + 私网/元数据 IP 拦截 + 重定向复检 + 体积/超时上限) 取数。
+  // 钉死 first-party (见 grant.ts PERMISSION_MIN_TIER): 仅本应用 agent 持有, 不下放给 verified/any-origin 嵌入页。
+  "web:search",
+  "web:fetch",
 ] as const
 
 /** 嵌入桥授权位 —— 宿主据此注册 tool/resource (越权 = 工具不存在)。 */

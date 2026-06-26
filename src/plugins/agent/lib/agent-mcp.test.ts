@@ -42,16 +42,113 @@ const noteNode = (id: string): Node => ({
   content: [{ type: "p", children: [{ text: "私密正文不应批量外发" }] }],
 })
 
-test("tools/list 只暴露 agentGrant 授权工具 (fs.*/ui.*; 不含 hub.*/identity)", async () => {
+test("tools/list 只暴露 agentGrant 授权工具 (fs.*/ui.*/web.*; 不含 hub.*/identity)", async () => {
   registerMock({})
   const mcp = await connectAgentMcp()
   const names = mcp.tools.map((t) => t.function.name)
-  for (const n of ["fs.list", "fs.read", "fs.create", "fs.write", "fs.delete", "ui.openTab"]) {
+  for (const n of [
+    "fs.list",
+    "fs.read",
+    "fs.create",
+    "fs.write",
+    "fs.delete",
+    "ui.openTab",
+    "web.search",
+    "web.fetch",
+  ]) {
     assert.ok(names.includes(n), `应暴露 ${n}`)
   }
   assert.ok(!names.includes("hub.addBookmark"), "无 hub.bookmarks:write → 不暴露 hub.addBookmark")
   assert.ok(!names.includes("identity.me"), "无 identity:read → 不暴露 identity.me")
   await mcp.close()
+})
+
+// web.* 经统一能力层端到端 (resolveFetch 在 node 非 Tauri 回退 globalThis.fetch, 故 stub 之即可驱动)。
+async function withStubbedFetch(impl: typeof fetch, fn: () => Promise<void>) {
+  const real = globalThis.fetch
+  globalThis.fetch = impl
+  try {
+    await fn()
+  } finally {
+    globalThis.fetch = real
+  }
+}
+
+test("web.fetch: 抓取 https 网页 → 回标题与正文文本", async () => {
+  registerMock({})
+  await withStubbedFetch(
+    async () =>
+      new Response(
+        "<html><head><title>示例标题</title></head><body><p>正文段落内容</p><script>var x=1</script></body></html>",
+        { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+      ),
+    async () => {
+      const mcp = await connectAgentMcp()
+      const r = await mcp.callTool("web.fetch", { url: "https://example.com/a" })
+      assert.equal(r.ok, true)
+      const d = r.data as { title: string; text: string }
+      assert.equal(d.title, "示例标题")
+      assert.ok(d.text.includes("正文段落内容"), "应含正文文本")
+      assert.ok(!d.text.includes("var x=1"), "应剥掉 <script> 内容")
+      await mcp.close()
+    },
+  )
+})
+
+test("web.fetch: 非 https 协议 (javascript:) → blocked-protocol (不发起请求)", async () => {
+  registerMock({})
+  let called = false
+  await withStubbedFetch(
+    async () => {
+      called = true
+      return new Response("", { status: 200 })
+    },
+    async () => {
+      const mcp = await connectAgentMcp()
+      const r = await mcp.callTool("web.fetch", { url: "javascript:alert(1)" })
+      assert.equal(r.ok, false)
+      assert.equal((r.data as { message?: string }).message, "blocked-protocol")
+      assert.equal(called, false, "策略闸应在发起 fetch 前拦截")
+      await mcp.close()
+    },
+  )
+})
+
+test("web.fetch: https 指向环回 IP (127.0.0.1) → blocked-host (SSRF 闸)", async () => {
+  registerMock({})
+  await withStubbedFetch(
+    async () => new Response("", { status: 200 }),
+    async () => {
+      const mcp = await connectAgentMcp()
+      const r = await mcp.callTool("web.fetch", { url: "https://127.0.0.1/admin" })
+      assert.equal(r.ok, false)
+      assert.equal((r.data as { message?: string }).message, "blocked-host")
+      await mcp.close()
+    },
+  )
+})
+
+test("web.search: DDG HTML 抓取 → 解析出 {标题,链接,摘要} 列表", async () => {
+  registerMock({})
+  const ddgHtml = `
+    <div class="result results_links_deep">
+      <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Fpage&amp;rut=abc">示例结果标题</a>
+      <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Fpage">这是一段<b>摘要</b>文本</a>
+    </div>`
+  await withStubbedFetch(
+    async () => new Response(ddgHtml, { status: 200, headers: { "content-type": "text/html" } }),
+    async () => {
+      const mcp = await connectAgentMcp()
+      const r = await mcp.callTool("web.search", { query: "示例" })
+      assert.equal(r.ok, true)
+      const d = r.data as { results: { title: string; url: string; snippet: string }[] }
+      assert.ok(Array.isArray(d.results) && d.results.length >= 1, "应有结果")
+      assert.equal(d.results[0].title, "示例结果标题")
+      assert.equal(d.results[0].url, "https://example.org/page", "应解开 uddg 重定向包装")
+      assert.ok(d.results[0].snippet.includes("摘要"), "应含摘要文本")
+      await mcp.close()
+    },
+  )
 })
 
 test("fs.read(note) 在 agent (无 fs.notes:read) → consent-required", async () => {

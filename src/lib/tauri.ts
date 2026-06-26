@@ -43,6 +43,33 @@ export async function openExternalUrl(href: string): Promise<void> {
   await mod.openUrl(href)
 }
 
+/** agent 出站守卫取数结果 (Rust `agent_guarded_fetch` 命令的返回; 见 src-tauri/src/lib.rs)。 */
+export interface AgentGuardedResponse {
+  status: number
+  finalUrl: string
+  contentType: string | null
+  location: string | null
+  body: string
+}
+
+/**
+ * App 形态: agent 联网 (web.search/web.fetch) 的出站取数经 Rust `agent_guarded_fetch` 命令 ——
+ * 解析主机 → 校验**所有**解析 IP (任一落环回/私网/link-local/元数据即拒) → resolve_to_addrs **钉连**到已校验 IP
+ * (reqwest 不再二次解析, 关闭 DNS-rebind/名解析 SSRF), 并在 Rust 侧做体积/超时/解压计数上限。**不**跟随重定向
+ * (调用方逐跳复检, 每跳重走本命令即重解析+钉连)。仅在 `isTauri()` 为真时调用 (纯浏览器/SSR 无此命令)。
+ */
+export async function agentGuardedFetch(args: {
+  url: string
+  method?: string
+  body?: string
+  headers?: Record<string, string>
+  maxBytes?: number
+  timeoutMs?: number
+}): Promise<AgentGuardedResponse> {
+  const { invoke } = await import("@tauri-apps/api/core")
+  return invoke<AgentGuardedResponse>("agent_guarded_fetch", { args })
+}
+
 /** 主窗口内容区矩形 (CSS 像素, 相对窗口), 同步给内嵌浏览器子 webview。 */
 export type BrowserBounds = { x: number; y: number; w: number; h: number }
 

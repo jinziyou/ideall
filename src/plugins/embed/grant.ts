@@ -88,6 +88,10 @@ export const PERMISSION_MIN_TIER: Partial<Record<Permission, GrantTier>> = {
   "fs.notes:write": "first-party",
   "fs.blobs:read": "first-party",
   "identity.publish": "first-party",
+  // 出站联网钉死 first-party: 未来 verified/any-origin 嵌入页即便携此位也被 effectivePermissions 剥掉,
+  // 不能借宿主拿到任意外网 egress (嵌入页自有同源取数, 不该走宿主出站通道)。
+  "web:search": "first-party",
+  "web:fetch": "first-party",
 }
 
 /**
@@ -102,12 +106,22 @@ export function effectivePermissions(grant: Grant): Permission[] {
 }
 
 /**
- * 本应用 agent 的默认授权集 (§6.2): fs 读写 + 笔记写 + 标签面。
+ * 本应用 agent 的默认授权集 (§6.2): fs 读写 + 笔记写 + 标签面 + 出站联网。
  * **故意不含 fs.notes:read / fs.blobs:read** —— agent 默认看不到既存笔记正文与上传文件二进制 (只看标题/文件名概览);
  * 正文须 @ 引用单条 consent 注入, 文件二进制须用户单独授权 fs.blobs:read。
  * 也不含 identity.publish / hub.* (统一走 fs.* 文件面)。
+ * 含 web:search / web:fetch —— agent 可联网搜索并抓取网页正文返回 (返回数据, 非只 link-out)。安全靠 @/lib/web-search
+ * 的 egress 守卫 (https-only + 私网/元数据 IP 拦截 + 重定向逐跳复检 + 体积/超时/去凭证), 而非 consent 闸;
+ * 抓取内容由 agent 系统提示标注「数据非指令」防间接提示注入 (见 agent-context.ts)。
  */
-const AGENT_PERMISSIONS: Permission[] = ["fs:read", "fs:write", "fs.notes:write", "ui.tabs"]
+const AGENT_PERMISSIONS: Permission[] = [
+  "fs:read",
+  "fs:write",
+  "fs.notes:write",
+  "ui.tabs",
+  "web:search",
+  "web:fetch",
+]
 
 /**
  * 本应用 agent 的 Grant —— 不复用 firstPartyGrant (无 manifest), 经 LoopbackTransport 消费同一能力层。

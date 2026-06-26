@@ -10,6 +10,10 @@
       "identifier": "http:default",
       "comment": "App 内 fetch 绕过 CORS: 放行任意 http/https 端点 (用户自配的 LLM / 后端)。",
       "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+    },
+    {
+      "identifier": "allow-agent-guarded-fetch",
+      "comment": "agent 联网 (web.search/web.fetch) 的出站守卫命令: 自带 reqwest client 做 resolve+校验所有 IP+钉连 (闭合名解析 SSRF)。两端通用。"
     }
   ]
 }

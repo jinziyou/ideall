@@ -57,13 +57,34 @@ test("isGrantActive: 未过期 true / 已过期 false (失效时能力层挂零�
 
 // ── §6.2 隐私不变量: agentGrant 与 iframe manifest 的授权集 (锁死 §9 清单) ──
 
-test("agentGrant: 含 fs:read/fs:write/fs.notes:write/ui.tabs", () => {
+test("agentGrant: 含 fs:read/fs:write/fs.notes:write/ui.tabs + web:search/web:fetch", () => {
   const g = agentGrant(NOW)
   assert.equal(g.tier, "first-party")
   assert.equal(g.consumerId, "ideall-agent")
   assert.equal(g.expiry, null)
-  for (const p of ["fs:read", "fs:write", "fs.notes:write", "ui.tabs"] as const) {
+  for (const p of [
+    "fs:read",
+    "fs:write",
+    "fs.notes:write",
+    "ui.tabs",
+    "web:search",
+    "web:fetch",
+  ] as const) {
     assert.ok(g.permissions.includes(p), `agentGrant 应含 ${p}`)
+  }
+})
+
+test("web:search/web:fetch 钉死 first-party: 低信任档被 effectivePermissions 剥掉 (嵌入页拿不到宿主 egress)", () => {
+  for (const tier of ["verified", "any-origin"] as const) {
+    const g: Grant = {
+      ...firstPartyGrant(manifest(), NOW),
+      tier,
+      permissions: ["web:search", "web:fetch", "hub.subscriptions:read"],
+    }
+    const eff = effectivePermissions(g)
+    assert.equal(eff.includes("web:search"), false, `${tier} 应剥 web:search`)
+    assert.equal(eff.includes("web:fetch"), false, `${tier} 应剥 web:fetch`)
+    assert.ok(eff.includes("hub.subscriptions:read"), `${tier} 应保留非敏感位`)
   }
 })
 
@@ -71,10 +92,13 @@ test("agentGrant **不含** fs.notes:read (既存笔记正文须 @ 引用 consen
   assert.equal(agentGrant(NOW).permissions.includes("fs.notes:read"), false)
 })
 
-test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:write", () => {
+test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:write / web:* 出站位", () => {
   for (const m of [infoEmbedManifest, communityEmbedManifest]) {
     assert.equal(m.permissions.includes("fs.notes:read"), false, `${m.id} 不得含 fs.notes:read`)
     assert.equal(m.permissions.includes("fs.notes:write"), false, `${m.id} 不得含 fs.notes:write`)
+    // 出站联网是 agent 专属 (嵌入页自有同源取数, 不该借宿主出站通道); 半信任源永不该拿 web:*。
+    assert.equal(m.permissions.includes("web:search"), false, `${m.id} 不得含 web:search`)
+    assert.equal(m.permissions.includes("web:fetch"), false, `${m.id} 不得含 web:fetch`)
   }
 })
 
