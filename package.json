@@ -1,7 +1,7 @@
 {
   "name": "ideall",
   "version": "0.1.0",
-  "description": "开源、本地优先、供应商中立的个人信息终端 (home「我的」+ info/community/tool)",
+  "description": "开源、本地优先的个人信息终端 (home「我的」+ info/community/tool)",
   "license": "Apache-2.0",
   "private": false,
   "packageManager": "pnpm@9.15.9",

@@ -25,13 +25,13 @@
 
 **目标**
 - 用一套 ideall 自有协议承载可嵌入的 web 扩展，info/community 为头两个实例。
-- 保住三条主张：供应商中立、用户数据主权、开源可审计——且把"中立"从数据层延伸到 UI 层。
+- 保住三条主张：后端可换·可自建、用户数据主权、开源可审计——且把"可换"从数据层延伸到 UI 层。
 - 让 wonita 能用 web 技术快速迭代 info/community 富 UI，不被客户端发版节奏卡住。
 
 **非目标**
 - 不做离线打包/缓存（info/community 非主权数据，不需要）。本规格只覆盖远程嵌入应用。
 - 不改 home 中枢（订阅/书签/资源/同步）的本地优先与原生实现——那是主权内核，永远原生。
-- 不替代 ServerPort：ServerPort 仍管原生核心与 agent 的取数中立。
+- 不替代 ServerPort：ServerPort 仍管原生核心与 agent 的取数后端可换。
 
 ---
 
@@ -39,7 +39,7 @@
 
 ### 2.1 三层模型
 
-| 层 | 内容 | 形态 | 中立机制 |
+| 层 | 内容 | 形态 | 可换机制 |
 | --- | --- | --- | --- |
 | 主权内核 | home：订阅/书签/资源/私有同步身份 | 本地 / E2E / 原生 / 开源 | ServerPort（后端可换/自建） |
 | 链接层（扩展） | info / community / 未来第三方 | 远程嵌入应用（iframe） | 可换整个嵌入应用 |
@@ -68,7 +68,7 @@
               └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **能力面（mcpPort）**：请求/响应、要 schema 的调用 —— 身份、发布、本地 hub、agent、导航、（可选）中立 data 代理。
+- **能力面（mcpPort）**：请求/响应、要 schema 的调用 —— 身份、发布、本地 hub、agent、导航、（可选）可换后端 data 代理。
 - **UI 事件面（uiPort）**：高频 fire-and-forget —— 主题、resize、可见性、返回键、就绪。**不塞进 MCP**，避免把 UI 节奏耦合进 server 生命周期。
 
 ---
@@ -85,9 +85,9 @@
 | 当前发布身份（CurrentUser） | **页面 ↔ ideall** | `identity.me` | 来自宿主 auth-store |
 | agent（摘要/问答） | **页面 ↔ ideall** | `agent.run` | BYO-key，宿主能力 |
 | 导航 / 外链 / 主题 | **页面 ↔ ideall** | `host.*` / uiPort | 应用外壳能力 |
-| 可选：后端中立读（第三方嵌入应用想跟随用户配置的 ServerPort） | **页面 ↔ ideall → ServerPort** | `data.*` | wonita 一方页不用（走直连）；留给中立/第三方场景 |
+| 可选：后端可换读（第三方嵌入应用想跟随用户配置的 ServerPort） | **页面 ↔ ideall → ServerPort** | `data.*` | wonita 一方页不用（走直连）；留给可换后端/第三方场景 |
 
-> 中立分两层、两套机制：**核心层中立 = ServerPort**（原生 home/agent 可换后端）；**嵌入应用层中立 = 可换整个嵌入应用**（info 是协议，wonita 是默认实现）。所以"wonita 页直连 wonita 语料"不破中立——中立单位是嵌入应用，不是语料读路径。
+> 可换分两层、两套机制：**核心层可换 = ServerPort**（原生 home/agent 可换后端）；**嵌入应用层可换 = 可换整个嵌入应用**（info 是协议，wonita 是默认实现）。所以"wonita 页直连 wonita 语料"不破可换性——可换单位是嵌入应用，不是语料读路径。
 
 ---
 
@@ -211,7 +211,7 @@ export class MessagePortTransport implements Transport {
 | `host.openExternal` | `{url:string}` | `{ok:true}` | `host.external` | 经 opener 插件用系统浏览器打开；URL 安全校验 |
 | `host.toast` | `{message:string, kind?:"info"\|"error"}` | `{ok:true}` | （随容器默认） | 用 ideall toast |
 
-**data / 后端中立读（可选，wonita 一方页不用）**
+**data / 后端可换读（可选，wonita 一方页不用）**
 
 | tool | 入参 | 出参 | 权限 | backed-by |
 | --- | --- | --- | --- | --- |
@@ -444,7 +444,7 @@ class IdeallEmbed {
 
 - **A 期（验证链路）**：协议最小集（握手 + `MessagePortTransport` + `identity.*` + `community.publish` + `host.*`）+ `EmbedHost`；**community 作第一个嵌入应用**（P2、风险低，又正好验证 token 不出 iframe 的链路）。
 - **B 期**：info 作嵌入应用（公共语料直连 + `hub.addSubscription` 写回订阅 + `agent.run`）；保留原生 info 作非 wonita ServerPort 的 fallback。
-- **C 期**：开放协议 + `@ideall/embed-sdk` + 文档 → 第三方嵌入应用 = "中立兑现 + 生态"里程碑落到 UI 层。
+- **C 期**：开放协议 + `@ideall/embed-sdk` + 文档 → 第三方嵌入应用 = "后端/嵌入可换兑现 + 生态"里程碑落到 UI 层。
 
 ---
 

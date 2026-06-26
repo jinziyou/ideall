@@ -110,11 +110,11 @@ type Permission     = CorePermission | ExtPermission
 
 ### 2.4 端口后端（决策 #8：升级为一等用户可添加扩展）
 
-`registerServerPort`/`registerSyncPort`/`registerFilesPort` 已是运行期 register/get（`boot.ts`），是最易解冻面。本轮决策把它**升格为对外一等可添加扩展类型**（兑现「供应商中立」核心主张：换同步/存储/鉴权/取数后端）。但三种端口的**数据暴露面差异极大，须按端口分信任档**：
+`registerServerPort`/`registerSyncPort`/`registerFilesPort` 已是运行期 register/get（`boot.ts`），是最易解冻面。本轮决策把它**升格为对外一等可添加扩展类型**（兑现「后端可换 / 可自建」：换同步/存储/鉴权/取数后端）。但三种端口的**数据暴露面差异极大，须按端口分信任档**：
 
 | 端口 | 后端能看到什么 | 默认可添加档 |
 | --- | --- | --- |
-| `ServerPort`（取数/鉴权） | 你的查询/搜索/发布请求（明文经其转发） | **用户可换**（中立主张核心；≈ 改 API 端点，类比换 DNS） |
+| `ServerPort`（取数/鉴权） | 你的查询/搜索/发布请求（明文经其转发） | **用户可换**（可换/可自建核心；≈ 改 API 端点，类比换 DNS） |
 | `SyncPort`（跨端同步） | **仅密文 + storageId**（E2E 加密，读不到内容） | **用户可换**（最低风险；只触及可用性/完整性，不触机密性） |
 | `FilesPort`（本机「我的」数据层） | **全部本地数据明文** | **默认不开放**，仅自托管/高级项（换它 = 换你所有本机数据的归宿） |
 
@@ -169,6 +169,6 @@ type Permission     = CorePermission | ExtPermission
 | 5 | 三方信任档 | **三方 = webpage（BrowserView，无桥）或 进程外 MCP server（IPC 沙箱）**；带 MCP 桥的 iframe plugin **仅限一方 / 签名源**（与 §2.2 CSP 现实 + 进程内 ambient 权限红队结论一致） | §2.2 / §3 |
 | 6 | ext 隐私粒度 | **两级**：extKind 可声明「公开元数据子集」（如标题/日期，进列举 + agent 上下文），其余 content/meta 默认私密 fail-closed | §2.3 |
 | 7 | 外部 MCP 沙箱 | **保守默认**：只读 + 禁出站网络 + 进程隔离（stdio 子进程）；写 / 联网 / 敏感数据出站一律逐能力 T2 显式批准 | §3 不变量5 |
-| 8 | 端口后端是否对外可添加 | **进，作一等扩展类型**（兑现「供应商中立」）；但按端口分信任档：`ServerPort`/`SyncPort` 用户可换、`FilesPort` 默认仅自托管/高级项 | §2.4 |
+| 8 | 端口后端是否对外可添加 | **进，作一等扩展类型**（兑现「后端可换 / 可自建」）；但按端口分信任档：`ServerPort`/`SyncPort` 用户可换、`FilesPort` 默认仅自托管/高级项 | §2.4 |
 
 > 据此，**§4 取 (A) ext 本地-only**、**§2.2 三方带桥 plugin 仅一方/签名**、**§2.3 两级隐私 + fail-closed**、**§2.4 端口后端按端口分档** 已为定稿方向。剩余纯实现细节（`TIER_RANK` 常量值、`ScopedHostCtx` 句柄面、ext-viewer 注册表签名）进 P0 工单时定。

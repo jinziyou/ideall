@@ -1,6 +1,6 @@
 // ServerPort 契约 —— ideall 用自己的领域词汇定义「一个信息服务必须提供什么」。
 //
-// 这是本地优先 / 混合 P2P 定位的关键端口: ideall = ordinary peer, 不被任何单一后端绑死。
+// 这是「后端可换 / 可自建」定位的关键端口: 业务只依赖 ServerPort 领域类型, 任一实现 ServerPort 的后端都能服务 ideall, 不被任何单一后端绑死。
 // 任何实现了 `ServerPort` 的节点 (官方 wonita 服务、第三方、未来嵌入式/局域网 peer)
 // 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 src/lib/server/http-adapter)。
 //

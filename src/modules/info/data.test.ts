@@ -1,6 +1,6 @@
 // M-4 配套: 消费方解耦验证 (node:test + tsx)。
 // 证明真实的 info 取数 facade (data.ts) 全程经 getServerPort() 路由, 故能在被替换的任意后端上运行 ——
-// 中立性不止停在端口层, 业务消费方确实不与 wonita 绑死。port 层完整契约/缺省回退证明见 protocol/server-port.test.ts。
+// 后端可换不止停在端口层, 业务消费方确实不与 wonita 绑死。port 层完整契约/缺省回退证明见 protocol/server-port.test.ts。
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
