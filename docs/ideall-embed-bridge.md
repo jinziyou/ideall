@@ -369,7 +369,7 @@ if (perms.includes("hub.subscriptions:write"))
 1. **放行被嵌入**：服务端去 `X-Frame-Options`、设 `frame-ancestors`（§9.3）。
 2. **接握手 + transport**：监听 `ideall:init`、校验 origin、取 ports、起 MCP client、`initialize`。封进 `@ideall/embed-sdk` 后一行 `await IdeallEmbed.connect()`。
 3. **取数分流**：公共语料**仍页面直连** wonita；发布/删除/profile、订阅/收藏、当前身份**改走 MCP**；页面不再自存 token、嵌入态不做登录。
-4. **双模式检测**：收到 init=嵌入态；超时（~800ms）无 init=独立态。
+4. **双模式检测（两个嵌入态信号）**：① **URL 标记**——ideall 给 iframe `src` 注入 `?embed=ideall&embedApp=<id>`（宿主 `src/plugins/embed/host.tsx`，query 不改 origin），被嵌入页**首帧**即可据此判嵌入态、立刻去 chrome，**无闪烁**；② **`ideall:init` 握手**——收到即确认嵌入态并接 transport（§4）。两信号皆缺、超时（~800ms）无 init=独立站点态。
 
 ```ts
 const ideall = await IdeallEmbed.tryConnect({ timeoutMs: 800 })  // 嵌入则连上, 否则 null
@@ -387,7 +387,7 @@ export const canPublish = ideall ? ideall.permissions.includes("identity.publish
 ```
 
 **强烈建议（像原生 + 安全）**
-5. 去掉自己的导航/头尾，只渲染内容区（外壳由 ideall `(discover)` 提供）。
+5. **去掉自己的导航/头尾**，只渲染内容区（外壳由 ideall `(discover)` 提供）。**首帧**就读 §11.4 的 `?embed=ideall` URL 标记来隐藏 chrome——别等异步 `ideall:init`，否则导航会闪一下。注意：ideall 作宿主**无法**跨域删你的导航（同源策略），故此条必须被嵌入页自己做。
 6. 主题：吃 init 的 `theme` + 听 uiPort `theme`，套 ideall token。
 7. 导航：外链/跳 ideall 路由改调 `host.openExternal`/`host.navigate`，不用 `window.open`/`target=_blank`。
 8. 能力门控：按 init 的 `permissions` 显隐 UI（没授 publish 就别显示发布按钮）。

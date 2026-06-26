@@ -46,20 +46,27 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
 
   // 同步可判的配置校验 (URL 合法 / 源在白名单 / 非同源)。放 useMemo 而非 effect:
   // effect 体内同步 setState 会触发级联渲染 (react-hooks/set-state-in-effect)。配置错误直接进 failed。
-  const { entryOrigin, configError } = React.useMemo<{
+  const { entryOrigin, embedSrc, configError } = React.useMemo<{
     entryOrigin: string | null
+    embedSrc: string | null
     configError: string | null
   }>(() => {
-    let origin: string
+    let url: URL
     try {
-      origin = new URL(manifest.entry).origin
+      url = new URL(manifest.entry)
     } catch {
-      return { entryOrigin: null, configError: `manifest.entry 非法 URL: ${manifest.entry}` }
+      return {
+        entryOrigin: null,
+        embedSrc: null,
+        configError: `manifest.entry 非法 URL: ${manifest.entry}`,
+      }
     }
+    const origin = url.origin
     // 一致性断言: entry 源必须在 manifest.origins 白名单内 (防 env 错配下向非预期源发 init)。
     if (manifest.origins.length > 0 && !manifest.origins.includes(origin)) {
       return {
         entryOrigin: null,
+        embedSrc: null,
         configError: `entry 源 ${origin} 不在 manifest.origins 白名单内 (检查 NEXT_PUBLIC_EMBED_BASE)`,
       }
     }
@@ -68,10 +75,16 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     if (typeof location !== "undefined" && origin === location.origin) {
       return {
         entryOrigin: null,
+        embedSrc: null,
         configError: `entry 源 ${origin} 与宿主同源 (嵌入源须跨域以隔离宿主 localStorage)`,
       }
     }
-    return { entryOrigin: origin, configError: null }
+    // 嵌入态信号 (URL 标记): 被嵌入页首帧即可据 ?embed=ideall 去掉自身导航/头尾 (外壳由 ideall 提供),
+    // 无需等异步 ideall:init 握手 → 消除「init 到达前导航闪一下」。契约见 docs/ideall-embed-bridge.md §11。
+    // query 标记不改 origin, 不影响上方源校验与 postMessage 的 targetOrigin (= entryOrigin)。
+    url.searchParams.set("embed", "ideall")
+    url.searchParams.set("embedApp", manifest.id)
+    return { entryOrigin: origin, embedSrc: url.toString(), configError: null }
   }, [manifest])
 
   // 配置错误直接渲染 failed; 运行期失败 (超时 / iframe onError) 走 status。
@@ -202,7 +215,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       <iframe
         key={reloadKey}
         ref={iframeRef}
-        src={manifest.entry}
+        src={embedSrc ?? manifest.entry}
         title={manifest.name}
         onError={() => setStatus("failed")}
         // allow-same-origin: 被嵌入页需真实 origin (CORS 直连语料 + 宿主源校验); 隔膜靠跨域 + token 不出宿主, 非 sandbox。
