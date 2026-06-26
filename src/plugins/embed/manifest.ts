@@ -16,8 +16,8 @@ export interface Manifest {
   permissions: Permission[]
 }
 
-/** 被嵌入应用 (wonita/portal) 基址 —— 开发默认 localhost:5024, 生产 web.wonita.link。 */
-const EMBED_BASE = (process.env.NEXT_PUBLIC_EMBED_BASE ?? "http://localhost:5024").replace(
+/** 被嵌入应用 (wonita/portal) 基址 —— 默认官方 portal; 本地联调经 NEXT_PUBLIC_EMBED_BASE 覆盖。 */
+const EMBED_BASE = (process.env.NEXT_PUBLIC_EMBED_BASE ?? "https://www.wonita.link").replace(
   /\/$/,
   "",
 )
@@ -26,7 +26,7 @@ const EMBED_ORIGIN = (() => {
   try {
     return new URL(EMBED_BASE).origin
   } catch {
-    return "http://localhost:5024"
+    return "https://www.wonita.link"
   }
 })()
 

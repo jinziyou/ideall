@@ -14,8 +14,8 @@ function manifest(overrides: Partial<Manifest> = {}): Manifest {
     id: "info",
     name: "资讯",
     version: "1.0.0",
-    entry: "https://web.wonita.link/info",
-    origins: ["https://web.wonita.link"],
+    entry: "https://www.wonita.link/info",
+    origins: ["https://www.wonita.link"],
     minHostProtocol: "1.0",
     permissions: ["hub.subscriptions:read", "hub.subscriptions:write"],
     ...overrides,
@@ -26,7 +26,7 @@ test("firstPartyGrant: T0 —— 采信 manifest 权限, 自动/不过期/不可
   const g = firstPartyGrant(manifest(), NOW)
   assert.equal(g.tier, "first-party")
   assert.equal(g.consumerId, "info")
-  assert.equal(g.origin, "https://web.wonita.link")
+  assert.equal(g.origin, "https://www.wonita.link")
   assert.deepEqual(g.permissions, ["hub.subscriptions:read", "hub.subscriptions:write"])
   assert.equal(g.grantedAt, NOW)
   assert.equal(g.expiry, null)
@@ -35,7 +35,7 @@ test("firstPartyGrant: T0 —— 采信 manifest 权限, 自动/不过期/不可
 
 test("firstPartyGrant: entry 非法 URL → origin 回退到 origins[0]", () => {
   const g = firstPartyGrant(manifest({ entry: "not-a-url" }), NOW)
-  assert.equal(g.origin, "https://web.wonita.link")
+  assert.equal(g.origin, "https://www.wonita.link")
 })
 
 test("isGrantActive: expiry=null 恒有效", () => {

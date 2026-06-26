@@ -8,7 +8,7 @@
  * 客户端直连后端需后端放行 CORS (见 docs/app.md); App 内 agent 经 tauri-plugin-http 绕过 CORS。
  */
 export const SERVER_ADDR: string =
-  process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "http://127.0.0.1:5021"
+  process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "https://api.wonita.link"
 
 /** wonita 服务的 `/info` 子路由前缀, info 模块所有取数的 base URL。 */
 export const INFO_API_URI: string = `${SERVER_ADDR}/info`
