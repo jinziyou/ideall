@@ -25,7 +25,7 @@ function currentTheme(): ThemeTokens {
 
 /**
  * EmbedHost —— 宿主壳: 把一个嵌入应用 (manifest) 以 iframe + postMessage + MCP 内嵌进 ideall。
- *  - 握手: iframe 'load' 或 收到页面 hello (取先到者) → 建两条 MessageChannel → 转移 port2 + 发 ideall:init。
+ *  - 握手: 仅在被嵌入页 hello 后建桥 (不在 iframe load 时发 init —— load 早于 portal JS 就绪会丢 init 且 started 守卫阻重试)。
  *  - 能力面: 起 McpServer, 只注册 manifest 授权的 tool/resource, 经 mcpPort 通信。
  *  - UI 面: uiPort 推送主题 (初始 + 变更) / 接收页面 ready 撤 loading。
  *  - 卸载: 关闭 server 与端口, 断开观察器。
@@ -156,11 +156,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       })
     }
 
-    // 路径 1: iframe 'load' 后宿主主动发 init。
-    const onLoad = () => startBridge()
-    iframe.addEventListener("load", onLoad)
-
-    // 路径 2: 页面 hello (主动索取 init) —— 消除 'load' 时序竞争。须校验来源与 source。
+    // 仅响应 hello 建桥: portal 每 200ms 重发 hello 直到收到 init; load 时 JS 常未就绪, 提前 init 会丢包。
     const onHello = (e: MessageEvent) => {
       if (e.source !== iframe.contentWindow) return
       if (e.origin !== entryOrigin) return
@@ -171,7 +167,6 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
 
     return () => {
       window.clearTimeout(failTimer)
-      iframe.removeEventListener("load", onLoad)
       window.removeEventListener("message", onHello)
       cleanups.forEach((f) => f())
     }
