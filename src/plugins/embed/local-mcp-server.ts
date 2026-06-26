@@ -9,6 +9,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { isGrantActive, effectivePermissions, type Grant } from "./grant"
 import { registerGrantedResources, registerGrantedTools, type HostToolsCtx } from "./tools"
+import { makeScopedHost } from "./scoped-host"
 
 /**
  * 据 Grant 起一个只挂授权能力的 McpServer (尚未接 transport)。
@@ -25,7 +26,9 @@ export function createLocalMcpServer(
   if (!isGrantActive(grant, now)) return server // 失效 → 空能力面 (含 host.toast 在内, tools/list 空)
   // 信任档门 (§2.1): 滤掉信任档不达标的敏感位 —— 低档消费方携敏感位也不挂对应能力。
   const perms = effectivePermissions(grant)
-  registerGrantedResources(server, perms)
-  registerGrantedTools(server, perms, ctx)
+  // 收窄宿主句柄 (scoped-host): note/thread 正文须 perms 含 fs.notes:read 才可达, 私密读闸下沉至此。
+  const host = makeScopedHost(perms)
+  registerGrantedResources(server, perms, host)
+  registerGrantedTools(server, perms, ctx, host)
   return server
 }

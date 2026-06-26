@@ -1,17 +1,16 @@
-// 把授权位映射到宿主能力 (getServerPort / getFilesPort / auth-store) 并注册到 MCP server。
+// 把授权位映射到宿主能力 (经注入的 ScopedHost: getSession / server / files) 并注册到 MCP server。
 // 只注册 manifest 授予的 tool/resource → tools/list 天然只暴露可用项 (越权调用 = 工具不存在)。
-// **token 永不返回给页面**: 发布类工具在 handler 内从 auth-store 取 token 调 ServerPort。
+// **token 永不返回给页面**: 发布类工具在 handler 内从 host.getSession() 取 token 调 ServerPort。
+// note/thread 正文的私密读闸下沉到 host.files (见 scoped-host.ts); 本文件不再触达模块单例。
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import { getServerPort } from "@protocol/server-port"
-import { getFilesPort } from "@protocol/files"
 import type { NewBookmark } from "@protocol/files"
-import { stripNode, NODE_KINDS, type Node, type NodeKind } from "@protocol/node"
-import { getSession } from "@/lib/auth/auth-store"
+import { NODE_KINDS, type NodeKind } from "@protocol/node"
 import { openExternalUrl } from "@/lib/tauri"
 import { safeHref } from "@/lib/safe-url"
 import { toast } from "sonner"
 import { TOOL, RESOURCE, type Permission } from "./protocol"
+import type { ScopedHost } from "./scoped-host"
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
 
@@ -46,13 +45,14 @@ export function registerGrantedTools(
   server: McpServer,
   perms: Permission[],
   ctx: HostToolsCtx,
+  host: ScopedHost,
 ): void {
   const has = (p: Permission) => perms.includes(p)
 
   // ── identity / 发布 ─────────────────────────────────────────────────────────
   if (has("identity:read")) {
     server.tool(TOOL.identityMe, {}, async () => {
-      const s = getSession()
+      const s = host.getSession()
       return ok(s?.user ?? null)
     })
   }
@@ -62,9 +62,9 @@ export function registerGrantedTools(
       TOOL.communityPublish,
       { title: z.string(), url: z.string().optional(), body: z.string().optional() },
       async (a) => {
-        const s = getSession()
+        const s = host.getSession()
         if (!s) return fail(-32002, "not-authenticated")
-        const r = await getServerPort().publish(s.token, {
+        const r = await host.server().publish(s.token, {
           title: a.title,
           url: a.url,
           body: a.body,
@@ -74,9 +74,9 @@ export function registerGrantedTools(
     )
 
     server.tool(TOOL.communityDeletePublication, { id: z.number() }, async (a) => {
-      const s = getSession()
+      const s = host.getSession()
       if (!s) return fail(-32002, "not-authenticated")
-      const r = await getServerPort().deletePublication(s.token, a.id)
+      const r = await host.server().deletePublication(s.token, a.id)
       return r.ok ? ok({ ok: true }) : fail(-32000, r.message)
     })
 
@@ -84,9 +84,9 @@ export function registerGrantedTools(
       TOOL.meUpdateProfile,
       { name: z.string().optional(), avatar: z.string().optional() },
       async (a) => {
-        const s = getSession()
+        const s = host.getSession()
         if (!s) return fail(-32002, "not-authenticated")
-        const r = await getServerPort().updateProfile(s.token, { name: a.name, avatar: a.avatar })
+        const r = await host.server().updateProfile(s.token, { name: a.name, avatar: a.avatar })
         return r.ok ? ok({ ok: true }) : fail(-32000, r.message)
       },
     )
@@ -95,11 +95,9 @@ export function registerGrantedTools(
   // ── hub / 本地主权数据 ──────────────────────────────────────────────────────
   if (has("hub.subscriptions:read")) {
     server.tool(TOOL.hubIsSubscribed, { type: subType, key: z.string() }, async (a) =>
-      ok(await getFilesPort().isSubscribed(a.type, a.key)),
+      ok(await host.files.isSubscribed(a.type, a.key)),
     )
-    server.tool(TOOL.hubListSubscriptions, {}, async () =>
-      ok(await getFilesPort().listSubscriptions()),
-    )
+    server.tool(TOOL.hubListSubscriptions, {}, async () => ok(await host.files.listSubscriptions()))
   }
 
   if (has("hub.subscriptions:write")) {
@@ -119,11 +117,11 @@ export function registerGrantedTools(
         // tool 关注的 key 即启动 URL, 会渲染成 <a href>; 过协议白名单拦伪协议 (与 hubAddBookmark 一致),
         // 防持权 iframe 经 MCP 注入 javascript: 工具关注 → 用户点击触发存储型 XSS。
         if (a.type === "tool" && !safeHref(a.key)) return fail(-32602, "blocked-protocol")
-        return ok(await getFilesPort().addSubscription(a))
+        return ok(await host.files.addSubscription(a))
       },
     )
     server.tool(TOOL.hubRemoveSubscription, { type: subType, key: z.string() }, async (a) => {
-      await getFilesPort().removeSubscription(a.type, a.key)
+      await host.files.removeSubscription(a.type, a.key)
       return ok({ ok: true })
     })
   }
@@ -142,56 +140,51 @@ export function registerGrantedTools(
       async (a) => {
         // 第三方嵌入页经 MCP 传入 url: 过协议白名单 (与 agent-tools 写入边界一致), 拦 javascript:/data: 伪协议入库。
         if (!safeHref(a.url)) return fail(-32602, "blocked-protocol")
-        const hub = getFilesPort()
         // 去重: addBookmark 非幂等; 同 url 重复点会产生重复书签 (与 ideall SaveToMine 一致)。
-        const existing = await hub.listBookmarks()
+        const existing = await host.files.listBookmarks()
         const dup = existing.find((b) => b.url === a.url)
         if (dup) return ok(dup)
-        return ok(await hub.addBookmark(a as NewBookmark))
+        return ok(await host.files.addBookmark(a as NewBookmark))
       },
     )
   }
 
   // ── fs.* 统一 Node 文件面 (§6, 净新建) ──────────────────────────────────────
   if (has("fs:read")) {
-    // fs.list: 列节点元数据。note/thread 一律经 stripNode 剥正文/消息 —— 批量永不回私密内容
+    // fs.list: 列节点元数据。note/thread 一律经 host.files.listStripped 剥正文/消息 —— 批量永不回私密内容
     // (即便持 fs.notes:read; 正文须 fs.read 单条 + consent)。可选 parentId 过滤同级。
     server.tool(
       TOOL.fsList,
       { kind: nodeKind.optional(), parentId: z.string().nullable().optional() },
       async (a) => {
         const kinds = a.kind ? [a.kind] : ALL_NODE_KINDS
-        let nodes = await getFilesPort().fsListNodes(kinds)
+        let nodes = await host.files.listStripped(kinds)
         if (a.parentId !== undefined) nodes = nodes.filter((n) => n.parentId === a.parentId)
-        return ok(nodes.map(stripNode))
+        return ok(nodes)
       },
     )
-    // fs.read: 读单个节点完整内容。私密内容 (note 正文 / thread 会话, 与 stripNode 同口径) 二次 gate
-    // 到 fs.notes:read (= 私密读 consent 位); 无则 consent-required (@ 引用单条单次临时注入)。余 fs:read 即可。
-    // 防 fs.read(thread) 在仅持 fs:read 时绕过 (批量已剥 messages, 单读须同等 gate, 否则会话泄漏)。
+    // fs.read: 读单个节点完整内容。私密内容 (note 正文 / thread 会话) 的读闸下沉到 host.files.readGated:
+    // 无 fs.notes:read 时对 note/thread 返回 "gated" → consent-required (@ 引用单条单次临时注入), 余正常。
     server.tool(TOOL.fsRead, { kind: nodeKind, id: z.string() }, async (a) => {
-      const n = await getFilesPort().fsGetNode(a.id)
-      if (!n || n.kind !== a.kind) return fail(-32004, "not-found")
-      if ((n.kind === "note" || n.kind === "thread") && !has("fs.notes:read"))
-        return fail(-32003, "consent-required")
-      return ok(n)
+      const r = await host.files.readGated(a.id, a.kind)
+      if (r === null) return fail(-32004, "not-found")
+      if (r === "gated") return fail(-32003, "consent-required")
+      return ok(r)
     })
     // fs.readBlob: 文件二进制 base64 (大文件不内联)。
     server.tool(TOOL.fsReadBlob, { id: z.string() }, async (a) => {
-      const r = await getFilesPort().fsReadBlob(a.id)
+      const r = await host.files.readBlob(a.id)
       return r ? ok(r) : fail(-32004, "not-found")
     })
   }
 
   // fs.* 写: note 二次 gate 到 fs.notes:write (防 fs:write 绕过 notes 专属位 §6.2); 余 fs:write。
   // 工具在持任一写位时注册, handler 内按 kind 二次校验 (notes-only 消费方只能写 note)。
+  // 写返回的 Node 由 host.files 自动按私密读位净化 (无 fs.notes:read 剥 note/thread 正文; 写 ≠ 可读)。
   if (has("fs:write") || has("fs.notes:write")) {
     const canWrite = (k: NodeKind) => (k === "note" ? has("fs.notes:write") : has("fs:write"))
     const fsWriteErr = (e: unknown) =>
       fail(-32000, e instanceof Error ? e.message : "fs-write-failed")
-    // 写工具的返回 Node 也须按私密读位净化: 否则持 fs.notes:write 但无 fs.notes:read 者可经 fs.write/move
-    // 的回读拿到既存 note 正文 / thread 会话 (写不等于可读)。有 fs.notes:read 才回全文。
-    const sanitize = (n: Node): Node => (has("fs.notes:read") ? n : stripNode(n))
 
     server.tool(
       TOOL.fsCreate,
@@ -205,7 +198,7 @@ export function registerGrantedTools(
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          return ok(sanitize(await getFilesPort().fsCreateNode(a)))
+          return ok(await host.files.createNode(a))
         } catch (e) {
           return fsWriteErr(e)
         }
@@ -225,13 +218,13 @@ export function registerGrantedTools(
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          const n = await getFilesPort().fsUpdateNode(a.kind, a.id, {
+          const n = await host.files.updateNode(a.kind, a.id, {
             title: a.title,
             tags: a.tags,
             content: a.content,
             parentId: a.parentId,
           })
-          return n ? ok(sanitize(n)) : fail(-32004, "not-found")
+          return n ? ok(n) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
         }
@@ -249,8 +242,8 @@ export function registerGrantedTools(
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          const n = await getFilesPort().fsMoveNode(a.kind, a.id, a.parentId, a.afterSortKey)
-          return n ? ok(sanitize(n)) : fail(-32004, "not-found")
+          const n = await host.files.moveNode(a.kind, a.id, a.parentId, a.afterSortKey)
+          return n ? ok(n) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
         }
@@ -260,7 +253,7 @@ export function registerGrantedTools(
     server.tool(TOOL.fsDelete, { kind: nodeKind, id: z.string() }, async (a) => {
       if (!canWrite(a.kind)) return fail(-32003, "consent-required")
       try {
-        await getFilesPort().fsDeleteNode(a.kind, a.id)
+        await host.files.deleteNode(a.kind, a.id)
         return ok({ ok: true })
       } catch (e) {
         return fsWriteErr(e)
@@ -325,7 +318,11 @@ export function registerGrantedTools(
 }
 
 /** 注册授权范围内的只读资源 (resources/read)。 */
-export function registerGrantedResources(server: McpServer, perms: Permission[]): void {
+export function registerGrantedResources(
+  server: McpServer,
+  perms: Permission[],
+  host: ScopedHost,
+): void {
   const has = (p: Permission) => perms.includes(p)
   const json = (uri: string, data: unknown) => ({
     contents: [{ uri, mimeType: "application/json", text: JSON.stringify(data ?? null) }],
@@ -333,23 +330,23 @@ export function registerGrantedResources(server: McpServer, perms: Permission[])
 
   if (has("identity:read")) {
     server.resource("identity-me", RESOURCE.identityMe, async (uri) =>
-      json(uri.href, getSession()?.user ?? null),
+      json(uri.href, host.getSession()?.user ?? null),
     )
   }
   if (has("hub.subscriptions:read")) {
     server.resource("hub-subscriptions", RESOURCE.hubSubscriptions, async (uri) =>
-      json(uri.href, await getFilesPort().listSubscriptions()),
+      json(uri.href, await host.files.listSubscriptions()),
     )
   }
   if (has("hub.bookmarks:read")) {
     server.resource("hub-bookmarks", RESOURCE.hubBookmarks, async (uri) =>
-      json(uri.href, await getFilesPort().listBookmarks()),
+      json(uri.href, await host.files.listBookmarks()),
     )
   }
   if (has("fs:read")) {
-    // fs://nodes 全库快照: 与 fs.list 同点经 stripNode 净化 (note/thread 剥私密内容), 防净化漂移。
+    // fs://nodes 全库快照: 与 fs.list 同点经 host.files.listStripped 净化 (note/thread 剥私密内容), 防净化漂移。
     server.resource("fs-nodes", RESOURCE.fsNodes, async (uri) =>
-      json(uri.href, (await getFilesPort().fsListNodes(ALL_NODE_KINDS)).map(stripNode)),
+      json(uri.href, await host.files.listStripped(ALL_NODE_KINDS)),
     )
   }
 }
