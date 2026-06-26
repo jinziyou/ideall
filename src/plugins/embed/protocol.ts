@@ -1,6 +1,6 @@
 // ideall 嵌入桥协议常量与类型 (宿主壳一侧)。
 // 与被嵌入页 (wonita/portal `src/embed/protocol.ts`) 必须保持一致 (两个独立仓库, 各持一份)。
-// 设计见 jinziyou docs/ideall-embed-bridge.md。
+// 设计见 docs/ideall-embed-bridge.md。
 
 /** 端口移交握手消息 type (宿主 → iframe, 随附两个 MessagePort)。 */
 export const INIT_MESSAGE_TYPE = "ideall:init"
