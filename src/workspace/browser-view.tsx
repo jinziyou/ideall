@@ -153,13 +153,28 @@ export default function BrowserView() {
     <div className="flex h-full flex-col">
       {/* 工具条 (可信本地 DOM; 与下方子 webview 区域严格不重叠) */}
       <div className="flex h-11 shrink-0 items-center gap-1 border-b bg-card px-2">
-        <button type="button" onClick={() => browserBack().catch(() => {})} title="后退" className={iconBtn}>
+        <button
+          type="button"
+          onClick={() => browserBack().catch(() => {})}
+          title="后退"
+          className={iconBtn}
+        >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => browserForward().catch(() => {})} title="前进" className={iconBtn}>
+        <button
+          type="button"
+          onClick={() => browserForward().catch(() => {})}
+          title="前进"
+          className={iconBtn}
+        >
           <ArrowRight className="h-4 w-4" />
         </button>
-        <button type="button" onClick={() => browserReload().catch(() => {})} title="刷新" className={iconBtn}>
+        <button
+          type="button"
+          onClick={() => browserReload().catch(() => {})}
+          title="刷新"
+          className={iconBtn}
+        >
           <RotateCw className="h-4 w-4" />
         </button>
         <form
