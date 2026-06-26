@@ -2,11 +2,19 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { Bot, Loader2, Send, Settings, SquarePen, Trash2, Wrench, X } from "lucide-react"
+import { Bot, Loader2, Send, Settings, Sparkles, SquarePen, Trash2, Wrench, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getActiveNodeRef } from "@/lib/active-node"
 import { Button } from "@/ui/button"
 import { Textarea } from "@/ui/textarea"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu"
 import { ServiceHeader } from "@/shared/service-header"
+import { BUILTIN_SKILLS, type AgentSkill } from "../lib/agent-skills"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import {
   createThread,
@@ -135,9 +143,12 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
     abortRef.current?.abort()
   }
 
-  async function send() {
-    const text = input.trim()
+  async function send(override?: string, opts?: { agentMode?: boolean }) {
+    // override: 技能等非输入框来源的预置文本; 缺省仍取输入框。useAgent: 技能可临时强制智能体模式
+    // (绕开 setAgentMode 异步 state 同 tick 读不到的问题)。
+    const text = (override ?? input).trim()
     if (!text || sendingRef.current) return
+    const useAgent = opts?.agentMode ?? agentMode
     const cfg = getAgentSettings()
     if (!isConfigured(cfg)) {
       toast.error("请先在设置中填写 API Key")
@@ -146,7 +157,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
     }
     sendingRef.current = true
 
-    setInput("")
+    if (override === undefined) setInput("") // 技能触发不清空用户已输入的草稿
     const userMsg = makeMessage("user", text)
     const convo = [...messages, userMsg]
     setMessages(convo)
@@ -178,9 +189,9 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
       const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""
       // 对话即文件 (§6.5): 注入用户当前正在看的 note 正文 / thread 会话 (随 home 上下文开关)。
       const referenced = cfg.includeHomeContext ? await gatherReferencedContext() : ""
-      system = buildSystemPrompt(ctx, { tools: agentMode, referenced })
+      system = buildSystemPrompt(ctx, { tools: useAgent, referenced })
     } catch {
-      system = buildSystemPrompt("", { tools: agentMode })
+      system = buildSystemPrompt("", { tools: useAgent })
     }
     const apiMessages = [
       { role: "system", content: system },
@@ -198,7 +209,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
     let acc = ""
     let toolEvents: AgentToolEvent[] = []
     try {
-      if (agentMode) {
+      if (useAgent) {
         // 智能体: 工具调用循环 (非流式), 工具事件实时回填到该助手消息
         const res = await runAgent({
           baseURL: cfg.baseURL,
@@ -236,7 +247,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
       }
     } finally {
       // 智能体若没产出文本 (纯工具轮 / 中途停止), 用工具结果合成一句, 避免空助手消息
-      if (agentMode && !acc.trim()) {
+      if (useAgent && !acc.trim()) {
         acc = toolEvents.length
           ? `已执行 ${toolEvents.length} 个操作：${toolEvents.map((t) => t.summary).join("；")}`
           : "（助手没有返回内容）"
@@ -271,6 +282,27 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
       e.preventDefault()
       send()
     }
+  }
+
+  // 技能 = 一条预置提示, 点选即执行 (而非只预填)。needsActiveNode 类先校验当前节点 + 数据上下文开关。
+  function runSkill(skill: AgentSkill) {
+    if (sendingRef.current) return
+    if (!isConfigured(getAgentSettings())) {
+      toast.error("请先在设置中填写 API Key")
+      setSettingsOpen(true)
+      return
+    }
+    if (skill.needsActiveNode) {
+      if (!getActiveNodeRef()) {
+        toast.error("请先打开一篇笔记或一段对话，技能才能读到当前内容")
+        return
+      }
+      if (!getAgentSettings().includeHomeContext) {
+        toast.error("请在设置中开启「带上我的数据」，技能才能读到当前内容")
+        return
+      }
+    }
+    void send(skill.prompt, { agentMode: skill.agentMode })
   }
 
   return (
@@ -429,6 +461,31 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
               <Wrench className="h-3.5 w-3.5" />
               智能体模式
             </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={sending}
+                  title="一键技能：用预置提示 + 当前上下文跑助手"
+                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  技能
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60">
+                {BUILTIN_SKILLS.map((s) => (
+                  <DropdownMenuItem
+                    key={s.id}
+                    onSelect={() => runSkill(s)}
+                    className="flex flex-col items-start gap-0.5"
+                  >
+                    <span className="text-sm">{s.label}</span>
+                    <span className="text-xs text-muted-foreground">{s.hint}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {agentMode && (
               <span className="text-xs text-muted-foreground">助手可读写你的关注、书签、资源</span>
             )}
@@ -459,7 +516,7 @@ export default function AgentPanel({ compact = false }: { compact?: boolean } = 
                 停止
               </Button>
             ) : (
-              <Button className="gap-1.5" onClick={send} disabled={!input.trim()}>
+              <Button className="gap-1.5" onClick={() => send()} disabled={!input.trim()}>
                 {streamingId ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
