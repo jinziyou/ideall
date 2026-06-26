@@ -341,7 +341,9 @@ function safeCodePoint(n: number): string {
 
 /** 行内片段 (标题/摘要) 去标签 + 解实体 + 压空白。 */
 function stripTags(s: string): string {
-  return decodeEntities(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim()
+  return decodeEntities(s.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 /** 整页 HTML → 可读纯文本 (剥 script/style, 块级转换行)。 */
@@ -382,14 +384,19 @@ export interface WebFetchResult {
 }
 
 /** 抓取一个 https 链接, 回其可读正文文本 (截断到 maxChars)。违反 egress 策略/失败抛 WebError。 */
-export async function webFetch(rawUrl: string, maxChars = DEFAULT_FETCH_CHARS): Promise<WebFetchResult> {
+export async function webFetch(
+  rawUrl: string,
+  maxChars = DEFAULT_FETCH_CHARS,
+): Promise<WebFetchResult> {
   const cap = Math.min(Math.max(Math.trunc(maxChars) || DEFAULT_FETCH_CHARS, 200), MAX_FETCH_CHARS)
   const r = await guardedFetch(rawUrl)
   if (!r.ok) throw new WebError("fetch-failed", -32000)
   const base = (r.contentType ?? "").split(";")[0].trim().toLowerCase()
-  if (base && !ALLOWED_CONTENT_TYPES.has(base)) throw new WebError("unsupported-content-type", -32003)
+  if (base && !ALLOWED_CONTENT_TYPES.has(base))
+    throw new WebError("unsupported-content-type", -32003)
   const raw = r.text
-  const isHtml = base === "text/html" || base === "application/xhtml+xml" || /^\s*<(?:!doctype|html)/i.test(raw)
+  const isHtml =
+    base === "text/html" || base === "application/xhtml+xml" || /^\s*<(?:!doctype|html)/i.test(raw)
   const title = isHtml ? extractTitle(raw) : ""
   let text = isHtml ? htmlToText(raw) : raw.trim()
   const truncated = text.length > cap
@@ -474,7 +481,9 @@ function flattenRelated(topics: DdgRelated[] | undefined): DdgRelated[] {
 
 async function ddgInstantAnswer(query: string, limit: number): Promise<SearchResult[]> {
   const r = await guardedFetch(
-    "https://api.duckduckgo.com/?q=" + encodeURIComponent(query) + "&format=json&no_html=1&skip_disambig=1",
+    "https://api.duckduckgo.com/?q=" +
+      encodeURIComponent(query) +
+      "&format=json&no_html=1&skip_disambig=1",
   )
   if (!r.ok) return []
   const data = JSON.parse(r.text) as {
@@ -486,12 +495,18 @@ async function ddgInstantAnswer(query: string, limit: number): Promise<SearchRes
   const out: SearchResult[] = []
   if (data.AbstractText && data.AbstractURL) {
     const u = safeHref(data.AbstractURL)
-    if (u) out.push({ title: clip(data.Heading || query, TITLE_CAP), url: u, snippet: clip(data.AbstractText, SNIPPET_CAP) })
+    if (u)
+      out.push({
+        title: clip(data.Heading || query, TITLE_CAP),
+        url: u,
+        snippet: clip(data.AbstractText, SNIPPET_CAP),
+      })
   }
   for (const t of flattenRelated(data.RelatedTopics)) {
     if (out.length >= limit) break
     const u = safeHref(t.FirstURL)
-    if (u && t.Text) out.push({ title: clip(t.Text, TITLE_CAP), url: u, snippet: clip(t.Text, SNIPPET_CAP) })
+    if (u && t.Text)
+      out.push({ title: clip(t.Text, TITLE_CAP), url: u, snippet: clip(t.Text, SNIPPET_CAP) })
   }
   return out.slice(0, limit)
 }
@@ -510,15 +525,24 @@ async function wikipediaSearch(query: string, limit: number): Promise<SearchResu
   const out: SearchResult[] = []
   for (const h of data.query?.search ?? []) {
     if (out.length >= limit) break
-    const url = safeHref(`https://${lang}.wikipedia.org/wiki/${encodeURIComponent(h.title.replace(/ /g, "_"))}`)
+    const url = safeHref(
+      `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(h.title.replace(/ /g, "_"))}`,
+    )
     if (!url) continue
-    out.push({ title: clip(h.title, TITLE_CAP), url, snippet: clip(stripTags(h.snippet ?? ""), SNIPPET_CAP) })
+    out.push({
+      title: clip(h.title, TITLE_CAP),
+      url,
+      snippet: clip(stripTags(h.snippet ?? ""), SNIPPET_CAP),
+    })
   }
   return out
 }
 
 /** 联网搜索: 级联多个免 key 数据源, 任一返回结果即用; 全失败退化为 link-out 提示。 */
-export async function webSearch(query: string, limit = DEFAULT_SEARCH_LIMIT): Promise<WebSearchResult> {
+export async function webSearch(
+  query: string,
+  limit = DEFAULT_SEARCH_LIMIT,
+): Promise<WebSearchResult> {
   const q = query.trim()
   if (!q) throw new WebError("empty-query", -32602)
   const cap = Math.min(Math.max(Math.trunc(limit) || DEFAULT_SEARCH_LIMIT, 1), MAX_SEARCH_LIMIT)

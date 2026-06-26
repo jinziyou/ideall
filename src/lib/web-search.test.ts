@@ -14,8 +14,10 @@ async function withFetch(impl: typeof fetch, fn: () => Promise<void>) {
   }
 }
 
-const html = (body: string, ct = "text/html") => async () =>
-  new Response(body, { status: 200, headers: { "content-type": ct } })
+const html =
+  (body: string, ct = "text/html") =>
+  async () =>
+    new Response(body, { status: 200, headers: { "content-type": ct } })
 
 function reason(e: unknown): string {
   return e instanceof WebError ? e.reason : `非 WebError: ${String(e)}`
@@ -62,7 +64,10 @@ test("webFetch: Content-Length 超体积上限 → content-too-large", async () 
         headers: { "content-type": "text/html", "content-length": String(9_000_000) },
       }),
     async () => {
-      await assert.rejects(webFetch("https://example.com"), (e) => reason(e) === "content-too-large")
+      await assert.rejects(
+        webFetch("https://example.com"),
+        (e) => reason(e) === "content-too-large",
+      )
     },
   )
 })
@@ -156,12 +161,15 @@ test("webSearch: DDG 限流(202) → 级联到即时答案 JSON", async () => {
 })
 
 test("webSearch: 全级联失败 → engine=none + 非致命 note + 兜底 serpUrl", async () => {
-  await withFetch(async () => new Response("", { status: 500 }), async () => {
-    const r = await webSearch("丙")
-    assert.equal(r.engine, "none")
-    assert.equal(r.results.length, 0)
-    assert.ok(r.note && r.serpUrl?.startsWith("https://duckduckgo.com/?q="))
-  })
+  await withFetch(
+    async () => new Response("", { status: 500 }),
+    async () => {
+      const r = await webSearch("丙")
+      assert.equal(r.engine, "none")
+      assert.equal(r.results.length, 0)
+      assert.ok(r.note && r.serpUrl?.startsWith("https://duckduckgo.com/?q="))
+    },
+  )
 })
 
 test("webSearch: 空查询 → empty-query", async () => {

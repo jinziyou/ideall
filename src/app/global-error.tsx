@@ -32,7 +32,9 @@ export default function GlobalError({
         }}
       >
         <div style={{ width: "100%", maxWidth: "28rem", textAlign: "center" }}>
-          <h1 style={{ fontSize: "1.05rem", fontWeight: 600, margin: "0 0 0.5rem" }}>应用启动出错</h1>
+          <h1 style={{ fontSize: "1.05rem", fontWeight: 600, margin: "0 0 0.5rem" }}>
+            应用启动出错
+          </h1>
           <p style={{ fontSize: "0.85rem", opacity: 0.7, margin: "0 0 1rem" }}>
             请重试；若反复出现，可回到「我的」。
           </p>
