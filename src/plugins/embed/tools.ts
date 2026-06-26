@@ -6,7 +6,7 @@ import { z } from "zod"
 import { getServerPort } from "@protocol/server-port"
 import { getFilesPort } from "@protocol/files"
 import type { NewBookmark } from "@protocol/files"
-import { stripNode, type Node, type NodeKind } from "@protocol/node"
+import { stripNode, NODE_KINDS, type Node, type NodeKind } from "@protocol/node"
 import { getSession } from "@/lib/auth/auth-store"
 import { openExternalUrl } from "@/lib/tauri"
 import { safeHref } from "@/lib/safe-url"
@@ -26,8 +26,9 @@ function fail(code: number, message: string): ToolResult {
 const subType = z.enum(["publisher", "entity", "tool", "search", "peer"])
 
 // 节点 kind 白名单 (fs.* 文件面)。缺省 kind = 列全部命名空间。
-const nodeKind = z.enum(["folder", "note", "bookmark", "file", "feed", "thread"])
-const ALL_NODE_KINDS: NodeKind[] = [...nodeKind.options]
+// 从 @protocol/node 的单一真相源 NODE_KINDS 派生, 杜绝与 NodeKind 联合漂移 (红队 §should-fix)。
+const nodeKind = z.enum([...NODE_KINDS] as [NodeKind, ...NodeKind[]])
+const ALL_NODE_KINDS: NodeKind[] = [...NODE_KINDS]
 
 export interface HostToolsCtx {
   /** ideall 内部路由跳转 (host.navigate)。 */

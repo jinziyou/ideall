@@ -64,6 +64,42 @@ export function isGrantActive(grant: Grant, now: number): boolean {
   return grant.expiry == null || now < grant.expiry
 }
 
+// ── 信任档偏序门 (设计 docs/extension-registry-design.md §2.1) ────────────────────
+/** 信任档偏序: 数值越大越可信。 */
+export const TIER_RANK: Record<GrantTier, number> = {
+  "first-party": 2,
+  verified: 1,
+  "any-origin": 0,
+}
+
+/** a 档是否 ≥ b 档。 */
+export function tierAtLeast(a: GrantTier, b: GrantTier): boolean {
+  return TIER_RANK[a] >= TIER_RANK[b]
+}
+
+/**
+ * 敏感授权位要求的最低信任档: 主权写 / 私密读 / 以用户身份发布 钉死 first-party。
+ * 未列出的位 = any-origin (不额外抬门槛, 仅靠 permissions 成员判定)。
+ * 现状所有 Grant 均 first-party, 故此门当前不改变行为; 是 verified/any-origin 接入前的前置闸。
+ */
+export const PERMISSION_MIN_TIER: Partial<Record<Permission, GrantTier>> = {
+  "fs:write": "first-party",
+  "fs.notes:read": "first-party",
+  "fs.notes:write": "first-party",
+  "identity.publish": "first-party",
+}
+
+/**
+ * Grant 在其信任档下「实际可用」的授权位: 滤掉信任档不达标的敏感位。
+ * 能力层 (createLocalMcpServer) 据此注册 —— 低信任档消费方即便 permissions 里携带敏感位,
+ * 对应能力也不挂载 (越权 = 工具不存在)。
+ */
+export function effectivePermissions(grant: Grant): Permission[] {
+  return grant.permissions.filter((p) =>
+    tierAtLeast(grant.tier, PERMISSION_MIN_TIER[p] ?? "any-origin"),
+  )
+}
+
 /**
  * 本应用 agent 的默认授权集 (§6.2): fs 读写 + 笔记写 + 标签面。
  * **故意不含 fs.notes:read** —— agent 默认看不到既存笔记正文 (只看标题概览); 正文须 @ 引用单条 consent 注入。

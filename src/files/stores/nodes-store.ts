@@ -2,6 +2,7 @@
 // 各 kind 的物理迁移仍归各自 *-store 的懒迁移 (seedXxxOnce); 此处只做协调触发 + 跨 kind 汇总读。
 // 写路径仍走各 kind 专属 store (notes-store/bookmarks-store/...), 此处不重复写逻辑。
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node"
+import { NODE_KINDS } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import { safeHref } from "@/lib/safe-url"
 import { idbGet, idbGetAll, STORE_NODES } from "@/lib/idb"
@@ -39,7 +40,7 @@ export interface NodeSummary extends TreeItem {
 }
 
 /** 全部本地 node kind (fs.read 不知 kind 时触发全部 seed; fs.list kind 缺省时遍历全部)。 */
-export const ALL_NODE_KINDS: NodeKind[] = ["folder", "note", "bookmark", "file", "feed", "thread"]
+export const ALL_NODE_KINDS: NodeKind[] = [...NODE_KINDS]
 
 /** kind → 触发其物理迁移的 seed once (folder 与 bookmark 同属书签迁移)。 */
 const SEED_OF_KIND: Partial<Record<NodeKind, () => Promise<void>>> = {

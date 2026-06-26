@@ -85,7 +85,15 @@ export type FsWritePatch = {
 /** 笔记节点 —— 折叠步 A 唯一物理入库的 kind。 */
 export type NoteNode = NodeOfKind<"note">
 
-const NODE_KINDS: readonly NodeKind[] = ["folder", "note", "bookmark", "file", "feed", "thread"]
+/** 全部 NodeKind 的**单一真相源**。tools.ts 的 zod enum、nodes-store 的 ALL_NODE_KINDS 等一律从此派生, 杜绝多份手抄漂移。 */
+export const NODE_KINDS: readonly NodeKind[] = [
+  "folder",
+  "note",
+  "bookmark",
+  "file",
+  "feed",
+  "thread",
+]
 
 /** 运行期校验 (反序列化标签 params / 深链 / 水合时用)。 */
 export function isNodeKind(k: string): k is NodeKind {
@@ -96,9 +104,20 @@ export function isNodeKind(k: string): k is NodeKind {
  * 隐私净化 (单一函数, fs.list 工具与 fs://nodes 资源同点复用, 防净化漂移; 见设计 §6.3):
  * note 剥正文 content, thread 剥 messages —— 批量列举永不回私密正文/会话 (即便消费方持 fs.notes:read)。
  * 其余 kind (folder/bookmark/file/feed) 的 content 非私密正文, 原样返回。纯函数, 不依赖存储。
+ *
+ * 用穷尽 switch (无 default) 锁死隐私决策: 新增 NodeKind 而未在此显式分类, 会因缺返回路径
+ * 而**编译失败** —— 防「加 kind 忘判私密 → 静默原样放行 → 批量列举泄漏」(红队 §must-fix)。
  */
 export function stripNode(n: Node): Node {
-  if (n.kind === "note") return { ...n, content: [] }
-  if (n.kind === "thread") return { ...n, content: { messages: [] } }
-  return n
+  switch (n.kind) {
+    case "note":
+      return { ...n, content: [] }
+    case "thread":
+      return { ...n, content: { messages: [] } }
+    case "folder":
+    case "bookmark":
+    case "file":
+    case "feed":
+      return n
+  }
 }

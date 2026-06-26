@@ -3,7 +3,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { stripNode, isNodeKind, type Node } from "./node"
+import { stripNode, isNodeKind, NODE_KINDS, type Node } from "./node"
 
 const base = {
   id: "x",
@@ -56,7 +56,12 @@ test("stripNode: bookmark/feed/file/folder 原样 (content 非私密正文)", ()
   assert.deepEqual(stripNode(folder), folder)
 })
 
-test("isNodeKind: 合法 kind true, 其余 false", () => {
-  for (const k of ["folder", "note", "bookmark", "file", "feed", "thread"]) assert.ok(isNodeKind(k))
+test("isNodeKind: NODE_KINDS 全 true, 其余 false", () => {
+  for (const k of NODE_KINDS) assert.ok(isNodeKind(k))
   assert.equal(isNodeKind("bogus"), false)
+})
+
+// 单一真相源锁: NODE_KINDS 增删须改这里 (连带提醒同步 stripNode 穷尽 switch / tools.ts zod enum / nodes-store)。
+test("NODE_KINDS: 锁定集合 (改动须自觉更新 + 同步派生处)", () => {
+  assert.deepEqual([...NODE_KINDS].sort(), ["bookmark", "feed", "file", "folder", "note", "thread"])
 })

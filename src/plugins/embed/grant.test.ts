@@ -3,7 +3,14 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { firstPartyGrant, isGrantActive, agentGrant, type Grant } from "./grant"
+import {
+  firstPartyGrant,
+  isGrantActive,
+  agentGrant,
+  tierAtLeast,
+  effectivePermissions,
+  type Grant,
+} from "./grant"
 import type { Manifest } from "./manifest"
 import { infoEmbedManifest, communityEmbedManifest } from "./manifest"
 
@@ -69,4 +76,56 @@ test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:
     assert.equal(m.permissions.includes("fs.notes:read"), false, `${m.id} 不得含 fs.notes:read`)
     assert.equal(m.permissions.includes("fs.notes:write"), false, `${m.id} 不得含 fs.notes:write`)
   }
+})
+
+// ── §2.1 信任档偏序门 (docs/extension-registry-design.md) ──
+
+test("tierAtLeast: first-party ≥ verified ≥ any-origin 偏序", () => {
+  assert.ok(tierAtLeast("first-party", "any-origin"))
+  assert.ok(tierAtLeast("verified", "any-origin"))
+  assert.ok(tierAtLeast("first-party", "first-party"))
+  assert.equal(tierAtLeast("any-origin", "verified"), false)
+  assert.equal(tierAtLeast("verified", "first-party"), false)
+})
+
+test("effectivePermissions: first-party 保留全部 (含敏感位)", () => {
+  const g: Grant = {
+    ...firstPartyGrant(manifest(), NOW),
+    permissions: ["fs:write", "fs.notes:read", "identity.publish", "hub.subscriptions:read"],
+  }
+  assert.deepEqual(effectivePermissions(g), [
+    "fs:write",
+    "fs.notes:read",
+    "identity.publish",
+    "hub.subscriptions:read",
+  ])
+})
+
+test("effectivePermissions: 低信任档剥掉钉死 first-party 的敏感位, 保留非敏感位", () => {
+  for (const tier of ["verified", "any-origin"] as const) {
+    const g: Grant = {
+      ...firstPartyGrant(manifest(), NOW),
+      tier,
+      permissions: [
+        "fs:write",
+        "fs.notes:read",
+        "fs.notes:write",
+        "identity.publish",
+        "hub.subscriptions:read",
+        "host.external",
+      ],
+    }
+    const eff = effectivePermissions(g)
+    for (const p of ["fs:write", "fs.notes:read", "fs.notes:write", "identity.publish"] as const) {
+      assert.equal(eff.includes(p), false, `${tier} 应剥 ${p}`)
+    }
+    for (const p of ["hub.subscriptions:read", "host.external"] as const) {
+      assert.ok(eff.includes(p), `${tier} 应保留 ${p}`)
+    }
+  }
+})
+
+test("effectivePermissions: agentGrant (first-party) 不受影响", () => {
+  const g = agentGrant(NOW)
+  assert.deepEqual(effectivePermissions(g), g.permissions)
 })
