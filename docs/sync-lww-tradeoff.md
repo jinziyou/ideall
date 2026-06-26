@@ -1,7 +1,7 @@
 # 跨端同步合并策略：LWW 取舍 + 删除传播（决策记录）
 
 > **状态：已落地。** 对应审计项 **Low-6**（跨端 LWW 取舍 + 删除不传播）。
-> 实现：`@protocol/sync`（纯合并/GC 逻辑 + 单测）、`src/app/home/lib/subscriptions-store.ts`（软删除/复活/读路径过滤/GC 落地）、`src/components/plugins/sync/lib/subscription-sync.ts`（编排）。
+> 实现：`@protocol/sync`（纯合并/GC 逻辑 + 单测）、`src/files/stores/subscriptions-store.ts`（软删除/复活/读路径过滤/GC 落地）、`src/plugins/sync/lib/subscription-sync.ts`（编排）。
 
 ## 背景
 
@@ -75,6 +75,6 @@
 
 ## 关联
 
-- 纯合并/GC 契约：`@protocol/sync`。同步编排：`src/components/plugins/sync/`。
-- 同步加解密：`src/components/lib/sync-crypto`。乐观并发（409 重试）见 `subscription-sync.ts`。
+- 纯合并/GC 契约：`@protocol/sync`。同步编排：`src/plugins/sync/`。
+- 同步加解密：`src/lib/sync-crypto.ts`。乐观并发（409 重试）见 `subscription-sync.ts`。
 - 关注类型（含 `deletedAt`）：`@protocol/subscription`。

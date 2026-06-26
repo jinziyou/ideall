@@ -92,7 +92,7 @@
  * - 亮色底 + 白卡 + 柔阴影; 友好靛蓝 (--primary / --pop) 作唯一强调色, 每屏只给一个主操作。
  * - --spoke-* 三色 (资讯蓝 / 社区绿 / 工具紫) 仅用于小圆点 / tint / 标签, 绝不大面积 fill。
  * - --pop == --flowback == 关键动作 / 回流(收入中枢) 的语义色 (= 靛蓝)。
- * - 默认跟随系统 (见 components/lib/theme), 暗色见 .dark。
+ * - 默认跟随系统 (见 src/lib/theme), 暗色见 .dark。
  */
 :root {
   --radius: 1rem;

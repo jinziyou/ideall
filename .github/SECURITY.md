@@ -4,7 +4,7 @@
 
 本策略仅覆盖 **ideall 客户端**（本仓库）。
 
-- ✅ ideall 前端、本地数据层、跨端同步加密（`src/components/lib/sync-crypto`）、插件、Tauri App 壳
+- ✅ ideall 前端、本地数据层、跨端同步加密（`src/lib/sync-crypto.ts`）、插件、Tauri App 壳
 - ❌ **官方信息服务后端**（采集 / NLP / 知识图谱 / 鉴权 API）不在本仓库范围内；相关问题请通过官方服务渠道反馈
 
 ## 报告漏洞

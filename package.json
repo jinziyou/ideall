@@ -17,8 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "sync:api": "node scripts/sync-server-openapi.mjs",
-    "gen:api": "openapi-typescript openapi/server.json -o src/components/lib/api/server.d.ts",
-    "gen:api:check": "openapi-typescript openapi/server.json -o /tmp/server.gen.d.ts && diff -q src/components/lib/api/server.d.ts /tmp/server.gen.d.ts",
+    "gen:api": "openapi-typescript openapi/server.json -o src/lib/api/server.d.ts",
+    "gen:api:check": "openapi-typescript openapi/server.json -o /tmp/server.gen.d.ts && diff -q src/lib/api/server.d.ts /tmp/server.gen.d.ts",
     "test": "node --import ./node_modules/tsx/dist/loader.mjs --test \"src/**/*.test.ts\"",
     "smoke:notes": "node scripts/smoke-notes.mjs"
   },

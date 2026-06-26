@@ -2,7 +2,7 @@
 //
 // 这是本地优先 / 混合 P2P 定位的关键端口: ideall = ordinary peer, 不被任何单一后端绑死。
 // 任何实现了 `ServerPort` 的节点 (官方 wonita 服务、第三方、未来嵌入式/局域网 peer)
-// 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 components/lib/server/http-adapter)。
+// 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 src/lib/server/http-adapter)。
 //
 // 与 FilesPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
 // ServerPort 是**同构**的 (SSR 预渲染期也要取数 —— `pnpm dev` 与导出前预渲染, 此时客户端启动闸 BootGate 尚未运行),
