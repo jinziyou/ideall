@@ -2,13 +2,14 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, RefreshCw, WifiOff } from "lucide-react"
+import { Loader2, RefreshCw, Unplug, WifiOff } from "lucide-react"
 import { Button } from "@/ui/button"
 import { cn } from "@/lib/utils"
 import { useOnlineStatus } from "@/lib/use-online-status"
 import { MessagePortTransport } from "./transport"
 import { createLocalMcpServer } from "./local-mcp-server"
 import { firstPartyGrant } from "./grant"
+import { registerConnection } from "./connections"
 import {
   HELLO_MESSAGE_TYPE,
   INIT_MESSAGE_TYPE,
@@ -35,7 +36,7 @@ function currentTheme(): ThemeTokens {
 // 加载超时: 起桥后多久未收到页面 'ready' 即判失败 (覆盖断网 / 零后端 / 服务不可达)。
 const LOAD_TIMEOUT_MS = 12_000
 
-type EmbedStatus = "loading" | "ready" | "failed"
+type EmbedStatus = "loading" | "ready" | "failed" | "revoked"
 
 export function EmbedHost({ manifest }: { manifest: Manifest }) {
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null)
@@ -43,6 +44,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
   const [status, setStatus] = React.useState<EmbedStatus>("loading")
   const [reloadKey, setReloadKey] = React.useState(0)
   const online = useOnlineStatus()
+  const connId = React.useId() // 本嵌入实例的稳定连接 id (「已连接的应用」面板 + 吊销用)
 
   // 同步可判的配置校验 (URL 合法 / 源在白名单 / 非同源)。放 useMemo 而非 effect:
   // effect 体内同步 setState 会触发级联渲染 (react-hooks/set-state-in-effect)。配置错误直接进 failed。
@@ -153,7 +155,10 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       const obs = new MutationObserver(sendTheme)
       obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
 
-      cleanups.push(() => {
+      let toreDown = false
+      const teardown = () => {
+        if (toreDown) return
+        toreDown = true
         obs.disconnect()
         void server.close()
         try {
@@ -166,6 +171,26 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
         } catch {
           /* ignore */
         }
+      }
+
+      // 运行期可见 + 可吊销: 登记本连接到「已连接的应用」面板。
+      // revoke (面板触发) → 断 MCP 能力面 + 翻到「已断开」态: 页面仍在但失去全部宿主工具 (越权=工具不存在)。
+      const deregister = registerConnection({
+        id: connId,
+        appId: manifest.id,
+        name: manifest.name,
+        origin: entryOrigin,
+        permissions: grant.permissions,
+        grantedAt: grant.grantedAt,
+        revoke: () => {
+          teardown()
+          setStatus("revoked")
+        },
+      })
+
+      cleanups.push(() => {
+        teardown()
+        deregister()
       })
     }
 
@@ -183,7 +208,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       window.removeEventListener("message", onHello)
       cleanups.forEach((f) => f())
     }
-  }, [manifest, router, reloadKey, configError, entryOrigin])
+  }, [manifest, router, reloadKey, configError, entryOrigin, connId])
 
   return (
     // 高度由外层标签容器决定 (工作区 TabHost 提供 h-full); 不再自算视口高度。
@@ -209,6 +234,19 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
           <Button variant="outline" size="sm" onClick={retry}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             重试
+          </Button>
+        </div>
+      )}
+      {effectiveStatus === "revoked" && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+          <Unplug className="h-8 w-8 text-muted-foreground" />
+          <div className="text-sm font-medium">已断开与 {manifest.name} 的连接</div>
+          <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
+            你在设置里吊销了该嵌入应用的宿主授权，它已失去全部宿主能力。重新连接将再次授予。
+          </p>
+          <Button variant="outline" size="sm" onClick={retry}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            重新连接
           </Button>
         </div>
       )}

@@ -65,6 +65,10 @@ export const PERMISSIONS = [
   "fs:write",
   "fs.notes:read",
   "fs.notes:write",
+  // 文件二进制读: 与 note 正文同级私密闸。fs:read 只列文件元数据 (id/name/size); 取二进制 (fs.readBlob)
+  // 须二次持 fs.blobs:read, 否则 consent-required。agentGrant 不含此位 —— agent 默认不能无授权把上传文件
+  // (PDF/图片等) 读出外发模型端点。
+  "fs.blobs:read",
   "ui.tabs",
 ] as const
 

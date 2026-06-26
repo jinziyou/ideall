@@ -171,9 +171,11 @@ export function registerGrantedTools(
       if (r === "gated") return fail(-32003, "consent-required")
       return ok(r)
     })
-    // fs.readBlob: 文件二进制 base64 (大文件不内联)。
+    // fs.readBlob: 文件二进制 base64 (大文件不内联)。私密读闸下沉 host.files.readBlob:
+    // 无 fs.blobs:read → "gated" → consent-required (与 note 正文同级; agent 默认无此位, 不能无授权外发文件内容)。
     server.tool(TOOL.fsReadBlob, { id: z.string() }, async (a) => {
       const r = await host.files.readBlob(a.id)
+      if (r === "gated") return fail(-32003, "consent-required")
       return r ? ok(r) : fail(-32004, "not-found")
     })
   }

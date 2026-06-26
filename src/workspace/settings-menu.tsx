@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover"
 import { Separator } from "@/ui/separator"
 import ThemeToggle from "@/shell/theme-toggle"
 import { LocalDeviceStatus } from "@/shell/local-device-chip"
+import { ConnectedApps } from "@/plugins/embed/connected-apps"
 
 export default function SettingsMenu() {
   return (
@@ -27,6 +28,7 @@ export default function SettingsMenu() {
         </div>
         <Separator className="my-3" />
         <LocalDeviceStatus />
+        <ConnectedApps />
       </PopoverContent>
     </Popover>
   )

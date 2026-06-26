@@ -86,6 +86,7 @@ export const PERMISSION_MIN_TIER: Partial<Record<Permission, GrantTier>> = {
   "fs:write": "first-party",
   "fs.notes:read": "first-party",
   "fs.notes:write": "first-party",
+  "fs.blobs:read": "first-party",
   "identity.publish": "first-party",
 }
 
@@ -102,7 +103,8 @@ export function effectivePermissions(grant: Grant): Permission[] {
 
 /**
  * 本应用 agent 的默认授权集 (§6.2): fs 读写 + 笔记写 + 标签面。
- * **故意不含 fs.notes:read** —— agent 默认看不到既存笔记正文 (只看标题概览); 正文须 @ 引用单条 consent 注入。
+ * **故意不含 fs.notes:read / fs.blobs:read** —— agent 默认看不到既存笔记正文与上传文件二进制 (只看标题/文件名概览);
+ * 正文须 @ 引用单条 consent 注入, 文件二进制须用户单独授权 fs.blobs:read。
  * 也不含 identity.publish / hub.* (统一走 fs.* 文件面)。
  */
 const AGENT_PERMISSIONS: Permission[] = ["fs:read", "fs:write", "fs.notes:write", "ui.tabs"]

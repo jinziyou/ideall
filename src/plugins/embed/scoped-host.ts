@@ -27,9 +27,10 @@ export interface ScopedFiles {
   removeSubscription: FilesPort["removeSubscription"]
   listBookmarks: FilesPort["listBookmarks"]
   addBookmark: FilesPort["addBookmark"]
-  readBlob: FilesPort["fsReadBlob"]
   deleteNode: FilesPort["fsDeleteNode"]
-  // ── 私密正文受控面 (note/thread 正文须 scope 含 fs.notes:read) ──
+  // ── 私密内容受控面 (note/thread 正文须 fs.notes:read; 文件二进制须 fs.blobs:read) ──
+  /** 文件二进制读 (受控): scope 含 fs.blobs:read 才回内容; 否则 "gated" → consent-required (与 note 正文同级闸)。 */
+  readBlob(id: string): Promise<Awaited<ReturnType<FilesPort["fsReadBlob"]>> | "gated">
   /** 列举: 永远净化 (note/thread 剥内容), 与 fs.list / fs://nodes 同口径。 */
   listStripped(kinds: NodeKind[]): Promise<Node[]>
   /** 单读 (kind 须匹配): 可读 → Node; note/thread 无 notes-read → "gated"; 不存在/kind 不符 → null。 */
@@ -46,7 +47,11 @@ export interface ScopedFiles {
 }
 
 /** 据 fs.notes:read 是否在 scope 内, 把底层 FilesPort 收窄成 ScopedFiles。纯函数, 可单测。 */
-export function makeScopedFiles(port: FilesPort, canReadNotes: boolean): ScopedFiles {
+export function makeScopedFiles(
+  port: FilesPort,
+  canReadNotes: boolean,
+  canReadBlobs = false,
+): ScopedFiles {
   const sanitize = (n: Node): Node => (canReadNotes ? n : stripNode(n))
   return {
     // 箭头延迟取属性到调用时 (而非构造时 .bind), 与原 handler 的惰性访问一致:
@@ -57,8 +62,12 @@ export function makeScopedFiles(port: FilesPort, canReadNotes: boolean): ScopedF
     removeSubscription: (...a) => port.removeSubscription(...a),
     listBookmarks: (...a) => port.listBookmarks(...a),
     addBookmark: (...a) => port.addBookmark(...a),
-    readBlob: (...a) => port.fsReadBlob(...a),
     deleteNode: (...a) => port.fsDeleteNode(...a),
+    // 文件二进制读受 fs.blobs:read 闸 (与 note/thread 正文同级): 无授权 → "gated" → consent-required。
+    async readBlob(id) {
+      if (!canReadBlobs) return "gated"
+      return port.fsReadBlob(id)
+    },
     async listStripped(kinds) {
       return (await port.fsListNodes(kinds)).map(stripNode)
     },
@@ -94,6 +103,10 @@ export function makeScopedHost(perms: Permission[]): ScopedHost {
   return {
     getSession,
     server: getServerPort,
-    files: makeScopedFiles(getFilesPort(), perms.includes("fs.notes:read")),
+    files: makeScopedFiles(
+      getFilesPort(),
+      perms.includes("fs.notes:read"),
+      perms.includes("fs.blobs:read"),
+    ),
   }
 }

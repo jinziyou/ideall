@@ -98,6 +98,17 @@ test("createNode: 无 notes-read 回读剥 note 正文; 有则全文", async () 
   assert.equal(noteContent(await makeScopedFiles(fakePort(), true).createNode(input)).length, 1)
 })
 
+test("readBlob: 无 fs.blobs:read → 'gated' (与 note 正文同级闸; notes-read 不解锁 blob)", async () => {
+  assert.equal(await makeScopedFiles(fakePort(), false).readBlob("f"), "gated")
+  assert.equal(await makeScopedFiles(fakePort(), true).readBlob("f"), "gated") // 仅 notes-read 不够
+})
+
+test("readBlob: 有 fs.blobs:read → 回二进制", async () => {
+  const r = await makeScopedFiles(fakePort(), false, true).readBlob("f")
+  assert.ok(r && r !== "gated")
+  assert.equal((r as { mime: string }).mime, "x")
+})
+
 test("非私密直通: listSubscriptions 透传底层端口", async () => {
   assert.deepEqual(await makeScopedFiles(fakePort(), false).listSubscriptions(), ["SUBS"])
 })
