@@ -6,15 +6,21 @@
 // redirect_uri 用 native loopback 占位: 授权后浏览器跳到它 (无监听 → 连接失败页, 但地址栏含 ?code=&state=),
 // 用户复制整条回调 URL 粘回即可。多数授权服务器接受 127.0.0.1 回环 (RFC 8252)。
 
-import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import {
+  auth,
+  discoverOAuthProtectedResourceMetadata,
+  discoverAuthorizationServerMetadata,
+  type OAuthClientProvider,
+} from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientInformationMixed,
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { isTauri } from "@/lib/tauri"
+import { isTauri, resolveFetch } from "@/lib/tauri"
 
-const REDIRECT_URI = "http://127.0.0.1:7843/callback"
+const CALLBACK_PORT = 7843
+const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`
 
 const CLIENT_METADATA: OAuthClientMetadata = {
   client_name: "ideall",
@@ -160,6 +166,58 @@ export function startMcpAuth(
   return auth(mcpOAuthProvider(serverId), { serverUrl })
 }
 
+/** 桌面: 起一次性 loopback 回调监听 (Rust oauth_callback_start), 等 oauth://callback 拿 code/state; 5 分钟超时。 */
+async function oauthCallbackListen(): Promise<{ code?: string; state?: string }> {
+  const { invoke } = await import("@tauri-apps/api/core")
+  const { listen } = await import("@tauri-apps/api/event")
+  let resolveCb!: (v: { code?: string; state?: string }) => void
+  const got = new Promise<{ code?: string; state?: string }>((r) => {
+    resolveCb = r
+  })
+  const un = await listen<{ code?: string; state?: string }>("oauth://callback", (e) =>
+    resolveCb(e.payload),
+  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await invoke("oauth_callback_start", { port: CALLBACK_PORT })
+    const timeout = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => rej(new Error("授权超时（5 分钟）")), 5 * 60 * 1000)
+    })
+    return await Promise.race([got, timeout])
+  } finally {
+    if (timer) clearTimeout(timer) // 清定时器, 防 got 先 resolve 后 timeout 仍 reject (unhandled)
+    un()
+  }
+}
+
+/** 发起授权: 桌面用 loopback 自动回调 (免粘贴), web 退回手动粘贴。
+ *  返回 'AUTHORIZED'(已有有效 token) | 'DONE'(桌面自动完成) | 'REDIRECT'(web 待手动粘贴)。 */
+export async function startMcpAuthAuto(
+  serverId: string,
+  serverUrl: string,
+): Promise<"AUTHORIZED" | "DONE" | "REDIRECT"> {
+  if (!isTauri()) return startMcpAuth(serverId, serverUrl) // web: 手动粘贴
+  const r = await startMcpAuth(serverId, serverUrl) // discover + 动态注册 + 打开浏览器
+  if (r === "AUTHORIZED") return "AUTHORIZED" // 无需浏览器回合 → 不起 listener (省端口/避泄漏)
+  // REDIRECT: 真需回合时才起 loopback 监听 (避免 AUTHORIZED / 抛错路径占用端口或留挂起 promise)。
+  const { code, state } = await oauthCallbackListen()
+  if (!code) throw new Error("未收到授权回调")
+  const cb = `${REDIRECT_URI}?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ""}`
+  await finishMcpAuth(serverId, cb, serverUrl)
+  return "DONE"
+}
+
+/** 停止桌面 loopback 回调监听 (用户取消授权时立即释放端口)。 */
+export async function stopMcpAuthCallback(): Promise<void> {
+  if (!isTauri()) return
+  try {
+    const { invoke } = await import("@tauri-apps/api/core")
+    await invoke("oauth_callback_stop")
+  } catch {
+    /* 忽略 */
+  }
+}
+
 /** 用回调 URL/code 完成授权: 校验 state, 交换 token。 */
 export async function finishMcpAuth(
   serverId: string,
@@ -191,4 +249,56 @@ export function lastAuthUrl(serverId: string): string | undefined {
 /** 撤销本地保存的授权 (token/client/verifier)。 */
 export function clearMcpAuth(serverId: string): void {
   if (typeof localStorage !== "undefined") localStorage.removeItem(keyOf(serverId))
+}
+
+/** 发现授权服务器的 revocation_endpoint (RFC 8414 metadata); 无则 undefined。 */
+async function discoverRevocationEndpoint(serverUrl: string): Promise<string | undefined> {
+  try {
+    const prm = await discoverOAuthProtectedResourceMetadata(serverUrl)
+    const authUrl = prm?.authorization_servers?.[0] ?? serverUrl
+    const meta = (await discoverAuthorizationServerMetadata(authUrl)) as
+      | { revocation_endpoint?: string }
+      | undefined
+    return meta?.revocation_endpoint ? String(meta.revocation_endpoint) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** RFC 7009: 向 revocation_endpoint POST 撤销一个 token (public client → client_id 入 body)。 */
+async function revokeOne(
+  endpoint: string,
+  token: string,
+  hint: "access_token" | "refresh_token",
+  clientId: string,
+): Promise<void> {
+  const httpFetch = await resolveFetch()
+  const body = new URLSearchParams({ token, token_type_hint: hint, client_id: clientId })
+  await httpFetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  })
+}
+
+/** 撤销授权: 尽力向授权服务器撤销 access/refresh token (RFC 7009), 再清本地。
+ *  撤销失败 (无 endpoint / 网络 / 服务端拒) 仍清本地, 保证本机不再持有 token。 */
+export async function revokeMcpAuth(serverId: string, serverUrl: string): Promise<void> {
+  const s = load(serverId)
+  const clientId = s.clientInfo?.client_id
+  try {
+    if (s.tokens?.access_token && clientId) {
+      const endpoint = await discoverRevocationEndpoint(serverUrl)
+      if (endpoint) {
+        await revokeOne(endpoint, s.tokens.access_token, "access_token", clientId)
+        if (s.tokens.refresh_token) {
+          await revokeOne(endpoint, s.tokens.refresh_token, "refresh_token", clientId)
+        }
+      }
+    }
+  } catch {
+    /* 撤销失败 → 仍清本地 */
+  } finally {
+    clearMcpAuth(serverId)
+  }
 }

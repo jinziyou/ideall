@@ -46,10 +46,12 @@ import {
   isValidSecretName,
 } from "../lib/agent-secrets"
 import {
-  startMcpAuth,
+  startMcpAuthAuto,
+  stopMcpAuthCallback,
   finishMcpAuth,
   isMcpAuthorized,
   clearMcpAuth,
+  revokeMcpAuth,
   lastAuthUrl,
 } from "../lib/agent-oauth"
 
@@ -405,23 +407,50 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
   const [pasted, setPasted] = React.useState("")
   const [oauthMsg, setOauthMsg] = React.useState<string | null>(null)
   const [oauthBusy, setOauthBusy] = React.useState(false)
+  // run token: 取消 / 新一轮使旧 await 的后续 setState 失效 (桌面等回调可能挂到超时)。
+  const authRunRef = React.useRef(0)
 
   async function authorize() {
+    const myRun = ++authRunRef.current
     setOauthBusy(true)
-    setOauthMsg(null)
+    setOauthStep("idle")
+    setOauthMsg("已打开授权页，请在浏览器完成授权…")
     try {
-      const r = await startMcpAuth(server.id, server.url)
-      if (r === "AUTHORIZED") {
-        forceAuthRefresh()
-        setOauthMsg("已授权")
-      } else {
+      // 桌面: loopback 自动回调 (免粘贴); web: 退回手动粘贴。
+      const r = await startMcpAuthAuto(server.id, server.url)
+      if (authRunRef.current !== myRun) return // 已取消 / 新一轮
+      if (r === "REDIRECT") {
         setOauthStep("paste")
-        setOauthMsg("已打开授权页。授权后，把浏览器地址栏里回调的整条 URL（含 ?code=…）粘到下方。")
+        setOauthMsg("已打开授权页。授权后把浏览器地址栏里回调的整条 URL（含 ?code=…）粘到下方。")
+      } else {
+        forceAuthRefresh()
+        setOauthMsg("授权成功")
       }
     } catch (e) {
-      setOauthMsg(`授权发起失败：${e instanceof Error ? e.message : String(e)}`)
+      if (authRunRef.current !== myRun) return
+      setOauthMsg(`授权失败：${e instanceof Error ? e.message : String(e)}`)
     } finally {
-      setOauthBusy(false)
+      if (authRunRef.current === myRun) setOauthBusy(false)
+    }
+  }
+
+  function cancelAuth() {
+    authRunRef.current++ // 失效当前 run (其后续 setState 跳过)
+    void stopMcpAuthCallback() // 释放 loopback 端口 (桌面)
+    setOauthBusy(false)
+    setOauthStep("idle")
+    setOauthMsg("已取消")
+  }
+
+  const [revoking, setRevoking] = React.useState(false)
+  async function revoke() {
+    setRevoking(true)
+    try {
+      await revokeMcpAuth(server.id, server.url) // RFC 7009 服务端撤销 + 清本机 (失败仍清本机)
+    } finally {
+      setRevoking(false)
+      forceAuthRefresh()
+      setOauthMsg("已撤销授权")
     }
   }
   async function completeAuth() {
@@ -574,17 +603,21 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
                   {oauthBusy && <Loader2 className="h-4 w-4 animate-spin" />}
                   {authorized ? "重新授权" : "授权"}
                 </Button>
+                {oauthBusy && (
+                  <Button variant="ghost" size="sm" onClick={cancelAuth}>
+                    取消
+                  </Button>
+                )}
                 {authorized && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      clearMcpAuth(server.id)
-                      forceAuthRefresh()
-                    }}
-                    title="仅清除本机保存的 token；如需彻底失效请到授权方撤销"
+                    disabled={revoking}
+                    onClick={revoke}
+                    title="向授权方撤销 token (RFC 7009) 并清本机；撤销失败仍清本机"
                   >
-                    清除本地授权
+                    {revoking && <Loader2 className="h-4 w-4 animate-spin" />}
+                    撤销授权
                   </Button>
                 )}
               </div>

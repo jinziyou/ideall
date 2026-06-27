@@ -12,6 +12,8 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUr
 // ACP (Agent Client Protocol) 外部智能体传输 —— 子进程 stdin/stdout 哑管道 (NDJSON 行框定), 仅桌面。
 #[cfg(desktop)]
 mod acp_transport;
+#[cfg(desktop)]
+mod oauth_callback;
 
 #[cfg(desktop)]
 const BROWSER_LABEL: &str = "browser_view";
@@ -375,6 +377,7 @@ pub fn run() {
         // ACP 出站会话表 (id → 子进程句柄) 与入站服务端状态 (connId → 连接); acp_transport 命令经 State 访问。
         .manage(acp_transport::init_state())
         .manage(acp_transport::init_server_state())
+        .manage(oauth_callback::init_oauth_state())
         .invoke_handler(tauri::generate_handler![
             agent_guarded_fetch,
             open_browser_view,
@@ -395,7 +398,9 @@ pub fn run() {
             acp_transport::acp_server_close,
             acp_transport::acp_which,
             acp_transport::acp_script_path,
-            acp_transport::acp_run_once
+            acp_transport::acp_run_once,
+            oauth_callback::oauth_callback_start,
+            oauth_callback::oauth_callback_stop
         ]);
     #[cfg(not(desktop))]
     let builder = builder.invoke_handler(tauri::generate_handler![agent_guarded_fetch]);
