@@ -6,13 +6,18 @@
 // redirect_uri 用 native loopback 占位: 授权后浏览器跳到它 (无监听 → 连接失败页, 但地址栏含 ?code=&state=),
 // 用户复制整条回调 URL 粘回即可。多数授权服务器接受 127.0.0.1 回环 (RFC 8252)。
 
-import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import {
+  auth,
+  discoverOAuthProtectedResourceMetadata,
+  discoverAuthorizationServerMetadata,
+  type OAuthClientProvider,
+} from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientInformationMixed,
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { isTauri } from "@/lib/tauri"
+import { isTauri, resolveFetch } from "@/lib/tauri"
 
 const CALLBACK_PORT = 7843
 const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`
@@ -244,4 +249,56 @@ export function lastAuthUrl(serverId: string): string | undefined {
 /** 撤销本地保存的授权 (token/client/verifier)。 */
 export function clearMcpAuth(serverId: string): void {
   if (typeof localStorage !== "undefined") localStorage.removeItem(keyOf(serverId))
+}
+
+/** 发现授权服务器的 revocation_endpoint (RFC 8414 metadata); 无则 undefined。 */
+async function discoverRevocationEndpoint(serverUrl: string): Promise<string | undefined> {
+  try {
+    const prm = await discoverOAuthProtectedResourceMetadata(serverUrl)
+    const authUrl = prm?.authorization_servers?.[0] ?? serverUrl
+    const meta = (await discoverAuthorizationServerMetadata(authUrl)) as
+      | { revocation_endpoint?: string }
+      | undefined
+    return meta?.revocation_endpoint ? String(meta.revocation_endpoint) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** RFC 7009: 向 revocation_endpoint POST 撤销一个 token (public client → client_id 入 body)。 */
+async function revokeOne(
+  endpoint: string,
+  token: string,
+  hint: "access_token" | "refresh_token",
+  clientId: string,
+): Promise<void> {
+  const httpFetch = await resolveFetch()
+  const body = new URLSearchParams({ token, token_type_hint: hint, client_id: clientId })
+  await httpFetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  })
+}
+
+/** 撤销授权: 尽力向授权服务器撤销 access/refresh token (RFC 7009), 再清本地。
+ *  撤销失败 (无 endpoint / 网络 / 服务端拒) 仍清本地, 保证本机不再持有 token。 */
+export async function revokeMcpAuth(serverId: string, serverUrl: string): Promise<void> {
+  const s = load(serverId)
+  const clientId = s.clientInfo?.client_id
+  try {
+    if (s.tokens?.access_token && clientId) {
+      const endpoint = await discoverRevocationEndpoint(serverUrl)
+      if (endpoint) {
+        await revokeOne(endpoint, s.tokens.access_token, "access_token", clientId)
+        if (s.tokens.refresh_token) {
+          await revokeOne(endpoint, s.tokens.refresh_token, "refresh_token", clientId)
+        }
+      }
+    }
+  } catch {
+    /* 撤销失败 → 仍清本地 */
+  } finally {
+    clearMcpAuth(serverId)
+  }
 }

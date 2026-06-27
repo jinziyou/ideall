@@ -51,6 +51,7 @@ import {
   finishMcpAuth,
   isMcpAuthorized,
   clearMcpAuth,
+  revokeMcpAuth,
   lastAuthUrl,
 } from "../lib/agent-oauth"
 
@@ -440,6 +441,18 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
     setOauthStep("idle")
     setOauthMsg("已取消")
   }
+
+  const [revoking, setRevoking] = React.useState(false)
+  async function revoke() {
+    setRevoking(true)
+    try {
+      await revokeMcpAuth(server.id, server.url) // RFC 7009 服务端撤销 + 清本机 (失败仍清本机)
+    } finally {
+      setRevoking(false)
+      forceAuthRefresh()
+      setOauthMsg("已撤销授权")
+    }
+  }
   async function completeAuth() {
     setOauthBusy(true)
     setOauthMsg(null)
@@ -599,13 +612,12 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      clearMcpAuth(server.id)
-                      forceAuthRefresh()
-                    }}
-                    title="仅清除本机保存的 token；如需彻底失效请到授权方撤销"
+                    disabled={revoking}
+                    onClick={revoke}
+                    title="向授权方撤销 token (RFC 7009) 并清本机；撤销失败仍清本机"
                   >
-                    清除本地授权
+                    {revoking && <Loader2 className="h-4 w-4 animate-spin" />}
+                    撤销授权
                   </Button>
                 )}
               </div>
