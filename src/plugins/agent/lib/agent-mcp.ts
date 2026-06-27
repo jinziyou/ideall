@@ -7,6 +7,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import { StdioMcpTransport } from "./agent-mcp-stdio"
 import type { McpServer } from "./agent-mcp-registry"
+import { resolveSecrets } from "./agent-secrets"
+import { mcpOAuthProvider, isMcpAuthorized } from "./agent-oauth"
 import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
 import { agentGrant } from "@/plugins/embed/grant"
 import type { Permission } from "@/plugins/embed/protocol"
@@ -43,6 +45,8 @@ export interface ExternalMcpServer {
   cwd?: string
   /** sse / http: 请求头 (认证 Authorization 等)。 */
   headers?: { key: string; value: string }[]
+  /** sse / http: 认证方式 oauth → 连接时挂 OAuth provider (自动带 Bearer / 刷新)。 */
+  auth?: "oauth"
 }
 
 /** 自动技能 → 合成「应用技能」工具: 模型按描述自路由, 调用即返回其指令文本供其展开。 */
@@ -93,7 +97,8 @@ function buildHeaders(
   const h: Record<string, string> = {}
   for (const { key, value } of headers) {
     const k = key.trim() // 用裁剪后的名 (带空格的 header 名非法, 会让 SDK new Headers 抛错)
-    if (k) h[k] = value // value 不裁剪 (token 可能含空格, 如 "Bearer xyz")
+    // value 支持 ${NAME} 引用本机密钥表 (避免内嵌明文); value 本身不裁剪 (token 可能含空格, 如 "Bearer xyz")。
+    if (k) h[k] = resolveSecrets(value)
   }
   return Object.keys(h).length ? h : undefined
 }
@@ -107,10 +112,23 @@ function createExternalTransport(s: ExternalMcpServer): Transport | null {
   if (!s.url?.trim()) return null
   const url = new URL(s.url)
   const headers = buildHeaders(s.headers)
-  const init = headers ? { requestInit: { headers } } : undefined
+  const authProvider = s.auth === "oauth" ? mcpOAuthProvider(s.id) : undefined
+  // OAuth 开启时剔除手动 Authorization 头 (否则它会覆盖 SDK 注入的 Bearer)。
+  if (authProvider && headers) {
+    for (const k of Object.keys(headers)) {
+      if (k.toLowerCase() === "authorization") delete headers[k]
+    }
+  }
+  const init: {
+    requestInit?: { headers: Record<string, string> }
+    authProvider?: ReturnType<typeof mcpOAuthProvider>
+  } = {}
+  if (headers && Object.keys(headers).length) init.requestInit = { headers }
+  if (authProvider) init.authProvider = authProvider
+  const opts = Object.keys(init).length ? init : undefined
   return s.transport === "sse"
-    ? new SSEClientTransport(url, init)
-    : new StreamableHTTPClientTransport(url, init)
+    ? new SSEClientTransport(url, opts)
+    : new StreamableHTTPClientTransport(url, opts)
 }
 
 /** McpServer (注册表) → ExternalMcpServer (运行/自检用): args 拆数组, 带 headers。 */
@@ -123,6 +141,7 @@ export function toExternalServer(s: McpServer): ExternalMcpServer {
     command: s.command,
     args: s.args.split(/\s+/).filter(Boolean),
     headers: s.headers,
+    auth: s.auth === "oauth" ? "oauth" : undefined,
   }
 }
 
@@ -130,6 +149,10 @@ export function toExternalServer(s: McpServer): ExternalMcpServer {
 export async function probeMcpServer(
   s: McpServer,
 ): Promise<{ ok: boolean; toolCount?: number; tools?: string[]; error?: string }> {
+  // 未授权的 oauth server 不发起连接 (否则 SDK 401 → 自动弹浏览器授权页, 还会覆盖手动授权态)。
+  if (s.auth === "oauth" && !isMcpAuthorized(s.id)) {
+    return { ok: false, error: "OAuth 未授权：请先在上方完成「授权」" }
+  }
   let transport: Transport | null
   try {
     transport = createExternalTransport(toExternalServer(s))
@@ -209,6 +232,8 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
   const externals = opts?.externalServers ?? []
   for (let i = 0; i < externals.length; i++) {
     const s = externals[i]
+    // 未授权的 oauth server 跳过 (否则 SDK 401 → 后台运行期间突然弹浏览器授权页)。已授权但过期 (有 refresh) 仍走刷新。
+    if (s.auth === "oauth" && !isMcpAuthorized(s.id)) continue
     try {
       const transport = createExternalTransport(s)
       if (!transport) continue // 配置不全 → 跳过

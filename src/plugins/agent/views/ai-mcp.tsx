@@ -5,7 +5,7 @@
 // loopback 行展示进程内能力位 (只读, 不可删); 外部行可编辑请求头 / 测试连接 / 删除 (运行任务时即时连接)。
 
 import * as React from "react"
-import { Loader2, Plug, Plus, Trash2 } from "lucide-react"
+import { KeyRound, Loader2, Plug, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 import {
@@ -37,6 +37,21 @@ import {
 } from "../lib/agent-mcp-registry"
 import { CAPABILITY_OPTIONS } from "../lib/agent-capabilities"
 import { probeMcpServer } from "../lib/agent-mcp"
+import {
+  subscribeSecrets,
+  getSecrets,
+  getServerSecrets,
+  setSecret,
+  deleteSecret,
+  isValidSecretName,
+} from "../lib/agent-secrets"
+import {
+  startMcpAuth,
+  finishMcpAuth,
+  isMcpAuthorized,
+  clearMcpAuth,
+  lastAuthUrl,
+} from "../lib/agent-oauth"
 
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
@@ -73,6 +88,7 @@ export default function AiMcp() {
   const [selectedId, setSelectedId] = React.useState<string | undefined>(servers[0]?.id)
   const selected = servers.find((s) => s.id === selectedId) ?? servers[0]
 
+  const [secretsOpen, setSecretsOpen] = React.useState(false)
   // 添加服务器表单
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [name, setName] = React.useState("")
@@ -112,7 +128,15 @@ export default function AiMcp() {
       title="MCP"
       icon={Plug}
       description="连接器：外部数据与工具。本地能力 (loopback) 内置。"
-      action={<AddButton label="添加服务器" onClick={openDialog} />}
+      action={
+        <>
+          <Button variant="outline" size="sm" onClick={() => setSecretsOpen(true)}>
+            <KeyRound className="h-4 w-4" />
+            密钥
+          </Button>
+          <AddButton label="添加服务器" onClick={openDialog} />
+        </>
+      }
     >
       <div className="space-y-8">
         {/* 服务器列表 */}
@@ -213,7 +237,82 @@ export default function AiMcp() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SecretsDialog open={secretsOpen} onOpenChange={setSecretsOpen} />
     </AiPage>
+  )
+}
+
+/** 本机密钥管理 (${NAME} 引用): 请求头等配置写 ${NAME}, 实际值集中存这里 (遮罩, 仅存本机)。 */
+function SecretsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}) {
+  const secrets = React.useSyncExternalStore(subscribeSecrets, getSecrets, getServerSecrets)
+  const [name, setName] = React.useState("")
+  const [value, setValue] = React.useState("")
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>密钥</DialogTitle>
+          <DialogDescription>
+            请求头等配置里用 {"${NAME}"} 引用；密钥仅存本机，不内嵌进 server 配置。名称仅限字母 /
+            数字 / 下划线。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 py-2">
+          {secrets.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">还没有密钥。</p>
+          ) : (
+            secrets.map((s) => (
+              <div key={s.id} className="flex items-center gap-2">
+                <code className="rounded bg-muted px-1.5 py-0.5 text-[12px]">{`\${${s.id}}`}</code>
+                <span className="flex-1 truncate text-[13px] text-muted-foreground">••••••</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => deleteSecret(s.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))
+          )}
+          <div className="flex items-center gap-2 pt-2">
+            <Input
+              className="h-8 flex-1"
+              placeholder="名称（如 ZOTERO_TOKEN）"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Input
+              className="h-8 flex-1"
+              type="password"
+              autoComplete="off"
+              placeholder="值"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+            <Button
+              size="sm"
+              disabled={!isValidSecretName(name)}
+              onClick={() => {
+                setSecret(name, value)
+                setName("")
+                setValue("")
+              }}
+            >
+              存
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -299,6 +398,48 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
   }
   const patchHeaders = (next: McpServer["headers"]) => saveMcpServer({ ...server, headers: next })
 
+  // OAuth (手动粘贴授权码); forceAuthRefresh 在授权状态变化后强制重读 localStorage。
+  const [, forceAuthRefresh] = React.useReducer((x: number) => x + 1, 0)
+  const authorized = isMcpAuthorized(server.id)
+  const [oauthStep, setOauthStep] = React.useState<"idle" | "paste">("idle")
+  const [pasted, setPasted] = React.useState("")
+  const [oauthMsg, setOauthMsg] = React.useState<string | null>(null)
+  const [oauthBusy, setOauthBusy] = React.useState(false)
+
+  async function authorize() {
+    setOauthBusy(true)
+    setOauthMsg(null)
+    try {
+      const r = await startMcpAuth(server.id, server.url)
+      if (r === "AUTHORIZED") {
+        forceAuthRefresh()
+        setOauthMsg("已授权")
+      } else {
+        setOauthStep("paste")
+        setOauthMsg("已打开授权页。授权后，把浏览器地址栏里回调的整条 URL（含 ?code=…）粘到下方。")
+      }
+    } catch (e) {
+      setOauthMsg(`授权发起失败：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setOauthBusy(false)
+    }
+  }
+  async function completeAuth() {
+    setOauthBusy(true)
+    setOauthMsg(null)
+    try {
+      await finishMcpAuth(server.id, pasted, server.url)
+      setOauthStep("idle")
+      setPasted("")
+      forceAuthRefresh()
+      setOauthMsg("授权成功")
+    } catch (e) {
+      setOauthMsg(`完成授权失败：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setOauthBusy(false)
+    }
+  }
+
   return (
     <Panel
       title={server.name}
@@ -357,6 +498,9 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
               添加
             </Button>
           </div>
+          <p className="text-[12px] text-muted-foreground">
+            值可用 {"${NAME}"} 引用「密钥」（顶部「密钥」管理），避免内嵌明文。
+          </p>
           {server.headers.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">
               无。如需认证可加 Authorization：Bearer &lt;token&gt;。
@@ -396,6 +540,81 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
                 </Button>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {/* OAuth 授权 (sse/http; 手动粘贴授权码) */}
+      {!isStdio && (
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">OAuth 授权</span>
+            <Toggle
+              checked={server.auth === "oauth"}
+              onChange={(v) => {
+                saveMcpServer({ ...server, auth: v ? "oauth" : "none" })
+                if (!v) {
+                  clearMcpAuth(server.id) // 关 OAuth 时清本地 token, 避免「已授权」假象与陈旧 token
+                  forceAuthRefresh()
+                }
+              }}
+              label="OAuth"
+            />
+          </div>
+          {server.auth === "oauth" && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Chip tone={authorized ? "ok" : "warn"}>{authorized ? "已授权" : "未授权"}</Chip>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={oauthBusy || !server.url}
+                  onClick={authorize}
+                >
+                  {oauthBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {authorized ? "重新授权" : "授权"}
+                </Button>
+                {authorized && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      clearMcpAuth(server.id)
+                      forceAuthRefresh()
+                    }}
+                    title="仅清除本机保存的 token；如需彻底失效请到授权方撤销"
+                  >
+                    清除本地授权
+                  </Button>
+                )}
+              </div>
+              {oauthStep === "paste" && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    className="h-8 flex-1"
+                    placeholder="粘贴回调 URL（含 ?code=…）"
+                    value={pasted}
+                    onChange={(e) => setPasted(e.target.value)}
+                  />
+                  <Button size="sm" disabled={oauthBusy || !pasted.trim()} onClick={completeAuth}>
+                    完成授权
+                  </Button>
+                </div>
+              )}
+              {oauthStep === "paste" && lastAuthUrl(server.id) && (
+                <a
+                  href={lastAuthUrl(server.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-[13px] text-primary underline-offset-2 hover:underline"
+                >
+                  若没有自动打开授权页，点此手动打开
+                </a>
+              )}
+              {oauthMsg && (
+                <p className="text-[13px] leading-relaxed text-muted-foreground">{oauthMsg}</p>
+              )}
+            </div>
           )}
         </div>
       )}

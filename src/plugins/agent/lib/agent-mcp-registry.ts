@@ -32,8 +32,10 @@ export interface McpServer {
   url: string
   /** 环境变量 (secret 以 ${NAME} 占位, 不明文)。 */
   env: McpEnvVar[]
-  /** sse / http: 请求头 (认证: Authorization: Bearer <token> 等; secret 仅存本机)。 */
+  /** sse / http: 请求头 (认证: Authorization: Bearer <token> 等; secret 仅存本机, 值支持 ${NAME} 引用密钥)。 */
   headers: McpEnvVar[]
+  /** sse / http 认证方式: none=无/仅请求头; oauth=OAuth 授权码 (token 经 agent-oauth 持久化)。 */
+  auth: "none" | "oauth"
   enabled: boolean
   /** 内置 loopback 行 (本地能力), 不可删改传输。 */
   builtin: boolean
@@ -54,6 +56,7 @@ function migrate(raw: Partial<McpServer>): McpServer {
     url: raw.url ?? "",
     env: Array.isArray(raw.env) ? raw.env : [],
     headers: Array.isArray(raw.headers) ? raw.headers : [],
+    auth: raw.auth === "oauth" ? "oauth" : "none",
     enabled: raw.enabled ?? true,
     builtin: raw.builtin ?? false,
     createdAt: raw.createdAt ?? now,
@@ -72,6 +75,7 @@ function loopbackRow(): McpServer {
     url: "",
     env: [],
     headers: [],
+    auth: "none",
     enabled: true,
     builtin: true,
     createdAt: now,
