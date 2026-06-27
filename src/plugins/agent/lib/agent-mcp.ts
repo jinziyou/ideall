@@ -6,6 +6,9 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import { StdioMcpTransport } from "./agent-mcp-stdio"
+import type { McpServer } from "./agent-mcp-registry"
+import { resolveSecrets } from "./agent-secrets"
+import { mcpOAuthProvider, isMcpAuthorized } from "./agent-oauth"
 import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
 import { agentGrant } from "@/plugins/embed/grant"
 import type { Permission } from "@/plugins/embed/protocol"
@@ -40,6 +43,10 @@ export interface ExternalMcpServer {
   args?: string[]
   /** stdio: 工作目录 (可选)。 */
   cwd?: string
+  /** sse / http: 请求头 (认证 Authorization 等)。 */
+  headers?: { key: string; value: string }[]
+  /** sse / http: 认证方式 oauth → 连接时挂 OAuth provider (自动带 Bearer / 刷新)。 */
+  auth?: "oauth"
 }
 
 /** 自动技能 → 合成「应用技能」工具: 模型按描述自路由, 调用即返回其指令文本供其展开。 */
@@ -80,6 +87,93 @@ async function callMcpClient(
     data = { raw: text }
   }
   return { ok: res.isError !== true, data }
+}
+
+/** sse/http 请求头数组 → Record (剔空键; 无有效头 → undefined)。 */
+function buildHeaders(
+  headers?: { key: string; value: string }[],
+): Record<string, string> | undefined {
+  if (!headers?.length) return undefined
+  const h: Record<string, string> = {}
+  for (const { key, value } of headers) {
+    const k = key.trim() // 用裁剪后的名 (带空格的 header 名非法, 会让 SDK new Headers 抛错)
+    // value 支持 ${NAME} 引用本机密钥表 (避免内嵌明文); value 本身不裁剪 (token 可能含空格, 如 "Bearer xyz")。
+    if (k) h[k] = resolveSecrets(value)
+  }
+  return Object.keys(h).length ? h : undefined
+}
+
+/** 由外部 server 配置建 MCP client transport (stdio / sse / http; 后两者带认证头); 配置不全 → null。 */
+function createExternalTransport(s: ExternalMcpServer): Transport | null {
+  if (s.transport === "stdio") {
+    if (!s.command?.trim()) return null
+    return new StdioMcpTransport({ program: s.command, args: s.args ?? [], cwd: s.cwd })
+  }
+  if (!s.url?.trim()) return null
+  const url = new URL(s.url)
+  const headers = buildHeaders(s.headers)
+  const authProvider = s.auth === "oauth" ? mcpOAuthProvider(s.id) : undefined
+  // OAuth 开启时剔除手动 Authorization 头 (否则它会覆盖 SDK 注入的 Bearer)。
+  if (authProvider && headers) {
+    for (const k of Object.keys(headers)) {
+      if (k.toLowerCase() === "authorization") delete headers[k]
+    }
+  }
+  const init: {
+    requestInit?: { headers: Record<string, string> }
+    authProvider?: ReturnType<typeof mcpOAuthProvider>
+  } = {}
+  if (headers && Object.keys(headers).length) init.requestInit = { headers }
+  if (authProvider) init.authProvider = authProvider
+  const opts = Object.keys(init).length ? init : undefined
+  return s.transport === "sse"
+    ? new SSEClientTransport(url, opts)
+    : new StreamableHTTPClientTransport(url, opts)
+}
+
+/** McpServer (注册表) → ExternalMcpServer (运行/自检用): args 拆数组, 带 headers。 */
+export function toExternalServer(s: McpServer): ExternalMcpServer {
+  return {
+    id: s.id,
+    name: s.name,
+    transport: s.transport as "sse" | "http" | "stdio",
+    url: s.url,
+    command: s.command,
+    args: s.args.split(/\s+/).filter(Boolean),
+    headers: s.headers,
+    auth: s.auth === "oauth" ? "oauth" : undefined,
+  }
+}
+
+/** 连接自检 (供 UI「测试连接」): 单连一个外部 server, 列工具, 返回结果; 不影响运行会话。 */
+export async function probeMcpServer(
+  s: McpServer,
+): Promise<{ ok: boolean; toolCount?: number; tools?: string[]; error?: string }> {
+  // 未授权的 oauth server 不发起连接 (否则 SDK 401 → 自动弹浏览器授权页, 还会覆盖手动授权态)。
+  if (s.auth === "oauth" && !isMcpAuthorized(s.id)) {
+    return { ok: false, error: "OAuth 未授权：请先在上方完成「授权」" }
+  }
+  let transport: Transport | null
+  try {
+    transport = createExternalTransport(toExternalServer(s))
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+  if (!transport) return { ok: false, error: "配置不完整（缺 URL 或命令）" }
+  const client = new Client({ name: "ideall-agent-probe", version: "1.0.0" }, { capabilities: {} })
+  try {
+    await client.connect(transport)
+    const listed = await client.listTools()
+    return { ok: true, toolCount: listed.tools.length, tools: listed.tools.map((t) => t.name) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  } finally {
+    try {
+      await client.close()
+    } catch {
+      /* 忽略关连接异常 */
+    }
+  }
 }
 
 /** 起一条 agent 的多源 MCP 会话: loopback 本地能力 (可关) + 外部 MCP server (sse/http) + 自动技能工具。
@@ -138,21 +232,21 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
   const externals = opts?.externalServers ?? []
   for (let i = 0; i < externals.length; i++) {
     const s = externals[i]
+    // 未授权的 oauth server 跳过 (否则 SDK 401 → 后台运行期间突然弹浏览器授权页)。已授权但过期 (有 refresh) 仍走刷新。
+    if (s.auth === "oauth" && !isMcpAuthorized(s.id)) continue
     try {
-      let transport: Transport
-      if (s.transport === "stdio") {
-        if (!s.command?.trim()) continue // 无命令 → 跳过
-        transport = new StdioMcpTransport({ program: s.command, args: s.args ?? [], cwd: s.cwd })
-      } else {
-        if (!s.url?.trim()) continue // 无 URL → 跳过
-        const url = new URL(s.url)
-        transport =
-          s.transport === "sse"
-            ? new SSEClientTransport(url)
-            : new StreamableHTTPClientTransport(url)
-      }
+      const transport = createExternalTransport(s)
+      if (!transport) continue // 配置不全 → 跳过
       const client = new Client({ name: "ideall-agent", version: "1.0.0" }, { capabilities: {} })
       await client.connect(transport)
+      // 连接即注册清理: 即便随后 listTools 抛 (server 可达但 tools/list 出错), 也保证关连接 / 杀子进程。
+      closers.push(async () => {
+        try {
+          await client.close()
+        } catch {
+          /* 忽略关连接异常 */
+        }
+      })
       const listed = await client.listTools()
       const prefix = `m${i}_`
       for (const t of listed.tools) {
@@ -167,13 +261,6 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
         })
         dispatch.set(exposed, (args) => callMcpClient(client, t.name, args))
       }
-      closers.push(async () => {
-        try {
-          await client.close()
-        } catch {
-          /* 忽略 */
-        }
-      })
     } catch {
       /* 连接失败 (CORS / 不可达 / 协议不符) → 跳过该 server, 不阻断本次运行。 */
     }

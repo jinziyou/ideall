@@ -7,8 +7,9 @@ import assert from "node:assert/strict"
 import { z } from "zod"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js"
-import { connectAgentMcp } from "./agent-mcp"
+import { connectAgentMcp, probeMcpServer } from "./agent-mcp"
 import { runAgent } from "./agent-run"
+import type { McpServer as RegistryMcpServer } from "./agent-mcp-registry"
 
 /** 起一个真实的 SSE MCP server, 暴露 echo 工具 (回显 text); 返回连接 url、调用计数、关闭。 */
 async function startEchoSse() {
@@ -19,6 +20,7 @@ async function startEchoSse() {
     return { content: [{ type: "text", text: JSON.stringify({ echoed: text }) }] }
   })
 
+  let lastAuth: string | undefined
   const transports = new Map<string, SSEServerTransport>()
   const httpServer = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1")
@@ -28,6 +30,7 @@ async function startEchoSse() {
       res.on("close", () => transports.delete(t.sessionId))
       await server.connect(t) // start() 写 SSE 头 + endpoint event
     } else if (req.method === "POST" && url.pathname === "/messages") {
+      lastAuth = req.headers.authorization
       const t = transports.get(url.searchParams.get("sessionId") ?? "")
       if (!t) {
         res.statusCode = 404
@@ -49,6 +52,7 @@ async function startEchoSse() {
   return {
     url: `http://127.0.0.1:${port}/sse`,
     getCalls: () => calls,
+    getLastAuth: () => lastAuth,
     async close() {
       httpServer.closeAllConnections?.()
       await new Promise<void>((r) => httpServer.close(() => r()))
@@ -167,6 +171,34 @@ test("工具审批 confirm: onApprove 返回 false → 工具被跳过, 不产�
     assert.equal(res.content, "完成")
   } finally {
     await llm.close()
+    await echo.close()
+  }
+})
+
+test("外部 MCP 连接自检 + 认证头: probe 列出工具且认证头随请求发送", async () => {
+  const echo = await startEchoSse()
+  try {
+    const server: RegistryMcpServer = {
+      id: "x",
+      name: "Echo",
+      transport: "sse",
+      command: "",
+      args: "",
+      url: echo.url,
+      env: [],
+      headers: [{ key: "Authorization", value: "Bearer secret-123" }],
+      auth: "none",
+      enabled: true,
+      builtin: false,
+      createdAt: 0,
+      updatedAt: 0,
+    }
+    const r = await probeMcpServer(server)
+    assert.equal(r.ok, true, "probe 应连接成功")
+    assert.ok((r.toolCount ?? 0) >= 1, "应列出至少一个工具")
+    assert.ok(r.tools?.includes("echo"), "应含 echo 工具")
+    assert.equal(echo.getLastAuth(), "Bearer secret-123", "外部 server 应收到认证头 (requestInit)")
+  } finally {
     await echo.close()
   }
 })
