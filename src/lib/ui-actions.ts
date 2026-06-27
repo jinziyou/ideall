@@ -7,6 +7,15 @@ export interface UiActions {
   openTab: (kind: NodeKind, id: string, title: string) => void
   /** 关闭一个节点标签。 */
   closeTab: (kind: NodeKind, id: string) => void
+  // —— AI 区段动作 (agent 插件视图经端口触达工作区, 守 plugin↛app 边界); 无宿主时为 undefined。 ——
+  /** 打开全局 AI 设置标签。 */
+  openAiSettings?: () => void
+  /** 打开 AI 区段管理标签 (MCP / Skills / 规则)。 */
+  openAiSection?: (kind: "ai-mcp" | "ai-skills" | "ai-rules") => void
+  /** 打开某工作空间的任务标签。 */
+  openAiTasks?: (workspaceId: string, title: string) => void
+  /** 关闭某工作空间的任务标签。 */
+  closeAiTasks?: (workspaceId: string) => void
 }
 
 let actions: UiActions | null = null

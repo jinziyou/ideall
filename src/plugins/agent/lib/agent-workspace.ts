@@ -11,6 +11,7 @@ import type { Permission } from "@/plugins/embed/protocol"
 import { AGENT_PERMISSIONS } from "@/plugins/embed/grant"
 import type { HomeSelection } from "./agent-context"
 import { getAgentSettings } from "./agent-settings"
+import { activeRulesText } from "./agent-rules"
 
 const STORE_KEY = "ideall:agent:workspaces:v1"
 
@@ -38,10 +39,9 @@ export interface WorkspaceCapabilities {
   appIds: string[] | null
 }
 
-/** 规则组: 规则 + 示例。 */
+/** 规则组: 引用顶层规则注册表的工作空间级规则 id (全局规则恒生效, 不必列入)。 */
 export interface WorkspaceRules {
-  rules: string
-  examples: string
+  ruleIds: string[]
 }
 
 /** 提示词组: 用户指令 + 精确模式拼接模板 + 最终提示覆盖。 */
@@ -105,7 +105,7 @@ export function defaultWorkspace(name = "默认工作区"): AgentWorkspace {
       skillIds: null,
       appIds: null,
     },
-    rules: { rules: "", examples: "" },
+    rules: { ruleIds: [] },
     prompt: { instructions: "", template: "", precise: false, override: "" },
     model: { useGlobal: true, baseURL: "", model: "", apiKey: "" },
     createdAt: now,
@@ -127,7 +127,7 @@ function migrate(w: Partial<AgentWorkspace>): AgentWorkspace {
       home: { ...d.data.home, ...(w.data?.home ?? {}) },
     },
     capabilities: { ...d.capabilities, ...(w.capabilities ?? {}) },
-    rules: { ...d.rules, ...(w.rules ?? {}) },
+    rules: { ruleIds: Array.isArray(w.rules?.ruleIds) ? w.rules!.ruleIds : [] },
     prompt: { ...d.prompt, ...(w.prompt ?? {}) },
     model: { ...d.model, ...(w.model ?? {}) },
     createdAt: w.createdAt ?? d.createdAt,
@@ -278,4 +278,9 @@ export function isWorkspaceConfigured(ws: AgentWorkspace): boolean {
 /** 本工作区进上下文的「我的」类目选择; includeHome=false → undefined (panel 据此不带 home)。 */
 export function homeSelectionOf(ws: AgentWorkspace): HomeSelection | undefined {
   return ws.data.includeHome ? ws.data.home : undefined
+}
+
+/** 解析本工作区生效的规则正文 (全局规则 + 本工作区引用的规则; 见 agent-rules.activeRulesText)。 */
+export function workspaceRulesText(ws: AgentWorkspace): string {
+  return activeRulesText(ws.rules.ruleIds)
 }

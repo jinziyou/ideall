@@ -109,6 +109,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
       model: form.model.trim(),
       apiKey: form.apiKey.trim(),
       includeHomeContext: form.includeHomeContext,
+      approvalPolicy: form.approvalPolicy ?? DEFAULT_SETTINGS.approvalPolicy,
     }
     if (!next.apiKey) {
       toast.error("请填写 API Key")

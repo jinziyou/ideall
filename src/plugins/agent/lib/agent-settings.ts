@@ -14,6 +14,8 @@ export interface AgentSettings {
   apiKey: string
   /** 是否把 home 数据 (关注/书签/资源) 作上下文一并发送 */
   includeHomeContext: boolean
+  /** 工具调用审批默认策略: confirm=逐次确认 (默认, 安全); auto=自动允许已授权工具。 */
+  approvalPolicy: "confirm" | "auto"
 }
 
 /** 常见 OpenAI 兼容端点预设 (仅填 baseURL/model, key 仍需用户自填)。 */
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   model: PROVIDER_PRESETS[0].model,
   apiKey: "",
   includeHomeContext: true,
+  approvalPolicy: "confirm",
 }
 
 export function isConfigured(s: AgentSettings): boolean {

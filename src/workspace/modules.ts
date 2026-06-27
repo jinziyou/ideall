@@ -1,8 +1,8 @@
 // 工作区模块配置 (单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 两种模式 (模式切换):
-//   本地(local): 我的(home) · 关注(subscriptions) · 搜索(search) · 工具(tool) —— 本机数据 + 常用工具
+//   本地(local): 我的(home) · 关注(subscriptions) · 工具(tool) —— 本机数据 + 常用工具 (含聚合搜索)
 //   连接(connected): 资讯(info) · 社区(community) —— 联网的发现
-// 注: 「搜索」= 聚合搜索 (跳外部搜索引擎); 顶栏的「本地搜索」负责搜本机内容, 两者职责分离。
+// 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏的「本地搜索」搜本机内容, 两者职责分离。
 
 import type { ComponentType } from "react"
 import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"
@@ -57,9 +57,10 @@ const homeEntries: SidebarEntry[] = [
     descriptor: { kind: "home-resources", module: "home", title: "资源", path: "/home/resources" },
   },
   {
-    label: MODULE_META.bookmarks.label,
+    // 「我的」语境下书签即「收藏」(标签/区段名统一为收藏; 底层仍是 bookmark 节点)。
+    label: "收藏",
     icon: MODULE_META.bookmarks.icon,
-    descriptor: { kind: "home-bookmarks", module: "home", title: "书签", path: "/home/bookmarks" },
+    descriptor: { kind: "home-bookmarks", module: "home", title: "收藏", path: "/home/bookmarks" },
   },
 ]
 
@@ -98,31 +99,21 @@ export const MODULES: ModuleConfig[] = [
     ],
   },
   {
-    // 搜索 = 聚合搜索 (选引擎输词, 跳转各大外部搜索引擎); 与顶栏「本地搜索」职责分离。
-    id: "search",
-    mode: "local",
-    label: "搜索",
-    icon: Search,
-    colorClass: "text-spoke-tool",
-    sidebarTitle: "搜索",
-    sidebarHint: "聚合搜索：选引擎输词，一键跳转各大搜索引擎（搜本机内容请用顶栏搜索）。",
-    entries: [
-      {
-        label: "打开搜索页",
-        icon: Search,
-        descriptor: { kind: "tool-search", module: "search", title: "搜索", path: "/tool/search" },
-      },
-    ],
-  },
-  {
     id: "tool",
     mode: "local",
     label: MODULE_META.tool.label,
     icon: MODULE_META.tool.icon,
     colorClass: MODULE_META.tool.tintClass,
     sidebarTitle: "工具",
-    sidebarHint: "AI / 导航，钉住的工具汇入「我的」。",
+    sidebarHint: "搜索 / AI / 导航，钉住的工具汇入「我的」。",
     entries: [
+      {
+        // 聚合搜索 (选引擎输词跳转外部搜索引擎); 侧栏顶部还有内联搜索框 (SidebarWebSearch)。
+        // 与顶栏「本地搜索」职责分离: 前者跳外部引擎, 后者搜本机内容。
+        label: "搜索",
+        icon: Search,
+        descriptor: { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" },
+      },
       {
         label: "AI",
         icon: Bot,
@@ -230,7 +221,7 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (pathname.startsWith("/community"))
     return { kind: "community", module: "community", title: "社区", path: "/community" }
   if (pathname.startsWith("/tool"))
-    return { kind: "tool-search", module: "search", title: "搜索", path: "/tool/search" }
+    return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
   return null
 }
 

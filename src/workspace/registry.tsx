@@ -27,11 +27,15 @@ const ToolSearch = React.lazy(() => import("@/modules/tool/search/page"))
 const ToolAi = React.lazy(() => import("@/modules/tool/ai/page"))
 const ToolNavigation = React.lazy(() => import("@/modules/tool/navigation/page"))
 const BrowserView = React.lazy(() => import("./browser-view"))
-const AiWorkspace = React.lazy(() => import("@/plugins/agent/views/ai-workspace"))
+const AiSettings = React.lazy(() => import("@/plugins/agent/views/ai-settings"))
+const AiMcp = React.lazy(() => import("@/plugins/agent/views/ai-mcp"))
+const AiSkills = React.lazy(() => import("@/plugins/agent/views/ai-skills"))
+const AiRules = React.lazy(() => import("@/plugins/agent/views/ai-rules"))
+const AiTasks = React.lazy(() => import("@/plugins/agent/views/ai-tasks"))
 
 export type TabLayout = "padded" | "fill"
 
-type Entry = { render: () => React.ReactNode; layout: TabLayout }
+type Entry = { render: (tab: Tab) => React.ReactNode; layout: TabLayout }
 
 const REGISTRY: Record<string, Entry> = {
   "home-overview": { render: () => <Overview />, layout: "padded" },
@@ -54,7 +58,15 @@ const REGISTRY: Record<string, Entry> = {
   "tool-ai": { render: () => <ToolAi />, layout: "padded" },
   "tool-navigation": { render: () => <ToolNavigation />, layout: "padded" },
   "browser-view": { render: () => <BrowserView />, layout: "fill" },
-  "ai-workspace": { render: () => <AiWorkspace />, layout: "fill" },
+  // AI 区段标签 (module:"agent", mode-中性)。任务标签按 params.workspaceId 实例化。
+  "ai-settings": { render: () => <AiSettings />, layout: "fill" },
+  "ai-mcp": { render: () => <AiMcp />, layout: "fill" },
+  "ai-skills": { render: () => <AiSkills />, layout: "fill" },
+  "ai-rules": { render: () => <AiRules />, layout: "fill" },
+  "ai-tasks": {
+    render: (tab) => <AiTasks workspaceId={tab.params?.workspaceId ?? ""} />,
+    layout: "fill",
+  },
 }
 
 const Spinner = (
@@ -96,5 +108,5 @@ export function TabContent({ tab }: { tab: Tab }) {
   if (!entry) {
     return <div className="p-6 text-sm text-muted-foreground">未知的标签类型：{tab.kind}</div>
   }
-  return <React.Suspense fallback={Spinner}>{entry.render()}</React.Suspense>
+  return <React.Suspense fallback={Spinner}>{entry.render(tab)}</React.Suspense>
 }

@@ -15,6 +15,9 @@ import {
   getActiveId,
   getActiveSource,
   getTabs,
+  openAiSettings,
+  openAiSection,
+  openAiTasks,
 } from "@/workspace/store"
 import { nodeTab, parseNodeParams } from "@/workspace/node-tab"
 import { infoManifest } from "@/modules/info/manifest"
@@ -34,6 +37,12 @@ export function registerAll(): void {
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
     openTab: (kind, id, title) => openNodeTab({ kind, id }, title, "agent"),
     closeTab: (kind, id) => closeTab(tabKey(nodeTab({ kind, id }, ""))),
+    // AI 区段动作: agent 插件视图 (ai-sidebar / ai-tasks) 经端口打开/关闭 AI 标签 (不直接 import 工作区)。
+    openAiSettings,
+    openAiSection,
+    openAiTasks,
+    closeAiTasks: (workspaceId) =>
+      closeTab(tabKey({ kind: "ai-tasks", module: "agent", title: "", params: { workspaceId } })),
   })
   // 活动节点端口 (§6.5 对话即文件): 当前激活的节点标签 → NodeRef, 供 AI 栏作隐式上下文。
   // 隐私守卫: 仅当激活来源为 user 时回 NodeRef; agent 经 ui.openTab 自激活的节点回 null ——

@@ -16,7 +16,7 @@ import {
 import { ServiceHeader } from "@/shared/service-header"
 import { BUILTIN_SKILLS, type AgentSkill } from "../lib/agent-skills"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
-import type { ConnectAgentOpts } from "../lib/agent-mcp"
+import type { ResolvedRun } from "../lib/agent-resolve"
 import {
   createThread,
   deleteThread,
@@ -42,16 +42,7 @@ const SUGGESTIONS = [
   "我都收藏了哪些资源？帮我概括一下",
 ]
 
-/** 一次运行解析出的连接 + 已组装系统提示 + 能力收窄 (工作区 / 精确模式在此注入)。 */
-export interface ResolvedRun {
-  baseURL: string
-  model: string
-  apiKey: string
-  /** 已组装好的系统提示 (工作区 / 精确模式在此给出最终文本)。 */
-  system: string
-  /** 工作区能力收窄 (传给 runAgent → connectAgentMcp)。 */
-  mcp?: ConnectAgentOpts
-}
+export type { ResolvedRun }
 
 export interface AgentPanelProps {
   compact?: boolean
@@ -65,6 +56,13 @@ export interface AgentPanelProps {
   skills?: AgentSkill[]
   /** 设置入口点击 (工作区改为打开模型组面板)。缺省打开内置全局设置 Dialog。 */
   onOpenSettings?: () => void
+  /** 限定可见线程到这组 id (任务标签: 只显示本工作空间的任务; 始终含当前激活线程防新建即隐)。缺省 = 全部线程。 */
+  scopeIds?: string[]
+  /** 新建线程后回调 (任务标签据此把线程登记为本工作空间的任务)。 */
+  onThreadCreated?: (id: string) => void
+  /** 侧栏「新建」与空态文案 (任务标签改「新任务 / 还没有任务」)。 */
+  newLabel?: string
+  emptyLabel?: string
 }
 
 export default function AgentPanel({
@@ -74,6 +72,10 @@ export default function AgentPanel({
   modelLabel,
   skills = BUILTIN_SKILLS,
   onOpenSettings,
+  scopeIds,
+  onThreadCreated,
+  newLabel = "新对话",
+  emptyLabel = "还没有对话",
 }: AgentPanelProps = {}) {
   const settings = React.useSyncExternalStore(
     subscribeAgentSettings,
@@ -91,6 +93,19 @@ export default function AgentPanel({
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   // 智能体模式: 开启后模型可调用工具读写 home 数据 (非流式); 默认关 (普通流式对话)
   const [agentMode, setAgentMode] = React.useState(false)
+  // 工具审批 (approvalPolicy==="confirm"): 待确认的工具调用 (resolve 由「允许/拒绝」按钮触发)。
+  const [pendingApproval, setPendingApproval] = React.useState<{
+    name: string
+    argsText: string
+    resolve: (v: boolean) => void
+  } | null>(null)
+
+  // 工具审批回调: 弹确认条, 等用户「允许/拒绝」后 resolve (runAgent 在此期间挂起)。
+  const approveTool = React.useCallback(
+    (name: string, argsText: string) =>
+      new Promise<boolean>((resolve) => setPendingApproval({ name, argsText, resolve })),
+    [],
+  )
 
   const abortRef = React.useRef<AbortController | null>(null)
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
@@ -178,6 +193,11 @@ export default function AgentPanel({
   }
 
   function stop() {
+    // 若正卡在工具审批, 视作拒绝并放行 runAgent 继续 (随后 abort 守卫收尾)。
+    setPendingApproval((p) => {
+      p?.resolve(false)
+      return null
+    })
     abortRef.current?.abort()
   }
 
@@ -201,18 +221,25 @@ export default function AgentPanel({
 
     // 确保线程存在并落库 (含本条用户消息)
     let thread: AgentThread
+    let createdNew = false
     try {
       if (!activeId) {
         const created = await createThread()
+        createdNew = true
         thread = { ...created, title: titleFromMessage(text), messages: convo }
       } else {
         const existing = await getThread(activeId)
-        thread = existing
-          ? { ...existing, messages: convo }
-          : { ...(await createThread()), title: titleFromMessage(text), messages: convo }
+        if (existing) {
+          thread = { ...existing, messages: convo }
+        } else {
+          createdNew = true
+          thread = { ...(await createThread()), title: titleFromMessage(text), messages: convo }
+        }
       }
       await saveThread(thread)
       setActiveId(thread.id)
+      // 任务标签: 把新建线程登记为本工作空间任务 (须在 refreshThreads 前, 让 scope 立刻纳入)。
+      if (createdNew) onThreadCreated?.(thread.id)
       refreshThreads()
     } catch (e) {
       toast.error("无法保存对话", { description: String(e) })
@@ -277,6 +304,8 @@ export default function AgentPanel({
           messages: apiMessages,
           signal: controller.signal,
           mcp: runCfg.mcp,
+          // 审批策略 confirm → 每个工具执行前弹确认 (auto 直接放行)。
+          onApprove: settings.approvalPolicy === "confirm" ? approveTool : undefined,
           onToolEvent: (ev) => {
             toolEvents = [...toolEvents, ev]
             setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, toolEvents } : m)))
@@ -366,6 +395,11 @@ export default function AgentPanel({
     void send(skill.prompt, { agentMode: skill.agentMode })
   }
 
+  // 任务标签: 只显示本工作空间的线程 (始终含当前激活线程, 防新建即被 scope 过滤掉)。
+  const shownThreads = scopeIds
+    ? threads.filter((t) => scopeIds.includes(t.id) || t.id === activeId)
+    : threads
+
   return (
     <div className="flex h-full flex-col gap-4 md:flex-row">
       {/* 会话侧栏 (紧凑模式隐藏, 新对话改在标题栏) */}
@@ -378,13 +412,13 @@ export default function AgentPanel({
             onClick={newChat}
           >
             <SquarePen className="h-4 w-4" />
-            新对话
+            {newLabel}
           </Button>
           <div className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-            {threads.length === 0 && (
-              <p className="px-2 py-1 text-xs text-muted-foreground">还没有对话</p>
+            {shownThreads.length === 0 && (
+              <p className="px-2 py-1 text-xs text-muted-foreground">{emptyLabel}</p>
             )}
-            {threads.map((t) => {
+            {shownThreads.map((t) => {
               const active = t.id === activeId
               return (
                 <div
@@ -498,6 +532,44 @@ export default function AgentPanel({
             ))
           )}
         </div>
+
+        {/* 工具审批条 (confirm 策略): 执行前征询, 挂起 runAgent 直到「允许/拒绝」。 */}
+        {pendingApproval && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-l-2 border-l-pop bg-muted/40 px-4 py-3 text-sm">
+            <span className="min-w-0">
+              <span className="font-medium">请求执行工具</span>
+              <span className="ml-1 font-mono text-[13px] text-muted-foreground">
+                {pendingApproval.name}
+                {pendingApproval.argsText ? `(${pendingApproval.argsText})` : ""}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  setPendingApproval((p) => {
+                    p?.resolve(false)
+                    return null
+                  })
+                }
+              >
+                拒绝
+              </Button>
+              <Button
+                size="sm"
+                onClick={() =>
+                  setPendingApproval((p) => {
+                    p?.resolve(true)
+                    return null
+                  })
+                }
+              >
+                允许
+              </Button>
+            </span>
+          </div>
+        )}
 
         {/* 输入区 */}
         <div className="mt-3 space-y-2">

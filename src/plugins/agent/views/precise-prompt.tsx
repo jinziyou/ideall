@@ -20,7 +20,12 @@ import {
   WORKSPACE_SEGMENT_LABELS,
   WORKSPACE_SEGMENT_ORDER,
 } from "../lib/agent-context"
-import { homeSelectionOf, saveWorkspace, type AgentWorkspace } from "../lib/agent-workspace"
+import {
+  homeSelectionOf,
+  saveWorkspace,
+  workspaceRulesText,
+  type AgentWorkspace,
+} from "../lib/agent-workspace"
 
 export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
   const [tools, setTools] = React.useState(true)
@@ -52,8 +57,8 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
           homeContext,
           referenced,
           instructions: ws.prompt.instructions,
-          rules: ws.rules.rules,
-          examples: ws.rules.examples,
+          rules: workspaceRulesText(ws),
+          examples: "",
         }),
         ws.prompt.template,
       )

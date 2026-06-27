@@ -15,7 +15,6 @@ const DOT: Record<ModuleId, string> = {
   info: "bg-spoke-info",
   community: "bg-spoke-community",
   browser: "bg-spoke-tool",
-  search: "bg-spoke-tool",
   tool: "bg-spoke-tool",
   agent: "bg-primary",
 }
