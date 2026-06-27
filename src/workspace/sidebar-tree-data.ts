@@ -6,7 +6,6 @@ import {
   Boxes,
   FileText,
   Folder,
-  Globe,
   Link2,
   Map,
   Newspaper,
@@ -116,19 +115,6 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         icon: Boxes,
         nodeKind: "section",
         hasChildren: true,
-      },
-    ]
-  }
-
-  if (moduleId === "browser") {
-    return [
-      {
-        id: "entry:browser",
-        label: "打开浏览器",
-        icon: Globe,
-        nodeKind: "entry",
-        descriptor: { kind: "browser-view", module: "browser", title: "浏览器", path: "/browser" },
-        hasChildren: false,
       },
     ]
   }

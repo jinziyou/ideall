@@ -167,15 +167,26 @@ export const MODULES: ModuleConfig[] = [
     ],
   },
   {
-    // 浏览器 = 内嵌 webview 浏览任意外站, 工具条 ☆ 收藏当前页 → 本地书签 (仅桌面 App; 见 browser-launcher.tsx / src-tauri lib.rs)。
+    // 浏览器 = 内嵌 webview 浏览任意外站; 活动栏点图标直达 browser-view 标签 (仅桌面 App; 见 browser-view.tsx / src-tauri lib.rs)。
     id: "browser",
     mode: "connected",
     label: "浏览器",
     icon: Globe,
     colorClass: "text-spoke-community",
     sidebarTitle: "浏览器",
-    sidebarHint: "浏览网页，把收藏的页面汇入书签（仅桌面 App）。",
-    entries: [],
+    sidebarHint: "浏览网页，点页面右下角 ★ 一键收藏到「我的」→ 收藏（仅桌面 App）。",
+    entries: [
+      {
+        label: "浏览器",
+        icon: Globe,
+        descriptor: {
+          kind: "browser-view",
+          module: "browser",
+          title: "浏览器",
+          path: "/browser",
+        },
+      },
+    ],
   },
   // 注: AI 不再作为活动栏模块/标签, 改为右侧常驻对话栏 (AI 原生)；见 right-ai-panel.tsx。
 ]
@@ -220,6 +231,8 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
     return { kind: "info", module: "info", title: "资讯", path: "/info" }
   if (pathname.startsWith("/community"))
     return { kind: "community", module: "community", title: "社区", path: "/community" }
+  if (pathname.startsWith("/browser"))
+    return { kind: "browser-view", module: "browser", title: "浏览器", path: "/browser" }
   if (pathname.startsWith("/tool"))
     return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
   return null

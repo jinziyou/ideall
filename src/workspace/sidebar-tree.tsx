@@ -46,6 +46,8 @@ const NotesSidebarTree = React.lazy(
 const EXPANDED_KEY = "ideall:sidebar-tree:expanded"
 
 function rootsForModule(moduleId: ModuleId): SidebarTreeNode[] {
+  // 浏览器由活动栏直达开标签, 侧栏仅保留提示文案, 避免「侧栏入口 + 主区标签」双入口。
+  if (moduleId === "browser") return []
   if (moduleId === "subscriptions") return subscriptionsTreeRoots()
   if (moduleId === "info") return embedTreeRoots("info")
   if (moduleId === "community") return embedTreeRoots("community")

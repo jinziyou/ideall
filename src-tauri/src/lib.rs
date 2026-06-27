@@ -1,9 +1,6 @@
-// 内嵌浏览器 (连接模式, 路线 A): 主窗口内嵌一个原生子 webview 显示外站, 工具条 (地址栏/前进后退/
-// 刷新/收藏) 由主窗口可信本地前端渲染。子 webview 是浮在 HTML 之上的原生层 (无法被 DOM 盖住), 故其
-// 矩形必须与工具条不重叠 (前端按内容区 getBoundingClientRect 同步 bounds); 切走标签则 hide。
-// 收藏由主窗口前端直接写本地书签 (URL 来自 on_navigation/on_page_load emit 回前端), 不依赖外站 webview
-// 的 IPC (Tauri v2 不向 External webview 注入 IPC)。需 Cargo feature "unstable" (Window::add_child);
-// WSL2 需 X11 (Wayland 下 add_child 不工作, app-dev.mjs 注入 GDK_BACKEND=x11)。仅桌面 (desktop)。
+// 内嵌浏览器 (连接模式, 路线 A): 主窗口内嵌原生子 webview 显示外站, 工具条由可信本地前端渲染。
+// Linux/WSL: Tauri add_child 默认 gtk::Box 堆叠 (子 webview 落窗口底部) → browser_linux.rs 用 gtk::Fixed 精确定位。
+// 非 Linux: Window::add_child + 前端 getBoundingClientRect 同步 bounds。切走标签 hide; WSLg 内嵌浏览器或需 GDK_BACKEND=x11。
 #[cfg(desktop)]
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
 #[cfg(desktop)]
@@ -14,22 +11,33 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUr
 mod acp_transport;
 #[cfg(desktop)]
 mod oauth_callback;
+#[cfg(all(desktop, target_os = "linux"))]
+mod browser_linux;
+#[cfg(desktop)]
+mod browser_fab;
 
 #[cfg(desktop)]
 const BROWSER_LABEL: &str = "browser_view";
+#[cfg(desktop)]
+const BROWSER_FAB_LABEL: &str = "browser_fab";
 
 // 主窗口内容区矩形 (CSS 像素, 相对窗口左上)。直接当 Logical 传, 勿乘 devicePixelRatio (Tauri 自动按 scale 换算)。
 #[cfg(desktop)]
-#[derive(serde::Deserialize)]
-struct Bounds {
+#[derive(serde::Deserialize, Clone, Copy, Debug, Default)]
+pub(crate) struct Bounds {
     x: f64,
     y: f64,
     w: f64,
     h: f64,
+    /// 收藏浮钮左上角 (窗口坐标, CSS 像素); 持久化自前端 localStorage。
+    #[serde(default)]
+    fab_x: Option<f64>,
+    #[serde(default)]
+    fab_y: Option<f64>,
 }
 
 #[cfg(desktop)]
-fn parse_http_url(url: &str) -> Result<tauri::Url, String> {
+pub(crate) fn parse_http_url(url: &str) -> Result<tauri::Url, String> {
     let u: tauri::Url = url.parse().map_err(|e| format!("非法网址: {e}"))?;
     if !matches!(u.scheme(), "http" | "https") {
         return Err("仅支持 http/https".into());
@@ -40,7 +48,16 @@ fn parse_http_url(url: &str) -> Result<tauri::Url, String> {
 /// 打开 (或重建) 内嵌浏览器子 webview, 加载 url, 定位到主窗口内容区 bounds。
 #[cfg(desktop)]
 #[tauri::command]
-fn open_browser_view(app: AppHandle, url: String, b: Bounds) -> Result<(), String> {
+fn open_browser_view(
+    app: AppHandle,
+    url: String,
+    b: Bounds,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    return browser_linux::open(&app, url, b);
+
+    #[cfg(not(target_os = "linux"))]
+    {
     let target = if url.trim().is_empty() {
         "https://www.google.com".to_string()
     } else {
@@ -49,19 +66,21 @@ fn open_browser_view(app: AppHandle, url: String, b: Bounds) -> Result<(), Strin
     let parsed = parse_http_url(&target)?;
     let main = app.get_webview_window("main").ok_or("主窗口不存在")?;
     let window = main.as_ref().window();
+    browser_fab::sync_content(&b);
     // 单例: 已存在则先关。
     if let Some(w) = app.get_webview(BROWSER_LABEL) {
+        let _ = w.close();
+    }
+    if let Some(w) = app.get_webview(BROWSER_FAB_LABEL) {
         let _ = w.close();
     }
     let app_nav = app.clone();
     let app_load = app.clone();
     let builder = WebviewBuilder::new(BROWSER_LABEL, WebviewUrl::External(parsed))
-        // 用户点页面内链接的 top-level 导航 → 同步 URL 回工具条 (true=放行)。SPA pushState 不触发, 属已知限制。
         .on_navigation(move |target| {
             let _ = app_nav.emit("browser://url", target.to_string());
             true
         })
-        // 页面加载完成再同步一次 (更准)。
         .on_page_load(move |_webview, payload| {
             if matches!(payload.event(), PageLoadEvent::Finished) {
                 let _ = app_load.emit("browser://url", payload.url().to_string());
@@ -74,81 +93,188 @@ fn open_browser_view(app: AppHandle, url: String, b: Bounds) -> Result<(), Strin
             LogicalSize::new(b.w, b.h),
         )
         .map_err(|e| e.to_string())?;
+
+    let fab = browser_fab::bounds(&b);
+    let fab_url = browser_fab::data_url()?;
+    let app_fab = app.clone();
+    let fab_builder = WebviewBuilder::new(BROWSER_FAB_LABEL, WebviewUrl::External(fab_url))
+        .on_navigation(move |target| {
+            if browser_fab::is_favorite_nav(&target) {
+                let _ = app_fab.emit("browser://favorite", ());
+                return false;
+            }
+            if let Some((dx, dy)) = browser_fab::parse_fab_delta(&target) {
+                if let Some(m) = browser_fab::apply_delta(dx, dy) {
+                    if let Some(fv) = app_fab.get_webview(BROWSER_FAB_LABEL) {
+                        let _ = fv.set_position(LogicalPosition::new(m.x, m.y));
+                    }
+                }
+                return false;
+            }
+            if browser_fab::is_fab_commit(&target) {
+                if let Some((x, y)) = browser_fab::custom_pos() {
+                    let _ = app_fab.emit("browser://fab-moved", browser_fab::FabMoved { x, y });
+                }
+                return false;
+            }
+            true
+        });
+    window
+        .add_child(
+            fab_builder,
+            LogicalPosition::new(fab.x, fab.y),
+            LogicalSize::new(fab.w, fab.h),
+        )
+        .map_err(|e| e.to_string())?;
     Ok(())
+    }
 }
 
 /// 同步子 webview 矩形 (内容区随窗口缩放/侧栏折叠变化时调用)。
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_set_bounds(app: AppHandle, b: Bounds) -> Result<(), String> {
+fn browser_set_bounds(
+    app: AppHandle,
+    b: Bounds,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    return browser_linux::set_bounds(b);
+
+    #[cfg(not(target_os = "linux"))]
+    {
+    browser_fab::sync_content(&b);
     let wv = app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?;
     wv.set_position(LogicalPosition::new(b.x, b.y))
         .map_err(|e| e.to_string())?;
     wv.set_size(LogicalSize::new(b.w, b.h))
         .map_err(|e| e.to_string())?;
+    let fab = browser_fab::bounds(&b);
+    if let Some(fv) = app.get_webview(BROWSER_FAB_LABEL) {
+        fv.set_position(LogicalPosition::new(fab.x, fab.y))
+            .map_err(|e| e.to_string())?;
+        fv.set_size(LogicalSize::new(fab.w, fab.h))
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
+    }
 }
 
 /// 地址栏导航到新 url。
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_navigate(app: AppHandle, url: String) -> Result<(), String> {
+fn browser_navigate(
+    app: AppHandle,
+    url: String,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    return browser_linux::navigate(&url);
+
+    #[cfg(not(target_os = "linux"))]
+    {
     let parsed = parse_http_url(&url)?;
     app.get_webview(BROWSER_LABEL)
         .ok_or("浏览器视图不存在")?
         .navigate(parsed)
         .map_err(|e| e.to_string())
+    }
 }
 
-#[cfg(desktop)]
-fn browser_eval(app: &AppHandle, js: &str) -> Result<(), String> {
-    app.get_webview(BROWSER_LABEL)
-        .ok_or("浏览器视图不存在")?
-        .eval(js)
-        .map_err(|e| e.to_string())
-}
-
-// 前进/后退/刷新: Webview 无原生 API, 用 eval (history/location)。
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_back(app: AppHandle) -> Result<(), String> {
-    browser_eval(&app, "history.back()")
+    #[cfg(target_os = "linux")]
+    return browser_linux::back();
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        app.get_webview(BROWSER_LABEL)
+            .ok_or("浏览器视图不存在")?
+            .eval("history.back()")
+            .map_err(|e| e.to_string())
+    }
 }
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_forward(app: AppHandle) -> Result<(), String> {
-    browser_eval(&app, "history.forward()")
+    #[cfg(target_os = "linux")]
+    return browser_linux::forward();
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        app.get_webview(BROWSER_LABEL)
+            .ok_or("浏览器视图不存在")?
+            .eval("history.forward()")
+            .map_err(|e| e.to_string())
+    }
 }
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_reload(app: AppHandle) -> Result<(), String> {
-    browser_eval(&app, "location.reload()")
+    #[cfg(target_os = "linux")]
+    return browser_linux::reload();
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        app.get_webview(BROWSER_LABEL)
+            .ok_or("浏览器视图不存在")?
+            .eval("location.reload()")
+            .map_err(|e| e.to_string())
+    }
 }
 
 // 隐藏/显示/关闭子 webview (标签切走 hide, 切回 show, 关标签 close)。
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_hide(app: AppHandle) -> Result<(), String> {
-    app.get_webview(BROWSER_LABEL)
-        .ok_or("浏览器视图不存在")?
-        .hide()
-        .map_err(|e| e.to_string())
+    #[cfg(target_os = "linux")]
+    return browser_linux::hide();
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        app.get_webview(BROWSER_LABEL)
+            .ok_or("浏览器视图不存在")?
+            .hide()
+            .map_err(|e| e.to_string())?;
+        if let Some(fv) = app.get_webview(BROWSER_FAB_LABEL) {
+            fv.hide().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
 }
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_show(app: AppHandle) -> Result<(), String> {
-    app.get_webview(BROWSER_LABEL)
-        .ok_or("浏览器视图不存在")?
-        .show()
-        .map_err(|e| e.to_string())
+    #[cfg(target_os = "linux")]
+    return browser_linux::show();
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        app.get_webview(BROWSER_LABEL)
+            .ok_or("浏览器视图不存在")?
+            .show()
+            .map_err(|e| e.to_string())?;
+        if let Some(fv) = app.get_webview(BROWSER_FAB_LABEL) {
+            fv.show().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
 }
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_close(app: AppHandle) -> Result<(), String> {
-    if let Some(w) = app.get_webview(BROWSER_LABEL) {
-        w.close().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    return browser_linux::close();
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        if let Some(w) = app.get_webview(BROWSER_LABEL) {
+            w.close().map_err(|e| e.to_string())?;
+        }
+        if let Some(w) = app.get_webview(BROWSER_FAB_LABEL) {
+            w.close().map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 // ── agent 出站联网守卫 (web.search / web.fetch 的 Rust 侧 SSRF 闭合) ────────────────────────────────
@@ -374,7 +500,6 @@ pub fn run() {
     // invoke_handler 只能设一次, 故按平台分别注册全集 / 仅 agent_guarded_fetch。
     #[cfg(desktop)]
     let builder = builder
-        // ACP 出站会话表 (id → 子进程句柄) 与入站服务端状态 (connId → 连接); acp_transport 命令经 State 访问。
         .manage(acp_transport::init_state())
         .manage(acp_transport::init_server_state())
         .manage(oauth_callback::init_oauth_state())

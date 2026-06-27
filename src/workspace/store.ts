@@ -304,7 +304,7 @@ export function toggleModule(m: ModuleId) {
   }
   const mod = moduleById(m)
   const first = mod.entries[0]
-  if (!first || m === "browser") {
+  if (!first) {
     setState({ activeModule: m, mode: MODE_OF[m], sidebarCollapsed: false })
     return
   }
