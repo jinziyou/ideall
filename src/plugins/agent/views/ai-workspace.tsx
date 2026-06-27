@@ -10,10 +10,15 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
 import AgentPanel, { type ResolvedRun } from "./agent-panel"
+import ExternalAgentPanel from "./external-agent-panel"
 import ContextComposer from "./context-composer"
 import PrecisePrompt from "./precise-prompt"
 import { BUILTIN_SKILLS } from "../lib/agent-skills"
-import { ACP_STATUS } from "../lib/agent-acp"
+import {
+  getAcpServerStatus,
+  getAcpServerStatusServer,
+  subscribeAcpServerStatus,
+} from "../lib/acp-status"
 import type { ConnectAgentOpts } from "../lib/agent-mcp"
 import {
   assembleSystemPrompt,
@@ -43,6 +48,17 @@ export default function AiWorkspace() {
   const ws =
     wsState.workspaces.find((w) => w.id === wsState.activeId) ?? wsState.workspaces[0] ?? null
   const [leftTab, setLeftTab] = React.useState<"compose" | "precise">("compose")
+  const [chatMode, setChatMode] = React.useState<"local" | "external">("local")
+  const acpStatus = React.useSyncExternalStore(
+    subscribeAcpServerStatus,
+    getAcpServerStatus,
+    getAcpServerStatusServer,
+  )
+  const acpLabel = acpStatus.listening
+    ? acpStatus.connections > 0
+      ? `编辑器已接入 ${acpStatus.connections}`
+      : `监听 :${acpStatus.port}`
+    : "未接入"
 
   // resolveRun 在「发送时」读最新工作区 (getActiveWorkspace), 这样组合器 / 精确模式里的改动即时生效。
   const resolveRun = React.useCallback(async (useAgent: boolean): Promise<ResolvedRun | null> => {
@@ -129,9 +145,9 @@ export default function AiWorkspace() {
         </Button>
         <span
           className="ml-auto hidden items-center text-xs text-muted-foreground sm:flex"
-          title="能力经进程内 loopback MCP; ACP 接缝预留"
+          title="能力经进程内 loopback MCP; ACP 暴露经设置开启 (编辑器经 loopback 连入)"
         >
-          本地 MCP · ACP {ACP_STATUS === "connected" ? "已接入" : "未接入"}
+          本地 MCP · ACP {acpLabel}
         </span>
         <Button
           variant="ghost"
@@ -169,13 +185,36 @@ export default function AiWorkspace() {
             {leftTab === "compose" ? <ContextComposer ws={ws} /> : <PrecisePrompt ws={ws} />}
           </div>
         </aside>
-        <div className="min-h-0 flex-1 p-4">
-          <AgentPanel
-            resolveRun={resolveRun}
-            configured={configured}
-            modelLabel={modelLabel}
-            skills={skills}
-          />
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="mb-2 flex shrink-0 items-center gap-1">
+            {(["local", "external"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setChatMode(mode)}
+                className={cn(
+                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  chatMode === mode
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/60",
+                )}
+              >
+                {mode === "local" ? "本机模型" : "外部智能体"}
+              </button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1">
+            {chatMode === "local" ? (
+              <AgentPanel
+                resolveRun={resolveRun}
+                configured={configured}
+                modelLabel={modelLabel}
+                skills={skills}
+              />
+            ) : (
+              <ExternalAgentPanel />
+            )}
+          </div>
         </div>
       </div>
     </div>

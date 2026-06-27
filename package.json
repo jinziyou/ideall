@@ -23,6 +23,7 @@
     "smoke:notes": "node scripts/smoke-notes.mjs"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.0.0",
     "@antv/g6": "^5.1.1",
     "@ariakit/react": "^0.4.29",
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -27,8 +27,16 @@ const NO_APP = {
 const config = [
   ...nextConfig,
   {
-    // @/lib/api/server.d.ts 是 openapi-typescript 生成物, 不该被 lint
-    ignores: [".next/**", "node_modules/**", "public/**", "src/lib/api/**"],
+    // @/lib/api/server.d.ts 是 openapi-typescript 生成物, 不该被 lint;
+    // src-tauri (Rust 工程 + target/gen 产物) 与 out (静态导出产物) 均非 JS 源, 不入 lint (二者已 gitignore)。
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "public/**",
+      "src/lib/api/**",
+      "src-tauri/**",
+      "out/**",
+    ],
   },
 
   // (1) protocol: 纯契约/端口/纯函数, 只依赖 @/lib 纯工具叶子; 不得 import frame/功能/UI 层, 也不得碰 wire DTO。

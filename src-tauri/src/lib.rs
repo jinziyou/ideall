@@ -9,6 +9,10 @@ use tauri::webview::{PageLoadEvent, WebviewBuilder};
 #[cfg(desktop)]
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
+// ACP (Agent Client Protocol) 外部智能体传输 —— 子进程 stdin/stdout 哑管道 (NDJSON 行框定), 仅桌面。
+#[cfg(desktop)]
+mod acp_transport;
+
 #[cfg(desktop)]
 const BROWSER_LABEL: &str = "browser_view";
 
@@ -367,18 +371,32 @@ pub fn run() {
     // agent 出站守卫命令两端通用; 内嵌浏览器命令仅桌面 (Window::add_child = desktop + unstable feature)。
     // invoke_handler 只能设一次, 故按平台分别注册全集 / 仅 agent_guarded_fetch。
     #[cfg(desktop)]
-    let builder = builder.invoke_handler(tauri::generate_handler![
-        agent_guarded_fetch,
-        open_browser_view,
-        browser_set_bounds,
-        browser_navigate,
-        browser_back,
-        browser_forward,
-        browser_reload,
-        browser_hide,
-        browser_show,
-        browser_close
-    ]);
+    let builder = builder
+        // ACP 出站会话表 (id → 子进程句柄) 与入站服务端状态 (connId → 连接); acp_transport 命令经 State 访问。
+        .manage(acp_transport::init_state())
+        .manage(acp_transport::init_server_state())
+        .invoke_handler(tauri::generate_handler![
+            agent_guarded_fetch,
+            open_browser_view,
+            browser_set_bounds,
+            browser_navigate,
+            browser_back,
+            browser_forward,
+            browser_reload,
+            browser_hide,
+            browser_show,
+            browser_close,
+            acp_transport::acp_spawn,
+            acp_transport::acp_send,
+            acp_transport::acp_close,
+            acp_transport::acp_listen_start,
+            acp_transport::acp_listen_stop,
+            acp_transport::acp_server_send,
+            acp_transport::acp_server_close,
+            acp_transport::acp_which,
+            acp_transport::acp_script_path,
+            acp_transport::acp_run_once
+        ]);
     #[cfg(not(desktop))]
     let builder = builder.invoke_handler(tauri::generate_handler![agent_guarded_fetch]);
 

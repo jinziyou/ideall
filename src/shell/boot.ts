@@ -6,6 +6,7 @@ import { registerContentResolver } from "@protocol/content"
 import { registerFilesPort } from "@protocol/files"
 import { registerUiActions } from "@/lib/ui-actions"
 import { registerActiveNode } from "@/lib/active-node"
+import { isTauri } from "@/lib/tauri"
 import { filesPort } from "@/files/files-port"
 import {
   openNodeTab,
@@ -48,4 +49,20 @@ export function registerAll(): void {
   }
   // 插件能力注册 (如 sync 的 SyncPort)。
   for (const p of [syncManifest]) p.register?.()
+}
+
+/**
+ * 客户端启动副作用 (仅客户端, 经 BootGate 的 useEffect 调一次; SSR 预渲染不触发)。
+ * 与 registerAll (同步纯注册) 分开: 这里做异步、仅 App 的副作用。
+ */
+export function bootClientEffects(): void {
+  // ACP 暴露自启动: 仅桌面 + 用户已开启时才动态加载 agent 暴露链路并启动监听 ——
+  // 关闭时不加载 agent 内核 (acp-settings 轻量, 先查; acp-expose 重, 仅按需 import), 不拖累初始包。
+  void (async () => {
+    if (!isTauri()) return
+    const { getAcpSettings } = await import("@/plugins/agent/lib/acp-settings")
+    if (!getAcpSettings().allowEditorConnect) return
+    const { autostartAcpServerFromSettings } = await import("@/plugins/agent/lib/acp-expose")
+    await autostartAcpServerFromSettings()
+  })()
 }

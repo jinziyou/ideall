@@ -16,6 +16,19 @@ fn main() {
                 "browser_hide",
                 "browser_show",
                 "browser_close",
+                // ACP 外部智能体传输 (仅桌面注册, 但命令名须在此声明以生成 ACL permission)。
+                "acp_spawn",
+                "acp_send",
+                "acp_close",
+                // ACP 入站服务端 (暴露方向: 编辑器连入)。
+                "acp_listen_start",
+                "acp_listen_stop",
+                "acp_server_send",
+                "acp_server_close",
+                // 外部智能体检测 (设置里点选即用) + 内置脚本定位 + 一次性运行 (暴露自测)。
+                "acp_which",
+                "acp_script_path",
+                "acp_run_once",
             ]),
         ),
     )

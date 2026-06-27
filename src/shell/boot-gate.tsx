@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { registerAll } from "./boot"
+import { registerAll, bootClientEffects } from "./boot"
 import { installTauriExternalLinks } from "@/lib/safe-url"
 
 /**
@@ -17,6 +17,9 @@ export default function BootGate({ children }: { children: ReactNode }) {
     registerAll()
     return null
   })
-  useEffect(() => installTauriExternalLinks(), [])
+  useEffect(() => {
+    bootClientEffects()
+    return installTauriExternalLinks()
+  }, [])
   return <>{children}</>
 }
