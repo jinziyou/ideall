@@ -2,7 +2,7 @@
 // 供任务标签的 AgentPanel 经 resolveRun 注入 (发送时调用, 取最新工作空间)。精确模式可原样覆盖。
 // (前身为 ai-workspace.tsx 内联的 resolveRun; 抽到 lib 以便任务标签复用。)
 
-import type { ConnectAgentOpts } from "./agent-mcp"
+import { toExternalServer, type ConnectAgentOpts } from "./agent-mcp"
 import type { AgentWorkspace } from "./agent-workspace"
 import { homeSelectionOf, resolveModel, workspaceRulesText } from "./agent-workspace"
 import { getMcpServers, LOOPBACK_ID } from "./agent-mcp-registry"
@@ -43,14 +43,7 @@ export async function resolveWorkspaceRun(
         (((s.transport === "sse" || s.transport === "http") && s.url.trim()) ||
           (s.transport === "stdio" && s.command.trim())),
     )
-    .map((s) => ({
-      id: s.id,
-      name: s.name,
-      transport: s.transport as "sse" | "http" | "stdio",
-      url: s.url,
-      command: s.command,
-      args: s.args.split(/\s+/).filter(Boolean),
-    }))
+    .map(toExternalServer)
   // 自动技能 (本工作区可用 + invocation:auto) → 合成工具供模型自调用。
   const autoSkills = resolveSkills(ws.capabilities.skillIds)
     .filter((s) => s.invocation === "auto")
@@ -92,6 +85,8 @@ export async function resolveWorkspaceRun(
       instructions: ws.prompt.instructions,
       rules: workspaceRulesText(ws),
       examples: "",
+      // 可用技能 (auto): 普通对话感知 + 智能体模式合成「应用技能」(use_skill) 工具供模型按描述选用。
+      skills: autoSkills.map((s) => ({ name: s.name, description: s.description })),
     }),
     ws.prompt.template,
   )
