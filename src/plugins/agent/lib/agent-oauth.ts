@@ -14,7 +14,8 @@ import type {
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 import { isTauri } from "@/lib/tauri"
 
-const REDIRECT_URI = "http://127.0.0.1:7843/callback"
+const CALLBACK_PORT = 7843
+const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`
 
 const CLIENT_METADATA: OAuthClientMetadata = {
   client_name: "ideall",
@@ -158,6 +159,58 @@ export function startMcpAuth(
   serverUrl: string,
 ): Promise<"AUTHORIZED" | "REDIRECT"> {
   return auth(mcpOAuthProvider(serverId), { serverUrl })
+}
+
+/** 桌面: 起一次性 loopback 回调监听 (Rust oauth_callback_start), 等 oauth://callback 拿 code/state; 5 分钟超时。 */
+async function oauthCallbackListen(): Promise<{ code?: string; state?: string }> {
+  const { invoke } = await import("@tauri-apps/api/core")
+  const { listen } = await import("@tauri-apps/api/event")
+  let resolveCb!: (v: { code?: string; state?: string }) => void
+  const got = new Promise<{ code?: string; state?: string }>((r) => {
+    resolveCb = r
+  })
+  const un = await listen<{ code?: string; state?: string }>("oauth://callback", (e) =>
+    resolveCb(e.payload),
+  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await invoke("oauth_callback_start", { port: CALLBACK_PORT })
+    const timeout = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => rej(new Error("授权超时（5 分钟）")), 5 * 60 * 1000)
+    })
+    return await Promise.race([got, timeout])
+  } finally {
+    if (timer) clearTimeout(timer) // 清定时器, 防 got 先 resolve 后 timeout 仍 reject (unhandled)
+    un()
+  }
+}
+
+/** 发起授权: 桌面用 loopback 自动回调 (免粘贴), web 退回手动粘贴。
+ *  返回 'AUTHORIZED'(已有有效 token) | 'DONE'(桌面自动完成) | 'REDIRECT'(web 待手动粘贴)。 */
+export async function startMcpAuthAuto(
+  serverId: string,
+  serverUrl: string,
+): Promise<"AUTHORIZED" | "DONE" | "REDIRECT"> {
+  if (!isTauri()) return startMcpAuth(serverId, serverUrl) // web: 手动粘贴
+  const r = await startMcpAuth(serverId, serverUrl) // discover + 动态注册 + 打开浏览器
+  if (r === "AUTHORIZED") return "AUTHORIZED" // 无需浏览器回合 → 不起 listener (省端口/避泄漏)
+  // REDIRECT: 真需回合时才起 loopback 监听 (避免 AUTHORIZED / 抛错路径占用端口或留挂起 promise)。
+  const { code, state } = await oauthCallbackListen()
+  if (!code) throw new Error("未收到授权回调")
+  const cb = `${REDIRECT_URI}?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ""}`
+  await finishMcpAuth(serverId, cb, serverUrl)
+  return "DONE"
+}
+
+/** 停止桌面 loopback 回调监听 (用户取消授权时立即释放端口)。 */
+export async function stopMcpAuthCallback(): Promise<void> {
+  if (!isTauri()) return
+  try {
+    const { invoke } = await import("@tauri-apps/api/core")
+    await invoke("oauth_callback_stop")
+  } catch {
+    /* 忽略 */
+  }
 }
 
 /** 用回调 URL/code 完成授权: 校验 state, 交换 token。 */
