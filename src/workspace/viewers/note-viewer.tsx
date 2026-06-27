@@ -1,14 +1,12 @@
 "use client"
 
-// 节点查看器: 笔记。自取数 (getNote) + 渲染受控 NoteEditor (锁定 5-prop) + onSaved 实时回填标签标题。
-// NoteEditor 经 next/dynamic({ssr:false}) 懒加载, 与 notes-manager 同范式 (避开 SSR / 静态导出预渲染)。
-// 落库 (去抖自动保存 / 卸载冲刷) 沿用 NoteEditor 既有逻辑; 写队列 / LRU / 块级合并是后续阶段。
+// 节点查看器: 笔记。自取数 + 面包屑导航 + NoteEditor; 标题变更同步标签栏。
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { Loader2 } from "lucide-react"
-import { getNote } from "@/files/stores/notes-store"
-import type { Note } from "@/modules/home/model"
-import { renameNodeTab } from "../store"
+import { ChevronRight, Loader2 } from "lucide-react"
+import { getNote, getAncestors } from "@/files/stores/notes-store"
+import type { Note, NoteMeta } from "@/modules/home/model"
+import { openNodeTab, renameNodeTab } from "../store"
 import type { NodeViewerProps } from "../node-viewers"
 
 const NoteEditor = dynamic(() => import("@/modules/home/notes/note-editor"), {
@@ -23,16 +21,18 @@ const NoteEditor = dynamic(() => import("@/modules/home/notes/note-editor"), {
 
 export default function NoteViewer({ nodeId }: NodeViewerProps) {
   const [note, setNote] = React.useState<Note | null>(null)
+  const [ancestors, setAncestors] = React.useState<NoteMeta[]>([])
   const [missing, setMissing] = React.useState(false)
 
-  // nodeId 对单个查看器实例恒定 (每个节点标签在 tab-host 是独立 keep-alive 实例), 故无需重置态。
   React.useEffect(() => {
     let alive = true
-    getNote(nodeId)
-      .then((n) => {
+    Promise.all([getNote(nodeId), getAncestors(nodeId)])
+      .then(([n, chain]) => {
         if (!alive) return
-        if (n) setNote(n)
-        else setMissing(true)
+        if (n) {
+          setNote(n)
+          setAncestors(chain)
+        } else setMissing(true)
       })
       .catch(() => {
         if (alive) setMissing(true)
@@ -54,13 +54,36 @@ export default function NoteViewer({ nodeId }: NodeViewerProps) {
   }
 
   return (
-    <NoteEditor
-      key={note.id}
-      noteId={note.id}
-      initialTitle={note.title}
-      initialContent={note.content}
-      initialTags={note.tags}
-      onSaved={(meta) => renameNodeTab({ kind: "note", id: note.id }, meta.title || "无标题")}
-    />
+    <div className="flex h-full flex-col overflow-hidden">
+      {ancestors.length > 0 && (
+        <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border/60 px-3 py-1.5 text-xs text-muted-foreground">
+          <span className="shrink-0 px-1">根</span>
+          {ancestors.map((a) => (
+            <React.Fragment key={a.id}>
+              <ChevronRight className="h-3 w-3 shrink-0" />
+              <button
+                type="button"
+                onClick={() => openNodeTab({ kind: "note", id: a.id }, a.title || "无标题")}
+                className="max-w-[10rem] shrink-0 truncate rounded px-1 py-0.5 hover:bg-accent"
+              >
+                {a.title || "无标题"}
+              </button>
+            </React.Fragment>
+          ))}
+          <ChevronRight className="h-3 w-3 shrink-0" />
+          <span className="max-w-[12rem] shrink-0 truncate px-1 text-foreground">
+            {note.title || "无标题"}
+          </span>
+        </div>
+      )}
+      <NoteEditor
+        key={note.id}
+        noteId={note.id}
+        initialTitle={note.title}
+        initialContent={note.content}
+        initialTags={note.tags}
+        onSaved={(meta) => renameNodeTab({ kind: "note", id: note.id }, meta.title || "无标题")}
+      />
+    </div>
   )
 }

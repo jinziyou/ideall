@@ -7,6 +7,7 @@ import * as React from "react"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTabs, useActiveId, setActiveTab, closeTab, reorderTabs } from "./store"
+import { tabViewType, TAB_VIEW_LABEL } from "./tab-view-type"
 import type { ModuleId } from "./types"
 
 const DOT: Record<ModuleId, string> = {
@@ -54,13 +55,16 @@ export default function TabBar() {
                 }}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group/tab flex h-8 min-w-[7rem] max-w-[14rem] shrink-0 cursor-pointer select-none items-center gap-2 rounded-shell px-2.5 text-[13px] transition-colors",
+                  "group/tab flex h-8 min-w-[9rem] max-w-[16rem] shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-shell px-2.5 text-[13px] transition-colors",
                   active
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                 )}
               >
                 <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT[t.module])} />
+                <span className="shrink-0 rounded bg-muted px-1 py-px text-[10px] font-medium text-muted-foreground">
+                  {TAB_VIEW_LABEL[tabViewType(t)]}
+                </span>
                 <span className="flex-1 truncate">{t.title}</span>
                 <button
                   type="button"

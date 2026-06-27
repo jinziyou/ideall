@@ -1,36 +1,20 @@
 "use client"
 
-// 二级侧栏 (IDE 资源管理器式): 标题栏(模块名 + 收起) + 模块条目列表。
-// 条目是 <Link href=path> → 路由标记打开/激活标签 (与深链 / ⌘K 统一)。
+// 二级侧栏: 标题栏 + 统一文件树 (所有模式共用 sidebar-tree)。
+// 点击树节点 → 开/激活标签; 概览由活动栏「我的」直达。
 
-import Link from "next/link"
 import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/lib/utils"
-import SidebarWebSearch from "./sidebar-web-search"
-import HomeSidebar from "./home-sidebar"
-import AiSidebar from "@/plugins/agent/views/ai-sidebar"
-import BrowserLauncher from "./browser-launcher"
+import SidebarTree from "./sidebar-tree"
 import { moduleById } from "./modules"
-import {
-  tabKey,
-  useActiveModule,
-  useActiveId,
-  useActiveTabKind,
-  useActiveWorkspaceId,
-  setSidebarCollapsed,
-} from "./store"
+import { useActiveModule, setSidebarCollapsed } from "./store"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
   const activeModule = useActiveModule()
-  const activeId = useActiveId()
-  const activeKind = useActiveTabKind()
-  const activeWorkspaceId = useActiveWorkspaceId()
   const mod = moduleById(activeModule)
-  // agent 不是活动栏模块 (moduleById 回退到 home) → 标题独立判定为「AI」。
   const title = activeModule === "agent" ? "AI" : mod.sidebarTitle
 
   return (
-    // 折叠用 width/opacity 过渡 (始终挂载, 避免布局抖动); 内层固定 w-60 防折叠动画时重排。
     <aside
       aria-hidden={collapsed}
       className={cn(
@@ -51,48 +35,7 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
             <PanelLeftClose className="h-4 w-4" />
           </button>
         </div>
-
-        {/* 「我的」: 4 区段; AI: MCP/Skills/规则/工作空间; 浏览器: 启动器; 其余: 既有条目列表。 */}
-        {activeModule === "home" ? (
-          <HomeSidebar />
-        ) : activeModule === "agent" ? (
-          <AiSidebar activeKind={activeKind} activeWorkspaceId={activeWorkspaceId} />
-        ) : activeModule === "browser" ? (
-          <BrowserLauncher />
-        ) : (
-          <div className="flex-1 overflow-y-auto p-2">
-            {/* 聚合搜索 (跳外部搜索引擎): 已并入「工具」模块顶部; 本机内容由顶栏「本地搜索」负责, 职责分离 */}
-            {activeModule === "tool" && <SidebarWebSearch />}
-            {mod.sidebarHint && (
-              <p className="px-2 pb-2 pt-1 text-xs leading-relaxed text-muted-foreground">
-                {mod.sidebarHint}
-              </p>
-            )}
-            <nav className="flex flex-col gap-0.5">
-              {mod.entries.map((e) => {
-                const Icon = e.icon
-                const id = tabKey(e.descriptor)
-                const active = activeId === id
-                return (
-                  <Link
-                    key={id}
-                    href={e.descriptor.path || "#"}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-shell px-2.5 py-2 text-sm transition-colors",
-                      active
-                        ? "bg-primary/10 font-medium text-primary"
-                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 truncate text-left">{e.label}</span>
-                  </Link>
-                )
-              })}
-            </nav>
-          </div>
-        )}
+        <SidebarTree />
       </div>
     </aside>
   )

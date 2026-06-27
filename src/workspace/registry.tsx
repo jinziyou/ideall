@@ -39,7 +39,7 @@ type Entry = { render: (tab: Tab) => React.ReactNode; layout: TabLayout }
 
 const REGISTRY: Record<string, Entry> = {
   "home-overview": { render: () => <Overview />, layout: "padded" },
-  "home-notes": { render: () => <NotesManager />, layout: "fill" },
+  "home-notes": { render: () => <NotesManager />, layout: "padded" },
   subscriptions: {
     render: () => (
       <div className="flex flex-col gap-6">

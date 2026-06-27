@@ -1,6 +1,6 @@
 // 「我的」(home) 的区段单一真相源: 二级侧栏的 4 个常驻区段 + 概览首页描述符。
 // 全部归属 module:"home" —— 点击在主区开/激活对应标签, 活动栏「我的」保持高亮, 侧栏不切走。
-// (替代旧的「一切皆文件」places 文件树; 概览由活动栏「我的」钮直达, 不在侧栏列。)
+// 概览由活动栏「我的」钮直达, 不在侧栏列; 侧栏以文件树展示各区段及其 node 子项 (见 sidebar-tree)。
 
 import type { ComponentType } from "react"
 import { Bookmark, Megaphone, NotebookPen, Rss } from "lucide-react"

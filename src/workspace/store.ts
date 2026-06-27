@@ -9,6 +9,7 @@ import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { HOME_OVERVIEW } from "./home-sections"
+import { moduleById } from "./modules"
 
 const STORAGE_KEY = "ideall:workspace:v1"
 
@@ -294,14 +295,30 @@ export function setActiveModule(m: ModuleId) {
   setState({ activeModule: m, mode: MODE_OF[m], sidebarCollapsed: false })
 }
 
-/** 点活动栏图标: 同模块且侧栏展开 → 收起; 否则切到该模块并展开。
+/** 点活动栏图标: 同模块且侧栏展开 → 收起; 否则切到该模块并展开, 同时开首个面板标签。
  *  注: 「我的」(home) 的活动栏钮不走这里, 改用 openHome (点即开/激活「概览」)。 */
 export function toggleModule(m: ModuleId) {
   if (state.activeModule === m && !state.sidebarCollapsed) {
     setState({ sidebarCollapsed: true })
-  } else {
-    setState({ activeModule: m, mode: MODE_OF[m], sidebarCollapsed: false })
+    return
   }
+  const mod = moduleById(m)
+  const first = mod.entries[0]
+  if (!first || m === "browser") {
+    setState({ activeModule: m, mode: MODE_OF[m], sidebarCollapsed: false })
+    return
+  }
+  const id = tabKey(first.descriptor)
+  const exists = state.tabs.some((t) => t.id === id)
+  const tabs = exists ? state.tabs : [...state.tabs, { ...first.descriptor, id }]
+  setState({
+    tabs,
+    activeId: id,
+    activeModule: m,
+    mode: MODE_OF[m],
+    sidebarCollapsed: false,
+    activeSource: "user",
+  })
 }
 
 /** 点活动栏「我的」: 直接开/激活「概览」标签并展开侧栏 (「我的」= 以概览为首页的个人中心)。 */
@@ -319,10 +336,30 @@ export function openHome() {
   })
 }
 
-/** 切换工作区模式 (本地 / 连接)。镜头切换: 活动模块归到该模式首个模块, 展开侧栏。 */
+/** 切换工作区模式 (本地 / 连接)。镜头切换: 活动模块归到该模式首个模块, 展开侧栏并开首个面板/概览标签。 */
 export function setMode(mode: WsMode) {
-  const first: ModuleId = mode === "local" ? "home" : "info"
-  setState({ mode, activeModule: first, sidebarCollapsed: false })
+  if (mode === "local") {
+    openHome()
+    return
+  }
+  const first: ModuleId = "info"
+  const mod = moduleById(first)
+  const entry = mod.entries[0]
+  if (!entry) {
+    setState({ mode, activeModule: first, sidebarCollapsed: false })
+    return
+  }
+  const id = tabKey(entry.descriptor)
+  const exists = state.tabs.some((t) => t.id === id)
+  const tabs = exists ? state.tabs : [...state.tabs, { ...entry.descriptor, id }]
+  setState({
+    mode,
+    tabs,
+    activeId: id,
+    activeModule: first,
+    sidebarCollapsed: false,
+    activeSource: "user",
+  })
 }
 
 export function setSidebarCollapsed(v: boolean) {
