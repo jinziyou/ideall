@@ -323,7 +323,7 @@ function ServerDetail({ server, onDelete }: { server: McpServer; onDelete: () =>
       </div>
 
       <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-        外部连接即将开放（传输接缝预留，当前仅保存配置）。
+        运行任务（智能体模式）时按此配置即时连接并拉取工具；stdio（本地命令）仅桌面 App。
       </p>
     </Panel>
   )

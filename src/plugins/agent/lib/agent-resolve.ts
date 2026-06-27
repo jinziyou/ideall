@@ -33,12 +33,24 @@ export async function resolveWorkspaceRun(
   const m = resolveModel(ws)
   if (!m.apiKey.trim() || !m.baseURL.trim() || !m.model.trim()) return null
 
-  // MCP 注册表 → 本次运行的工具源: loopback 开关 + 启用的外部 server (sse/http)。
+  // MCP 注册表 → 本次运行的工具源: loopback 开关 + 启用的外部 server (sse/http/stdio)。
   const servers = getMcpServers()
   const loopback = servers.find((s) => s.id === LOOPBACK_ID)
   const externalServers = servers
-    .filter((s) => s.enabled && (s.transport === "sse" || s.transport === "http") && s.url.trim())
-    .map((s) => ({ id: s.id, name: s.name, transport: s.transport as "sse" | "http", url: s.url }))
+    .filter(
+      (s) =>
+        s.enabled &&
+        (((s.transport === "sse" || s.transport === "http") && s.url.trim()) ||
+          (s.transport === "stdio" && s.command.trim())),
+    )
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      transport: s.transport as "sse" | "http" | "stdio",
+      url: s.url,
+      command: s.command,
+      args: s.args.split(/\s+/).filter(Boolean),
+    }))
   // 自动技能 (本工作区可用 + invocation:auto) → 合成工具供模型自调用。
   const autoSkills = resolveSkills(ws.capabilities.skillIds)
     .filter((s) => s.invocation === "auto")

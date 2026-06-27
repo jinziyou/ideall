@@ -4,6 +4,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
+import { StdioMcpTransport } from "./agent-mcp-stdio"
 import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
 import { agentGrant } from "@/plugins/embed/grant"
 import type { Permission } from "@/plugins/embed/protocol"
@@ -25,12 +27,19 @@ export interface AgentMcp {
   close(): Promise<void>
 }
 
-/** 外部 MCP server 连接信息 (sse / streamable-http; 来自 MCP 注册表的启用项)。 */
+/** 外部 MCP server 连接信息 (sse / streamable-http / stdio; 来自 MCP 注册表的启用项)。 */
 export interface ExternalMcpServer {
   id: string
   name: string
-  transport: "sse" | "http"
-  url: string
+  transport: "sse" | "http" | "stdio"
+  /** sse / http: 端点 URL。 */
+  url?: string
+  /** stdio: 启动命令 (本地进程, 仅桌面)。 */
+  command?: string
+  /** stdio: 参数 (已拆为数组)。 */
+  args?: string[]
+  /** stdio: 工作目录 (可选)。 */
+  cwd?: string
 }
 
 /** 自动技能 → 合成「应用技能」工具: 模型按描述自路由, 调用即返回其指令文本供其展开。 */
@@ -130,9 +139,18 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
   for (let i = 0; i < externals.length; i++) {
     const s = externals[i]
     try {
-      const url = new URL(s.url)
-      const transport =
-        s.transport === "sse" ? new SSEClientTransport(url) : new StreamableHTTPClientTransport(url)
+      let transport: Transport
+      if (s.transport === "stdio") {
+        if (!s.command?.trim()) continue // 无命令 → 跳过
+        transport = new StdioMcpTransport({ program: s.command, args: s.args ?? [], cwd: s.cwd })
+      } else {
+        if (!s.url?.trim()) continue // 无 URL → 跳过
+        const url = new URL(s.url)
+        transport =
+          s.transport === "sse"
+            ? new SSEClientTransport(url)
+            : new StreamableHTTPClientTransport(url)
+      }
       const client = new Client({ name: "ideall-agent", version: "1.0.0" }, { capabilities: {} })
       await client.connect(transport)
       const listed = await client.listTools()
