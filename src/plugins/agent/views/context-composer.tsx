@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { Permission } from "@/plugins/embed/protocol"
 import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manifest"
 import { BUILTIN_SKILLS } from "../lib/agent-skills"
+import { getRules, getServerRules, subscribeRules } from "../lib/agent-rules"
 import { PROVIDER_PRESETS } from "../lib/agent-settings"
 import {
   saveWorkspace,
@@ -233,25 +234,11 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
         </Section>
 
         {/* —— 规则 —— */}
-        <Section title="规则与示例" hint="期望助手遵循的约束与示范">
-          <div className="space-y-1.5">
-            <Label className="text-xs">规则</Label>
-            <Textarea
-              rows={3}
-              placeholder="例如：回答先给结论再给依据；不要编造来源…"
-              value={ws.rules.rules}
-              onChange={(e) => save({ rules: { ...ws.rules, rules: e.target.value } })}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">示例</Label>
-            <Textarea
-              rows={3}
-              placeholder="可贴入示范问答，供助手参照风格…"
-              value={ws.rules.examples}
-              onChange={(e) => save({ rules: { ...ws.rules, examples: e.target.value } })}
-            />
-          </div>
+        <Section
+          title="规则"
+          hint="勾选本工作空间启用的规则；全局规则恒生效（在左侧「规则」区段管理）。"
+        >
+          <WorkspaceRulesPicker ws={ws} />
         </Section>
 
         {/* —— 提示词 —— */}
@@ -332,4 +319,51 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
 
 function presetLabel(ws: AgentWorkspace): string | null {
   return PROVIDER_PRESETS.find((p) => p.baseURL === ws.model.baseURL)?.label ?? null
+}
+
+/** 规则引用选择: 全局规则恒生效 (只读列示); 工作空间级规则可勾选加入本工作区 ruleIds。 */
+function WorkspaceRulesPicker({ ws }: { ws: AgentWorkspace }) {
+  const rules = React.useSyncExternalStore(subscribeRules, getRules, getServerRules)
+  const globals = rules.filter((r) => r.scope === "global")
+  const wsRules = rules.filter((r) => r.scope === "workspace")
+  const refs = new Set(ws.rules.ruleIds)
+
+  function toggle(id: string, on: boolean) {
+    const next = on
+      ? Array.from(new Set([...ws.rules.ruleIds, id]))
+      : ws.rules.ruleIds.filter((x) => x !== id)
+    saveWorkspace({ ...ws, rules: { ruleIds: next } })
+  }
+
+  return (
+    <div className="space-y-2">
+      {globals.map((r) => (
+        <div key={r.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">全局</span>
+          <span className="truncate">{r.name}</span>
+        </div>
+      ))}
+      {wsRules.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          还没有工作空间级规则。在左侧「规则」区段新建（范围选「工作空间」）。
+        </p>
+      ) : (
+        wsRules.map((r) => (
+          <label key={r.id} className="flex items-start gap-2">
+            <Checkbox
+              checked={refs.has(r.id)}
+              onCheckedChange={(v) => toggle(r.id, Boolean(v))}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm">{r.name}</span>
+              {r.description && (
+                <span className="block text-xs text-muted-foreground">{r.description}</span>
+              )}
+            </span>
+          </label>
+        ))
+      )}
+    </div>
+  )
 }

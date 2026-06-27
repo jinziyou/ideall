@@ -19,6 +19,8 @@ export interface RunAgentOptions {
   onToolEvent?: (ev: AgentToolEvent) => void
   /** 工作区能力收窄 (能力位子集 / 工具白名单); 缺省 = 全部默认能力。 */
   mcp?: ConnectAgentOpts
+  /** 工具审批 (approvalPolicy==="confirm" 时由 UI 提供): 每次执行工具前征询, 返回 false → 跳过该工具。 */
+  onApprove?: (name: string, argsText: string) => Promise<boolean>
 }
 
 export interface RunAgentResult {
@@ -66,6 +68,26 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
           args = JSON.parse(tc.function.arguments || "{}")
         } catch {
           args = {}
+        }
+        // 工具审批 (confirm 策略): 执行前征询用户; 拒绝 → 把「已拒绝」喂回模型, 不执行副作用。
+        if (
+          opts.onApprove &&
+          !(await opts.onApprove(tc.function.name, tc.function.arguments || ""))
+        ) {
+          const ev: AgentToolEvent = {
+            name: tc.function.name,
+            argsText: shorten(tc.function.arguments),
+            ok: false,
+            summary: "已拒绝执行",
+          }
+          toolEvents.push(ev)
+          opts.onToolEvent?.(ev)
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, summary: "用户拒绝执行该工具" }),
+          })
+          continue
         }
         const { ok, data } = await mcp.callTool(tc.function.name, args)
         const summary = summarizeTool(tc.function.name, ok, data)

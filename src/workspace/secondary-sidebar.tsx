@@ -7,15 +7,27 @@ import Link from "next/link"
 import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/lib/utils"
 import SidebarWebSearch from "./sidebar-web-search"
-import PlacesSidebar from "./places-sidebar"
+import HomeSidebar from "./home-sidebar"
+import AiSidebar from "@/plugins/agent/views/ai-sidebar"
 import BrowserLauncher from "./browser-launcher"
 import { moduleById } from "./modules"
-import { tabKey, useActiveModule, useActiveId, setSidebarCollapsed } from "./store"
+import {
+  tabKey,
+  useActiveModule,
+  useActiveId,
+  useActiveTabKind,
+  useActiveWorkspaceId,
+  setSidebarCollapsed,
+} from "./store"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
   const activeModule = useActiveModule()
   const activeId = useActiveId()
+  const activeKind = useActiveTabKind()
+  const activeWorkspaceId = useActiveWorkspaceId()
   const mod = moduleById(activeModule)
+  // agent 不是活动栏模块 (moduleById 回退到 home) → 标题独立判定为「AI」。
+  const title = activeModule === "agent" ? "AI" : mod.sidebarTitle
 
   return (
     // 折叠用 width/opacity 过渡 (始终挂载, 避免布局抖动); 内层固定 w-60 防折叠动画时重排。
@@ -28,7 +40,7 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
     >
       <div className="flex h-full w-60 flex-col">
         <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b px-3">
-          <h2 className="text-sm font-semibold text-foreground">{mod.sidebarTitle}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
           <button
             type="button"
             onClick={() => setSidebarCollapsed(true)}
@@ -40,15 +52,17 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
           </button>
         </div>
 
-        {/* 「我的」: 一切皆文件 —— places 切换 + 跨 kind 文件树; 其余模块: 既有条目列表。 */}
+        {/* 「我的」: 4 区段; AI: MCP/Skills/规则/工作空间; 浏览器: 启动器; 其余: 既有条目列表。 */}
         {activeModule === "home" ? (
-          <PlacesSidebar />
+          <HomeSidebar />
+        ) : activeModule === "agent" ? (
+          <AiSidebar activeKind={activeKind} activeWorkspaceId={activeWorkspaceId} />
         ) : activeModule === "browser" ? (
           <BrowserLauncher />
         ) : (
           <div className="flex-1 overflow-y-auto p-2">
-            {/* 聚合搜索 (跳外部搜索引擎): 仅「搜索」模块; 本机内容由顶栏「本地搜索」负责, 职责分离 */}
-            {activeModule === "search" && <SidebarWebSearch />}
+            {/* 聚合搜索 (跳外部搜索引擎): 已并入「工具」模块顶部; 本机内容由顶栏「本地搜索」负责, 职责分离 */}
+            {activeModule === "tool" && <SidebarWebSearch />}
             {mod.sidebarHint && (
               <p className="px-2 pb-2 pt-1 text-xs leading-relaxed text-muted-foreground">
                 {mod.sidebarHint}

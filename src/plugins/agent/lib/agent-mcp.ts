@@ -2,6 +2,8 @@
 // 用 agentGrant 起只挂 fs.*/ui.* (无 fs.notes:read) 的 MCP server, 进程内 MessageChannel 接 MCP client;
 // tools/list → OpenAI function 工具数组; callTool → 统一调用面 (含隐私/权限 gate, 与 iframe 完全一致)。
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
 import { agentGrant } from "@/plugins/embed/grant"
 import type { Permission } from "@/plugins/embed/protocol"
@@ -23,64 +25,93 @@ export interface AgentMcp {
   close(): Promise<void>
 }
 
-/** connectAgentMcp 的可选项: 让工作区收窄能力 (右栏随手对话不传 = 全部默认能力)。 */
+/** 外部 MCP server 连接信息 (sse / streamable-http; 来自 MCP 注册表的启用项)。 */
+export interface ExternalMcpServer {
+  id: string
+  name: string
+  transport: "sse" | "http"
+  url: string
+}
+
+/** 自动技能 → 合成「应用技能」工具: 模型按描述自路由, 调用即返回其指令文本供其展开。 */
+export interface AutoSkillTool {
+  id: string
+  name: string
+  description: string
+  prompt: string
+}
+
+/** connectAgentMcp 的可选项: 工作区收窄本地能力 + 外部 MCP + 自动技能 (右栏随手对话不传 = loopback 全能力)。 */
 export interface ConnectAgentOpts {
   /** 本工作区启用的能力位子集 (与 agent 默认集取交集, 不可越权); 缺省 = 全部默认能力。 */
   permissions?: Permission[]
-  /** 工具名白名单 (在已授权工具里再按名过滤); 空 / 缺省 = 不额外过滤。 */
+  /** 工具名白名单 (在已授权 loopback 工具里再按名过滤); 空 / 缺省 = 不额外过滤。 */
   toolAllowlist?: string[] | null
+  /** 本地能力 (loopback) 是否启用 (MCP 注册表开关); 缺省 true。 */
+  loopbackEnabled?: boolean
+  /** 启用的外部 MCP server; 逐个连真实 client, 工具并入。连不上的跳过 (不阻断本次运行)。 */
+  externalServers?: ExternalMcpServer[]
+  /** 自动技能 (invocation:auto 且启用): 合成 use-skill 工具供模型自调用。 */
+  autoSkills?: AutoSkillTool[]
 }
 
-/** 起一条 agent 的 loopback MCP 会话: server(agentGrant) ↔ client, 列出工具备用。
- *  opts 缺省时等价于历史行为 (全部默认能力, 不过滤工具)。 */
+/** 一个 MCP client 的 callTool → 统一 {ok, data} (解析 text content; 应用级 isError 不抛)。 */
+async function callMcpClient(
+  client: Client,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; data: unknown }> {
+  const res = await client.callTool({ name, arguments: args })
+  const content = res.content as { type?: string; text?: string }[] | undefined
+  const text = content?.[0]?.type === "text" ? (content[0].text ?? "") : ""
+  let data: unknown = {}
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    data = { raw: text }
+  }
+  return { ok: res.isError !== true, data }
+}
+
+/** 起一条 agent 的多源 MCP 会话: loopback 本地能力 (可关) + 外部 MCP server (sse/http) + 自动技能工具。
+ *  统一 dispatch 按工具名路由; opts 缺省 = loopback 全能力 (兼容右栏随手对话)。 */
 export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp> {
-  const ui = getUiActions()
-  const server = createLocalMcpServer(agentGrant(Date.now(), opts?.permissions), {
-    navigate: () => {}, // agent 不做内部路由跳转
-    openTab: ui ? (kind, id, title) => ui.openTab(kind, id, title) : undefined,
-    closeTab: ui ? (kind, id) => ui.closeTab(kind, id) : undefined,
-  })
-  const { serverTransport, clientTransport } = createLoopbackTransports()
-  await server.connect(serverTransport)
-  const client = new Client({ name: "ideall-agent", version: "1.0.0" }, { capabilities: {} })
-  await client.connect(clientTransport)
+  const tools: OpenAiTool[] = []
+  const dispatch = new Map<
+    string,
+    (args: Record<string, unknown>) => Promise<{ ok: boolean; data: unknown }>
+  >()
+  const closers: (() => Promise<void>)[] = []
 
-  // 工具名白名单: 既过滤给模型看的 tools 数组, 也在 callTool 拒绝 (双重 enforcement —— 防模型凭记忆
-  // 调用被工作区关掉的工具)。能力位收窄已在 server 端「越权=工具不存在」, 此处是更细的按名闸。
-  const allow =
-    opts?.toolAllowlist && opts.toolAllowlist.length ? new Set(opts.toolAllowlist) : null
-
-  const listed = await client.listTools()
-  const tools: OpenAiTool[] = listed.tools
-    .filter((t) => !allow || allow.has(t.name))
-    .map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.inputSchema ?? { type: "object", properties: {} },
-      },
-    }))
-
-  return {
-    tools,
-    async callTool(name, args) {
-      if (allow && !allow.has(name)) {
-        return { ok: false, data: { message: "该工具未在本工作区启用" } }
-      }
-      const res = await client.callTool({ name, arguments: args })
-      const content = res.content as { type?: string; text?: string }[] | undefined
-      const text = content?.[0]?.type === "text" ? (content[0].text ?? "") : ""
-      let data: unknown = {}
-      try {
-        data = text ? JSON.parse(text) : {}
-      } catch {
-        data = { raw: text }
-      }
-      // 应用级 fail() 的 isError:true 不抛 (协议透传), 由 agent 把 ok:false 喂回模型。
-      return { ok: res.isError !== true, data }
-    },
-    async close() {
+  // 1) 本地能力 (loopback): 缺省启用; MCP 注册表里关掉 → 不挂本地工具。
+  if (opts?.loopbackEnabled !== false) {
+    const ui = getUiActions()
+    const server = createLocalMcpServer(agentGrant(Date.now(), opts?.permissions), {
+      navigate: () => {}, // agent 不做内部路由跳转
+      openTab: ui ? (kind, id, title) => ui.openTab(kind, id, title) : undefined,
+      closeTab: ui ? (kind, id) => ui.closeTab(kind, id) : undefined,
+    })
+    const { serverTransport, clientTransport } = createLoopbackTransports()
+    await server.connect(serverTransport)
+    const client = new Client({ name: "ideall-agent", version: "1.0.0" }, { capabilities: {} })
+    await client.connect(clientTransport)
+    // 工具名白名单: 双重 enforcement (过滤给模型看的 + dispatch 缺该名即拒)。
+    const allow =
+      opts?.toolAllowlist && opts.toolAllowlist.length ? new Set(opts.toolAllowlist) : null
+    const listed = await client.listTools()
+    for (const t of listed.tools) {
+      if (allow && !allow.has(t.name)) continue
+      tools.push({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema ?? { type: "object", properties: {} },
+        },
+      })
+      dispatch.set(t.name, (args) => callMcpClient(client, t.name, args))
+    }
+    closers.push(async () => {
       try {
         await client.close()
       } catch {
@@ -91,6 +122,72 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
       } catch {
         /* 忽略 */
       }
+    })
+  }
+
+  // 2) 外部 MCP server (sse / streamable-http): 真实连接 + 列工具; 工具名前缀防跨源撞名。
+  const externals = opts?.externalServers ?? []
+  for (let i = 0; i < externals.length; i++) {
+    const s = externals[i]
+    try {
+      const url = new URL(s.url)
+      const transport =
+        s.transport === "sse" ? new SSEClientTransport(url) : new StreamableHTTPClientTransport(url)
+      const client = new Client({ name: "ideall-agent", version: "1.0.0" }, { capabilities: {} })
+      await client.connect(transport)
+      const listed = await client.listTools()
+      const prefix = `m${i}_`
+      for (const t of listed.tools) {
+        const exposed = `${prefix}${t.name}`
+        tools.push({
+          type: "function",
+          function: {
+            name: exposed,
+            description: `[${s.name}] ${t.description ?? ""}`.trim(),
+            parameters: t.inputSchema ?? { type: "object", properties: {} },
+          },
+        })
+        dispatch.set(exposed, (args) => callMcpClient(client, t.name, args))
+      }
+      closers.push(async () => {
+        try {
+          await client.close()
+        } catch {
+          /* 忽略 */
+        }
+      })
+    } catch {
+      /* 连接失败 (CORS / 不可达 / 协议不符) → 跳过该 server, 不阻断本次运行。 */
+    }
+  }
+
+  // 3) 自动技能 → 合成「应用技能」工具 (调用即返回其指令, 供模型展开)。仅智能体模式可用。
+  const autoSkills = opts?.autoSkills ?? []
+  autoSkills.forEach((sk, i) => {
+    const exposed = `use_skill_${i}`
+    tools.push({
+      type: "function",
+      function: {
+        name: exposed,
+        description: `应用技能「${sk.name}」：${sk.description}`,
+        parameters: { type: "object", properties: {} },
+      },
+    })
+    dispatch.set(exposed, async () => ({
+      ok: true,
+      data: { skill: sk.name, instructions: sk.prompt },
+    }))
+  })
+
+  return {
+    tools,
+    async callTool(name, args) {
+      const fn = dispatch.get(name)
+      if (!fn) return { ok: false, data: { message: "该工具未在本工作区启用" } }
+      return fn(args)
+    },
+    async close() {
+      for (const c of closers) await c()
     },
   }
 }
@@ -115,6 +212,10 @@ export function summarizeTool(name: string, ok: boolean, data: unknown): string 
     const msg = (data as { message?: string })?.message
     return `操作失败：${name}${msg ? `（${msg}）` : ""}`
   }
+  // 合成「应用技能」工具 + 外部 MCP 工具 (m<i>_ 前缀): 名字非 fs.*/web.* 内置集, 单列。
+  if (name.startsWith("use_skill_")) return "已加载技能指令"
+  const ext = name.match(/^m\d+_(.+)$/)
+  if (ext) return `已调用外部工具 ${ext[1]}`
   const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>
   switch (name) {
     case "fs.list":

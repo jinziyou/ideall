@@ -10,7 +10,6 @@ export type ModuleId =
   | "info"
   | "community"
   | "browser"
-  | "search"
   | "tool"
   | "agent"
 

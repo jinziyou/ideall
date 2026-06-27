@@ -3,31 +3,31 @@
 // 活动栏 (IDE 式标签工作区侧栏的图标轨): 按当前模式渲染模块图标。
 // logo / 模式切换 / 设置 / 账户 已上移到顶边栏 (top-bar)。
 // 点图标 = 切到该模块并展开二级侧栏 (再点同模块收起)；不直接开标签 (由侧栏条目开)。
-// 「AI 工作区」钮: 跨 local/connected 模式常驻, 不随模式过滤; 放在「我的」(home) 下方,
-// 连接模式无「我的」时置顶。点击直接开/激活 AI 工作区标签。
+// 「AI」钮: 仅本地(local)模式, 放在「我的」(home) 紧下方; 连接(connected)模式不展示。
+// 点击 = 打开全局 AI 设置标签 + 展开 AI 二级侧栏 (MCP / Skills / 规则 / 工作空间); AI 跨模式常驻、不翻 mode。
 
 import { Fragment } from "react"
 import { Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNodeCount } from "@/shell/use-node-count"
 import { modulesForMode } from "./modules"
-import { useActiveModule, useMode, useActiveTabKind, toggleModule, openAiWorkspace } from "./store"
+import { useActiveModule, useMode, toggleModule, openHome, openAiSettings } from "./store"
 
 export default function ActivityBar() {
   const activeModule = useActiveModule()
   const mode = useMode()
-  const aiActive = useActiveTabKind() === "ai-workspace"
+  // AI 钮高亮 = 任一 AI 区段标签激活 (activeModule==="agent")。
+  const aiActive = activeModule === "agent"
   const { count, flash } = useNodeCount()
   const modules = modulesForMode(mode)
-  const hasHome = modules.some((m) => m.id === "home")
 
-  // AI 工作区钮 (跨模式常驻): 渲染在「我的」下方; 连接模式无「我的」时置顶。
+  // AI 钮: 仅本地模式, 渲染在「我的」下方 (见下方 home 分支); 连接模式不展示。
   const aiButton = (
     <button
-      key="ai-workspace"
+      key="ai"
       type="button"
-      onClick={openAiWorkspace}
-      title="AI 工作区"
+      onClick={openAiSettings}
+      title="AI"
       aria-current={aiActive ? "true" : undefined}
       className={cn(
         "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[10px] font-medium transition-colors",
@@ -46,8 +46,6 @@ export default function ActivityBar() {
 
   return (
     <aside className="hidden h-full w-14 shrink-0 flex-col items-center gap-1 border-r bg-card px-2 py-2.5 md:flex">
-      {/* 连接模式无「我的」, AI 仍跨模式常驻 → 置顶 */}
-      {!hasHome && aiButton}
       {modules.map((m) => {
         const Icon = m.icon
         const active = activeModule === m.id
@@ -56,7 +54,7 @@ export default function ActivityBar() {
           <Fragment key={m.id}>
             <button
               type="button"
-              onClick={() => toggleModule(m.id)}
+              onClick={() => (m.id === "home" ? openHome() : toggleModule(m.id))}
               title={m.label}
               aria-current={active ? "true" : undefined}
               className={cn(
@@ -86,7 +84,7 @@ export default function ActivityBar() {
               </span>
               <span className="leading-none">{m.label}</span>
             </button>
-            {/* AI 紧随「我的」下方 (local 模式) */}
+            {/* AI 紧随「我的」下方 (仅 local 模式; 连接模式无「我的」→ 不展示 AI) */}
             {m.id === "home" && aiButton}
           </Fragment>
         )
