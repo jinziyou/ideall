@@ -7,13 +7,18 @@
 import * as React from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { descriptorForNode, descriptorForPath } from "./modules"
-import { openTab, setRightPanel } from "./store"
+import { openTab, setRightPanel, openAiWorkspace } from "./store"
 
 function OpenWorkspaceTabInner() {
   const pathname = usePathname()
   const search = useSearchParams()
   React.useEffect(() => {
     const p = pathname || "/"
+    // /ai: AI 工作区标签 (跨模式常驻, 不切 mode)。
+    if (p.startsWith("/ai")) {
+      openAiWorkspace()
+      return
+    }
     // /home/agent: AI 是右侧常驻对话栏, 不开标签 —— 呼出右栏即可。
     if (p.startsWith("/home/agent")) {
       setRightPanel(true)

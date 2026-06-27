@@ -1,9 +1,10 @@
 "use client"
 
 // 右侧 AI 对话栏 (AI 原生): 桌面右停靠列, 移动端全屏覆盖。承载 AgentPanel (紧凑模式)。
-import { Bot, X } from "lucide-react"
+// 与左侧「AI 工作区」并存: 右栏 = 轻量随手对话; 顶部「展开」可升级为完整工作区标签。
+import { Bot, Maximize2, X } from "lucide-react"
 import AgentPanel from "@/plugins/agent/views/agent-panel"
-import { useRightPanelOpen, setRightPanel } from "./store"
+import { useRightPanelOpen, setRightPanel, openAiWorkspace } from "./store"
 
 export default function RightAiPanel() {
   const open = useRightPanelOpen()
@@ -16,15 +17,29 @@ export default function RightAiPanel() {
           <Bot className="h-4 w-4 text-primary" />
           AI 助手
         </span>
-        <button
-          type="button"
-          onClick={() => setRightPanel(false)}
-          aria-label="关闭 AI 对话栏"
-          title="关闭"
-          className="flex h-6 w-6 items-center justify-center rounded-shell text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              openAiWorkspace()
+              setRightPanel(false)
+            }}
+            aria-label="展开为 AI 工作区"
+            title="展开为工作区"
+            className="flex h-6 w-6 items-center justify-center rounded-shell text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setRightPanel(false)}
+            aria-label="关闭 AI 对话栏"
+            title="关闭"
+            className="flex h-6 w-6 items-center justify-center rounded-shell text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden p-3">
         <AgentPanel compact />

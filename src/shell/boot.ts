@@ -7,7 +7,14 @@ import { registerFilesPort } from "@protocol/files"
 import { registerUiActions } from "@/lib/ui-actions"
 import { registerActiveNode } from "@/lib/active-node"
 import { filesPort } from "@/files/files-port"
-import { openNodeTab, closeTab, tabKey, getActiveId, getActiveSource, getTabs } from "@/workspace/store"
+import {
+  openNodeTab,
+  closeTab,
+  tabKey,
+  getActiveId,
+  getActiveSource,
+  getTabs,
+} from "@/workspace/store"
 import { nodeTab, parseNodeParams } from "@/workspace/node-tab"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"

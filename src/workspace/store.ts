@@ -149,19 +149,30 @@ export function hydrateWorkspace() {
     // 激活标签: marker 先跑设置的当前路由优先, 否则历史; 且必须确实存在于 merged。
     const wantId = state.activeId ?? saved.activeId
     const activeTab = wantId ? (merged.find((x) => x.id === wantId) ?? null) : null
+    // AI 工作区 mode-中性: 不由其 module('agent') 反推 mode/activeModule, 沿用持久化的镜头
+    // (与 openAiWorkspace/setActiveTab 一致; 否则「local 下开 AI 再刷新」会被静默翻成 connected)。
+    const aiActive = activeTab?.kind === "ai-workspace"
     state = {
       ...state,
       tabs: merged,
       activeId: activeTab ? activeTab.id : null,
       // 恢复的激活标签视作 user (原本由用户导航而来); 不持久化 source, 防 agent 自激活态跨刷新泄漏。
       activeSource: "user",
-      // 模块/模式由激活标签派生, 保证三者自洽 (避免与 URL 短暂错位)。
-      activeModule: activeTab
-        ? activeTab.module
-        : state.activeId
-          ? state.activeModule
-          : saved.activeModule,
-      mode: activeTab ? MODE_OF[activeTab.module] : state.activeId ? state.mode : saved.mode,
+      // 模块/模式由激活标签派生, 保证三者自洽 (避免与 URL 短暂错位); AI 工作区例外, 沿用持久化镜头。
+      activeModule: aiActive
+        ? saved.activeModule
+        : activeTab
+          ? activeTab.module
+          : state.activeId
+            ? state.activeModule
+            : saved.activeModule,
+      mode: aiActive
+        ? saved.mode
+        : activeTab
+          ? MODE_OF[activeTab.module]
+          : state.activeId
+            ? state.mode
+            : saved.mode,
       rightPanelOpen: saved.rightPanelOpen,
       hydrated: true,
     }
@@ -179,7 +190,30 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user") {
   const id = tabKey(d)
   const exists = state.tabs.some((t) => t.id === id)
   const tabs = exists ? state.tabs : [...state.tabs, { ...d, id }]
-  setState({ tabs, activeId: id, activeModule: d.module, mode: MODE_OF[d.module], activeSource: source })
+  setState({
+    tabs,
+    activeId: id,
+    activeModule: d.module,
+    mode: MODE_OF[d.module],
+    activeSource: source,
+  })
+}
+
+/** AI 工作区标签描述符 (跨模式常驻; module:"agent" 仅供 hydrate 校验与状态栏色点)。 */
+export const AI_WORKSPACE_TAB: TabDescriptor = {
+  kind: "ai-workspace",
+  module: "agent",
+  title: "AI",
+  path: "/ai",
+}
+
+/** 打开 (或激活) AI 工作区标签。AI 跨 local/connected 常驻 —— 不切换 mode / activeModule,
+ *  仅激活该标签并收起二级侧栏给工作区让出整宽 (工作区自带组合器面板)。 */
+export function openAiWorkspace() {
+  const id = tabKey(AI_WORKSPACE_TAB)
+  const exists = state.tabs.some((t) => t.id === id)
+  const tabs = exists ? state.tabs : [...state.tabs, { ...AI_WORKSPACE_TAB, id }]
+  setState({ tabs, activeId: id, activeSource: "user", sidebarCollapsed: true })
 }
 
 /** 打开 (或激活已存在的) 一个节点标签。三入口 (搜索/侧栏/AI) 统一经此, 保证 entity 级去重。
@@ -207,7 +241,8 @@ export function closeTab(id: string) {
     const next = tabs[idx] ?? tabs[idx - 1] ?? null
     activeId = next ? next.id : null
     // 焦点转移到相邻标签时, 同步活动模块与模式镜头 (否则活动栏/侧栏/状态栏会停在旧模块)。
-    if (next) {
+    // AI 工作区 mode-中性: 焦点落到它时不改 mode/activeModule (保留关闭前的镜头)。
+    if (next && next.kind !== "ai-workspace") {
       activeModule = next.module
       mode = MODE_OF[next.module]
     }
@@ -218,6 +253,11 @@ export function closeTab(id: string) {
 export function setActiveTab(id: string) {
   const t = state.tabs.find((x) => x.id === id)
   if (!t) return
+  // AI 工作区 mode-中性: 激活它不切换 mode/activeModule (与 openAiWorkspace 一致, 否则点 AI 标签会翻 mode)。
+  if (t.kind === "ai-workspace") {
+    setState({ activeId: id, activeSource: "user" })
+    return
+  }
   // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
   setState({ activeId: id, activeModule: t.module, mode: MODE_OF[t.module], activeSource: "user" })
 }
@@ -289,6 +329,15 @@ export function useActiveId() {
     subscribe,
     () => state.activeId,
     () => DEFAULT.activeId,
+  )
+}
+
+/** 当前激活标签的 kind (活动栏 AI 钉钮高亮用); 无激活标签 → null。 */
+export function useActiveTabKind(): string | null {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => state.tabs.find((t) => t.id === state.activeId)?.kind ?? null,
+    () => null,
   )
 }
 export function useActiveModule() {

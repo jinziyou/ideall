@@ -4,6 +4,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
 import { agentGrant } from "@/plugins/embed/grant"
+import type { Permission } from "@/plugins/embed/protocol"
 import { createLoopbackTransports } from "@/plugins/embed/transport"
 import { getUiActions } from "@/lib/ui-actions"
 
@@ -22,10 +23,19 @@ export interface AgentMcp {
   close(): Promise<void>
 }
 
-/** 起一条 agent 的 loopback MCP 会话: server(agentGrant) ↔ client, 列出工具备用。 */
-export async function connectAgentMcp(): Promise<AgentMcp> {
+/** connectAgentMcp 的可选项: 让工作区收窄能力 (右栏随手对话不传 = 全部默认能力)。 */
+export interface ConnectAgentOpts {
+  /** 本工作区启用的能力位子集 (与 agent 默认集取交集, 不可越权); 缺省 = 全部默认能力。 */
+  permissions?: Permission[]
+  /** 工具名白名单 (在已授权工具里再按名过滤); 空 / 缺省 = 不额外过滤。 */
+  toolAllowlist?: string[] | null
+}
+
+/** 起一条 agent 的 loopback MCP 会话: server(agentGrant) ↔ client, 列出工具备用。
+ *  opts 缺省时等价于历史行为 (全部默认能力, 不过滤工具)。 */
+export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp> {
   const ui = getUiActions()
-  const server = createLocalMcpServer(agentGrant(Date.now()), {
+  const server = createLocalMcpServer(agentGrant(Date.now(), opts?.permissions), {
     navigate: () => {}, // agent 不做内部路由跳转
     openTab: ui ? (kind, id, title) => ui.openTab(kind, id, title) : undefined,
     closeTab: ui ? (kind, id) => ui.closeTab(kind, id) : undefined,
@@ -35,19 +45,29 @@ export async function connectAgentMcp(): Promise<AgentMcp> {
   const client = new Client({ name: "ideall-agent", version: "1.0.0" }, { capabilities: {} })
   await client.connect(clientTransport)
 
+  // 工具名白名单: 既过滤给模型看的 tools 数组, 也在 callTool 拒绝 (双重 enforcement —— 防模型凭记忆
+  // 调用被工作区关掉的工具)。能力位收窄已在 server 端「越权=工具不存在」, 此处是更细的按名闸。
+  const allow =
+    opts?.toolAllowlist && opts.toolAllowlist.length ? new Set(opts.toolAllowlist) : null
+
   const listed = await client.listTools()
-  const tools: OpenAiTool[] = listed.tools.map((t) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.inputSchema ?? { type: "object", properties: {} },
-    },
-  }))
+  const tools: OpenAiTool[] = listed.tools
+    .filter((t) => !allow || allow.has(t.name))
+    .map((t) => ({
+      type: "function",
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.inputSchema ?? { type: "object", properties: {} },
+      },
+    }))
 
   return {
     tools,
     async callTool(name, args) {
+      if (allow && !allow.has(name)) {
+        return { ok: false, data: { message: "该工具未在本工作区启用" } }
+      }
       const res = await client.callTool({ name, arguments: args })
       const content = res.content as { type?: string; text?: string }[] | undefined
       const text = content?.[0]?.type === "text" ? (content[0].text ?? "") : ""

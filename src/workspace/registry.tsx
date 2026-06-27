@@ -27,6 +27,7 @@ const ToolSearch = React.lazy(() => import("@/modules/tool/search/page"))
 const ToolAi = React.lazy(() => import("@/modules/tool/ai/page"))
 const ToolNavigation = React.lazy(() => import("@/modules/tool/navigation/page"))
 const BrowserView = React.lazy(() => import("./browser-view"))
+const AiWorkspace = React.lazy(() => import("@/plugins/agent/views/ai-workspace"))
 
 export type TabLayout = "padded" | "fill"
 
@@ -53,6 +54,7 @@ const REGISTRY: Record<string, Entry> = {
   "tool-ai": { render: () => <ToolAi />, layout: "padded" },
   "tool-navigation": { render: () => <ToolNavigation />, layout: "padded" },
   "browser-view": { render: () => <BrowserView />, layout: "fill" },
+  "ai-workspace": { render: () => <AiWorkspace />, layout: "fill" },
 }
 
 const Spinner = (
