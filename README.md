@@ -2,18 +2,23 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**开源、本地优先、供应商中立的个人信息工作台** — 你的信息、密钥与后端都在你手里。
+**开源、本地优先的个人信息终端** — 你的信息、密钥与后端都在你手里。
+
+> **设计思想：一切皆文件，一切皆标签页。** 你的笔记、书签、资源、关注、对话都是统一命名空间里可寻址的「文件」节点；打开任意文件即开一个工作区**标签页**，标签页是通用查看器。AI 是横跨本地 / 连接两态的环境层——文件是它的记忆与工作产物，标签页是它为你物化的视图。
+>
+> **设计风格：现代 · 面板 · 留白。** 面板化的标签工作区（活动栏 / 侧栏 / 标签页 / 状态栏），克制的留白与现代质感，不堆砌、让信息呼吸。
 
 ideall **能独立成立**：自带本地阅读与 AI 助手（自带 LLM 密钥），**零后端即是完整产品**；需要聚合与知识图谱时，默认接入 **wonita** 智能后端，且经 `ServerPort` 契约**随时可换 / 可自建**。
 
-以 **home（「我的」）为信息中枢**，`info`（资讯）/ `community`（社区）/ `tool`（工具）围绕并服务于 home：
+终端的五个分区里，**「我的」(home) 是你本机数据的所在**，**apps（应用）是本机已安装应用的启动器**（Tauri 桌面 / 本地模式专属、零后端）；`info`（资讯）/ `community`（社区）/ `tool`（工具）是三个**发现**模块，它们发现的内容经**关注汇入「我的」**：
 
 | 模块 | 路由 | 角色 | 是否依赖远程后端 |
 | --- | --- | --- | --- |
-| home | `/home` | 信息中枢（个人资源 / 书签，本地优先） | 否 |
-| info | `/info` | 信息聚合展示 | 是（后端数据服务） |
-| community | `/community` | 发布者地图、订阅与发布 | 是（后端数据服务） |
-| tool | `/tool` | 工具聚合（搜索 / AI / 导航） | 部分功能可选 |
+| 我的 (home) | `/home` | 本机数据区：笔记 / 书签 / 资源 / 关注 / 对话，本地优先 | 否 |
+| apps（应用） | `/apps` | 本机已安装应用启动器：列举并一键启动本机已装应用 | 否（**Tauri 桌面 / 本地模式专属**，零后端） |
+| info | `/info` | 信息聚合展示（发现界面默认 wonita 应用嵌入，经[嵌入桥](docs/ideall-embed-bridge.md)可换源） | 是（后端数据服务） |
+| community | `/community` | 发布者地图、关注与发布（发现界面默认 wonita 应用嵌入，可换源） | 是（后端数据服务） |
+| tool | `/tool` | 工具聚合（搜索 / AI / 导航） | 否（本地外链启动器，历史仅存本机） |
 
 ## 开源客户端与后端服务
 
@@ -23,10 +28,11 @@ ideall **能独立成立**：自带本地阅读与 AI 助手（自带 LLM 密钥
 | --- | --- | --- |
 | 内容 | Next.js 前端、本地 home、插件、BYO-key agent | 采集、NLP、知识图谱、实体/事件追踪、鉴权 API |
 | 许可 | [Apache 2.0](LICENSE) | 闭源，官方运营（也可自实现 `ServerPort` 替换） |
-| 角色 | 独立可用的本地工作台 | 可选的"语料级智能"增强 |
+| 角色 | 独立可用的本地终端 | 可选的"语料级智能"增强 |
 | 商标 | **Wonita** 名称与官方 logo 不随 Apache 2.0 许可转让 | **Wonita** 品牌与官方数据 |
 
-- **本地能力（home / tool / 同步 / agent）零后端即可用**——离线、无账号、数据存在你设备上。
+- **本地能力（home / apps / tool / 同步 / agent）零后端即可用**——离线、无账号、数据存在你设备上（apps 为 Tauri 桌面专属）。
+- **agent 是横跨本地的 AI 环境层**：除自带 LLM 密钥（BYO-key）直连 OpenAI 兼容端点外，还可**连接外部 ACP agent / 外部 MCP**，并能**联网搜索 / 抓取网页**（出站受 egress 守卫的 SSRF 防护约束）。
 - **需要聚合 / 知识图谱时**：默认连接 [wonita 后端](#连接后端-next_public_server_addr)；也可换用自建后端或自行实现 `ServerPort`。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务，或冒充官方 Wonita / ideall 网络。
 
@@ -34,7 +40,7 @@ ideall **能独立成立**：自带本地阅读与 AI 助手（自带 LLM 密钥
 
 ideall **仅以 App 形态分发**：同一套 Next.js 代码经 **Tauri 2.0** 静态导出后打包为**跨平台客户端 —— Windows / Linux / macOS 桌面 + iOS / Android 移动**。无 Node 运行时、无 SSR 生产服务端，客户端直连后端数据服务。详见 [App（桌面 / 移动）](#app桌面--移动) 与 [docs/app.md](docs/app.md)。
 
-> 想深入领域模型、模块边界、数据流图与关键不变量？见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+> 想深入领域模型、模块边界、数据流图与关键不变量？见 [docs/architecture.md](docs/architecture.md)。
 
 ## 开发环境
 
@@ -82,19 +88,20 @@ cd ideall
 cp .env.example .env.local   # 按需选择官方或自托管后端地址
 pnpm install
 pnpm dev                     # 开发服 http://localhost:5020（也是 Tauri 壳的加载源）
+# bash scripts/run.sh        # 等价于 pnpm dev
 pnpm app:dev                 # 起 Tauri 桌面开发壳（加载上面的 dev 服）
 ```
 
-### 连接后端 (`NEXT_PUBLIC_SERVER_ADDR`)
+### 连接后端
 
-App 客户端直连后端数据服务，地址在静态导出构建期内联进包，故用 `NEXT_PUBLIC_SERVER_ADDR`：
+开箱默认连官方 wonita（`https://api.wonita.link` + iframe `https://www.wonita.link`），见 [`.env.example`](.env.example)。home / tool 不依赖后端；info / community 需可用后端（经 `ServerPort` 契约；wonita 是默认实现）。
 
-| 模式 | 适用 | `NEXT_PUBLIC_SERVER_ADDR` 示例 |
-| --- | --- | --- |
-| **官方** | 使用 Wonita 官方资讯与图谱 | _官方 API 尚未公开发布；上线后填正式基址_ |
-| **本地开发**（默认） | 本机联调后端 | `http://127.0.0.1:5021` |
+| 场景 | 做法 |
+| --- | --- |
+| **独立运行 / 官方后端** | 无需配置，或复制 `.env.example` → `.env.local` |
+| **联调自建 / 本地后端** | 复制 `.env.example` → `.env.local`，把 `NEXT_PUBLIC_SERVER_ADDR` / `NEXT_PUBLIC_EMBED_BASE` 指向你的后端地址（`.env.local` 不入库） |
 
-复制 [`.env.example`](.env.example) 为 `.env.local` 后取消对应模式的注释。开箱默认走本地开发模式。home / tool 的本地能力不依赖后端；info / community 需可用的后端数据服务（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现）。客户端直连需后端放行 CORS（见 [docs/app.md](docs/app.md)）。
+客户端直连需后端放行 CORS（见 [docs/app.md](docs/app.md)）。
 
 ## App（桌面 / 移动）
 
@@ -114,8 +121,9 @@ pnpm typecheck
 
 | 变量 | 说明 | 默认 |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SERVER_ADDR` | App 客户端直连的后端 API 基址（官方信息服务或自托管） | 见 `.env.example` |
-| `SERVER_ADDR` | 仅 `pnpm dev` SSR 渲染期在服务端读取；不设时回退到上一项 | 见 `.env.example` |
+| `NEXT_PUBLIC_SERVER_ADDR` | App 客户端直连的后端 API 基址 | `https://api.wonita.link` |
+| `NEXT_PUBLIC_EMBED_BASE` | info/community iframe 嵌入的 portal 基址 | `https://www.wonita.link` |
+| `SERVER_ADDR` | 仅 `pnpm dev` SSR 渲染期在服务端读取；不设时回退到上一项 | 同 `NEXT_PUBLIC_SERVER_ADDR` |
 
 ## API 类型同步 (codegen)
 
@@ -123,7 +131,7 @@ ideall 调用后端数据服务的类型来自 OpenAPI schema（经 `ServerPort`
 
 ```
 openapi/server.json                    ← 已提交的契约源
-src/components/lib/api/server.d.ts     ← openapi-typescript 生成物
+src/lib/api/server.d.ts                ← openapi-typescript 生成物
 scripts/sync-server-openapi.mjs        ← 维护者刷新契约用 (可选)
 ```
 
@@ -141,18 +149,18 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 
 | 文档 | 内容 |
 | --- | --- |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 架构权威说明：领域模型、模块与边界、数据流图、技术选型、关键不变量 |
+| [docs/architecture.md](docs/architecture.md) | 架构权威说明：领域模型、模块与边界、数据流图、技术选型、关键不变量 |
 | [docs/app.md](docs/app.md) | App（桌面 / 移动）方案、平台矩阵、CI、签名与分阶段路线图 |
-| [CLAUDE.md](CLAUDE.md) | 仓库结构与开发约定（贡献者速查） |
+| [docs/claude.md](docs/claude.md) | 仓库结构与开发约定（贡献者速查） |
 | [.github/SECURITY.md](.github/SECURITY.md) | 安全策略与漏洞报告（含跨端同步加密关注点） |
 
 ## 参与贡献
 
-欢迎 Issue 与 PR（UI、home 本地能力、插件等）。开发约定见 [CLAUDE.md](CLAUDE.md)，架构说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+欢迎 Issue 与 PR（UI、home 本地能力、插件等）。开发约定见 [docs/claude.md](docs/claude.md)，架构说明见 [docs/architecture.md](docs/architecture.md)。
 
 ## 赞助
 
-ideall 客户端免费开源；赞助用于支持客户端开发与社区维护（**不包含**官方信息服务订阅）。
+ideall 客户端免费开源；赞助用于支持客户端开发与社区维护（**不包含**官方信息服务关注）。
 
 <!-- TODO: 启用 .github/FUNDING.yml 或填入链接 -->
 <!-- [GitHub Sponsors](https://github.com/sponsors/YOUR_USERNAME) · [爱发电](https://afdian.com/a/YOUR_ID) -->

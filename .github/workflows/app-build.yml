@@ -23,10 +23,10 @@ permissions:
 
 # 静态导出把地址内联进包 (用仓库变量覆盖, Settings → Variables; 未设则回退生产默认):
 #   NEXT_PUBLIC_SERVER_ADDR — 数据服务 (apiserver)。
-#   NEXT_PUBLIC_EMBED_BASE  — 内嵌门户 (info/community 经 iframe 嵌入的 portal); 必须设, 否则回退 localhost。
+#   NEXT_PUBLIC_EMBED_BASE  — 内嵌门户 (info/community 经 iframe 嵌入的 portal); 未设则回退 https://www.wonita.link (须在 tauri.conf.json CSP frame-src 白名单内)。
 env:
   NEXT_PUBLIC_SERVER_ADDR: ${{ vars.NEXT_PUBLIC_SERVER_ADDR || 'https://api.wonita.link' }}
-  NEXT_PUBLIC_EMBED_BASE: ${{ vars.NEXT_PUBLIC_EMBED_BASE || 'https://web.wonita.link' }}
+  NEXT_PUBLIC_EMBED_BASE: ${{ vars.NEXT_PUBLIC_EMBED_BASE || 'https://www.wonita.link' }}
 
 jobs:
   # 判定是否构建: tag / 手动 → 总是; main 推送 → 仅当本次改动含"非文档/非配置"文件才构建

@@ -33,6 +33,11 @@
   --color-spoke-community: hsl(var(--spoke-community));
   --color-spoke-tool: hsl(var(--spoke-tool));
 
+  /* 状态语义色 (ok/warn/info; error 复用 --destructive, idle 复用 --muted-foreground) */
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-info: hsl(var(--info));
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -92,7 +97,7 @@
  * - 亮色底 + 白卡 + 柔阴影; 友好靛蓝 (--primary / --pop) 作唯一强调色, 每屏只给一个主操作。
  * - --spoke-* 三色 (资讯蓝 / 社区绿 / 工具紫) 仅用于小圆点 / tint / 标签, 绝不大面积 fill。
  * - --pop == --flowback == 关键动作 / 回流(收入中枢) 的语义色 (= 靛蓝)。
- * - 默认跟随系统 (见 components/lib/theme), 暗色见 .dark。
+ * - 默认跟随系统 (见 src/lib/theme), 暗色见 .dark。
  */
 :root {
   --radius: 1rem;
@@ -107,7 +112,8 @@
   --secondary: 220 30% 95%;
   --secondary-foreground: 222 22% 20%;
   --muted: 220 30% 95%;
-  --muted-foreground: 220 12% 46%;
+  /* 43% (非 46%): 让状态栏文字 / text-[10px] 类型徽标等小字在浅底上过 WCAG AA (~4.5:1); 暗色见下方 .dark 不变。 */
+  --muted-foreground: 220 12% 43%;
   --accent: 229 60% 95%;
   --accent-foreground: 222 22% 18%;
   --destructive: 4 72% 52%;
@@ -123,6 +129,10 @@
   --spoke-info: 217 91% 60%;
   --spoke-community: 162 72% 40%;
   --spoke-tool: 258 85% 66%;
+  /* 状态语义色 (浅底: 取偏深值保 WCAG AA 文字对比; 暗色见 .dark 取亮版) */
+  --success: 158 75% 36%;
+  --warning: 33 90% 42%;
+  --info: 217 80% 50%;
   --highlight: oklch(0.852 0.199 91.936);
 }
 
@@ -152,6 +162,9 @@
   --spoke-info: 217 88% 70%;
   --spoke-community: 162 58% 52%;
   --spoke-tool: 258 82% 74%;
+  --success: 158 64% 50%;
+  --warning: 38 90% 60%;
+  --info: 217 85% 68%;
   --highlight: oklch(0.852 0.199 91.936);
 }
 

@@ -37,10 +37,7 @@ try {
 
   // 2. 新建页面 → 编辑器挂载 (首次点击会触发 dev 下 Plate 懒加载块的按需编译, 故给足超时)
   //   exact:true 关键 —— 否则「新建」会子串命中空态的「新建页面」按钮。
-  await page
-    .getByRole("button", { name: "新建", exact: true })
-    .first()
-    .click({ timeout: 15000 })
+  await page.getByRole("button", { name: "新建", exact: true }).first().click({ timeout: 15000 })
   const titleInput = page.getByPlaceholder("无标题")
   await titleInput.waitFor({ state: "visible", timeout: 60000 })
   record("点「新建」→ 编辑器挂载 (标题框出现)", true)

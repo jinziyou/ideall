@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Wonita Information Service API",
-    "description": "Wonita 核心 API: 用户检查、JWT 鉴权、信息查询、订阅跨端同步 (E2E 加密)、community 发布与发布者档案。",
+    "description": "Wonita 核心 API: 用户检查、JWT 鉴权、信息查询、关注跨端同步 (E2E 加密)、community 发布与发布者档案。",
     "license": {
       "name": ""
     },
@@ -744,7 +744,7 @@
         "tags": [
           "peer"
         ],
-        "summary": "GET /peers — 社区发布者列表 (公开, 供 community 浏览订阅)。",
+        "summary": "GET /peers — 社区发布者列表 (公开, 供 community 浏览关注)。",
         "operationId": "list_publishers",
         "parameters": [
           {
@@ -1283,7 +1283,7 @@
       },
       "PeerPublisher": {
         "type": "object",
-        "description": "社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (ideall `type:\"peer\"` 的 key)。",
+        "description": "社区发布者 (用户) 公开档案 + 发布数。`id` 即关注键 (ideall `type:\"peer\"` 的 key)。",
         "required": [
           "id",
           "name",
@@ -1519,7 +1519,7 @@
         "properties": {
           "ciphertext": {
             "type": "string",
-            "description": "密文 (base64); 明文为客户端订阅列表 JSON, 服务端不可读"
+            "description": "密文 (base64); 明文为客户端关注列表 JSON, 服务端不可读"
           },
           "iv": {
             "type": "string",
@@ -1578,11 +1578,11 @@
     },
     {
       "name": "sync",
-      "description": "端到端加密同步 (订阅跨端)"
+      "description": "端到端加密同步 (关注跨端)"
     },
     {
       "name": "peer",
-      "description": "用户发布层 (community 发布者/订阅)"
+      "description": "用户发布层 (community 发布者/关注)"
     },
     {
       "name": "authorize",

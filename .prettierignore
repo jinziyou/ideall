@@ -9,11 +9,12 @@ next-env.d.ts
 src-tauri/gen
 src-tauri/target
 
-# 本地工具/会话配置
+# 本地工具/会话配置 (.design-sync 由 claude.ai/design 工具管理, 勿强制 prettier)
 .claude
+.design-sync
 
 # 生成文件 (由 openapi-typescript / sync 脚本产出, 勿手动格式化)
-src/components/lib/api/server.d.ts
+src/lib/api/server.d.ts
 openapi
 pnpm-lock.yaml
 
