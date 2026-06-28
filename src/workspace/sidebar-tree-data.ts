@@ -3,18 +3,20 @@
 
 import type { ComponentType } from "react"
 import {
+  Bookmark,
   Boxes,
   FileText,
   Folder,
   Link2,
-  Map,
-  Newspaper,
   Plug,
   Rss,
   ScrollText,
   Sparkles,
+  Tag,
+  Users,
 } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
+import type { SubscriptionType } from "@protocol/subscription"
 import type { TabDescriptor } from "./types"
 import type { ModuleId } from "./types"
 import { HOME_SECTIONS } from "./home-sections"
@@ -34,6 +36,8 @@ export type SidebarTreeNode = {
   nodeRef?: { kind: NodeKind; id: string }
   /** 展开后懒加载的子节点 kind (仅 section 有效) */
   childKinds?: NodeKind[]
+  /** 展开后按关注类型加载 (info/community 侧栏) */
+  subscriptionTypes?: SubscriptionType[]
   hasChildren: boolean
 }
 
@@ -136,12 +140,44 @@ export function subscriptionsTreeRoots(): SidebarTreeNode[] {
   }))
 }
 
-/** info / community 嵌入模块: 单主页 + 无本地子节点。 */
-export function embedTreeRoots(moduleId: "info" | "community"): SidebarTreeNode[] {
-  const icon = moduleId === "info" ? Newspaper : Map
-  const mod = moduleById(moduleId)
-  return mod.entries.map((e) => ({
-    ...entryNode(e),
-    icon,
-  }))
+/** info 模块: 侧栏展示已关注的实体。 */
+export function infoTreeRoots(): SidebarTreeNode[] {
+  return [
+    {
+      id: "section:entities",
+      label: "关注的实体",
+      icon: Tag,
+      nodeKind: "section",
+      subscriptionTypes: ["entity"],
+      hasChildren: true,
+    },
+  ]
+}
+
+/** community 模块: 侧栏展示已关注的社区发布者 (peer)。 */
+export function communityTreeRoots(): SidebarTreeNode[] {
+  return [
+    {
+      id: "section:peers",
+      label: "关注的发布者",
+      icon: Users,
+      nodeKind: "section",
+      subscriptionTypes: ["peer"],
+      hasChildren: true,
+    },
+  ]
+}
+
+/** 浏览器模块: 侧栏仅展示收藏夹目录与书签 (点击书签 → 内嵌浏览器导航)。 */
+export function browserTreeRoots(): SidebarTreeNode[] {
+  return [
+    {
+      id: "section:bookmarks",
+      label: "收藏",
+      icon: Bookmark,
+      nodeKind: "section",
+      childKinds: ["folder", "bookmark"],
+      hasChildren: true,
+    },
+  ]
 }

@@ -1,7 +1,6 @@
 "use client"
 
 // 内嵌浏览器标签内容 (路线 A): 顶部工具条 + 下方内容占位区; 原生子 webview 铺满占位区。
-// 收藏浮钮由 Rust 原生层叠在 webview 之上, 可拖拽; 位置持久化见 browser-fab-pos.ts。
 import * as React from "react"
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react"
 import { toast } from "sonner"
@@ -15,12 +14,11 @@ import {
   browserReload,
   browserHide,
   browserClose,
+  browserShow,
   onBrowserUrl,
-  onBrowserFavorite,
-  onBrowserFabMoved,
   type BrowserBounds,
 } from "@/lib/tauri"
-import { loadBrowserFabPos, saveBrowserFabPos } from "./browser-fab-pos"
+import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-open"
 
 const START_URL = "https://www.google.com"
 
@@ -38,40 +36,24 @@ export default function BrowserView() {
   )
   const contentRef = React.useRef<HTMLDivElement | null>(null)
   const openedRef = React.useRef(false)
-  const currentUrlRef = React.useRef(START_URL)
-  const [addr, setAddr] = React.useState(START_URL)
+  const initialUrl = React.useMemo(() => takePendingBrowserUrl() ?? START_URL, [])
+  const currentUrlRef = React.useRef(initialUrl)
+  const [addr, setAddr] = React.useState(initialUrl)
 
-  const favorite = React.useCallback(() => {
-    void (async () => {
-      const { safeHref } = await import("@/lib/safe-url")
-      const href = safeHref(currentUrlRef.current)
-      if (!href) {
-        toast.error("当前页地址无效")
-        return
+  React.useEffect(() => {
+    return subscribePendingBrowserUrl((url) => {
+      currentUrlRef.current = url
+      setAddr(url)
+      if (openedRef.current) {
+        browserNavigate(url).catch(() => toast.error("导航失败"))
+        browserShow().catch(() => {})
       }
-      const { addBookmark, listBookmarks } = await import("@/files/stores/bookmarks-store")
-      const norm = (u: string) => u.replace(/[/#?]+$/, "")
-      const existing = await listBookmarks()
-      if (existing.some((b) => norm(b.url) === norm(href))) {
-        toast("该网页已在「我的 → 收藏」中")
-        return
-      }
-      let title = href
-      try {
-        title = new URL(href).hostname
-      } catch {
-        /* 用 href 兜底 */
-      }
-      await addBookmark({ url: href, title })
-      toast.success("已收藏到「我的 → 收藏」")
-    })()
+    })
   }, [])
 
   React.useEffect(() => {
     if (!isTauri()) return
     let unUrl: (() => void) | undefined
-    let unFab: (() => void) | undefined
-    let unFabMoved: (() => void) | undefined
     let ro: ResizeObserver | undefined
     let raf = 0
 
@@ -79,14 +61,7 @@ export default function BrowserView() {
       const el = contentRef.current
       if (!el) return null
       const r = el.getBoundingClientRect()
-      const saved = loadBrowserFabPos()
-      return {
-        x: r.left,
-        y: r.top,
-        w: r.width,
-        h: r.height,
-        ...(saved ? { fabX: saved.fabX, fabY: saved.fabY } : {}),
-      }
+      return { x: r.left, y: r.top, w: r.width, h: r.height }
     }
     const sync = () => {
       const b = boundsOf()
@@ -119,14 +94,6 @@ export default function BrowserView() {
       unUrl = u
     })
 
-    onBrowserFavorite(favorite).then((u) => {
-      unFab = u
-    })
-
-    onBrowserFabMoved(({ x, y }) => saveBrowserFabPos(x, y)).then((u) => {
-      unFabMoved = u
-    })
-
     const el = contentRef.current
     if (el) {
       ro = new ResizeObserver(schedule)
@@ -137,15 +104,13 @@ export default function BrowserView() {
 
     return () => {
       unUrl?.()
-      unFab?.()
-      unFabMoved?.()
       ro?.disconnect()
       window.removeEventListener("resize", schedule)
       cancelAnimationFrame(raf)
       browserClose().catch(() => {})
       openedRef.current = false
     }
-  }, [favorite])
+  }, [])
 
   const go = (raw?: string) => {
     const v = normalizeInput(raw ?? addr)
@@ -213,7 +178,7 @@ export default function BrowserView() {
           />
         </form>
       </div>
-      {/* 内容占位区: 原生子 webview + 原生收藏浮钮覆盖此矩形 */}
+      {/* 内容占位区: 原生子 webview 覆盖此矩形 */}
       <div ref={contentRef} className="min-h-0 flex-1 bg-muted/20" />
     </div>
   )

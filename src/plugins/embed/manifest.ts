@@ -1,5 +1,7 @@
 // 嵌入应用 manifest —— 宿主据此校验 iframe 源 + 起对应授权集的 MCP server (§6.1)。
-// info / community 是头两个一方 (first-party) 嵌入应用, 由 wonita/portal 实现。
+// info / community 是头两个一方 (first-party) 嵌入插件: wonita/portal 的单页应用 (Next.js SPA),
+// 经 iframe 挂载; 插件内 /info/*、/community/* 等路由由客户端 router 切换, 不整页刷新、不经 host.navigate。
+// 仅绝对外链 (https://…) 经 host.openExternal 交给宿主「浏览器」模块; host.navigate 只用于跳出到宿主壳 (如 /auth)。
 import type { Permission } from "./protocol"
 
 export interface Manifest {
@@ -30,7 +32,7 @@ const EMBED_ORIGIN = (() => {
   }
 })()
 
-/** 资讯嵌入应用: 公共语料页面直连, 故不需 data.info:read; 仅需关注/收藏回写 + 外链/导航。 */
+/** 资讯嵌入插件: 语料页面直连; host.external → 宿主「浏览器」模块 (外部资源, 非 iframe 内跳转)。 */
 export const infoEmbedManifest: Manifest = {
   id: "info",
   name: "Wonita 资讯",

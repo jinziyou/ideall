@@ -10,7 +10,7 @@ import { installTauriExternalLinks } from "@/lib/safe-url"
  * 故关注流 / 助手等使用 registry 时, 注册必已完成。registerAll 幂等。
  *
  * 另在 App (Tauri) 形态装一个全局外链点击委托 (浏览器 / SSR 为 no-op), 把 `<a target="_blank">`
- * 外链改经系统浏览器打开。挂在根 layout, 故全站锚点一处覆盖。
+ * 外链改交「浏览器」模块打开。挂在根 layout, 故全站锚点一处覆盖。
  */
 export default function BootGate({ children }: { children: ReactNode }) {
   useState(() => {

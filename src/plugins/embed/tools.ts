@@ -6,7 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { NewBookmark } from "@protocol/files"
 import { NODE_KINDS, type NodeKind } from "@protocol/node"
-import { openExternalUrl } from "@/lib/tauri"
+import { openInBrowserTab } from "@/workspace/browser-open"
 import { safeHref } from "@/lib/safe-url"
 import { webSearch, webFetch, WebError } from "@/lib/web-search"
 import { toast } from "sonner"
@@ -39,7 +39,7 @@ export interface HostToolsCtx {
   closeTab?: (kind: NodeKind, id: string) => void
 }
 
-/** host.navigate 允许的内部路由前缀 (白名单, §5.2)。 */
+/** host.navigate 允许的内部路由前缀 (白名单, §5.2)。仅宿主壳路由; 插件 SPA 内页 (/info/* 等) 不经此 API。 */
 const NAV_ALLOW = ["/home", "/auth", "/info", "/community", "/tool"]
 
 export function registerGrantedTools(
@@ -292,7 +292,8 @@ export function registerGrantedTools(
       } catch {
         return fail(-32602, "invalid-url")
       }
-      await openExternalUrl(a.url)
+      // 插件 (资讯/社区) 的外链 → 「浏览器」模块; 不在插件 iframe 内跳外链 (§9.2)。
+      await openInBrowserTab(a.url)
       return ok({ ok: true })
     })
   }

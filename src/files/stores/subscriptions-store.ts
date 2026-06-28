@@ -106,6 +106,15 @@ export async function listSubscriptions(): Promise<Subscription[]> {
     .sort((a, b) => b.createdAt - a.createdAt)
 }
 
+/** 按类型筛选活跃关注 (侧栏 info/community 用)。 */
+export async function listSubscriptionsByTypes(
+  types: SubscriptionType[],
+): Promise<Subscription[]> {
+  if (types.length === 0) return []
+  const want = new Set(types)
+  return (await listSubscriptions()).filter((s) => want.has(s.type))
+}
+
 /** 列出全部关注含墓碑 —— 仅跨端同步合并用 (墓碑需进合并/上传才能传播删除)。 */
 export async function listAllSubscriptions(): Promise<Subscription[]> {
   await seedFeedsOnce()

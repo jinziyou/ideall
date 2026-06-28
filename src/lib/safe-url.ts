@@ -3,7 +3,7 @@
 // 发布、被投毒的爬取链接、模型给的书签 URL) 一旦含此类 URL, 受害者点击即在本站
 // origin 执行脚本, 可窃取 localStorage 中的 auth token 与同步码 (存储型 XSS)。
 
-import { isTauri, openExternalUrl } from "@/lib/tauri"
+import { isTauri } from "@/lib/tauri"
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"])
 
@@ -23,7 +23,7 @@ export function safeHref(url: string | null | undefined): string | undefined {
 
 /**
  * 安全打开外链: 先过协议白名单, 再按形态分流:
- *   - App (Tauri): 经 opener 插件交给系统默认浏览器 (webview 内 `window.open(_blank)` 不可靠);
+ *   - App (Tauri): 交给「浏览器」模块 (外部资源专用内嵌 webview; 插件 iframe 内不跳外链);
  *   - 纯浏览器: `window.open(_blank)` + 强制 noopener,noreferrer (防反向 tabnabbing)。
  * 非法协议则忽略。
  */
@@ -31,19 +31,16 @@ export function openExternal(url: string | null | undefined): void {
   const href = safeHref(url)
   if (!href) return
   if (isTauri()) {
-    // 失败 (插件未就绪等) 兜底回退 window.open, 不让外链彻底打不开。
-    openExternalUrl(href).catch((e) => {
-      console.error("[openExternal] 系统浏览器打开失败, 回退 window.open:", e)
-      window.open(href, "_blank", "noopener,noreferrer")
-    })
+    // 动态 import 避免与 browser-open 循环依赖 (其亦 import safeHref)。
+    void import("@/workspace/browser-open").then(({ openInBrowserTab }) => openInBrowserTab(href))
     return
   }
   window.open(href, "_blank", "noopener,noreferrer")
 }
 
 /**
- * App (Tauri) 形态: 全局拦截 `<a target="_blank">` 外链点击, 改经系统浏览器打开
- * (webview 内原生新窗口不可靠)。覆盖全站现有及未来的外链锚点, 免去逐处改造。
+ * App (Tauri) 形态: 全局拦截 `<a target="_blank">` 外链点击, 改交「浏览器」模块打开
+ * (外部资源与嵌入插件分离; webview 内原生新窗口不可靠)。覆盖全站外链锚点, 免去逐处改造。
  * 仅左键、未被 preventDefault、href 过协议白名单者拦截; 纯浏览器 / SSR 为 no-op。
  * 返回卸载函数 (供 effect 清理)。
  *
