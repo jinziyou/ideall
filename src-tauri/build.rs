@@ -29,6 +29,9 @@ fn main() {
                 "acp_which",
                 "acp_script_path",
                 "acp_run_once",
+                "list_installed_apps",
+                "launch_installed_app",
+                "read_app_icon_data_url",
             ]),
         ),
     )

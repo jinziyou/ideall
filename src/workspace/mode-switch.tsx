@@ -10,7 +10,7 @@ const MODES: { id: WsMode; label: string; hint: string; dot: string }[] = [
   {
     id: "local",
     label: "本地",
-    hint: "我的 · 关注 · 工具 —— 本机数据 + 常用工具",
+    hint: "我的 · 关注 · 应用 · 工具 —— 本机数据 + 常用工具",
     dot: "bg-primary",
   },
   { id: "connected", label: "连接", hint: "资讯 · 社区 —— 联网发现", dot: "bg-spoke-community" },

@@ -6,6 +6,7 @@ import type { ModuleId } from "./types"
 export const MODULE_DOT: Record<ModuleId, string> = {
   home: "bg-primary",
   subscriptions: "bg-spoke-info",
+  apps: "bg-spoke-tool",
   info: "bg-spoke-info",
   community: "bg-spoke-community",
   browser: "bg-spoke-tool",

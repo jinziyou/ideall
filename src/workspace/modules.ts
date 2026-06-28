@@ -1,6 +1,6 @@
 // 工作区模块配置 (桌面工作区壳的单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 两种模式 (模式切换):
-//   本地(local): 我的(home) · 关注(subscriptions) · 工具(tool) —— 本机数据 + 常用工具 (含聚合搜索)
+//   本地(local): 我的(home) · 关注(subscriptions) · 应用(apps) · 工具(tool) —— 本机数据 + 常用工具
 //   连接(connected): 资讯(info) · 社区(community) —— 嵌入 SPA 插件 (wonita/portal iframe, 客户端路由)
 //                    浏览器(browser) —— 外部网页资源 (内嵌 webview, 仅桌面 App)
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏的「本地搜索」搜本机内容, 两者职责分离。
@@ -101,6 +101,22 @@ export const MODULES: ModuleConfig[] = [
           title: "关注",
           path: "/home/subscriptions",
         },
+      },
+    ],
+  },
+  {
+    id: "apps",
+    mode: "local",
+    label: MODULE_META.apps.label,
+    icon: MODULE_META.apps.icon,
+    colorClass: MODULE_META.apps.tintClass,
+    sidebarTitle: "应用",
+    sidebarHint: "识别并启动本机已安装的应用 (.desktop / 开始菜单 / Applications)。",
+    entries: [
+      {
+        label: "全部应用",
+        icon: MODULE_META.apps.icon,
+        descriptor: { kind: "apps", module: "apps", title: "应用", path: "/apps" },
       },
     ],
   },
@@ -246,6 +262,8 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
     return { kind: "community", module: "community", title: "社区", path: "/community" }
   if (pathname.startsWith("/browser"))
     return { kind: "browser-view", module: "browser", title: "浏览器", path: "/browser" }
+  if (pathname.startsWith("/apps"))
+    return { kind: "apps", module: "apps", title: "应用", path: "/apps" }
   if (pathname.startsWith("/tool"))
     return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
   return null

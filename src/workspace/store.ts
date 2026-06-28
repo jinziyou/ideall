@@ -18,6 +18,7 @@ const STORAGE_KEY = "ideall:workspace:v1"
 const MODE_OF: Record<ModuleId, WsMode> = {
   home: "local",
   subscriptions: "local",
+  apps: "local",
   tool: "local",
   info: "connected",
   community: "connected",

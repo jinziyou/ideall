@@ -7,6 +7,7 @@ import {
   Bookmark,
   FolderOpen,
   LayoutDashboard,
+  LayoutGrid,
   Map,
   Megaphone,
   Newspaper,
@@ -43,4 +44,5 @@ export const MODULE_META = {
     tintClass: "text-spoke-community",
   },
   tool: { label: "工具", icon: Wrench, dotClass: "bg-spoke-tool", tintClass: "text-spoke-tool" },
+  apps: { label: "应用", icon: LayoutGrid, tintClass: "text-spoke-tool" },
 } satisfies Record<string, ModuleMeta>

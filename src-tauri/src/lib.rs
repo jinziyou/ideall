@@ -19,6 +19,8 @@ mod oauth_callback;
 mod browser_linux;
 #[cfg(desktop)]
 mod window_placement;
+#[cfg(desktop)]
+mod installed_apps;
 
 #[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_LABEL: &str = "browser_view";
@@ -485,7 +487,10 @@ pub fn run() {
             acp_transport::acp_script_path,
             acp_transport::acp_run_once,
             oauth_callback::oauth_callback_start,
-            oauth_callback::oauth_callback_stop
+            oauth_callback::oauth_callback_stop,
+            installed_apps::list_installed_apps,
+            installed_apps::launch_installed_app,
+            installed_apps::read_app_icon_data_url
         ]);
     #[cfg(not(desktop))]
     let builder = builder.invoke_handler(tauri::generate_handler![agent_guarded_fetch]);
