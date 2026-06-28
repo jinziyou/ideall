@@ -5,6 +5,7 @@
 //   - 环成员 (沿 parentId 上溯会回到自身 —— 跨端并发 move 可合并出 A.parentId=B & B.parentId=A 的双向环)。
 // 不重挂会让环节点及其子树永远不被根遍历枚举到 → 在页树中「消失」、无法选中/删除/移到根。
 import type { NoteMeta } from "@protocol/files"
+import { sortKeyBetween } from "@/files/sort-key"
 
 /** 可建树的最小形状 (一切皆文件: 任意 kind 的节点元数据都满足)。 */
 export interface TreeItem {
@@ -46,6 +47,52 @@ export function effectiveParentId(
     cur = parentOf.get(cur) ?? null
   }
   return parentId
+}
+
+/** 同级插入位置 (与 notes-store / bookmarks-store 对齐)。 */
+export type InsertPos = { afterSortKey?: string | null }
+
+/**
+ * 为某父下「新增 / 移动」算同级 sortKey。pos.afterSortKey:
+ *   - undefined → 追加同级末尾
+ *   - null        → 插到同级开头
+ *   - "<键>"      → 插到该兄弟键之后
+ */
+export function computeSiblingSortKey(
+  items: TreeItem[],
+  parentId: string | null,
+  pos: InsertPos | undefined,
+  excludeId?: string,
+): string {
+  const parentOf = buildParentOf(items)
+  const siblingKeys = items
+    .filter(
+      (n) =>
+        n.id !== excludeId && effectiveParentId(n.id, n.parentId, parentOf) === parentId,
+    )
+    .map((n) => n.sortKey)
+    .filter((k) => typeof k === "string" && k.length > 0)
+    .sort()
+  const first = siblingKeys.length ? siblingKeys[0] : null
+  const last = siblingKeys.length ? siblingKeys[siblingKeys.length - 1] : null
+  const append = () => sortKeyBetween(last, null)
+  const after = pos?.afterSortKey
+  if (after === undefined) return append()
+  if (after === null) {
+    try {
+      return sortKeyBetween(null, first)
+    } catch {
+      return append()
+    }
+  }
+  const idx = siblingKeys.indexOf(after)
+  if (idx === -1) return append()
+  const next = idx + 1 < siblingKeys.length ? siblingKeys[idx + 1] : null
+  try {
+    return sortKeyBetween(after, next)
+  } catch {
+    return append()
+  }
 }
 
 /** 同级稳定比较: 先按 sortKey 字典序, sortKey 并列时以 id 兜底 (跨端并发可能产生相同键)。 */

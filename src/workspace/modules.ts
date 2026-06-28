@@ -232,6 +232,13 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
       title: "关注",
       path: "/home/subscriptions",
     }
+  if (pathname.startsWith("/home/settings"))
+    return {
+      kind: "home-settings",
+      module: "home",
+      title: "设置",
+      path: "/home/settings",
+    }
   if (pathname.startsWith("/home")) return homeEntries[0].descriptor
   if (pathname.startsWith("/info"))
     return { kind: "info", module: "info", title: "资讯", path: "/info" }

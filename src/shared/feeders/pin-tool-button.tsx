@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Pin } from "lucide-react"
+import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { getFilesPort } from "@protocol/files"
@@ -87,8 +87,10 @@ export function PinToolButton({
     >
       {busy ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : pinned ? (
+        <BookmarkCheck className="h-3.5 w-3.5 fill-current" />
       ) : (
-        <Pin className={cn("h-3.5 w-3.5", pinned && "fill-current")} />
+        <Bookmark className="h-3.5 w-3.5" />
       )}
     </button>
   )

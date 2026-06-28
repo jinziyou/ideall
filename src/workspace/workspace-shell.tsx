@@ -9,6 +9,7 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Header } from "@/shell/header"
+import WindowTitleBar from "@/shell/window-titlebar"
 import BottomTabBar from "@/shell/bottom-tab-bar"
 import TopBar from "./top-bar"
 import ActivityBar from "./activity-bar"
@@ -104,6 +105,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
       </React.Suspense>
 
       <div className="flex h-dvh flex-col">
+        <WindowTitleBar />
         {/* 移动顶栏 (md:hidden 由组件内部控制) */}
         <Header />
         {/* 桌面顶边栏 (hidden md:flex): 模式切换 + 设置 + 账户 */}

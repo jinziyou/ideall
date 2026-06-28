@@ -205,6 +205,18 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user") {
   })
 }
 
+/** 打开全局设置标签 (外观 / 本机 / 已连接应用)。 */
+export const SETTINGS_TAB: TabDescriptor = {
+  kind: "home-settings",
+  module: "home",
+  title: "设置",
+  path: "/home/settings",
+}
+
+export function openSettings() {
+  openTab(SETTINGS_TAB)
+}
+
 /** AI 全局设置标签 (默认 AI 标签; module:"agent" mode-中性, 跨 local/connected 常驻)。 */
 export const AI_SETTINGS_TAB: TabDescriptor = {
   kind: "ai-settings",
@@ -285,6 +297,31 @@ export function closeTab(id: string) {
     }
   }
   setState({ tabs, activeId, activeModule, mode, activeSource: "user" })
+}
+
+/** 关闭全部标签。 */
+export function closeAllTabs() {
+  if (state.tabs.length === 0) return
+  if (isTauri()) void browserHide().catch(() => {})
+  setState({
+    tabs: [],
+    activeId: null,
+    activeSource: "user",
+  })
+}
+
+/** 关闭除 keepId 外的全部标签。 */
+export function closeOtherTabs(keepId: string) {
+  const keep = state.tabs.find((t) => t.id === keepId)
+  if (!keep) return
+  hideBrowserWebviewUnlessBrowserTab(keep.kind)
+  setState({
+    tabs: [keep],
+    activeId: keepId,
+    activeModule: keep.module === "agent" ? "agent" : keep.module,
+    mode: keep.module === "agent" ? state.mode : MODE_OF[keep.module],
+    activeSource: "user",
+  })
 }
 
 export function setActiveTab(id: string) {

@@ -28,6 +28,7 @@ const ToolAi = React.lazy(() => import("@/modules/tool/ai/page"))
 const ToolNavigation = React.lazy(() => import("@/modules/tool/navigation/page"))
 const BrowserView = React.lazy(() => import("./browser-view"))
 const AiSettings = React.lazy(() => import("@/plugins/agent/views/ai-settings"))
+const HomeSettings = React.lazy(() => import("@/modules/home/settings/settings-page"))
 const AiMcp = React.lazy(() => import("@/plugins/agent/views/ai-mcp"))
 const AiSkills = React.lazy(() => import("@/plugins/agent/views/ai-skills"))
 const AiRules = React.lazy(() => import("@/plugins/agent/views/ai-rules"))
@@ -52,6 +53,7 @@ const REGISTRY: Record<string, Entry> = {
   "home-publications": { render: () => <MyPublications />, layout: "padded" },
   "home-resources": { render: () => <FileManager />, layout: "padded" },
   "home-bookmarks": { render: () => <BookmarkManager />, layout: "padded" },
+  "home-settings": { render: () => <HomeSettings />, layout: "padded" },
   info: { render: () => <EmbedHost manifest={infoEmbedManifest} />, layout: "fill" },
   community: { render: () => <EmbedHost manifest={communityEmbedManifest} />, layout: "fill" },
   "tool-search": { render: () => <ToolSearch />, layout: "padded" },

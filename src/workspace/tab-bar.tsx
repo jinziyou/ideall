@@ -1,10 +1,10 @@
 "use client"
 
-// 顶部标签条: Chrome 式 flex 均分 + 最小/最大宽度; 窄时隐去类型徽标, 溢出横向滚动 + 「更多」。
+// 顶部标签条: 固定宽度标签 + 横向滚动; 右侧留白区右键管理; 溢出时显示「更多」。
 // 全键盘可达: role=tab, Enter/Space 激活, Delete 关闭, Ctrl+Shift+←/→ 重排。
 
 import * as React from "react"
-import { ChevronDown, X } from "lucide-react"
+import { ChevronDown, LayoutList, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
-import { useTabs, useActiveId, setActiveTab, closeTab, reorderTabs } from "./store"
+import { useTabs, useActiveId, setActiveTab, closeTab, closeAllTabs, closeOtherTabs, reorderTabs } from "./store"
 import type { Tab } from "./types"
 import { tabViewType, TAB_VIEW_LABEL } from "./tab-view-type"
 import { MODULE_DOT } from "./module-dot"
@@ -20,6 +20,97 @@ import { MODULE_DOT } from "./module-dot"
 /** Chrome 近似: 最小约 favicon 宽, 最大 ~240px, 中间 flex 均分收缩。 */
 const TAB_MIN_PX = 48
 const TAB_MAX_PX = 240
+/** 标签列表右侧留白 (点击/右键打开标签管理菜单)。 */
+const TAB_TAIL_MIN_PX = 112
+
+function TabBarTailMenu({
+  tabs,
+  activeId,
+}: {
+  tabs: Tab[]
+  activeId: string | null
+}) {
+  const [open, setOpen] = React.useState(false)
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title="标签管理"
+          aria-label="标签管理"
+          className={cn(
+            "flex h-full shrink-0 items-center justify-center gap-1.5 border-l border-dashed border-border/60 px-3 outline-none transition-colors",
+            "bg-muted/40 text-muted-foreground hover:bg-accent hover:text-foreground",
+            "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+            open && "bg-accent text-foreground",
+          )}
+          style={{ minWidth: TAB_TAIL_MIN_PX }}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            setOpen(true)
+          }}
+        >
+          <LayoutList className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+          <span className="text-[11px] font-medium">标签管理</span>
+          <span className="rounded bg-background/80 px-1 py-px text-[10px] tabular-nums text-muted-foreground">
+            {tabs.length}
+          </span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem
+          disabled={!activeId || tabs.length <= 1}
+          onSelect={() => {
+            if (activeId) closeOtherTabs(activeId)
+          }}
+        >
+          关闭其他标签
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onSelect={() => closeAllTabs()}
+        >
+          关闭所有标签
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function TabCloseButton({
+  title,
+  active,
+  onClose,
+  className,
+}: {
+  title: string
+  active?: boolean
+  onClose: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      title="关闭"
+      aria-label={`关闭 ${title}`}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClose()
+      }}
+      className={cn(
+        "tab-close-narrow-overlay ml-auto -mr-0.5 flex h-7 w-7 min-h-7 min-w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-[opacity,background-color,color]",
+        "hover:bg-accent hover:text-foreground active:bg-accent/80",
+        "opacity-0 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
+        "group-hover/tab:opacity-100 pointer-coarse:opacity-100",
+        active && "opacity-100",
+        className,
+      )}
+    >
+      <X className="h-3.5 w-3.5" strokeWidth={2.25} />
+    </button>
+  )
+}
 
 function TabItem({
   tab: t,
@@ -88,7 +179,7 @@ function TabItem({
       }}
       style={{ minWidth: TAB_MIN_PX, maxWidth: TAB_MAX_PX }}
       className={cn(
-        "@container/tab group/tab relative flex h-full min-w-0 flex-[1_1_0] basis-0 cursor-pointer select-none items-center gap-1.5 px-2 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        "@container/tab group/tab relative flex h-full shrink-0 cursor-pointer select-none items-center gap-1.5 px-2 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         active
           ? "z-[1] bg-card text-foreground shadow-[inset_0_-1px_0_0_hsl(var(--card))]"
           : "border-r border-border/40 text-muted-foreground hover:bg-accent/40 hover:text-foreground",
@@ -99,21 +190,7 @@ function TabItem({
         {TAB_VIEW_LABEL[tabViewType(t)]}
       </span>
       <span className="min-w-0 flex-1 truncate tab-when-narrow-hidden">{t.title}</span>
-      <button
-        type="button"
-        title="关闭"
-        aria-label={`关闭 ${t.title}`}
-        onClick={(e) => {
-          e.stopPropagation()
-          closeTab(t.id)
-        }}
-        className={cn(
-          "ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded opacity-0 outline-none transition-opacity hover:bg-accent focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover/tab:opacity-70 tab-when-narrow-hidden",
-          active && "opacity-60 group-hover/tab:opacity-100",
-        )}
-      >
-        <X className="h-3 w-3" />
-      </button>
+      <TabCloseButton title={t.title} active={active} onClose={() => closeTab(t.id)} />
     </div>
   )
 }
@@ -149,32 +226,35 @@ export default function TabBar() {
 
   return (
     <div className="hidden h-9 shrink-0 items-stretch border-b bg-secondary/30 md:flex">
-      <div
-        ref={tablistRef}
-        role="tablist"
-        onScroll={checkOverflow}
-        className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        {tabs.length === 0 ? (
-          <span className="flex items-center px-3 text-xs text-muted-foreground">
-            从左侧选择一个面板打开
-          </span>
-        ) : (
-          tabs.map((t, i) => (
-            <TabItem
-              key={t.id}
-              tab={t}
-              index={i}
-              tabs={tabs}
-              active={t.id === activeId}
-              dragIdRef={dragIdRef}
-              tabRef={(el) => {
-                if (el) tabRefs.current.set(t.id, el)
-                else tabRefs.current.delete(t.id)
-              }}
-            />
-          ))
-        )}
+      <div className="flex min-w-0 flex-1 items-stretch">
+        <div
+          ref={tablistRef}
+          role="tablist"
+          onScroll={checkOverflow}
+          className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {tabs.length === 0 ? (
+            <span className="flex items-center px-3 text-xs text-muted-foreground">
+              从左侧选择一个面板打开
+            </span>
+          ) : (
+            tabs.map((t, i) => (
+              <TabItem
+                key={t.id}
+                tab={t}
+                index={i}
+                tabs={tabs}
+                active={t.id === activeId}
+                dragIdRef={dragIdRef}
+                tabRef={(el) => {
+                  if (el) tabRefs.current.set(t.id, el)
+                  else tabRefs.current.delete(t.id)
+                }}
+              />
+            ))
+          )}
+        </div>
+        {tabs.length > 0 && <TabBarTailMenu tabs={tabs} activeId={activeId} />}
       </div>
 
       {tabs.length > 0 && overflowing && (
@@ -202,18 +282,11 @@ export default function TabBar() {
                   {TAB_VIEW_LABEL[tabViewType(t)]}
                 </span>
                 <span className="flex-1 truncate">{t.title}</span>
-                <button
-                  type="button"
-                  title="关闭"
-                  aria-label={`关闭 ${t.title}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    closeTab(t.id)
-                  }}
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+                <TabCloseButton
+                  title={t.title}
+                  onClose={() => closeTab(t.id)}
+                  className="opacity-100"
+                />
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

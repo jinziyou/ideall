@@ -9,6 +9,10 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
+import {
+  computeSiblingSortKey,
+  type InsertPos,
+} from "@/files/notes-tree-util"
 import { planBookmarksSeed } from "@/files/migrate/nodes-migrate"
 import {
   idbBulkDelete,
@@ -308,6 +312,66 @@ export async function deleteBookmark(id: string): Promise<void> {
   await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
     current && current.kind === "bookmark"
       ? { ...current, deletedAt: now, updatedAt: now }
+      : undefined,
+  )
+  notifyFilesUpdated()
+}
+
+export type { InsertPos as BookmarkInsertPos }
+
+type BookmarkTreeItem = { id: string; parentId: string | null; sortKey: string; title: string }
+
+async function liveBookmarkTreeItems(): Promise<BookmarkTreeItem[]> {
+  const bookmarks = (await allBookmarkNodes()).filter(isLive)
+  const folders = (await allFolderNodes()).filter(isLive)
+  return [
+    ...bookmarks.map((n) => ({
+      id: n.id,
+      parentId: n.parentId,
+      sortKey: n.sortKey,
+      title: n.title,
+    })),
+    ...folders.map((n) => ({
+      id: n.id,
+      parentId: n.parentId,
+      sortKey: n.sortKey,
+      title: n.title,
+    })),
+  ]
+}
+
+/** 书签移入收藏夹 / 同级重排 (收藏夹仅作父, 不可嵌套)。 */
+export async function moveBookmark(
+  id: string,
+  newParentId: string | null,
+  pos?: InsertPos,
+): Promise<void> {
+  await seedBookmarksOnce()
+  if (newParentId !== null) {
+    const folder = await idbGet<FolderNode>(STORE_NODES, newParentId)
+    if (!folder || folder.kind !== "folder" || !isLive(folder))
+      throw new Error("目标收藏夹不存在")
+  }
+  const live = await liveBookmarkTreeItems()
+  if (!live.some((n) => n.id === id)) return
+  const sortKey = computeSiblingSortKey(live, newParentId, pos, id)
+  await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
+    current && current.kind === "bookmark"
+      ? { ...current, parentId: newParentId, sortKey, updatedAt: Date.now() }
+      : undefined,
+  )
+  notifyFilesUpdated()
+}
+
+/** 收藏夹同级重排 (parentId 恒为 null)。 */
+export async function moveFolder(id: string, pos?: InsertPos): Promise<void> {
+  await seedBookmarksOnce()
+  const live = await liveBookmarkTreeItems()
+  if (!live.some((n) => n.id === id)) return
+  const sortKey = computeSiblingSortKey(live, null, pos, id)
+  await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
+    current && current.kind === "folder"
+      ? { ...current, parentId: null, sortKey, updatedAt: Date.now() }
       : undefined,
   )
   notifyFilesUpdated()

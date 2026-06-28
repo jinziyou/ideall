@@ -17,7 +17,7 @@ function getServerSnapshot(): string | null {
  * 本机系统状态面板内容: 跨端同步状态 / 本地存储用量 / 发布身份, 以及双身份说明。
  * 可独立嵌入任意容器 (如右上角设置齿轮)；LocalDeviceChip 把它包进 Popover。
  */
-export function LocalDeviceStatus() {
+export function LocalDeviceStatus({ inPopover = false }: { inPopover?: boolean }) {
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, getServerSnapshot)
   const session = React.useSyncExternalStore(subscribeSession, getSession, () => null)
   const synced = Boolean(code)
@@ -87,15 +87,24 @@ export function LocalDeviceStatus() {
           {session ? `已登录 · ${session.user.name || session.user.email}` : "未登录"}
         </span>
       </div>
-      {/* 点击导航后主动关闭浮层 (Radix Popover 不会因内部点击自动收起) */}
-      <PopoverClose asChild>
+      {/* Popover 内点击链接需 PopoverClose 收起浮层; 设置标签页内用普通 Link。 */}
+      {inPopover ? (
+        <PopoverClose asChild>
+          <Link
+            href="/home/subscriptions"
+            className="mt-2.5 inline-block text-xs font-medium text-foreground hover:underline"
+          >
+            管理跨端同步 →
+          </Link>
+        </PopoverClose>
+      ) : (
         <Link
           href="/home/subscriptions"
           className="mt-2.5 inline-block text-xs font-medium text-foreground hover:underline"
         >
           管理跨端同步 →
         </Link>
-      </PopoverClose>
+      )}
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
         登录账号只用于社区发布，与本机数据无关。
       </p>
@@ -126,7 +135,7 @@ export default function LocalDeviceChip({ compact = false }: { compact?: boolean
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
-        <LocalDeviceStatus />
+        <LocalDeviceStatus inPopover />
       </PopoverContent>
     </Popover>
   )

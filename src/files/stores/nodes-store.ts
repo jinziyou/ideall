@@ -22,6 +22,8 @@ import {
   addFolder,
   renameFolder,
   deleteFolder,
+  moveBookmark,
+  moveFolder,
 } from "@/files/stores/bookmarks-store"
 import { seedFilesOnce, updateFileMeta, deleteFile, getFile } from "@/files/stores/files-store"
 import {
@@ -246,7 +248,9 @@ export async function moveNode(
   if (kind === "note") {
     await moveNote(id, parentId, afterSortKey === undefined ? undefined : { afterSortKey })
   } else if (kind === "bookmark") {
-    await updateBookmark(id, { folderId: parentId })
+    await moveBookmark(id, parentId, afterSortKey === undefined ? undefined : { afterSortKey })
+  } else if (kind === "folder") {
+    await moveFolder(id, afterSortKey === undefined ? undefined : { afterSortKey })
   }
   return getNodeRaw(id)
 }

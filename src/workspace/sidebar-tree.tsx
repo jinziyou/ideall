@@ -15,7 +15,6 @@ import type { NodeKind } from "@protocol/node"
 import type { Subscription } from "@protocol/subscription"
 import { onFilesUpdated } from "@protocol/flowback"
 import {
-  iconForNodeKind,
   staticTreeRoots,
   subscriptionsTreeRoots,
   infoTreeRoots,
@@ -23,9 +22,6 @@ import {
   browserTreeRoots,
   type SidebarTreeNode,
 } from "./sidebar-tree-data"
-import { getBookmark } from "@/files/stores/bookmarks-store"
-import { browserNavigate, browserShow, isTauri } from "@/lib/tauri"
-import { safeHref } from "@/lib/safe-url"
 import { requestEmbedRoute } from "@/plugins/embed/embed-nav"
 import {
   openTab,
@@ -49,6 +45,8 @@ import {
 import { moduleById } from "./modules"
 import type { ModuleId } from "./types"
 import { subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
+import { DraggableNodeForest } from "./draggable-node-forest"
+import { NodeTreeBranch } from "./sidebar-tree-node-branch"
 
 const NotesSidebarTree = React.lazy(
   () => import("@/modules/home/notes/notes-sidebar-tree"),
@@ -78,6 +76,10 @@ function entityEmbedRoute(sub: Subscription): string | null {
   const name = sub.entityName ?? sub.title
   if (!label || !name) return null
   return `/info/entity?label=${encodeURIComponent(label)}&name=${encodeURIComponent(name)}`
+}
+
+function isBookmarkTreeSection(childKinds?: NodeKind[]): boolean {
+  return Boolean(childKinds?.includes("bookmark") || childKinds?.includes("folder"))
 }
 
 function peerEmbedRoute(sub: Subscription): string {
@@ -249,19 +251,6 @@ export default function SidebarTree() {
       </nav>
     </div>
   )
-}
-
-async function openBookmarkInBrowser(id: string) {
-  const bm = await getBookmark(id)
-  if (!bm) return
-  const href = safeHref(bm.url)
-  if (!href) return
-  if (!isTauri()) {
-    window.open(href, "_blank", "noopener,noreferrer")
-    return
-  }
-  await browserNavigate(href)
-  await browserShow()
 }
 
 function TreeRow({
@@ -451,18 +440,33 @@ function TreeRow({
         </p>
       )}
 
-      {forest.map(({ item, children }) => (
-        <NodeTreeBranch
-          key={item.id}
-          item={item}
-          children={children}
+      {isBookmarkTreeSection(node.childKinds) ? (
+        <DraggableNodeForest
+          forest={forest}
+          flatItems={nodeCache.get(node.id) ?? []}
+          sectionId={node.id}
+          childKinds={node.childKinds ?? []}
           depth={depth + 1}
           expanded={expanded}
           activeId={activeId}
           activeModule={activeModule}
           onToggle={onToggle}
+          onLoadNodes={onLoadNodes}
         />
-      ))}
+      ) : (
+        forest.map(({ item, children }) => (
+          <NodeTreeBranch
+            key={item.id}
+            item={item}
+            children={children}
+            depth={depth + 1}
+            expanded={expanded}
+            activeId={activeId}
+            activeModule={activeModule}
+            onToggle={onToggle}
+          />
+        ))
+      )}
     </div>
   )
 }
@@ -512,100 +516,6 @@ function SubscriptionRow({
         <Rss className="h-3.5 w-3.5 shrink-0" />
       )}
       <span className="min-w-0 flex-1 truncate text-left">{sub.title || sub.key}</span>
-    </div>
-  )
-}
-
-function NodeTreeBranch({
-  item,
-  children,
-  depth,
-  expanded,
-  activeId,
-  activeModule,
-  onToggle,
-}: {
-  item: NodeSummary
-  children: Tree<NodeSummary>[]
-  depth: number
-  expanded: Set<string>
-  activeId: string | null
-  activeModule: ModuleId
-  onToggle: (id: string) => void
-}) {
-  const id = `node:${item.kind}:${item.id}`
-  const isOpen = expanded.has(id)
-  const Icon = iconForNodeKind(item.kind)
-  const active = isNodeActive(activeId, item.kind, item.id)
-  const hasKids = children.length > 0
-  const inBrowser = activeModule === "browser"
-
-  const handleNodeClick = () => {
-    if (inBrowser && item.kind === "bookmark") {
-      void openBookmarkInBrowser(item.id)
-      return
-    }
-    if (inBrowser && item.kind === "folder") {
-      if (hasKids) onToggle(id)
-      return
-    }
-    openNodeTab({ kind: item.kind, id: item.id }, item.title || "无标题")
-  }
-
-  return (
-    <div>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={handleNodeClick}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault()
-            handleNodeClick()
-          }
-        }}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
-        aria-current={active ? "page" : undefined}
-        aria-expanded={hasKids ? isOpen : undefined}
-        className={cn(
-          "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm transition-colors",
-          active
-            ? "bg-primary/10 font-medium text-primary"
-            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-        )}
-      >
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            if (hasKids) onToggle(id)
-          }}
-          className={cn(
-            "grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground transition-transform hover:bg-accent",
-            !hasKids && "invisible",
-            isOpen && "rotate-90",
-          )}
-          aria-label={isOpen ? "折叠" : "展开"}
-          aria-expanded={hasKids ? isOpen : undefined}
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-        <Icon className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-left">{item.title || "无标题"}</span>
-      </div>
-      {isOpen &&
-        children.map((child) => (
-          <NodeTreeBranch
-            key={child.item.id}
-            item={child.item}
-            children={child.children}
-            depth={depth + 1}
-            expanded={expanded}
-            activeId={activeId}
-            activeModule={activeModule}
-            onToggle={onToggle}
-          />
-        ))}
     </div>
   )
 }

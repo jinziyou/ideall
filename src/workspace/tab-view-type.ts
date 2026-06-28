@@ -14,6 +14,7 @@ export const TAB_VIEW_LABEL: Record<TabViewType, string> = {
 
 const CONFIG_KINDS = new Set([
   "ai-settings",
+  "home-settings",
   "ai-mcp",
   "ai-skills",
   "ai-rules",

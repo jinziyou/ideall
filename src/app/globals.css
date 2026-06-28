@@ -184,4 +184,16 @@
   .tab-when-narrow-hidden {
     display: none;
   }
+  /* 极窄标签仍保留关闭: 叠在右侧, 扩大可点区域 */
+  .tab-close-narrow-overlay {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    margin: 0;
+    width: 2.25rem;
+    min-width: 2.25rem;
+    border-radius: 0;
+  }
 }
