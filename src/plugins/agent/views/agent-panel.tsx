@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { Bot, Loader2, Send, Settings, Sparkles, SquarePen, Trash2, Wrench, X } from "lucide-react"
+import { Loader2, Plus, Send, Settings, Sparkles, Trash2, Wrench, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getActiveNodeRef } from "@/lib/active-node"
 import { Button } from "@/ui/button"
@@ -13,7 +13,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
-import { ServiceHeader } from "@/shared/service-header"
 import { BUILTIN_SKILLS, type AgentSkill } from "../lib/agent-skills"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import type { ResolvedRun } from "../lib/agent-resolve"
@@ -32,40 +31,31 @@ import { streamChat } from "../lib/agent-chat"
 import { runAgent } from "../lib/agent-run"
 import ChatMessage from "./chat-message"
 import AgentSettingsDialog from "./agent-settings-dialog"
+import { Chip, ComposerShell } from "./ui-kit"
 
-// 发给模型的历史上限 (控制 token; 系统提示另算)
 const HISTORY_LIMIT = 20
-
-const SUGGESTIONS = [
-  "根据我关注的来源，最近值得关注什么？",
-  "帮我把书签按主题归归类，给个方案",
-  "我都收藏了哪些资源？帮我概括一下",
-]
 
 export type { ResolvedRun }
 
+export interface AgentPanelHandle {
+  newChat: () => void
+}
+
 export interface AgentPanelProps {
   compact?: boolean
-  /** 工作区注入: 决定模型 / 系统提示 / 能力 (精确模式在此覆盖)。缺省 = 右栏默认行为 (全局设置 + 默认拼装)。 */
   resolveRun?: (useAgent: boolean) => Promise<ResolvedRun | null>
-  /** 配置态 (false → 显示未配置 banner / 拦截发送)。缺省取全局 isConfigured。 */
   configured?: boolean
-  /** 模型名 (状态栏展示)。缺省取全局 settings.model。 */
   modelLabel?: string
-  /** 技能列表 (工作区可筛选)。缺省 = 全部内置技能。 */
   skills?: AgentSkill[]
-  /** 设置入口点击 (工作区改为打开模型组面板)。缺省打开内置全局设置 Dialog。 */
   onOpenSettings?: () => void
-  /** 限定可见线程到这组 id (任务标签: 只显示本工作空间的任务; 始终含当前激活线程防新建即隐)。缺省 = 全部线程。 */
   scopeIds?: string[]
-  /** 新建线程后回调 (任务标签据此把线程登记为本工作空间的任务)。 */
   onThreadCreated?: (id: string) => void
-  /** 侧栏「新建」与空态文案 (任务标签改「新任务 / 还没有任务」)。 */
   newLabel?: string
   emptyLabel?: string
 }
 
-export default function AgentPanel({
+const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function AgentPanel(
+  {
   compact = false,
   resolveRun,
   configured: configuredProp,
@@ -76,13 +66,16 @@ export default function AgentPanel({
   onThreadCreated,
   newLabel = "新对话",
   emptyLabel = "还没有对话",
-}: AgentPanelProps = {}) {
+}: AgentPanelProps = {},
+  ref,
+) {
   const settings = React.useSyncExternalStore(
     subscribeAgentSettings,
     getAgentSettings,
     getAgentSettings,
   )
   const configured = configuredProp ?? isConfigured(settings)
+  const showHeader = !compact && scopeIds === undefined
 
   const [threads, setThreads] = React.useState<AgentThread[]>([])
   const [activeId, setActiveId] = React.useState<string | null>(null)
@@ -91,16 +84,13 @@ export default function AgentPanel({
   const [sending, setSending] = React.useState(false)
   const [streamingId, setStreamingId] = React.useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
-  // 智能体模式: 开启后模型可调用工具读写 home 数据 (非流式); 默认关 (普通流式对话)
   const [agentMode, setAgentMode] = React.useState(false)
-  // 工具审批 (approvalPolicy==="confirm"): 待确认的工具调用 (resolve 由「允许/拒绝」按钮触发)。
   const [pendingApproval, setPendingApproval] = React.useState<{
     name: string
     argsText: string
     resolve: (v: boolean) => void
   } | null>(null)
 
-  // 工具审批回调: 弹确认条, 等用户「允许/拒绝」后 resolve (runAgent 在此期间挂起)。
   const approveTool = React.useCallback(
     (name: string, argsText: string) =>
       new Promise<boolean>((resolve) => setPendingApproval({ name, argsText, resolve })),
@@ -110,10 +100,7 @@ export default function AgentPanel({
   const abortRef = React.useRef<AbortController | null>(null)
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null)
-  // 同步的发送中标志, 防止 sending 状态异步生效前的重入 (连按 Enter 创建孤儿线程)
   const sendingRef = React.useRef(false)
-  // 输入法 (IME) 组合中标志: Tauri 的 WebKitGTK webview 下 keydown 的 isComposing 不可靠 (组合中常为 false),
-  // 仅凭它会让中文选词/确认候选的 Enter 被误判为发送、打断组合 → 改用 compositionstart/end 维护此 ref 兜底。
   const composingRef = React.useRef(false)
 
   function openSettings() {
@@ -129,7 +116,6 @@ export default function AgentPanel({
     }
   }, [])
 
-  // 首次加载: 列出线程并打开最近一条
   React.useEffect(() => {
     let alive = true
     ;(async () => {
@@ -150,20 +136,19 @@ export default function AgentPanel({
     }
   }, [])
 
-  // 新消息时滚到底部
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
   }, [messages])
 
   function newChat() {
-    // 用同步 sendingRef (与 removeThread 一致): send() 进入后立即置位、setSending 要等 await 后才生效,
-    // 用异步 state sending 守卫会留出窗口让本函数在发送途中切走线程, 使消息落入错误线程。
     if (sendingRef.current) return
     setActiveId(null)
     setMessages([])
     setInput("")
     inputRef.current?.focus()
   }
+
+  React.useImperativeHandle(ref, () => ({ newChat }), [])
 
   async function selectThread(id: string) {
     if (sendingRef.current || id === activeId) return
@@ -193,7 +178,6 @@ export default function AgentPanel({
   }
 
   function stop() {
-    // 若正卡在工具审批, 视作拒绝并放行 runAgent 继续 (随后 abort 守卫收尾)。
     setPendingApproval((p) => {
       p?.resolve(false)
       return null
@@ -202,8 +186,6 @@ export default function AgentPanel({
   }
 
   async function send(override?: string, opts?: { agentMode?: boolean }) {
-    // override: 技能等非输入框来源的预置文本; 缺省仍取输入框。useAgent: 技能可临时强制智能体模式
-    // (绕开 setAgentMode 异步 state 同 tick 读不到的问题)。
     const text = (override ?? input).trim()
     if (!text || sendingRef.current) return
     const useAgent = opts?.agentMode ?? agentMode
@@ -214,12 +196,11 @@ export default function AgentPanel({
     }
     sendingRef.current = true
 
-    if (override === undefined) setInput("") // 技能触发不清空用户已输入的草稿
+    if (override === undefined) setInput("")
     const userMsg = makeMessage("user", text)
     const convo = [...messages, userMsg]
     setMessages(convo)
 
-    // 确保线程存在并落库 (含本条用户消息)
     let thread: AgentThread
     let createdNew = false
     try {
@@ -238,7 +219,6 @@ export default function AgentPanel({
       }
       await saveThread(thread)
       setActiveId(thread.id)
-      // 任务标签: 把新建线程登记为本工作空间任务 (须在 refreshThreads 前, 让 scope 立刻纳入)。
       if (createdNew) onThreadCreated?.(thread.id)
       refreshThreads()
     } catch (e) {
@@ -247,8 +227,6 @@ export default function AgentPanel({
       return
     }
 
-    // 解析本次运行: 工作区经 resolveRun 注入 (模型 + 系统提示 + 能力收窄, 含精确模式覆盖);
-    // 右栏默认行为 = 全局设置 + 默认拼装 (可选 home 上下文 + 是否开放工具)。
     let runCfg: ResolvedRun
     try {
       if (resolveRun) {
@@ -265,7 +243,6 @@ export default function AgentPanel({
         let system = ""
         try {
           const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""
-          // 对话即文件 (§6.5): 注入用户当前正在看的 note 正文 / thread 会话 (随 home 上下文开关)。
           const referenced = cfg.includeHomeContext ? await gatherReferencedContext() : ""
           system = buildSystemPrompt(ctx, { tools: useAgent, referenced })
         } catch {
@@ -284,7 +261,6 @@ export default function AgentPanel({
       ...convo.slice(-HISTORY_LIMIT).map((m) => ({ role: m.role, content: m.content })),
     ]
 
-    // 助手占位消息
     const asst = makeMessage("assistant", "")
     setMessages((prev) => [...prev, asst])
     setStreamingId(asst.id)
@@ -296,7 +272,6 @@ export default function AgentPanel({
     let toolEvents: AgentToolEvent[] = []
     try {
       if (useAgent) {
-        // 智能体: 工具调用循环 (非流式), 工具事件实时回填到该助手消息
         const res = await runAgent({
           baseURL: runCfg.baseURL,
           model: runCfg.model,
@@ -304,7 +279,6 @@ export default function AgentPanel({
           messages: apiMessages,
           signal: controller.signal,
           mcp: runCfg.mcp,
-          // 审批策略 confirm → 每个工具执行前弹确认 (auto 直接放行)。
           onApprove: settings.approvalPolicy === "confirm" ? approveTool : undefined,
           onToolEvent: (ev) => {
             toolEvents = [...toolEvents, ev]
@@ -314,7 +288,6 @@ export default function AgentPanel({
         acc = res.content
         toolEvents = res.toolEvents
       } else {
-        // 普通对话: 流式
         await streamChat({
           baseURL: runCfg.baseURL,
           model: runCfg.model,
@@ -328,14 +301,12 @@ export default function AgentPanel({
         })
       }
     } catch (e) {
-      // 智能体中止会抛 AbortError —— 视为「停止」, 保留已生成内容, 不报错。
       if (!(e instanceof DOMException && e.name === "AbortError") && !controller.signal.aborted) {
         const msg = e instanceof Error ? e.message : String(e)
         toast.error(useAgent ? "智能体出错" : "对话出错", { description: msg })
         if (!acc) acc = `（请求出错：${msg}）`
       }
     } finally {
-      // 智能体若没产出文本 (纯工具轮 / 中途停止), 用工具结果合成一句, 避免空助手消息
       if (useAgent && !acc.trim()) {
         acc = toolEvents.length
           ? `已执行 ${toolEvents.length} 个操作：${toolEvents.map((t) => t.summary).join("；")}`
@@ -349,7 +320,6 @@ export default function AgentPanel({
       abortRef.current = null
     }
 
-    // 落库最终对话
     try {
       const finalAsst: AgentMessage = {
         ...asst,
@@ -366,14 +336,12 @@ export default function AgentPanel({
   }
 
   function onComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // 组合中 (拼音选词 / 确认候选) 的 Enter 不应发送; isComposing 在 WebKitGTK 不可靠, 叠加 composingRef 兜底。
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !composingRef.current) {
       e.preventDefault()
       send()
     }
   }
 
-  // 技能 = 一条预置提示, 点选即执行 (而非只预填)。needsActiveNode 类先校验当前节点 + 数据上下文开关。
   function runSkill(skill: AgentSkill) {
     if (sendingRef.current) return
     if (!configured) {
@@ -386,7 +354,6 @@ export default function AgentPanel({
         toast.error("请先打开一篇笔记或一段对话，技能才能读到当前内容")
         return
       }
-      // 右栏默认行为下校验「带上我的数据」开关; 工作区由 resolveRun 自管数据注入, 此处不拦。
       if (!resolveRun && !getAgentSettings().includeHomeContext) {
         toast.error("请在设置中开启「带上我的数据」，技能才能读到当前内容")
         return
@@ -395,28 +362,29 @@ export default function AgentPanel({
     void send(skill.prompt, { agentMode: skill.agentMode })
   }
 
-  // 任务标签: 只显示本工作空间的线程 (始终含当前激活线程, 防新建即被 scope 过滤掉)。
   const shownThreads = scopeIds
     ? threads.filter((t) => scopeIds.includes(t.id) || t.id === activeId)
     : threads
 
+  const statusLabel = configured
+    ? modelLabel ?? settings.model
+    : "未配置模型"
+
   return (
-    <div className="flex h-full flex-col gap-4 md:flex-row">
-      {/* 会话侧栏 (紧凑模式隐藏, 新对话改在标题栏) */}
+    <div className={cn("flex h-full min-h-0", !compact && "md:gap-6")}>
       {!compact && (
-        <aside className="md:w-52 md:shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            className="mb-2 w-full justify-start gap-2"
+        <aside className="flex w-48 shrink-0 flex-col md:w-52">
+          <button
+            type="button"
             onClick={newChat}
+            className="mb-3 inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-accent"
           >
-            <SquarePen className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
             {newLabel}
-          </Button>
-          <div className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+          </button>
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
             {shownThreads.length === 0 && (
-              <p className="px-2 py-1 text-xs text-muted-foreground">{emptyLabel}</p>
+              <p className="px-2 py-6 text-center text-[13px] text-muted-foreground">{emptyLabel}</p>
             )}
             {shownThreads.map((t) => {
               const active = t.id === activeId
@@ -424,24 +392,26 @@ export default function AgentPanel({
                 <div
                   key={t.id}
                   className={cn(
-                    "group flex shrink-0 items-center gap-1 rounded-md pl-3 pr-1 text-sm transition-colors md:shrink",
-                    active ? "bg-accent font-medium" : "hover:bg-accent/60",
+                    "group flex items-center gap-0.5 rounded-lg px-2 transition-colors",
+                    active ? "bg-accent/70" : "hover:bg-accent/40",
                   )}
                 >
                   <button
-                    className="flex-1 truncate py-2 text-left"
+                    type="button"
+                    className="min-w-0 flex-1 truncate py-2 text-left text-sm"
                     title={t.title}
                     onClick={() => selectThread(t.id)}
                   >
                     {t.title}
                   </button>
                   <button
-                    className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-                    title="删除对话"
+                    type="button"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                    title="删除"
                     onClick={() => removeThread(t.id)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    <span className="sr-only">删除对话</span>
+                    <span className="sr-only">删除</span>
                   </button>
                 </div>
               )
@@ -450,45 +420,25 @@ export default function AgentPanel({
         </aside>
       )}
 
-      {/* 对话区 */}
-      <section className="mx-auto flex h-full w-full min-w-0 max-w-4xl flex-1 flex-col">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <ServiceHeader
-              icon={Bot}
-              title="AI 助手"
-              status={
-                configured
-                  ? { label: `就绪 · ${modelLabel ?? settings.model}`, tone: "ok" }
-                  : { label: "未配置模型", tone: "warn" }
-              }
-            />
-            <p className="mt-1 truncate text-xs text-muted-foreground">懂「我的」，对话只存本机</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {compact && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5"
-                onClick={newChat}
-                title="新对话"
-              >
-                <SquarePen className="h-4 w-4" />
-                <span className="sr-only">新对话</span>
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {showHeader && (
+          <header className="mb-6 flex shrink-0 items-center justify-between gap-3 px-1">
+            <div className="min-w-0">
+              <h1 className="text-[15px] font-semibold leading-tight">AI 助手</h1>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Chip tone={configured ? "ok" : "warn"}>{statusLabel}</Chip>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={openSettings} title="设置">
+                <Settings className="h-4 w-4" />
+                <span className="sr-only">设置</span>
               </Button>
-            )}
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={openSettings}>
-              <Settings className="h-4 w-4" />
-              设置
-            </Button>
-          </div>
-        </div>
+            </div>
+          </header>
+        )}
 
-        {!configured && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-l-2 border-l-pop bg-muted/40 px-4 py-3 text-sm">
-            <span>填入你的 API Key 开始使用，密钥只存本机。</span>
-            <Button size="sm" onClick={openSettings}>
+        {!compact && !configured && (
+          <div className="mb-6 flex justify-end">
+            <Button size="sm" variant="outline" onClick={openSettings}>
               去设置
             </Button>
           </div>
@@ -496,49 +446,30 @@ export default function AgentPanel({
 
         <div
           ref={scrollRef}
-          // aria-live=polite + aria-busy: 流式中 (streamingId 非空) busy=true 抑制逐 token 播报,
-          // 收尾 busy 转 false 时读屏一次性播报终态 —— 避免每 token 打断/重排队的过度播报。
           aria-live="polite"
           aria-busy={streamingId !== null}
-          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-lg border bg-background/40 p-4"
+          className="min-h-0 flex-1 overflow-y-auto"
         >
-          {messages.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Bot className="h-6 w-6" />
-              </div>
-              <div className="space-y-1">
-                <p className="font-medium">问问关于「我的」的事</p>
-                <p className="text-sm text-muted-foreground">结合本机的关注、书签、资源作答</p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={() => {
-                      setInput(s)
-                      inputRef.current?.focus()
-                    }}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            messages.map((m) => (
-              <ChatMessage key={m.id} message={m} streaming={m.id === streamingId} />
-            ))
-          )}
+          <div
+            className={cn(
+              "mx-auto flex w-full flex-col",
+              compact ? "gap-5 px-4 py-6" : "max-w-2xl gap-6 py-2",
+            )}
+          >
+            {messages.length === 0 ? null : (
+              messages.map((m) => (
+                <ChatMessage key={m.id} message={m} streaming={m.id === streamingId} compact={compact} />
+              ))
+            )}
+          </div>
         </div>
 
-        {/* 工具审批条 (confirm 策略): 执行前征询, 挂起 runAgent 直到「允许/拒绝」。 */}
         {pendingApproval && (
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-l-2 border-l-pop bg-muted/40 px-4 py-3 text-sm">
-            <span className="min-w-0">
+          <div className={cn("shrink-0", compact ? "px-4 pb-3" : "mt-4")}>
+            <ComposerShell className="flex items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 text-[13px]">
               <span className="font-medium">请求执行工具</span>
-              <span className="ml-1 font-mono text-[13px] text-muted-foreground">
+              <span className="ml-1 font-mono text-muted-foreground">
                 {pendingApproval.name}
                 {pendingApproval.argsText ? `(${pendingApproval.argsText})` : ""}
               </span>
@@ -568,101 +499,122 @@ export default function AgentPanel({
                 允许
               </Button>
             </span>
+            </ComposerShell>
           </div>
         )}
 
-        {/* 输入区 */}
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setAgentMode((v) => !v)}
-              disabled={sending}
-              title="开启后助手可读写「我的」的数据"
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50",
-                agentMode
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent",
-              )}
-            >
-              <Wrench className="h-3.5 w-3.5" />
-              智能体模式
-            </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  disabled={sending}
-                  title="一键技能：用预置提示 + 当前上下文跑助手"
-                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  技能
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-60">
-                {skills.length === 0 && (
-                  <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-                    本工作区未启用技能
-                  </DropdownMenuItem>
+        <div
+          className={cn(
+            "shrink-0 space-y-3",
+            compact ? "border-t bg-card px-4 py-4" : "mx-auto mt-6 w-full max-w-2xl",
+          )}
+        >
+          {compact && !configured && (
+            <div className="flex justify-end">
+              <Button size="sm" variant="ghost" onClick={openSettings}>
+                去配置
+              </Button>
+            </div>
+          )}
+          <ComposerShell className={cn("space-y-3", compact && "border-0 bg-transparent p-0")}>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAgentMode((v) => !v)}
+                disabled={sending}
+                title="开启后助手可读写「我的」的数据"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors disabled:opacity-50",
+                  agentMode
+                    ? "border-primary/30 bg-primary/5 text-primary"
+                    : "text-muted-foreground hover:bg-accent",
                 )}
-                {skills.map((s) => (
-                  <DropdownMenuItem
-                    key={s.id}
-                    onSelect={() => runSkill(s)}
-                    className="flex flex-col items-start gap-0.5"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                智能体
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={sending}
+                    title="一键技能"
+                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
                   >
-                    <span className="text-sm">{s.label}</span>
-                    <span className="text-xs text-muted-foreground">{s.hint}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {agentMode && (
-              <span className="text-xs text-muted-foreground">助手可读写你的关注、书签、资源</span>
-            )}
-          </div>
-          <div className="flex items-end gap-2">
-            <Textarea
-              ref={inputRef}
-              rows={2}
-              value={input}
-              placeholder={
-                agentMode
-                  ? "让助手整理本机的关注、书签、资源…（Enter 发送）"
-                  : "输入消息，Enter 发送，Shift+Enter 换行"
-              }
-              className="max-h-40 min-h-[2.75rem] resize-none"
-              onChange={(e) => setInput(e.target.value)}
-              onCompositionStart={() => {
-                composingRef.current = true
-              }}
-              onCompositionEnd={() => {
-                composingRef.current = false
-              }}
-              onKeyDown={onComposerKeyDown}
-            />
-            {sending ? (
-              <Button variant="outline" className="gap-1.5" onClick={stop}>
-                <X className="h-4 w-4" />
-                停止
-              </Button>
-            ) : (
-              <Button className="gap-1.5" onClick={() => send()} disabled={!input.trim()}>
-                {streamingId ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                发送
-              </Button>
-            )}
-          </div>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    技能
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-60">
+                  {skills.length === 0 && (
+                    <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                      本工作区未启用技能
+                    </DropdownMenuItem>
+                  )}
+                  {skills.map((s) => (
+                    <DropdownMenuItem
+                      key={s.id}
+                      onSelect={() => runSkill(s)}
+                      className="flex flex-col items-start gap-0.5"
+                    >
+                      <span className="text-sm">{s.label}</span>
+                      <span className="text-xs text-muted-foreground">{s.hint}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <div className="flex items-end gap-2 rounded-lg border bg-background px-3 py-2">
+              <Textarea
+                ref={inputRef}
+                rows={compact ? 3 : 2}
+                value={input}
+                placeholder={
+                  !configured && compact
+                    ? "配置 API Key 后即可对话…"
+                    : agentMode
+                      ? "让助手整理本机的关注、书签、资源…"
+                      : "输入消息，Enter 发送，Shift+Enter 换行"
+                }
+                className="min-h-[2.75rem] max-h-40 flex-1 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                onChange={(e) => setInput(e.target.value)}
+                onCompositionStart={() => {
+                  composingRef.current = true
+                }}
+                onCompositionEnd={() => {
+                  composingRef.current = false
+                }}
+                onKeyDown={onComposerKeyDown}
+              />
+              {sending ? (
+                <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={stop} title="停止">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">停止</span>
+                </Button>
+              ) : (
+                <Button
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => send()}
+                  disabled={!input.trim()}
+                  title="发送"
+                >
+                  {streamingId ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">发送</span>
+                </Button>
+              )}
+            </div>
+          </ComposerShell>
         </div>
       </section>
 
       <AgentSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   )
-}
+})
+
+export default AgentPanel

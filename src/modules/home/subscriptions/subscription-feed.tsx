@@ -142,7 +142,6 @@ export default function SubscriptionFeed({
         bordered={false}
         icon={Rss}
         title="还没有关注"
-        description="去「发现」关注，内容会汇入这里。"
         action={
           <>
             <Button asChild size="sm">

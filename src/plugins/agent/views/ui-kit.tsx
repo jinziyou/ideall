@@ -115,14 +115,12 @@ export function Toggle({
 export function AiPage({
   title,
   icon: Icon,
-  description,
   action,
   width = "3xl",
   children,
 }: {
   title: string
   icon?: LucideIcon
-  description?: string
   action?: React.ReactNode
   width?: "2xl" | "3xl"
   children: React.ReactNode
@@ -133,9 +131,6 @@ export function AiPage({
         {Icon && <Icon className="h-[1.1rem] w-[1.1rem] shrink-0 text-muted-foreground" />}
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[15px] font-semibold leading-tight">{title}</h1>
-          {description && (
-            <p className="truncate text-[13px] text-muted-foreground">{description}</p>
-          )}
         </div>
         {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
       </header>
@@ -153,13 +148,11 @@ export function AiPage({
 /** 区段卡片 (rounded-xl border bg-card; 标题/描述 + 内容)。 */
 export function Panel({
   title,
-  description,
   action,
   children,
   className,
 }: {
   title?: string
-  description?: string
   action?: React.ReactNode
   children?: React.ReactNode
   className?: string
@@ -170,11 +163,6 @@ export function Panel({
         <header className="flex items-start justify-between gap-4 px-5 pt-5">
           <div className="min-w-0">
             {title && <h2 className="text-base font-semibold leading-tight">{title}</h2>}
-            {description && (
-              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                {description}
-              </p>
-            )}
           </div>
           {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
         </header>
@@ -187,12 +175,10 @@ export function Panel({
 /** 设置行: 左标签/描述, 右控件 (label-left / control-right)。配合 Panel + divide-y。 */
 export function SettingRow({
   label,
-  description,
   children,
   htmlFor,
 }: {
   label: string
-  description?: string
   children: React.ReactNode
   htmlFor?: string
 }) {
@@ -202,9 +188,6 @@ export function SettingRow({
         <label htmlFor={htmlFor} className="block text-sm font-medium">
           {label}
         </label>
-        {description && (
-          <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
-        )}
       </div>
       <div className="flex shrink-0 items-center gap-2">{children}</div>
     </div>
@@ -284,32 +267,56 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
   )
 }
 
-/** 空态: 居中, 柔底图标 + 标题 + 一句说明 + 单一主操作。 */
+/** 对话输入壳: 圆角面板 + 内边距, 贴底 composer 复用。 */
+export function ComposerShell({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("rounded-xl border bg-card p-3 shadow-none", className)}>{children}</div>
+  )
+}
+
+/** 内容区浮动面板 (主工作区 / 侧栏内卡片)。 */
+export function SurfacePanel({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card", className)}>
+      {children}
+    </div>
+  )
+}
+
+/** 空态: 居中, 柔底图标 + 标题 + 一句说明 + 单一主操作。compact 用于窄侧栏。 */
 export function EmptyState({
   icon: Icon,
   title,
-  description,
   action,
+  compact = false,
 }: {
   icon: LucideIcon
   title: string
-  description?: string
   action?: React.ReactNode
+  compact?: boolean
 }) {
   return (
-    <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
-      <span className="grid size-16 place-items-center rounded-full bg-muted/50">
-        <Icon className="size-7 text-muted-foreground" />
-      </span>
-      <div className="space-y-1">
-        <p className="text-sm font-medium">{title}</p>
-        {description && (
-          <p className="mx-auto max-w-xs text-[13px] leading-relaxed text-muted-foreground">
-            {description}
-          </p>
-        )}
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center text-center",
+        compact ? "min-h-0 flex-1 gap-4 px-2 py-8" : "min-h-[320px] gap-3",
+      )}
+    >
+      {!compact && (
+        <span className="grid size-16 place-items-center rounded-full bg-muted/50">
+          <Icon className="size-7 text-muted-foreground" />
+        </span>
+      )}
+      <div>
+        <p className={cn("font-medium", compact ? "text-[13px]" : "text-sm")}>{title}</p>
       </div>
-      {action && <div className="mt-1">{action}</div>}
+      {action && <div className={compact ? "w-full" : "mt-1"}>{action}</div>}
     </div>
   )
 }

@@ -6,14 +6,13 @@ import { cn } from "@/lib/utils"
 import { useMode, setMode } from "./store"
 import type { WsMode } from "./types"
 
-const MODES: { id: WsMode; label: string; hint: string; dot: string }[] = [
+const MODES: { id: WsMode; label: string; dot: string }[] = [
   {
     id: "local",
     label: "本地",
-    hint: "我的 · 关注 · 应用 · 工具 —— 本机数据 + 常用工具",
     dot: "bg-primary",
   },
-  { id: "connected", label: "连接", hint: "资讯 · 社区 —— 联网发现", dot: "bg-spoke-community" },
+  { id: "connected", label: "连接", dot: "bg-spoke-community" },
 ]
 
 export default function ModeSwitch() {
@@ -33,7 +32,6 @@ export default function ModeSwitch() {
             type="button"
             role="tab"
             aria-selected={active}
-            title={m.hint}
             onClick={() => setMode(m.id)}
             className={cn(
               "flex items-center gap-1.5 rounded-shell px-2.5 py-1 text-sm font-medium transition-colors",

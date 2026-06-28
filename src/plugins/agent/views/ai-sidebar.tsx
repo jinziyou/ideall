@@ -51,7 +51,7 @@ export default function AiSidebar({
   const ui = getUiActions()
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4">
       <SectionLink
         icon={Plug}
         label="MCP"
@@ -75,12 +75,10 @@ export default function AiSidebar({
       />
 
       {/* 工作空间分组 */}
-      <div className="mt-3">
-        <div className="flex items-center gap-2 px-2 pb-1">
+      <div className="mt-6">
+        <div className="flex items-center gap-2 px-1 pb-2">
           <Boxes className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            工作空间
-          </span>
+          <span className="flex-1 text-xs font-medium text-muted-foreground">工作空间</span>
           <button
             type="button"
             title="新建工作空间"
@@ -128,10 +126,10 @@ function SectionLink({
       onClick={onOpen}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-shell px-2.5 py-2 text-sm transition-colors",
+        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors",
         active
-          ? "bg-primary/10 font-medium text-primary"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+          ? "bg-accent font-medium text-foreground"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
       )}
     >
       <Icon className="h-4 w-4 shrink-0" />
@@ -167,8 +165,8 @@ function WorkspaceRow({
     <div>
       <div
         className={cn(
-          "group flex items-center gap-1 rounded-shell pr-1 transition-colors",
-          active ? "bg-primary/10 text-primary" : "hover:bg-accent/60",
+          "group flex items-center gap-1 rounded-lg pr-1 transition-colors",
+          active ? "bg-accent text-foreground" : "hover:bg-accent/50",
         )}
       >
         <button

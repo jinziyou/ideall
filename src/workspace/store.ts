@@ -9,7 +9,7 @@ import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { HOME_OVERVIEW } from "./home-sections"
-import { moduleById } from "./modules"
+import { moduleById, isModeNeutralModule } from "./modules"
 import { isTauri, browserHide } from "@/lib/tauri"
 
 const STORAGE_KEY = "ideall:workspace:v1"
@@ -19,7 +19,7 @@ const MODE_OF: Record<ModuleId, WsMode> = {
   home: "local",
   subscriptions: "local",
   apps: "local",
-  tool: "local",
+  tool: "connected",
   info: "connected",
   community: "connected",
   browser: "connected",
@@ -148,8 +148,8 @@ export function hydrateWorkspace() {
     // 激活标签: marker 先跑设置的当前路由优先, 否则历史; 且必须确实存在于 merged。
     const wantId = state.activeId ?? saved.activeId
     const activeTab = wantId ? (merged.find((x) => x.id === wantId) ?? null) : null
-    // AI 区段 (module:"agent") mode-中性: 不由其 module 反推 mode, 沿用持久化的镜头
-    // (与 openAgentTab/setActiveTab 一致; 否则「local 下开 AI 再刷新」会被静默翻成 connected)。
+    // mode-中性模块 (agent / 跨模式 tool): 不由 module 反推 mode, 沿用持久化镜头。
+    const modeNeutralActive = activeTab != null && isModeNeutralModule(activeTab.module)
     const aiActive = activeTab?.module === "agent"
     state = {
       ...state,
@@ -165,7 +165,7 @@ export function hydrateWorkspace() {
           : state.activeId
             ? state.activeModule
             : saved.activeModule,
-      mode: aiActive
+      mode: modeNeutralActive
         ? saved.mode
         : activeTab
           ? MODE_OF[activeTab.module]
@@ -200,8 +200,8 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user") {
     tabs,
     activeId: id,
     activeModule: d.module,
-    // AI 区段 (module:"agent") mode-中性: 跨 local/connected 常驻, 打开不翻 mode。
-    mode: d.module === "agent" ? state.mode : MODE_OF[d.module],
+    // mode-中性模块 (agent / 跨模式 tool): 打开不翻 mode。
+    mode: isModeNeutralModule(d.module) ? state.mode : MODE_OF[d.module],
     activeSource: source,
   })
 }
@@ -286,15 +286,11 @@ export function closeTab(id: string) {
     const next = tabs[idx] ?? tabs[idx - 1] ?? null
     activeId = next ? next.id : null
     // 焦点转移到相邻标签时, 同步活动模块与模式镜头 (否则活动栏/侧栏/状态栏会停在旧模块)。
-    // AI 区段 (module:"agent") mode-中性: 焦点落到它时设 activeModule=agent 但保留关闭前的 mode 镜头。
+    // mode-中性模块: 焦点落到它时保留关闭前的 mode 镜头。
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next.kind)
-      if (next.module === "agent") {
-        activeModule = "agent"
-      } else {
-        activeModule = next.module
-        mode = MODE_OF[next.module]
-      }
+      activeModule = next.module
+      if (!isModeNeutralModule(next.module)) mode = MODE_OF[next.module]
     }
   }
   setState({ tabs, activeId, activeModule, mode, activeSource: "user" })
@@ -319,8 +315,8 @@ export function closeOtherTabs(keepId: string) {
   setState({
     tabs: [keep],
     activeId: keepId,
-    activeModule: keep.module === "agent" ? "agent" : keep.module,
-    mode: keep.module === "agent" ? state.mode : MODE_OF[keep.module],
+    activeModule: keep.module,
+    mode: isModeNeutralModule(keep.module) ? state.mode : MODE_OF[keep.module],
     activeSource: "user",
   })
 }
@@ -329,9 +325,9 @@ export function setActiveTab(id: string) {
   const t = state.tabs.find((x) => x.id === id)
   if (!t) return
   hideBrowserWebviewUnlessBrowserTab(t.kind)
-  // AI 区段 (module:"agent") mode-中性: 激活它设 activeModule=agent 但不改 mode (否则点 AI 标签会翻 connected)。
-  if (t.module === "agent") {
-    setState({ activeId: id, activeModule: "agent", activeSource: "user" })
+  // mode-中性模块: 激活时不改 mode (否则点工具/AI 标签会翻镜头)。
+  if (isModeNeutralModule(t.module)) {
+    setState({ activeId: id, activeModule: t.module, activeSource: "user" })
     return
   }
   // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
@@ -340,7 +336,11 @@ export function setActiveTab(id: string) {
 
 /** 选中模块 (展开其二级侧栏)。 */
 export function setActiveModule(m: ModuleId) {
-  setState({ activeModule: m, mode: MODE_OF[m], sidebarCollapsed: false })
+  setState({
+    activeModule: m,
+    mode: isModeNeutralModule(m) ? state.mode : MODE_OF[m],
+    sidebarCollapsed: false,
+  })
 }
 
 /** 点活动栏图标: 同模块且侧栏展开 → 收起; 否则切到该模块并展开, 同时开首个面板标签。
@@ -353,7 +353,11 @@ export function toggleModule(m: ModuleId) {
   const mod = moduleById(m)
   const first = mod.entries[0]
   if (!first) {
-    setState({ activeModule: m, mode: MODE_OF[m], sidebarCollapsed: false })
+    setState({
+      activeModule: m,
+      mode: isModeNeutralModule(m) ? state.mode : MODE_OF[m],
+      sidebarCollapsed: false,
+    })
     return
   }
   const id = tabKey(first.descriptor)
@@ -364,7 +368,7 @@ export function toggleModule(m: ModuleId) {
     tabs,
     activeId: id,
     activeModule: m,
-    mode: MODE_OF[m],
+    mode: isModeNeutralModule(m) ? state.mode : MODE_OF[m],
     sidebarCollapsed: false,
     activeSource: "user",
   })

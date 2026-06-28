@@ -56,7 +56,6 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
         <EmptyState
           icon={Boxes}
           title="工作空间不存在"
-          description="它可能已被删除。可关闭此标签。"
         />
       </div>
     )
@@ -122,7 +121,7 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
 
       <div className="min-h-0 flex-1">
         {view === "tasks" ? (
-          <div className="h-full p-4">
+          <div className="h-full px-6 py-5">
             <AgentPanel
               resolveRun={resolveRun}
               configured={configured}

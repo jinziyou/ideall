@@ -75,7 +75,6 @@ export default function AiRules() {
     <AiPage
       title="规则"
       icon={ScrollText}
-      description="被动约束。全局规则恒生效；工作空间规则被工作空间引用时生效。"
       action={
         <AddButton
           label="新建规则"
@@ -91,7 +90,7 @@ export default function AiRules() {
         <Panel title="工作空间规则">{renderList(workspaceRules)}</Panel>
 
         {selected && (
-          <Panel title="编辑规则" description="改动即时保存。">
+          <Panel title="编辑规则">
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="rule-name">名称</Label>

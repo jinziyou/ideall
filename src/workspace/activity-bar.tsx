@@ -1,10 +1,10 @@
 "use client"
 
-// 活动栏 (IDE 式标签工作区侧栏的图标轨): 按当前模式渲染模块图标。
+// 活动栏 (IDE 式标签工作区侧栏的图标轨): 按当前模式渲染模块图标 (+ crossMode 跨模式模块)。
 // logo / 模式切换 / 设置 / 账户 已上移到顶边栏 (top-bar)。
 // 点图标 = 切到该模块并展开二级侧栏 (再点同模块收起)；不直接开标签 (由侧栏条目开)。
+// 「工具」: 本地/连接活动栏均展示, 打开不翻 mode (与 AI 区段同类)。
 // 「AI」钮: 仅本地(local)模式, 放在「我的」(home) 紧下方; 连接(connected)模式不展示。
-// 点击 = 打开全局 AI 设置标签 + 展开 AI 二级侧栏 (MCP / Skills / 规则 / 工作空间); AI 跨模式常驻、不翻 mode。
 
 import { Fragment } from "react"
 import { Bot } from "lucide-react"

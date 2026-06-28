@@ -16,6 +16,7 @@ import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manif
 import { BUILTIN_SKILLS } from "../lib/agent-skills"
 import { getRules, getServerRules, subscribeRules } from "../lib/agent-rules"
 import { PROVIDER_PRESETS } from "../lib/agent-settings"
+import { Panel } from "./ui-kit"
 import {
   saveWorkspace,
   type AgentWorkspace,
@@ -23,7 +24,6 @@ import {
   type WorkspaceData,
 } from "../lib/agent-workspace"
 
-// 能力位 → 友好标签 (顺序 = AGENT_PERMISSIONS; 只列 agent 默认集, 不含私密读位)。
 const CAPABILITY_OPTIONS: { perm: Permission; label: string; hint: string }[] = [
   { perm: "fs:read", label: "读取「我的」", hint: "列出关注 / 书签 / 资源 / 笔记标题" },
   { perm: "fs:write", label: "修改「我的」", hint: "增改书签 / 收藏夹 / 关注" },
@@ -51,21 +51,15 @@ const DATA_KINDS: { key: keyof WorkspaceData["home"]; label: string }[] = [
 
 function Section({
   title,
-  hint,
   children,
 }: {
   title: string
-  hint?: string
   children: React.ReactNode
 }) {
   return (
-    <section className="space-y-2.5 border-b pb-4">
-      <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-      </div>
-      {children}
-    </section>
+    <Panel title={title}>
+      <div className="space-y-3">{children}</div>
+    </Panel>
   )
 }
 
@@ -73,12 +67,10 @@ function Row({
   checked,
   onChange,
   label,
-  hint,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
   label: string
-  hint?: string
 }) {
   return (
     <label className="flex cursor-pointer items-start gap-2 text-sm">
@@ -89,7 +81,6 @@ function Row({
       />
       <span className="min-w-0">
         <span>{label}</span>
-        {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
       </span>
     </label>
   )
@@ -135,14 +126,14 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-2xl space-y-6 px-6 py-6">
         {/* —— 数据 —— */}
-        <Section title="数据" hint="把「我的」与本地目录作为上下文（默认全部）">
+        <Section title="数据">
           <Row
             checked={ws.data.includeHome}
             onChange={(v) => patchData({ includeHome: v })}
             label="带上「我的」概览"
-            hint="仅标题 / 元数据，正文需 @ 引用单条授权"
           />
           {ws.data.includeHome && (
             <div className="ml-6 grid grid-cols-2 gap-x-3 gap-y-1.5">
@@ -184,7 +175,7 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
         </Section>
 
         {/* —— 能力 —— */}
-        <Section title="能力" hint="MCP 工具 / 技能 / 应用（默认全部）">
+        <Section title="能力">
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-muted-foreground">工具（智能体模式下可调用）</p>
             {CAPABILITY_OPTIONS.map((c) => (
@@ -199,7 +190,6 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                   })
                 }
                 label={c.label}
-                hint={c.hint}
               />
             ))}
           </div>
@@ -213,7 +203,6 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                   patchCaps({ skillIds: toggleNullable(skillIds, SKILL_IDS, s.id, v) })
                 }
                 label={s.label}
-                hint={s.hint}
               />
             ))}
           </div>
@@ -227,22 +216,16 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                 label={a.name}
               />
             ))}
-            <p className="text-xs text-muted-foreground">
-              应用与外部 MCP 接入随后开放；当前先记录选择。
-            </p>
           </div>
         </Section>
 
         {/* —— 规则 —— */}
-        <Section
-          title="规则"
-          hint="勾选本工作空间启用的规则；全局规则恒生效（在左侧「规则」区段管理）。"
-        >
+        <Section title="规则">
           <WorkspaceRulesPicker ws={ws} />
         </Section>
 
         {/* —— 提示词 —— */}
-        <Section title="提示词 / 指令" hint="高优先的工作区指令（拼接模板见「精确模式」）">
+        <Section title="提示词 / 指令">
           <Textarea
             rows={3}
             placeholder="例如：你是我的科研助理，围绕本工作目录的资料作答…"
@@ -252,7 +235,7 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
         </Section>
 
         {/* —— 模型 —— */}
-        <Section title="模型" hint="默认沿用全局设置，可按工作区覆盖">
+        <Section title="模型">
           <Select
             value={ws.model.useGlobal ? GLOBAL_MODEL : (presetLabel(ws) ?? CUSTOM_PRESET)}
             onValueChange={(v) => {
@@ -312,6 +295,7 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
             </div>
           )}
         </Section>
+        </div>
       </div>
     </div>
   )

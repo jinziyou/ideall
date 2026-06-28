@@ -75,7 +75,6 @@ export default function ToolAiPage() {
   return (
     <QuickJump
       title="AI"
-      description="输入问题，一键跳转到各大 AI 站点。不支持带词的会自动复制，打开后粘贴。"
       placeholder="输入要提问的内容…"
       providers={assistants}
     />

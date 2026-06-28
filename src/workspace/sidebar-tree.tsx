@@ -36,25 +36,21 @@ import {
   getTabs,
 } from "./store"
 import { parseNodeParams } from "./node-tab"
-import SidebarWebSearch from "./sidebar-web-search"
 import {
   getWorkspacesState,
   getServerWorkspacesState,
   subscribeWorkspaces,
 } from "@/plugins/agent/lib/agent-workspace"
-import { moduleById } from "./modules"
-import type { ModuleId } from "./types"
 import { subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
 import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
+import type { ModuleId } from "./types"
 
 const NotesSidebarTree = React.lazy(
   () => import("@/modules/home/notes/notes-sidebar-tree"),
 )
 
 const EXPANDED_KEY = "ideall:sidebar-tree:expanded"
-
-const SIDEBAR_DATA_MODULES = new Set<ModuleId>(["browser", "info", "community"])
 
 function rootsForModule(moduleId: ModuleId): SidebarTreeNode[] {
   if (moduleId === "browser") return browserTreeRoots()
@@ -108,7 +104,6 @@ export default function SidebarTree() {
   const activeId = useActiveId()
   const activeKind = useActiveTabKind()
   const activeWorkspaceId = useActiveWorkspaceId()
-  const mod = moduleById(activeModule)
 
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
   const [nodeCache, setNodeCache] = React.useState<Map<string, NodeSummary[]>>(new Map())
@@ -223,12 +218,6 @@ export default function SidebarTree() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
-      {activeModule === "tool" && <SidebarWebSearch />}
-      {mod.sidebarHint && !SIDEBAR_DATA_MODULES.has(activeModule) && (
-        <p className="px-2 pb-2 pt-1 text-xs leading-relaxed text-muted-foreground">
-          {mod.sidebarHint}
-        </p>
-      )}
       <nav className="flex flex-col gap-0.5">
         {roots.map((node) => (
           <TreeRow

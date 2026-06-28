@@ -75,9 +75,6 @@ export default function ToolNavigationPage() {
                       {site.name}
                       <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
                     </span>
-                    {site.desc ? (
-                      <span className="truncate text-xs text-muted-foreground">{site.desc}</span>
-                    ) : null}
                   </a>
                   <PinToolButton
                     name={site.name}

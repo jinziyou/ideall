@@ -1,8 +1,8 @@
 // 工作区模块配置 (桌面工作区壳的单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 两种模式 (模式切换):
-//   本地(local): 我的(home) · 关注(subscriptions) · 应用(apps) · 工具(tool) —— 本机数据 + 常用工具
-//   连接(connected): 资讯(info) · 社区(community) —— 嵌入 SPA 插件 (wonita/portal iframe, 客户端路由)
-//                    浏览器(browser) —— 外部网页资源 (内嵌 webview, 仅桌面 App)
+//   本地(local): 我的(home) · 关注(subscriptions) · 应用(apps) —— 本机数据
+//   连接(connected): 资讯(info) · 社区(community) · 浏览器(browser) —— 发现 spoke + 内嵌 webview
+//   工具(tool): 跨模式常驻 (本地/连接活动栏均展示; 打开不翻 mode, 与 AI 区段同类)
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏的「本地搜索」搜本机内容, 两者职责分离。
 //
 // 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
@@ -21,7 +21,6 @@ export type SidebarEntry = {
   label: string
   icon: ComponentType<{ className?: string }>
   descriptor: TabDescriptor
-  hint?: string
 }
 
 export type ModuleConfig = {
@@ -32,7 +31,8 @@ export type ModuleConfig = {
   /** spoke 分类色 (text-*), 仅用于图标着色, 不大面积 fill。 */
   colorClass?: string
   sidebarTitle: string
-  sidebarHint?: string
+  /** 跨模式常驻: 本地/连接活动栏均展示, 打开时不翻 mode (见 store isModeNeutralModule)。 */
+  crossMode?: boolean
   entries: SidebarEntry[]
 }
 
@@ -78,7 +78,6 @@ export const MODULES: ModuleConfig[] = [
     label: "我的",
     icon: Hexagon,
     sidebarTitle: "我的",
-    sidebarHint: "本地优先的「我的」，笔记 / 书签 / 资源只存本机。",
     entries: homeEntries,
   },
   {
@@ -90,7 +89,6 @@ export const MODULES: ModuleConfig[] = [
     icon: MODULE_META.subscriptions.icon,
     colorClass: MODULE_META.subscriptions.tintClass,
     sidebarTitle: "关注",
-    sidebarHint: "关注的发布者 / 实体 / 搜索 / 社区发布者，内容汇入「我的」。",
     entries: [
       {
         label: "关注流",
@@ -111,7 +109,6 @@ export const MODULES: ModuleConfig[] = [
     icon: MODULE_META.apps.icon,
     colorClass: MODULE_META.apps.tintClass,
     sidebarTitle: "应用",
-    sidebarHint: "识别并启动本机已安装的应用 (.desktop / 开始菜单 / Applications)。",
     entries: [
       {
         label: "全部应用",
@@ -120,18 +117,48 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
+  // —— 连接 ——
+  {
+    id: "info",
+    mode: "connected",
+    label: MODULE_META.info.label,
+    icon: MODULE_META.info.icon,
+    colorClass: MODULE_META.info.tintClass,
+    sidebarTitle: "资讯",
+    entries: [
+      {
+        label: "资讯主页",
+        icon: MODULE_META.info.icon,
+        descriptor: { kind: "info", module: "info", title: "资讯", path: "/info" },
+      },
+    ],
+  },
+  {
+    id: "community",
+    mode: "connected",
+    label: MODULE_META.community.label,
+    icon: MODULE_META.community.icon,
+    colorClass: MODULE_META.community.tintClass,
+    sidebarTitle: "社区",
+    entries: [
+      {
+        label: "社区主页",
+        icon: MODULE_META.community.icon,
+        descriptor: { kind: "community", module: "community", title: "社区", path: "/community" },
+      },
+    ],
+  },
   {
     id: "tool",
-    mode: "local",
+    mode: "connected",
+    crossMode: true,
     label: MODULE_META.tool.label,
     icon: MODULE_META.tool.icon,
     colorClass: MODULE_META.tool.tintClass,
     sidebarTitle: "工具",
-    sidebarHint: "搜索 / AI / 导航，钉住的工具汇入「我的」。",
     entries: [
       {
-        // 聚合搜索 (选引擎输词跳转外部搜索引擎); 侧栏顶部还有内联搜索框 (SidebarWebSearch)。
-        // 与顶栏「本地搜索」职责分离: 前者跳外部引擎, 后者搜本机内容。
+        // 聚合搜索 (选引擎输词跳转外部搜索引擎); 与顶栏「本地搜索」职责分离: 前者跳外部引擎, 后者搜本机内容。
         label: "搜索",
         icon: Search,
         descriptor: { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" },
@@ -153,41 +180,6 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
-  // —— 连接 ——
-  {
-    id: "info",
-    mode: "connected",
-    label: MODULE_META.info.label,
-    icon: MODULE_META.info.icon,
-    colorClass: MODULE_META.info.tintClass,
-    sidebarTitle: "资讯",
-    sidebarHint: "侧栏为已关注的实体；点击条目在资讯应用中打开。",
-    entries: [
-      {
-        label: "资讯主页",
-        icon: MODULE_META.info.icon,
-        descriptor: { kind: "info", module: "info", title: "资讯", path: "/info" },
-        hint: "聚合资讯（嵌入应用）",
-      },
-    ],
-  },
-  {
-    id: "community",
-    mode: "connected",
-    label: MODULE_META.community.label,
-    icon: MODULE_META.community.icon,
-    colorClass: MODULE_META.community.tintClass,
-    sidebarTitle: "社区",
-    sidebarHint: "侧栏为已关注的社区发布者；点击条目查看其发布。",
-    entries: [
-      {
-        label: "社区主页",
-        icon: MODULE_META.community.icon,
-        descriptor: { kind: "community", module: "community", title: "社区", path: "/community" },
-        hint: "社区发布（嵌入应用）",
-      },
-    ],
-  },
   {
     // 浏览器 = 外部资源模块 (内嵌 webview); 插件/宿主 UI 的外链均经此打开 (见 browser-open.ts)。
     id: "browser",
@@ -196,7 +188,6 @@ export const MODULES: ModuleConfig[] = [
     icon: Globe,
     colorClass: "text-spoke-community",
     sidebarTitle: "浏览器",
-    sidebarHint: "侧栏为收藏夹与书签；点击条目在内嵌浏览器中打开（仅桌面 App）。",
     entries: [
       {
         label: "浏览器",
@@ -217,9 +208,15 @@ export function moduleById(id: ModuleId): ModuleConfig {
   return MODULES.find((m) => m.id === id) ?? MODULES[0]
 }
 
-/** 某模式下的模块列表 (活动栏按模式渲染)。 */
+/** 某模式下的模块列表 (活动栏按模式渲染; crossMode 模块两种模式均展示)。 */
 export function modulesForMode(mode: WsMode): ModuleConfig[] {
-  return MODULES.filter((m) => m.mode === mode)
+  return MODULES.filter((m) => m.mode === mode || m.crossMode)
+}
+
+/** 打开/激活时不翻 mode 的模块 (AI 区段 + 跨模式工具)。 */
+export function isModeNeutralModule(id: ModuleId): boolean {
+  if (id === "agent") return true
+  return MODULES.find((m) => m.id === id)?.crossMode === true
 }
 
 const ALL_ENTRIES = MODULES.flatMap((m) => m.entries)

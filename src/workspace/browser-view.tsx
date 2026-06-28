@@ -122,7 +122,7 @@ export default function BrowserView() {
 
   if (!tauri) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-2 bg-muted/25 p-6 text-center text-muted-foreground">
         <Globe className="h-8 w-8 opacity-60" />
         <p className="text-sm">内嵌浏览器仅在桌面 App 可用。</p>
         <p className="text-xs">当前为网页形态；请在桌面 App 里使用。</p>
@@ -131,55 +131,57 @@ export default function BrowserView() {
   }
 
   const iconBtn =
-    "flex h-7 w-7 shrink-0 items-center justify-center rounded-shell text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 
   return (
-    <div className="flex h-full flex-col">
-      {/* 工具条 (可信本地 DOM; 与下方子 webview 区域严格不重叠) */}
-      <div className="flex h-11 shrink-0 items-center gap-1 border-b bg-card px-2">
-        <button
-          type="button"
-          onClick={() => browserBack().catch(() => {})}
-          title="后退"
-          className={iconBtn}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => browserForward().catch(() => {})}
-          title="前进"
-          className={iconBtn}
-        >
-          <ArrowRight className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => browserReload().catch(() => {})}
-          title="刷新"
-          className={iconBtn}
-        >
-          <RotateCw className="h-4 w-4" />
-        </button>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            go()
-          }}
-          className="flex min-w-0 flex-1 items-center"
-        >
-          <input
-            value={addr}
-            onChange={(e) => setAddr(e.target.value)}
-            spellCheck={false}
-            aria-label="网址"
-            placeholder="输入网址，回车打开…"
-            className="h-7 w-full min-w-0 rounded-shell border bg-background px-2.5 text-xs outline-none focus:ring-1 focus:ring-ring"
-          />
-        </form>
+    <div className="flex h-full flex-col bg-muted/25 p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+        {/* 工具条 (可信本地 DOM; 与下方子 webview 区域严格不重叠) */}
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+          <button
+            type="button"
+            onClick={() => browserBack().catch(() => {})}
+            title="后退"
+            className={iconBtn}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => browserForward().catch(() => {})}
+            title="前进"
+            className={iconBtn}
+          >
+            <ArrowRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => browserReload().catch(() => {})}
+            title="刷新"
+            className={iconBtn}
+          >
+            <RotateCw className="h-4 w-4" />
+          </button>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              go()
+            }}
+            className="flex min-w-0 flex-1 items-center"
+          >
+            <input
+              value={addr}
+              onChange={(e) => setAddr(e.target.value)}
+              spellCheck={false}
+              aria-label="网址"
+              placeholder="输入网址，回车打开…"
+              className="h-9 w-full min-w-0 rounded-lg border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </form>
+        </div>
+        {/* 内容占位区: 原生子 webview 覆盖此矩形 */}
+        <div ref={contentRef} className="min-h-0 flex-1 bg-background" />
       </div>
-      {/* 内容占位区: 原生子 webview 覆盖此矩形 */}
-      <div ref={contentRef} className="min-h-0 flex-1 bg-muted/20" />
     </div>
   )
 }

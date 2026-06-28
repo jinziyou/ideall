@@ -1,6 +1,6 @@
 import type { Provider } from "./quick-jump"
 
-// 聚合搜索引擎单一真相源: 工具·搜索标签 与 左侧栏聚合搜索 共用。
+// 聚合搜索引擎单一真相源: 工具·搜索标签共用。
 // 带 queryUrl 的支持「{q}」直接带词跳转 (link-out, 在新标签打开)。
 export const SEARCH_ENGINES: Provider[] = [
   {

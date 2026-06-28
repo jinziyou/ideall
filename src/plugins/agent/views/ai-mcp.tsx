@@ -129,7 +129,6 @@ export default function AiMcp() {
     <AiPage
       title="MCP"
       icon={Plug}
-      description="连接器：外部数据与工具。本地能力 (loopback) 内置。"
       action={
         <>
           <Button variant="outline" size="sm" onClick={() => setSecretsOpen(true)}>
@@ -365,7 +364,7 @@ function ServerDetail({ server, onDelete }: { server: McpServer; onDelete: () =>
 
 function LoopbackDetail() {
   return (
-    <Panel title="本地能力 (loopback)" description="进程内 MCP；工作空间按能力位选用。">
+    <Panel title="本地能力 (loopback)">
       <div className="divide-y">
         {CAPABILITY_OPTIONS.map((c) => (
           <div
@@ -374,7 +373,6 @@ function LoopbackDetail() {
           >
             <div className="min-w-0">
               <p className="text-sm font-medium">{c.label}</p>
-              <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{c.hint}</p>
             </div>
             <Chip>{c.perm}</Chip>
           </div>
@@ -472,7 +470,6 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
   return (
     <Panel
       title={server.name}
-      description="外部连接器配置。运行任务（智能体模式）时即时连接；stdio（本地命令）仅桌面 App。"
       action={
         <>
           <Button variant="outline" size="sm" onClick={test} disabled={probing}>

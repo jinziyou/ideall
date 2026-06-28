@@ -57,9 +57,9 @@ export default function TabHost() {
 
   if (tabs.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 bg-background px-6 text-center text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-muted/25 px-6 text-center text-muted-foreground">
         <p className="text-sm font-medium text-foreground">没有打开的标签</p>
-        <p className="max-w-xs text-xs leading-relaxed">
+        <p className="max-w-xs text-[13px] leading-relaxed">
           从左侧活动栏选择一个模块，再从侧栏打开一个面板。
         </p>
       </div>
@@ -82,7 +82,7 @@ export default function TabHost() {
   if (activeId) alive.add(activeId) // 激活项恒挂
 
   return (
-    <div className="h-full w-full bg-background">
+    <div className="h-full w-full bg-muted/25">
       {tabs.map((t) => {
         // LRU 逐出: 卸载内容 (标签条仍在; 未保存草稿已由写队列在卸载时同步入队落库)。
         if (!alive.has(t.id)) return null

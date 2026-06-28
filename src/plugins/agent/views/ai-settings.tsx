@@ -43,7 +43,6 @@ export default function AiSettings() {
       title="全局 AI 设置"
       icon={SlidersHorizontal}
       width="2xl"
-      description="默认模型与策略 · 密钥只存本机"
       action={
         <Chip tone={isConfigured(settings) ? "ok" : "warn"}>
           {isConfigured(settings) ? "已就绪" : "未配置"}
@@ -52,7 +51,7 @@ export default function AiSettings() {
     >
       <div className="space-y-8">
         {/* 1) 模型 */}
-        <Panel title="模型" description="OpenAI 兼容端点；自带密钥直连，不经服务端代理。">
+        <Panel title="模型">
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="ai-preset">预设</Label>
@@ -108,10 +107,7 @@ export default function AiSettings() {
         {/* 2) 上下文 */}
         <Panel title="上下文">
           <div className="divide-y">
-            <SettingRow
-              label="带上「我的」数据"
-              description="把关注/书签/资源概览作上下文（仅标题，正文需 @ 单条授权）"
-            >
+            <SettingRow label="带上「我的」数据">
               <Toggle
                 checked={settings.includeHomeContext}
                 onChange={(v) => update({ includeHomeContext: v })}
@@ -124,7 +120,7 @@ export default function AiSettings() {
         {/* 3) 工具审批 */}
         <Panel title="工具审批">
           <div className="divide-y">
-            <SettingRow label="工具调用审批" description="智能体读写工具前的默认策略">
+            <SettingRow label="工具调用审批">
               <Select
                 value={settings.approvalPolicy}
                 onValueChange={(v) => update({ approvalPolicy: v as "confirm" | "auto" })}

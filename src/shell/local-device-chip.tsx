@@ -45,10 +45,6 @@ export function LocalDeviceStatus({ inPopover = false }: { inPopover?: boolean }
         <Lock className="h-4 w-4" />
         本机
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        关注、书签等数据只存本机，默认
-        <b className="font-medium text-foreground">不上传服务器</b>。
-      </p>
       <div className="mt-3 flex items-center justify-between rounded-md border bg-muted/40 px-2.5 py-2">
         <span className="text-xs">跨端同步</span>
         <span
@@ -105,9 +101,6 @@ export function LocalDeviceStatus({ inPopover = false }: { inPopover?: boolean }
           管理跨端同步 →
         </Link>
       )}
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        登录账号只用于社区发布，与本机数据无关。
-      </p>
     </div>
   )
 }

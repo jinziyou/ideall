@@ -177,23 +177,3 @@
     scroll-behavior: auto !important;
   }
 }
-
-/* 标签条 named container `tab`: Tailwind @max-[56px]/tab 会生成非法 @container 语法 (PostCSS 报错),
- * 故用原生 container query。窄标签只留色点, 隐藏标题与关闭钮。 */
-@container tab (max-width: 3.5rem) {
-  .tab-when-narrow-hidden {
-    display: none;
-  }
-  /* 极窄标签仍保留关闭: 叠在右侧, 扩大可点区域 */
-  .tab-close-narrow-overlay {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 2;
-    margin: 0;
-    width: 2.25rem;
-    min-width: 2.25rem;
-    border-radius: 0;
-  }
-}

@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils"
 export function EmptyState({
   icon: Icon,
   title,
-  description,
   action,
   bordered = true,
   className,
@@ -16,8 +15,6 @@ export function EmptyState({
   icon?: ComponentType<{ className?: string }>
   /** 主标题 (必填) */
   title: string
-  /** 副说明 (可选) */
-  description?: string
   /** 操作区: 按钮等 (可选) */
   action?: ReactNode
   /** 是否渲染虚线边框容器 (默认 true) */
@@ -33,9 +30,8 @@ export function EmptyState({
       )}
     >
       {Icon ? <Icon className="h-10 w-10 opacity-40" /> : null}
-      <div className="space-y-1">
+      <div>
         <p className="text-sm">{title}</p>
-        {description ? <p className="text-xs text-muted-foreground/80">{description}</p> : null}
       </div>
       {action ? <div className="flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
     </div>

@@ -67,7 +67,7 @@ pub fn launch_installed_app(id: String) -> Result<(), String> {
 pub fn read_app_icon_data_url(path: String) -> Result<Option<String>, String> {
     let pb = PathBuf::from(&path);
     if !is_allowed_icon_path(&pb) {
-        return Err("icon path not allowed".into());
+        return Ok(None);
     }
     if !pb.is_file() {
         return Ok(None);
@@ -86,10 +86,13 @@ fn is_allowed_icon_path(path: &Path) -> bool {
         return false;
     };
     let s = canonical.to_string_lossy();
+    #[cfg(target_os = "linux")]
+    if is_allowed_linux_icon_path(&s, &canonical) {
+        return true;
+    }
     if s.starts_with("/usr/share/icons/")
         || s.starts_with("/usr/share/pixmaps/")
         || s.starts_with("/usr/local/share/icons/")
-        || s.starts_with("/var/lib/flatpak/exports/share/icons/")
         || s.contains("/.local/share/icons/")
     {
         return true;
@@ -112,6 +115,40 @@ fn is_allowed_icon_path(path: &Path) -> bool {
         }
     }
     false
+}
+
+#[cfg(target_os = "linux")]
+fn is_allowed_linux_icon_path(canonical_str: &str, canonical: &Path) -> bool {
+    const PREFIXES: &[&str] = &[
+        "/usr/share/icons/",
+        "/usr/share/pixmaps/",
+        "/usr/local/share/icons/",
+        "/var/lib/flatpak/",
+        "/var/lib/snapd/",
+        "/snap/",
+        "/opt/",
+    ];
+    if PREFIXES.iter().any(|p| canonical_str.starts_with(p)) {
+        return true;
+    }
+    if canonical_str.contains("/.local/share/") {
+        return true;
+    }
+    // Kali 等发行版: /usr/share/kali-menu/icons/… 及同目录 bundled 图标。
+    if canonical_str.starts_with("/usr/share/") && is_icon_image_path(canonical) {
+        return true;
+    }
+    false
+}
+
+fn is_icon_image_path(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .as_deref(),
+        Some("png" | "svg" | "xpm" | "jpg" | "jpeg" | "gif" | "webp" | "ico")
+    )
 }
 
 fn mime_for_icon_path(path: &Path) -> Option<&'static str> {
@@ -158,6 +195,7 @@ fn list_linux_apps() -> Result<Vec<InstalledApp>, String> {
                 .icon
                 .as_deref()
                 .and_then(|icon| resolve_linux_icon(icon, Some(&path)))
+                .filter(|p| is_allowed_icon_path(p))
                 .map(|p| p.to_string_lossy().into_owned());
             by_id.insert(
                 id.clone(),

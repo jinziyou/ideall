@@ -1,9 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Cloud, Copy, Loader2, Lock, RefreshCw } from "lucide-react"
+import { Cloud, Copy, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
-import { Badge } from "@/ui/badge"
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { ServiceHeader } from "@/shared/service-header"
@@ -87,27 +86,6 @@ export default function SyncPanel() {
           code ? { label: "已开启 · 端到端加密", tone: "ok" } : { label: "未开启", tone: "off" }
         }
       />
-      <p className="mt-2 text-xs text-muted-foreground">
-        用同步码在多设备间同步关注与笔记，服务器只存密文。删除会跨端同步（旧删除记录 90
-        天后自动清理）。
-      </p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        <Badge
-          variant="outline"
-          className="gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
-        >
-          <Lock className="h-3 w-3" />
-          关注明文 · 只存本机
-        </Badge>
-        <Badge
-          variant="outline"
-          className="gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
-        >
-          <Cloud className="h-3 w-3" />
-          同步密文 · 经服务器
-        </Badge>
-      </div>
-
       {code ? (
         <div className="mt-3 flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -143,9 +121,6 @@ export default function SyncPanel() {
                   <span className="sr-only">复制同步码</span>
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                在其它设备的「我的 · 关注」里粘贴此码。谁拿到同步码，都能读写你的关注与笔记。
-              </p>
             </>
           )}
         </div>

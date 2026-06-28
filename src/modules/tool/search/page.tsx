@@ -6,7 +6,6 @@ export default function ToolSearchPage() {
   return (
     <QuickJump
       title="搜索"
-      description="输入关键词，一键跳转到各大搜索引擎。"
       placeholder="输入要搜索的关键词…"
       providers={SEARCH_ENGINES}
       historyKey="tool:search:history"

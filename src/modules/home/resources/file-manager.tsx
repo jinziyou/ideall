@@ -342,7 +342,6 @@ export default function FileManager() {
         <div className="text-sm font-medium">
           {uploading ? "正在保存…" : "拖拽文件到此处，或点击选择"}
         </div>
-        <div className="text-xs text-muted-foreground">文件只存本机，不上传服务器</div>
         <input
           ref={inputRef}
           type="file"

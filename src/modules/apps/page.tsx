@@ -3,7 +3,7 @@
 // 本地模式「应用」视图: 列举本机已安装应用, 支持搜索/分类筛选与一键启动。
 
 import * as React from "react"
-import { AppWindow, Loader2, RefreshCw, Search } from "lucide-react"
+import { AppWindow, ChevronDown, RefreshCw, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   appIconSrc,
@@ -16,6 +16,61 @@ import { Input } from "@/ui/input"
 import { Button } from "@/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
 import { EmptyState } from "@/ui/empty-state"
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover"
+
+/** 与 Rust `category_label` 映射一致的标准分类 (展示顺序)。 */
+const STANDARD_CATEGORY_ORDER = [
+  "办公",
+  "开发",
+  "工具",
+  "浏览器",
+  "网络",
+  "系统",
+  "设置",
+  "影音",
+  "音频",
+  "视频",
+  "图形",
+  "游戏",
+  "教育",
+  "科学",
+  "文本",
+] as const
+
+const STANDARD_CATEGORY_SET = new Set<string>(STANDARD_CATEGORY_ORDER)
+
+function appCategories(app: InstalledApp): string[] {
+  return app.categories.length > 0 ? app.categories : ["其他"]
+}
+
+function isStandardCategory(cat: string): boolean {
+  return STANDARD_CATEGORY_SET.has(cat)
+}
+
+/** 分组展示用: 优先标准分类, 否则归入「其他」。 */
+function primaryDisplayCategory(app: InstalledApp): string {
+  const cats = appCategories(app)
+  for (const std of STANDARD_CATEGORY_ORDER) {
+    if (cats.includes(std)) return std
+  }
+  return "其他"
+}
+
+function splitCategories(all: string[]): { standard: string[]; custom: string[] } {
+  const standard: string[] = []
+  const custom: string[] = []
+  for (const cat of all) {
+    if (isStandardCategory(cat)) standard.push(cat)
+    else custom.push(cat)
+  }
+  standard.sort(
+    (a, b) =>
+      STANDARD_CATEGORY_ORDER.indexOf(a as (typeof STANDARD_CATEGORY_ORDER)[number]) -
+      STANDARD_CATEGORY_ORDER.indexOf(b as (typeof STANDARD_CATEGORY_ORDER)[number]),
+  )
+  custom.sort((a, b) => a.localeCompare(b, "zh-CN"))
+  return { standard, custom }
+}
 
 function AppIcon({ app, size = "md" }: { app: InstalledApp; size?: "md" | "lg" }) {
   const [src, setSrc] = React.useState<string | null>(null)
@@ -59,20 +114,27 @@ function AppIcon({ app, size = "md" }: { app: InstalledApp; size?: "md" | "lg" }
   )
 }
 
-function groupByCategory(apps: InstalledApp[]): Map<string, InstalledApp[]> {
+function groupByPrimaryCategory(apps: InstalledApp[]): Map<string, InstalledApp[]> {
   const map = new Map<string, InstalledApp[]>()
   for (const app of apps) {
-    const cats = app.categories.length > 0 ? app.categories : ["其他"]
-    for (const cat of cats) {
-      const list = map.get(cat) ?? []
-      list.push(app)
-      map.set(cat, list)
-    }
+    const cat = primaryDisplayCategory(app)
+    const list = map.get(cat) ?? []
+    list.push(app)
+    map.set(cat, list)
   }
   for (const [, list] of map) {
     list.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
   }
-  return new Map([...map.entries()].sort(([a], [b]) => a.localeCompare(b, "zh-CN")))
+  const order = (key: string) => {
+    const idx = STANDARD_CATEGORY_ORDER.indexOf(key as (typeof STANDARD_CATEGORY_ORDER)[number])
+    return idx >= 0 ? idx : STANDARD_CATEGORY_ORDER.length
+  }
+  return new Map(
+    [...map.entries()].sort(([a], [b]) => {
+      const diff = order(a) - order(b)
+      return diff !== 0 ? diff : a.localeCompare(b, "zh-CN")
+    }),
+  )
 }
 
 function AppsSkeleton() {
@@ -166,19 +228,36 @@ export default function AppsPage() {
     void load()
   }, [load])
 
-  const categories = React.useMemo(() => {
-    const set = new Set<string>()
-    for (const app of apps) {
-      for (const c of app.categories.length > 0 ? app.categories : ["其他"]) set.add(c)
-    }
-    return [...set].sort((a, b) => a.localeCompare(b, "zh-CN"))
-  }, [apps])
+  const { standardCategories, customCategories, customCategoryCounts, hasOtherGroup } =
+    React.useMemo(() => {
+      const set = new Set<string>()
+      const counts = new Map<string, number>()
+      let otherCount = 0
+      for (const app of apps) {
+        for (const c of appCategories(app)) {
+          set.add(c)
+          counts.set(c, (counts.get(c) ?? 0) + 1)
+        }
+        if (primaryDisplayCategory(app) === "其他") otherCount++
+      }
+      const { standard, custom } = splitCategories([...set])
+      return {
+        standardCategories: standard,
+        customCategories: custom.filter((c) => c !== "其他"),
+        customCategoryCounts: counts,
+        hasOtherGroup: otherCount > 0,
+      }
+    }, [apps])
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     return apps.filter((app) => {
-      if (category && !(app.categories.length > 0 ? app.categories : ["其他"]).includes(category)) {
-        return false
+      if (category) {
+        const matches =
+          category === "其他"
+            ? primaryDisplayCategory(app) === "其他"
+            : appCategories(app).includes(category)
+        if (!matches) return false
       }
       if (!q) return true
       const hay = [app.name, app.comment ?? "", app.id, ...app.categories].join(" ").toLowerCase()
@@ -186,7 +265,7 @@ export default function AppsPage() {
     })
   }, [apps, query, category])
 
-  const grouped = React.useMemo(() => groupByCategory(filtered), [filtered])
+  const grouped = React.useMemo(() => groupByPrimaryCategory(filtered), [filtered])
   const showGrouped = !query.trim() && !category
 
   const handleLaunch = async (app: InstalledApp) => {
@@ -207,7 +286,6 @@ export default function AppsPage() {
         <EmptyState
           icon={AppWindow}
           title="本机应用列表仅在桌面 App 中可用"
-          description="请使用 pnpm app:dev 启动 Tauri 桌面客户端。"
           bordered
         />
       </div>
@@ -242,21 +320,15 @@ export default function AppsPage() {
           </Button>
         </div>
 
-        {categories.length > 1 && (
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-border/50 pt-5">
-            <CategoryPill active={category === null} onClick={() => setCategory(null)}>
-              全部
-            </CategoryPill>
-            {categories.map((c) => (
-              <CategoryPill
-                key={c}
-                active={category === c}
-                onClick={() => setCategory(c === category ? null : c)}
-              >
-                {c}
-              </CategoryPill>
-            ))}
-          </div>
+        {(standardCategories.length > 0 || customCategories.length > 0) && (
+          <CategoryBar
+            category={category}
+            onCategoryChange={setCategory}
+            standardCategories={standardCategories}
+            customCategories={customCategories}
+            customCategoryCounts={customCategoryCounts}
+            hasOtherGroup={hasOtherGroup}
+          />
         )}
       </div>
 
@@ -272,11 +344,6 @@ export default function AppsPage() {
         <EmptyState
           icon={AppWindow}
           title={apps.length === 0 ? "未识别到已安装应用" : "没有匹配的应用"}
-          description={
-            apps.length === 0
-              ? "请确认系统已安装桌面应用，或尝试刷新列表。"
-              : "试试调整搜索词或清除分类筛选。"
-          }
           action={
             apps.length === 0 ? (
               <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
@@ -402,5 +469,132 @@ function CategoryPill({
     >
       {children}
     </button>
+  )
+}
+
+function CategoryBar({
+  category,
+  onCategoryChange,
+  standardCategories,
+  customCategories,
+  customCategoryCounts,
+  hasOtherGroup,
+}: {
+  category: string | null
+  onCategoryChange: (cat: string | null) => void
+  standardCategories: string[]
+  customCategories: string[]
+  customCategoryCounts: Map<string, number>
+  hasOtherGroup: boolean
+}) {
+  const [moreOpen, setMoreOpen] = React.useState(false)
+  const [moreQuery, setMoreQuery] = React.useState("")
+  const customActive =
+    category !== null && category !== "其他" && !isStandardCategory(category)
+
+  const filteredCustom = React.useMemo(() => {
+    const q = moreQuery.trim().toLowerCase()
+    if (!q) return customCategories
+    return customCategories.filter((c) => c.toLowerCase().includes(q))
+  }, [customCategories, moreQuery])
+
+  const pickCategory = (cat: string | null) => {
+    onCategoryChange(cat)
+    setMoreOpen(false)
+    setMoreQuery("")
+  }
+
+  return (
+    <div className="mt-5 space-y-3 border-t border-border/50 pt-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <CategoryPill active={category === null} onClick={() => pickCategory(null)}>
+          全部
+        </CategoryPill>
+        {standardCategories.map((c) => (
+          <CategoryPill
+            key={c}
+            active={category === c}
+            onClick={() => pickCategory(category === c ? null : c)}
+          >
+            {c}
+          </CategoryPill>
+        ))}
+        {hasOtherGroup && (
+          <CategoryPill
+            active={category === "其他"}
+            onClick={() => pickCategory(category === "其他" ? null : "其他")}
+          >
+            其他
+          </CategoryPill>
+        )}
+        {customCategories.length > 0 && (
+          <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  customActive
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {customActive ? category : `更多分类 (${customCategories.length})`}
+                <ChevronDown className="h-3 w-3 opacity-70" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80 p-0">
+              <div className="border-b border-border/60 p-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={moreQuery}
+                    onChange={(e) => setMoreQuery(e.target.value)}
+                    placeholder="搜索扩展分类…"
+                    className="h-8 border-border/60 bg-background pl-8 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="max-h-64 overflow-y-auto p-2">
+                {filteredCustom.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-xs text-muted-foreground">无匹配分类</p>
+                ) : (
+                  filteredCustom.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => pickCategory(c)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                        category === c
+                          ? "bg-primary/10 font-medium text-primary"
+                          : "text-foreground hover:bg-muted/60",
+                      )}
+                    >
+                      <span className="min-w-0 truncate">{c}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {customCategoryCounts.get(c) ?? 0}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
+      {customActive && (
+        <p className="text-xs text-muted-foreground">
+          已选扩展分类：<span className="font-medium text-foreground">{category}</span>
+          <button
+            type="button"
+            className="ml-2 text-primary hover:underline"
+            onClick={() => pickCategory(null)}
+          >
+            清除
+          </button>
+        </p>
+      )}
+    </div>
   )
 }

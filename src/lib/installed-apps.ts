@@ -32,8 +32,13 @@ const iconCache = new Map<string, string | null>()
 export async function appIconSrc(iconPath: string | null | undefined): Promise<string | null> {
   if (!iconPath || !isTauri()) return null
   if (iconCache.has(iconPath)) return iconCache.get(iconPath) ?? null
-  const { invoke } = await import("@tauri-apps/api/core")
-  const url = await invoke<string | null>("read_app_icon_data_url", { path: iconPath })
-  iconCache.set(iconPath, url)
-  return url
+  try {
+    const { invoke } = await import("@tauri-apps/api/core")
+    const url = await invoke<string | null>("read_app_icon_data_url", { path: iconPath })
+    iconCache.set(iconPath, url)
+    return url
+  } catch {
+    iconCache.set(iconPath, null)
+    return null
+  }
 }

@@ -76,7 +76,6 @@ export type Provider = {
 
 type QuickJumpProps = {
   title: string
-  description: string
   placeholder: string
   providers: Provider[]
   /** 提供则启用「最近搜索」历史, 用作 localStorage 存储键 (数据仅留在本机浏览器) */
@@ -85,7 +84,6 @@ type QuickJumpProps = {
 
 export default function QuickJump({
   title,
-  description,
   placeholder,
   providers,
   historyKey,
@@ -178,10 +176,7 @@ export default function QuickJump({
 
   return (
     <div className="flex max-w-6xl flex-col gap-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
 
       <form onSubmit={onSubmit} className="flex w-full max-w-2xl items-center gap-2">
         <div className="relative flex-1">
@@ -266,11 +261,6 @@ export default function QuickJump({
                   <span className="truncate">{provider.name}</span>
                   <ExternalLink className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
                 </span>
-                {provider.hint ? (
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {provider.hint}
-                  </span>
-                ) : null}
               </span>
             </button>
             <PinToolButton

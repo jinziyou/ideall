@@ -148,7 +148,6 @@ export default function Overview() {
       <div className="rounded-lg border bg-card p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <h2 className="text-sm font-semibold">最近</h2>
-          <span className="text-xs text-muted-foreground">· 实时更新 · 都存在本机</span>
         </div>
         {!data ? (
           <div className="flex flex-col gap-3">
@@ -158,11 +157,7 @@ export default function Overview() {
           </div>
         ) : data.flow.length > 0 ? (
           <RecentFlowback items={data.flow} />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            还没有动态。从「关注 / 收藏 / 笔记」开始，内容都会汇入这里。
-          </p>
-        )}
+        ) : null}
       </div>
     </div>
   )

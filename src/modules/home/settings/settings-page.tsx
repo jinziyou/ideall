@@ -14,7 +14,6 @@ export default function SettingsPage() {
           <Settings className="h-6 w-6 text-muted-foreground" />
           设置
         </h1>
-        <p className="text-sm text-muted-foreground">外观、本机数据与已连接应用。</p>
       </div>
 
       <section className="rounded-lg border bg-card p-4">

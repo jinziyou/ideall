@@ -43,7 +43,6 @@ export default function AiSkills() {
     <AiPage
       title="Skills"
       icon={Sparkles}
-      description="可调用流程：一段预置指令 + 可选「需当前节点 / 智能体模式」。与「规则」分车道（规则=被动约束）。"
       action={
         <AddButton
           label="新建技能"
@@ -58,7 +57,6 @@ export default function AiSkills() {
         <EmptyState
           icon={Sparkles}
           title="还没有技能"
-          description="技能 = 一条可调用流程：预置指令 + 可选「需当前节点 / 智能体模式」。新建一个开始。"
           action={
             <AddButton
               label="新建技能"
@@ -98,7 +96,6 @@ export default function AiSkills() {
           {selected && (
             <Panel
               title={selected.label || "未命名技能"}
-              description="编辑技能的承重字段；改动即时保存（本地优先）。"
               action={
                 !selected.builtin ? (
                   <Button
