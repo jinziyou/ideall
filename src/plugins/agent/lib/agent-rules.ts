@@ -71,11 +71,6 @@ const store = createCollection<AgentRule>("ideall:agent:rules:v1", seed, migrate
 export const subscribeRules = store.subscribe
 export const getRules = store.get
 export const getServerRules = store.getServer
-export const getRule = store.byId
-
-export function listRulesByScope(scope: RuleScope): AgentRule[] {
-  return store.get().filter((r) => r.scope === scope)
-}
 
 /** 解析某工作区生效的规则正文: 全部启用的全局规则 + 被引用且启用的工作空间规则。 */
 export function activeRulesText(ruleIds: string[] | null): string {

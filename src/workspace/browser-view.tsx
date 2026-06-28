@@ -4,6 +4,7 @@
 import * as React from "react"
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react"
 import { toast } from "sonner"
+import { IconButton } from "@/ui/icon-button"
 import {
   isTauri,
   openBrowserView,
@@ -130,38 +131,20 @@ export default function BrowserView() {
     )
   }
 
-  const iconBtn =
-    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-
   return (
     <div className="flex h-full flex-col bg-muted/25 p-4">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
         {/* 工具条 (可信本地 DOM; 与下方子 webview 区域严格不重叠) */}
         <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-          <button
-            type="button"
-            onClick={() => browserBack().catch(() => {})}
-            title="后退"
-            className={iconBtn}
-          >
+          <IconButton onClick={() => browserBack().catch(() => {})} title="后退" aria-label="后退">
             <ArrowLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => browserForward().catch(() => {})}
-            title="前进"
-            className={iconBtn}
-          >
+          </IconButton>
+          <IconButton onClick={() => browserForward().catch(() => {})} title="前进" aria-label="前进">
             <ArrowRight className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => browserReload().catch(() => {})}
-            title="刷新"
-            className={iconBtn}
-          >
+          </IconButton>
+          <IconButton onClick={() => browserReload().catch(() => {})} title="刷新" aria-label="刷新">
             <RotateCw className="h-4 w-4" />
-          </button>
+          </IconButton>
           <form
             onSubmit={(e) => {
               e.preventDefault()

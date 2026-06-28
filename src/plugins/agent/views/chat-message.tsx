@@ -12,7 +12,7 @@ function toolKind(name: string): "write" | "delete" | "read" {
 }
 
 const TOOL_BADGE = {
-  write: { Icon: Lock, label: "已写入本机", cls: "text-emerald-600 dark:text-emerald-400" },
+  write: { Icon: Lock, label: "已写入本机", cls: "text-success" },
   delete: { Icon: Trash2, label: "已从本机删除", cls: "text-destructive" },
   read: { Icon: Eye, label: "仅读取", cls: "text-muted-foreground" },
 } as const

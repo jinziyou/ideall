@@ -34,8 +34,8 @@ import {
   useActiveTabKind,
   useActiveWorkspaceId,
   getTabs,
-} from "./store"
-import { parseNodeParams } from "./node-tab"
+} from "../store"
+import { parseNodeParams } from "../node-tab"
 import {
   getWorkspacesState,
   getServerWorkspacesState,
@@ -44,7 +44,7 @@ import {
 import { subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
 import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
-import type { ModuleId } from "./types"
+import type { ModuleId } from "../types"
 
 const NotesSidebarTree = React.lazy(
   () => import("@/modules/home/notes/notes-sidebar-tree"),
@@ -349,7 +349,7 @@ function TreeRow({
         aria-current={active ? "page" : undefined}
         aria-expanded={node.hasChildren ? isOpen : undefined}
         className={cn(
-          "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm transition-colors",
+          "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           active
             ? "bg-primary/10 font-medium text-primary"
             : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -391,7 +391,7 @@ function TreeRow({
               style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }}
               aria-current={wsActive ? "page" : undefined}
               className={cn(
-                "flex cursor-pointer items-center gap-1.5 rounded-shell py-1.5 pr-1 text-sm transition-colors",
+                "flex cursor-pointer items-center gap-1.5 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 wsActive
                   ? "bg-primary/10 font-medium text-primary"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -447,7 +447,7 @@ function TreeRow({
           <NodeTreeBranch
             key={item.id}
             item={item}
-            children={children}
+            childNodes={children}
             depth={depth + 1}
             expanded={expanded}
             activeId={activeId}
@@ -500,7 +500,7 @@ function SubscriptionRow({
       <span className="h-5 w-5 shrink-0" />
       {sub.favicon ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={sub.favicon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-sm" />
+        <img src={sub.favicon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-[3px]" />
       ) : (
         <Rss className="h-3.5 w-3.5 shrink-0" />
       )}

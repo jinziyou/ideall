@@ -1,4 +1,4 @@
-// 「我的」本地数据契约 —— core 拥有的本地优先实体 (资源 / 书签 / 收藏夹)。
+// 「我的」本地数据契约 —— core 拥有的本地优先实体 (资源 / 书签 / 收藏夹 / 笔记 / 对话)。
 // 这些类型既是 core 存储模型, 又经 FilesPort 暴露给 plugin (如 agent), 故属契约。
 // (关注 Subscription 类型见 ./subscription)。
 import type { Subscription, SubscriptionType, NewSubscription } from "./subscription"

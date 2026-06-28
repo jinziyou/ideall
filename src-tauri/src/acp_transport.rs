@@ -1,9 +1,9 @@
 // ACP (Agent Client Protocol) 外部智能体传输 —— Rust 侧「哑管道」, 仅桌面。
 //
-// 设计 (方案 C, 见 src/plugins/agent/lib/agent-acp.ts 预留接缝): Rust 只做两件与协议无关的事 ——
+// 设计 (方案 C, 见 src/plugins/agent/lib/acp-expose.ts + acp-agent.ts): Rust 只做两件与协议无关的事 ——
 //   1. spawn 一个外部 ACP 智能体子进程 (program/args/cwd 来自用户设置, **绝不**由模型/网页内容控制);
 //   2. 在子进程 stdin/stdout 上做 NDJSON 行框定 (每条 JSON-RPC 消息一行, 按 '\n' 切分)。
-// **绝不解析 JSON-RPC、绝不理解 ACP 语义** —— 协议逻辑全在 webview 侧 (createAcpAgentBridge), 与 agent 内核同处一地;
+// **绝不解析 JSON-RPC、绝不理解 ACP 语义** —— 协议逻辑全在 webview 侧 (acp-agent.ts / acp-expose.ts), 与 agent 内核同处一地;
 // 故 agent 的四道安全闸 (越权=工具不存在 / 信任档 / 私密读 / 出站守卫) 因「未被触碰」而原样保住。
 //
 // 与 embed 的 MessagePortTransport / LoopbackTransport (MCP-over-postMessage, 进程内/iframe) 完全正交, 共存不互扰。

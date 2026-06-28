@@ -34,15 +34,6 @@ export async function resolveFetch(): Promise<typeof fetch> {
   return _appFetch ?? fetch
 }
 
-/**
- * App 形态: 经 tauri-plugin-opener 用系统默认浏览器打开外链 (webview 内 `window.open` 不可靠)。
- * 调用方须先自行做协议白名单校验 (见 `@/lib/safe-url` 的 `safeHref`)。
- */
-export async function openExternalUrl(href: string): Promise<void> {
-  const mod = await import("@tauri-apps/plugin-opener")
-  await mod.openUrl(href)
-}
-
 /** agent 出站守卫取数结果 (Rust `agent_guarded_fetch` 命令的返回; 见 src-tauri/src/lib.rs)。 */
 export interface AgentGuardedResponse {
   status: number

@@ -20,9 +20,9 @@ import {
   PROVIDER_PRESETS,
   setAgentSettings,
 } from "../lib/agent-settings"
-import { AcpSettings, getAcpSettings, setAcpSettings } from "../lib/acp-settings"
-import { disableAcpServer, enableAcpServer, runExposeSelfTest } from "../lib/acp-expose"
-import { detectAgents, type DetectedAgent } from "../lib/acp-detect"
+import { AcpSettings, getAcpSettings, setAcpSettings } from "../lib/acp/acp-settings"
+import { disableAcpServer, enableAcpServer, runExposeSelfTest } from "../lib/acp/acp-expose"
+import { detectAgents, type DetectedAgent } from "../lib/acp/acp-detect"
 import { isTauri } from "@/lib/tauri"
 
 const CUSTOM = "__custom__"

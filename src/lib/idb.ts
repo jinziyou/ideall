@@ -127,16 +127,6 @@ export async function idbGetAll<T>(storeName: string): Promise<T[]> {
   return withStore<T[]>(storeName, "readonly", (store) => store.getAll())
 }
 
-/**
- * 仅取记录条数 —— 走原生 `IDBObjectStore.count()`, 不反序列化任何记录。
- * 用于只需计数的场景 (「我的」/导航的数量徽标), 避免 idbGetAll 把全部文档 (含文件 Blob /
- * 笔记正文) 载入内存只为取 `.length`。注意: 软删除墓碑仓库 (subscriptions) 不可用此法 —— count()
- * 会把墓碑也计入, 仍需 listSubscriptions 过滤。
- */
-export async function idbCount(storeName: string): Promise<number> {
-  return withStore<number>(storeName, "readonly", (store) => store.count())
-}
-
 export async function idbGet<T>(storeName: string, key: IDBValidKey): Promise<T | undefined> {
   return withStore<T | undefined>(storeName, "readonly", (store) => store.get(key))
 }

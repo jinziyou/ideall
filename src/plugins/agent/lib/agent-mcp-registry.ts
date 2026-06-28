@@ -94,7 +94,6 @@ const store = createCollection<McpServer>("ideall:agent:mcp:v1", seed, migrate)
 export const subscribeMcpServers = store.subscribe
 export const getMcpServers = store.get
 export const getServerMcpServers = store.getServer
-export const getMcpServer = store.byId
 
 export function createMcpServer(partial?: Partial<McpServer>): McpServer {
   const s = migrate({ ...partial, id: genId("mcp"), builtin: false, createdAt: Date.now() })
@@ -117,7 +116,8 @@ export function deleteMcpServer(id: string): void {
   store.remove(id)
 }
 
-/** 展示用运行状态: loopback 启用即「已连接」; 外部行传输未落地 → 「待接入」/「已禁用」。 */
+/** 展示用运行状态: loopback 启用即「已连接」; 外部行传输 (stdio/SSE/streamable-http) 已实现, 但按运行
+ *  时连接 (connectAgentMcp 每轮按需连), 无常驻连接可反映 → 静态显示「待接入」; 未启用 → 「已禁用」。 */
 export function runStatusOf(s: McpServer): McpRunStatus {
   if (!s.enabled) return "disabled"
   if (s.transport === "loopback") return "connected"

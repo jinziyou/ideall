@@ -8,11 +8,10 @@ import type { NodeSummary } from "@/files/stores/nodes-store"
 import type { NodeKind } from "@protocol/node"
 import { iconForNodeKind } from "./sidebar-tree-data"
 import { getBookmark } from "@/files/stores/bookmarks-store"
-import { browserNavigate, browserShow, isTauri } from "@/lib/tauri"
-import { safeHref } from "@/lib/safe-url"
-import { openNodeTab, getTabs } from "./store"
-import { parseNodeParams } from "./node-tab"
-import type { ModuleId } from "./types"
+import { navigateExternal } from "../browser-open"
+import { openNodeTab, getTabs } from "../store"
+import { parseNodeParams } from "../node-tab"
+import type { ModuleId } from "../types"
 
 type DropZone = "before" | "after" | "inside"
 
@@ -26,20 +25,13 @@ function isNodeActive(activeId: string | null, kind: NodeKind, id: string): bool
 
 async function openBookmarkInBrowser(id: string) {
   const bm = await getBookmark(id)
-  if (!bm) return
-  const href = safeHref(bm.url)
-  if (!href) return
-  if (!isTauri()) {
-    window.open(href, "_blank", "noopener,noreferrer")
-    return
-  }
-  await browserNavigate(href)
-  await browserShow()
+  // 已在「浏览器」模块内 → 仅导航现有视图, 不开新标签。
+  if (bm) await navigateExternal(bm.url, { newTab: false })
 }
 
 export function NodeTreeBranch({
   item,
-  children,
+  childNodes,
   depth,
   expanded,
   activeId,
@@ -56,7 +48,7 @@ export function NodeTreeBranch({
   zoneFromEvent,
 }: {
   item: NodeSummary
-  children: Tree<NodeSummary>[]
+  childNodes: Tree<NodeSummary>[]
   depth: number
   expanded: Set<string>
   activeId: string | null
@@ -76,7 +68,7 @@ export function NodeTreeBranch({
   const isOpen = expanded.has(id)
   const Icon = iconForNodeKind(item.kind)
   const active = isNodeActive(activeId, item.kind, item.id)
-  const hasKids = children.length > 0
+  const hasKids = childNodes.length > 0
   const inBrowser = activeModule === "browser"
 
   const invalidTarget =
@@ -144,7 +136,7 @@ export function NodeTreeBranch({
         aria-current={active ? "page" : undefined}
         aria-expanded={hasKids ? isOpen : undefined}
         className={cn(
-          "group relative flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm transition-colors",
+          "group relative flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           active
             ? "bg-primary/10 font-medium text-primary"
             : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -179,11 +171,11 @@ export function NodeTreeBranch({
         <span className="min-w-0 flex-1 truncate text-left">{item.title || "无标题"}</span>
       </div>
       {isOpen &&
-        children.map((child) => (
+        childNodes.map((child) => (
           <NodeTreeBranch
             key={child.item.id}
             item={child.item}
-            children={child.children}
+            childNodes={child.children}
             depth={depth + 1}
             expanded={expanded}
             activeId={activeId}

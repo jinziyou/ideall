@@ -20,6 +20,7 @@ import {
   openAiTasks,
 } from "@/workspace/store"
 import { nodeTab, parseNodeParams } from "@/workspace/node-tab"
+import { openInBrowserTab } from "@/workspace/browser-open"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
 import { syncManifest } from "@/plugins/sync/manifest"
@@ -37,6 +38,8 @@ export function registerAll(): void {
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
     openTab: (kind, id, title) => openNodeTab({ kind, id }, title, "agent"),
     closeTab: (kind, id) => closeTab(tabKey(nodeTab({ kind, id }, ""))),
+    // 外链 → 「浏览器」模块 (插件经 host.external 触达, 守 plugin↛workspace 边界由 app 注入实现)。
+    openExternal: (url) => openInBrowserTab(url),
     // AI 区段动作: agent 插件视图 (ai-sidebar / ai-tasks) 经端口打开/关闭 AI 标签 (不直接 import 工作区)。
     openAiSettings,
     openAiSection,
@@ -69,9 +72,9 @@ export function bootClientEffects(): void {
   // 关闭时不加载 agent 内核 (acp-settings 轻量, 先查; acp-expose 重, 仅按需 import), 不拖累初始包。
   void (async () => {
     if (!isTauri()) return
-    const { getAcpSettings } = await import("@/plugins/agent/lib/acp-settings")
+    const { getAcpSettings } = await import("@/plugins/agent/lib/acp/acp-settings")
     if (!getAcpSettings().allowEditorConnect) return
-    const { autostartAcpServerFromSettings } = await import("@/plugins/agent/lib/acp-expose")
+    const { autostartAcpServerFromSettings } = await import("@/plugins/agent/lib/acp/acp-expose")
     await autostartAcpServerFromSettings()
   })()
 }

@@ -12,9 +12,9 @@ import { listFiles } from "@/files/stores/files-store"
 import { listNotes } from "@/files/stores/notes-store"
 import { onFilesUpdated } from "@protocol/flowback"
 import { openTab } from "@/workspace/store"
-import { HOME_SECTIONS } from "@/workspace/home-sections"
+import { HOME_SECTIONS } from "@/workspace/tree/home-sections"
 import { SUB_SPOKE_META } from "@/files/spoke-meta"
-import type { Subscription } from "./model"
+import type { Subscription } from "@protocol/subscription"
 import { RecentFlowback, type FlowItem } from "./recent-flowback"
 
 /** 本地区段计数 (按 HOME_SECTIONS.id 取; 发布为远端, 无本地计数 → undefined)。 */

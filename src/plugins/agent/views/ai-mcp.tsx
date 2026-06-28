@@ -655,8 +655,8 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
           className={cn(
             "mt-4 rounded-lg border px-4 py-3 text-[13px]",
             probe.ok
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-              : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+              ? "border-success/30 bg-success/10 text-success"
+              : "border-destructive/30 bg-destructive/10 text-destructive",
           )}
         >
           {probe.ok

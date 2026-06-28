@@ -80,7 +80,6 @@ const store = createCollection<AgentSkill>(
 export const subscribeSkills = store.subscribe
 export const getSkills = store.get
 export const getServerSkills = store.getServer
-export const getSkill = store.byId
 
 /** 解析某工作区可用的技能: skillIds=null → 全部启用; 否则取交集且启用。 */
 export function resolveSkills(skillIds: string[] | null): AgentSkill[] {

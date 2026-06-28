@@ -74,7 +74,3 @@ export function setAcpSettings(next: AcpSettings): void {
   for (const l of listeners) l()
 }
 
-export function subscribeAcpSettings(cb: () => void): () => void {
-  listeners.add(cb)
-  return () => listeners.delete(cb)
-}

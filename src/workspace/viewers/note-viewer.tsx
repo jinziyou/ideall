@@ -5,7 +5,7 @@ import * as React from "react"
 import dynamic from "next/dynamic"
 import { ChevronRight, Loader2 } from "lucide-react"
 import { getNote, getAncestors } from "@/files/stores/notes-store"
-import type { Note, NoteMeta } from "@/modules/home/model"
+import type { Note, NoteMeta } from "@protocol/files"
 import { openNodeTab, renameNodeTab } from "../store"
 import type { NodeViewerProps } from "../node-viewers"
 

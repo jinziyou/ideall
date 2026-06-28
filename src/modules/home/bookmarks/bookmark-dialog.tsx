@@ -8,7 +8,7 @@ import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
 import { Textarea } from "@/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
-import { Bookmark, BookmarkFolder } from "../model"
+import { Bookmark, BookmarkFolder } from "@protocol/files"
 import { addBookmark, updateBookmark } from "@/files/stores/bookmarks-store"
 
 const NONE_FOLDER = "__none__"

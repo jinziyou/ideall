@@ -4,7 +4,7 @@
 
 import type { ComponentType } from "react"
 import { Bookmark, FolderOpen, Megaphone, NotebookPen, Rss } from "lucide-react"
-import type { TabDescriptor } from "./types"
+import type { TabDescriptor } from "../types"
 
 export type HomeSection = {
   id: string

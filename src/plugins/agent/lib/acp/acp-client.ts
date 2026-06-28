@@ -7,8 +7,8 @@
 // 安全: 不向外部智能体开放本机文件系统 (clientCapabilities.fs=false 且不注册 fs 处理器); 权限请求默认拒绝,
 //       由调用方 (UI) 提供 requestPermission 决策。program/args/cwd 来自用户设置, 非模型可控。
 //
-// 注: 这是「反向驱动外部智能体」方向 (agent-acp.ts 注释所述两方向之一)。「把 ideall 经 ACP 暴露给编辑器」
-// 是另一方向 (Stage 2), 仍待接入。端到端 (真机连真实外部 agent) 验证随 UI 接线 (后续子步) 进行。
+// 注: 这是「反向驱动外部智能体」方向。另一方向「把 ideall 经 ACP 暴露给编辑器」已实现于 acp-expose.ts
+// (Rust 监听器 → createServerStream → exposeIdeallAcpAgent, 由 boot 自启动); 真机端到端验证随 UI 接线推进。
 import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
@@ -16,7 +16,7 @@ import type {
   PromptResponse,
 } from "@agentclientprotocol/sdk"
 import { acpSpawn, acpClose, createAcpStream } from "@/lib/acp-transport"
-import { PromptQueue } from "./prompt-queue"
+import { PromptQueue } from "../prompt-queue"
 
 export interface ExternalAcpOptions {
   /** 外部 ACP 智能体可执行命令 (用户设置, 非模型可控)。 */

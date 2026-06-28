@@ -201,7 +201,8 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
-  // 注: AI 不再作为活动栏模块/标签, 改为右侧常驻对话栏 (AI 原生)；见 right-ai-panel.tsx。
+  // 注: "agent" 刻意不在 MODULES 内, 但仍以活动栏专属 AI 钮 (activity-bar.tsx) + ai-* 区段标签
+  //     (ai-settings/ai-mcp/ai-skills/ai-rules/ai-tasks, 见 registry) 出现, 外加右侧常驻对话栏 (right-ai-panel.tsx)。
 ]
 
 export function moduleById(id: ModuleId): ModuleConfig {

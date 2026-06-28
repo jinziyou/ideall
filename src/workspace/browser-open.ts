@@ -29,8 +29,14 @@ export function subscribePendingBrowserUrl(cb: (url: string) => void): () => voi
   return () => subscribers.delete(cb)
 }
 
-/** 桌面 App: 切到「浏览器」模块并加载 url; 纯网页形态回退新标签 window.open。 */
-export async function openInBrowserTab(url: string): Promise<void> {
+/**
+ * 桌面 App: 把外链交给「浏览器」模块加载; 纯网页形态一律回退新标签 window.open。
+ * newTab=true (默认) 开/切到浏览器标签再导航; newTab=false 只在已打开的浏览器内导航 (不开新标签)。
+ */
+export async function navigateExternal(
+  url: string,
+  { newTab = true }: { newTab?: boolean } = {},
+): Promise<void> {
   const href = safeHref(url)
   if (!href) return
 
@@ -39,14 +45,21 @@ export async function openInBrowserTab(url: string): Promise<void> {
     return
   }
 
-  pendingUrl = href
-  openTab(BROWSER_TAB)
+  if (newTab) {
+    pendingUrl = href
+    openTab(BROWSER_TAB)
+  }
 
   try {
     await browserNavigate(href)
     await browserShow()
-    pendingUrl = null
+    if (newTab) pendingUrl = null
   } catch {
-    for (const cb of subscribers) cb(href)
+    if (newTab) for (const cb of subscribers) cb(href)
   }
+}
+
+/** 外链 → 新「浏览器」标签 (= navigateExternal 默认 newTab)。 */
+export async function openInBrowserTab(url: string): Promise<void> {
+  return navigateExternal(url, { newTab: true })
 }

@@ -119,7 +119,7 @@ pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026","beforeDevComm
   ⚠️ 浏览器直连受厂商 CORS 限制（本地 Ollama / 放行 CORS 的端点可用）；桌面/移动 App 已接
   Tauri HTTP 插件（`@tauri-apps/plugin-http`，Rust 侧请求绕过 CORS）即可全端点可用 —— 已于 Phase 3 接入（见下）。
 
-> 验证：`pnpm build`（= `app:export`，21 静态页）✓ · lint ✓ · typecheck ✓ · test 12/12 ✓
+> 验证（Phase 1 当时快照）：`pnpm build`（= `app:export`，21 静态页）✓ · lint ✓ · typecheck ✓ · test 12/12 ✓（测试集此后已扩至 30+ 文件，详见 [claude.md](claude.md#common-commands)）
 > 后端侧：后端数据服务（如 wonita 的 server）的 `CORS_ALLOW_ORIGINS` 需放行 app 来源（`tauri://localhost` / 开发期 `http://localhost:5020`）。
 
 ### ✅ Phase 2 — 平台构建与 CI（桌面 + Android 已接，iOS 待证书）

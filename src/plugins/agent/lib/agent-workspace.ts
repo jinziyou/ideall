@@ -214,12 +214,6 @@ export function getWorkspace(id: string): AgentWorkspace | undefined {
 
 // —— 变更 ——
 
-export function setActiveWorkspaceId(id: string) {
-  const s = ensure()
-  if (!s.workspaces.some((w) => w.id === id) || s.activeId === id) return
-  commit({ ...s, activeId: id })
-}
-
 /** 写回一个工作区 (存在则替换, 否则追加); 刷新 updatedAt。 */
 export function saveWorkspace(ws: AgentWorkspace) {
   const s = ensure()

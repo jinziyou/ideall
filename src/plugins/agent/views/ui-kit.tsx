@@ -3,10 +3,10 @@
 // AI 重设计共享视觉套件 (现代 · 面板 · 留白) —— MCP / Skills / 规则 / 工作空间 / 全局设置 复用同一套原语,
 // 使异质概念读作同一系统。视觉契约 (源于 Geist/Linear/Stripe/shadcn 调研):
 //   间距 3 档: gap-2(组内) / gap-4(行间) / space-y-8(区段间);
-//   border-first 几无阴影 (卡片 rounded-xl border bg-card; shadow 仅留弹层);
-//   内容列 max-w-2xl/3xl mx-auto (留白=现代感); 半径阶梯 controls=rounded-md / cards=rounded-xl;
+//   border-first 几无阴影 (卡片 rounded-lg border bg-card; shadow 仅留弹层);
+//   内容列 max-w-2xl/3xl mx-auto (留白=现代感); 半径阶梯 controls=rounded-md / cards=rounded-lg (便当 --radius, 全站统一);
 //   type ramp: 标题 text-base font-semibold / 正文 text-sm / meta text-[13px] text-muted-foreground;
-//   状态点 size-2 ring-2 ring-card; 色彩近乎只留给状态点与主操作。
+//   状态点 size-2 ring-2 ring-card; 色彩走语义 token (success/warning/info/destructive), 近乎只留给状态点与主操作。
 
 import * as React from "react"
 import { Plus, type LucideIcon } from "lucide-react"
@@ -15,11 +15,11 @@ import { cn } from "@/lib/utils"
 export type Tone = "ok" | "warn" | "error" | "idle" | "info"
 
 const DOT_TONE: Record<Tone, string> = {
-  ok: "bg-emerald-500",
-  warn: "bg-amber-500",
-  error: "bg-red-500",
-  idle: "bg-zinc-400",
-  info: "bg-blue-500",
+  ok: "bg-success",
+  warn: "bg-warning",
+  error: "bg-destructive",
+  idle: "bg-muted-foreground/60",
+  info: "bg-info",
 }
 
 /** 状态点 (size-2 + 同底色描边防融底)。 */
@@ -46,11 +46,11 @@ export function CountBadge({ children }: { children: React.ReactNode }) {
 
 const CHIP_TONE: Record<Tone | "neutral", string> = {
   neutral: "border-border text-muted-foreground",
-  ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  warn: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  error: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
+  ok: "border-success/30 bg-success/10 text-success",
+  warn: "border-warning/30 bg-warning/10 text-warning",
+  error: "border-destructive/30 bg-destructive/10 text-destructive",
   idle: "border-border text-muted-foreground",
-  info: "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  info: "border-info/30 bg-info/10 text-info",
 }
 
 /** 小药丸 chip (范围/模式/状态文字)。 */
@@ -158,7 +158,7 @@ export function Panel({
   className?: string
 }) {
   return (
-    <section className={cn("rounded-xl border bg-card", className)}>
+    <section className={cn("rounded-lg border bg-card", className)}>
       {(title || action) && (
         <header className="flex items-start justify-between gap-4 px-5 pt-5">
           <div className="min-w-0">
@@ -270,7 +270,7 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
 /** 对话输入壳: 圆角面板 + 内边距, 贴底 composer 复用。 */
 export function ComposerShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-xl border bg-card p-3 shadow-none", className)}>{children}</div>
+    <div className={cn("rounded-lg border bg-card p-3 shadow-none", className)}>{children}</div>
   )
 }
 
@@ -283,40 +283,8 @@ export function SurfacePanel({
   className?: string
 }) {
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card", className)}>
+    <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card", className)}>
       {children}
-    </div>
-  )
-}
-
-/** 空态: 居中, 柔底图标 + 标题 + 一句说明 + 单一主操作。compact 用于窄侧栏。 */
-export function EmptyState({
-  icon: Icon,
-  title,
-  action,
-  compact = false,
-}: {
-  icon: LucideIcon
-  title: string
-  action?: React.ReactNode
-  compact?: boolean
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center text-center",
-        compact ? "min-h-0 flex-1 gap-4 px-2 py-8" : "min-h-[320px] gap-3",
-      )}
-    >
-      {!compact && (
-        <span className="grid size-16 place-items-center rounded-full bg-muted/50">
-          <Icon className="size-7 text-muted-foreground" />
-        </span>
-      )}
-      <div>
-        <p className={cn("font-medium", compact ? "text-[13px]" : "text-sm")}>{title}</p>
-      </div>
-      {action && <div className={compact ? "w-full" : "mt-1"}>{action}</div>}
     </div>
   )
 }

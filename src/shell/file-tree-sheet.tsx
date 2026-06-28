@@ -8,7 +8,7 @@ import * as React from "react"
 import { ListTree } from "lucide-react"
 import { Button } from "@/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/ui/sheet"
-import SidebarTree from "@/workspace/sidebar-tree"
+import SidebarTree from "@/workspace/tree/sidebar-tree"
 import { useActiveId } from "@/workspace/store"
 
 export default function FileTreeSheet() {

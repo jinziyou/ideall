@@ -5,7 +5,7 @@
 import * as React from "react"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { StoredFile } from "../model"
+import { StoredFile } from "@protocol/files"
 import { getFile } from "@/files/stores/files-store"
 import { fileKind } from "@/lib/node-format"
 

@@ -6,7 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { NewBookmark } from "@protocol/files"
 import { NODE_KINDS, type NodeKind } from "@protocol/node"
-import { openInBrowserTab } from "@/workspace/browser-open"
+import { getUiActions } from "@/lib/ui-actions"
 import { safeHref } from "@/lib/safe-url"
 import { webSearch, webFetch, WebError } from "@/lib/web-search"
 import { toast } from "sonner"
@@ -293,7 +293,8 @@ export function registerGrantedTools(
         return fail(-32602, "invalid-url")
       }
       // 插件 (资讯/社区) 的外链 → 「浏览器」模块; 不在插件 iframe 内跳外链 (§9.2)。
-      await openInBrowserTab(a.url)
+      // 经 ui-actions 端口 (守 plugin↛workspace 边界); 无宿主时降级为不开 (仍回 ok)。
+      await getUiActions()?.openExternal?.(a.url)
       return ok({ ok: true })
     })
   }

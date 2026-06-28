@@ -64,7 +64,7 @@ export default function TabsSheet() {
                       type="button"
                       aria-label={`关闭 ${t.title}`}
                       onClick={() => closeTab(t.id)}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:bg-muted/80"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-shell text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-muted/80"
                     >
                       <X className="h-4 w-4" strokeWidth={2.25} />
                     </button>

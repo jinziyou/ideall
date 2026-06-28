@@ -6,10 +6,10 @@
 //
 // 注: 暴露方向是 headless —— 不注入"当前查看的节点"(gatherReferencedContext, UI 概念); 仅用 home 快照 (仅标题)。
 import type { Stream } from "@agentclientprotocol/sdk"
-import type { AcpRunContext } from "./agent-acp"
-import { runAgent } from "./agent-run"
-import { getAgentSettings, isConfigured } from "./agent-settings"
-import { gatherHomeContext, buildSystemPrompt } from "./agent-context"
+import type { ConnectAgentOpts } from "../agent-mcp"
+import { runAgent } from "../agent-run"
+import { getAgentSettings, isConfigured } from "../agent-settings"
+import { gatherHomeContext, buildSystemPrompt } from "../agent-context"
 import { buildIdeallAcpAgent, type AcpTurnRunner } from "./acp-agent"
 import {
   acpListenStart,
@@ -22,6 +22,15 @@ import {
 import { bumpAcpConnections, setAcpServerStatus } from "./acp-status"
 import { getAcpSettings } from "./acp-settings"
 import { isTauri } from "@/lib/tauri"
+
+/** 一次 ACP 提示运行所需的解析结果 (工作区提供: 模型 + 系统提示 + 能力收窄), 与 AgentPanel 的 ResolvedRun 同构。 */
+export interface AcpRunContext {
+  baseURL: string
+  model: string
+  apiKey: string
+  system: string
+  mcp?: ConnectAgentOpts
+}
 
 /** 无 React, 从本地设置 + home 快照 (仅标题) 组装运行上下文; 未配置模型/Key 返回 null。 */
 export async function resolveRun(): Promise<AcpRunContext | null> {

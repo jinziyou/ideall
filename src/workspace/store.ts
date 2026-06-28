@@ -2,13 +2,14 @@
 
 // 工作区状态 (多标签 + 活动模块 + 二级侧栏折叠)。
 // 用 useSyncExternalStore (与本仓库 sync-code / session / theme 同范式), 不引入额外状态库。
-// 标签 keep-alive: 内容由 tab-host 全部挂载、非激活态 display:none (iframe 等不重载)。
+// 标签 keep-alive: tab-host 对激活 + 最近的重标签 (iframe/编辑器) 做 LRU 保活、非激活态 display:none
+// (不重载); 超出上限的重标签被卸载 (草稿由写队列落盘)。轻标签全挂载。详见 tab-host.tsx。
 
 import * as React from "react"
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
-import { HOME_OVERVIEW } from "./home-sections"
+import { HOME_OVERVIEW } from "./tree/home-sections"
 import { moduleById, isModeNeutralModule } from "./modules"
 import { isTauri, browserHide } from "@/lib/tauri"
 
@@ -332,15 +333,6 @@ export function setActiveTab(id: string) {
   }
   // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
   setState({ activeId: id, activeModule: t.module, mode: MODE_OF[t.module], activeSource: "user" })
-}
-
-/** 选中模块 (展开其二级侧栏)。 */
-export function setActiveModule(m: ModuleId) {
-  setState({
-    activeModule: m,
-    mode: isModeNeutralModule(m) ? state.mode : MODE_OF[m],
-    sidebarCollapsed: false,
-  })
 }
 
 /** 点活动栏图标: 同模块且侧栏展开 → 收起; 否则切到该模块并展开, 同时开首个面板标签。

@@ -28,7 +28,8 @@ const config = [
   ...nextConfig,
   {
     // @/lib/api/server.d.ts 是 openapi-typescript 生成物, 不该被 lint;
-    // src-tauri (Rust 工程 + target/gen 产物) 与 out (静态导出产物) 均非 JS 源, 不入 lint (二者已 gitignore)。
+    // src-tauri (Rust 工程 + target/gen 产物) / out (静态导出产物) / ds-bundle (design-sync 编译产物)
+    // 均非手写 JS 源, 不入 lint (三者已 gitignore)。
     ignores: [
       ".next/**",
       "node_modules/**",
@@ -36,6 +37,7 @@ const config = [
       "src/lib/api/**",
       "src-tauri/**",
       "out/**",
+      "ds-bundle/**",
     ],
   },
 
@@ -100,6 +102,21 @@ const config = [
       ],
     },
   })),
+
+  // React Compiler 实验规则降噪: 本项目未启用 React Compiler。下面两条随 eslint-plugin-react-hooks
+  // 升级带入, 但只对「编译器友好」代码有意义, 对本项目的合理手写模式整片误报, 故关闭:
+  //  - set-state-in-effect: 命中挂载加载 / 外部源订阅 / localStorage hydration / Tauri 环境探测等
+  //    React 官方认可的 effect setState (apps/notes 列表加载、sidebar-tree 展开态恢复、window-titlebar 仅桌面显示)。
+  //  - static-components: 命中 `const Icon = iconForNodeKind(kind)` —— iconForNodeKind 返回稳定的
+  //    lucide 组件引用 (NODE_ICON 查表), 并非 render 期新建组件。
+  // 其余 react-hooks 核心规则 (rules-of-hooks / exhaustive-deps) 与 react/no-children-prop 仍生效。
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/static-components": "off",
+    },
+  },
 
   // (5) plugins ↛ shell/workspace: 插件 (agent·sync·embed) 经 @/lib/ui-actions / @/lib/active-node 端口与外壳交互;
   //     禁反向 import 外壳/工作区, 防插件耦合具体 frame 实现 (§6.5 不变量, 机器强制)。

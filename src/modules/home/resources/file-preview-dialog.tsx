@@ -3,7 +3,7 @@
 import { Download } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/ui/dialog"
 import { Button } from "@/ui/button"
-import { StoredFile } from "../model"
+import { StoredFile } from "@protocol/files"
 import { formatBytes } from "@/lib/node-format"
 import { FilePreviewBox, useFilePreview } from "./file-preview"
 

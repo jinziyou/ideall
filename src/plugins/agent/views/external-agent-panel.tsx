@@ -14,15 +14,15 @@ import { Textarea } from "@/ui/textarea"
 import type { AgentMessage } from "../lib/model"
 import ChatMessage from "./chat-message"
 import AgentSettingsDialog from "./agent-settings-dialog"
-import { getAcpSettings } from "../lib/acp-settings"
-import { connectExternalAcpAgent, type ExternalAcpHandle } from "../lib/acp-client"
+import { getAcpSettings } from "../lib/acp/acp-settings"
+import { connectExternalAcpAgent, type ExternalAcpHandle } from "../lib/acp/acp-client"
 import {
   EMPTY_TURN,
   foldAcpUpdate,
   pickPermissionOption,
   turnToolEvents,
   type AcpTurnState,
-} from "../lib/acp-chat"
+} from "../lib/acp/acp-chat"
 
 let msgSeq = 0
 function mkMsg(role: "user" | "assistant", content: string): AgentMessage {

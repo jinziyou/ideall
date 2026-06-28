@@ -13,7 +13,7 @@ import { moveBookmark, moveFolder } from "@/files/stores/bookmarks-store"
 import type { NodeSummary } from "@/files/stores/nodes-store"
 import type { NodeKind } from "@protocol/node"
 import { refreshSidebarTree } from "./sidebar-tree-bus"
-import type { ModuleId } from "./types"
+import type { ModuleId } from "../types"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
 
 type DropZone = "before" | "after" | "inside"
@@ -168,7 +168,7 @@ export function DraggableNodeForest({
         <NodeTreeBranch
           key={item.id}
           item={item}
-          children={children}
+          childNodes={children}
           depth={depth}
           expanded={expanded}
           activeId={activeId}

@@ -33,6 +33,11 @@
   --color-spoke-community: hsl(var(--spoke-community));
   --color-spoke-tool: hsl(var(--spoke-tool));
 
+  /* 状态语义色 (ok/warn/info; error 复用 --destructive, idle 复用 --muted-foreground) */
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-info: hsl(var(--info));
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -124,6 +129,10 @@
   --spoke-info: 217 91% 60%;
   --spoke-community: 162 72% 40%;
   --spoke-tool: 258 85% 66%;
+  /* 状态语义色 (浅底: 取偏深值保 WCAG AA 文字对比; 暗色见 .dark 取亮版) */
+  --success: 158 75% 36%;
+  --warning: 33 90% 42%;
+  --info: 217 80% 50%;
   --highlight: oklch(0.852 0.199 91.936);
 }
 
@@ -153,6 +162,9 @@
   --spoke-info: 217 88% 70%;
   --spoke-community: 162 58% 52%;
   --spoke-tool: 258 82% 74%;
+  --success: 158 64% 50%;
+  --warning: 38 90% 60%;
+  --info: 217 85% 68%;
   --highlight: oklch(0.852 0.199 91.936);
 }
 

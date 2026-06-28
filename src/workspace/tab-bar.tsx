@@ -47,7 +47,7 @@ function TabBarTail({
             type="button"
             title="管理标签"
             aria-label="管理标签"
-            className={cn(tabTailTrigger, "gap-1 rounded-sm pl-1.5 pr-0.5", mgmtOpen && "bg-accent text-foreground")}
+            className={cn(tabTailTrigger, "gap-1 rounded-shell pl-1.5 pr-0.5", mgmtOpen && "bg-accent text-foreground")}
             onContextMenu={(e) => {
               e.preventDefault()
               setMgmtOpen(true)
@@ -75,7 +75,7 @@ function TabBarTail({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <span className="flex items-center rounded bg-background/80 px-1 py-px text-[10px] tabular-nums text-muted-foreground">
+      <span className="flex items-center rounded-shell bg-background/80 px-1 py-px text-[10px] tabular-nums text-muted-foreground">
         {tabs.length}
       </span>
 
@@ -85,7 +85,7 @@ function TabBarTail({
             type="button"
             title="全部标签"
             aria-label={`全部标签，共 ${tabs.length} 个`}
-            className={cn(tabTailTrigger, "rounded-sm px-1 pr-1.5", listOpen && "bg-accent text-foreground")}
+            className={cn(tabTailTrigger, "rounded-shell px-1 pr-1.5", listOpen && "bg-accent text-foreground")}
           >
             <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" strokeWidth={2} />
           </button>
@@ -138,7 +138,7 @@ function TabCloseButton({
         onClose()
       }}
       className={cn(
-        "ml-auto -mr-0.5 flex h-7 w-7 min-h-7 min-w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-[opacity,background-color,color]",
+        "ml-auto -mr-0.5 flex h-7 w-7 min-h-7 min-w-7 shrink-0 items-center justify-center rounded-shell text-muted-foreground outline-none transition-[opacity,background-color,color]",
         "hover:bg-accent hover:text-foreground active:bg-accent/80",
         "opacity-0 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
         "group-hover/tab:opacity-100 pointer-coarse:opacity-100",

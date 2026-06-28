@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import type { NoteMeta } from "../model"
+import type { NoteMeta } from "@protocol/files"
 import { buildNoteTree, type TreeNode } from "@/files/notes-tree-util"
 import { EmptyState } from "@/ui/empty-state"
 

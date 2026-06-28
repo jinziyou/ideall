@@ -17,11 +17,11 @@ import {
 } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
-import type { TabDescriptor } from "./types"
-import type { ModuleId } from "./types"
+import type { TabDescriptor } from "../types"
+import type { ModuleId } from "../types"
 import { HOME_SECTIONS } from "./home-sections"
-import { moduleById } from "./modules"
-import type { SidebarEntry } from "./modules"
+import { moduleById } from "../modules"
+import type { SidebarEntry } from "../modules"
 
 export type SidebarTreeNodeKind = "section" | "entry" | "node"
 

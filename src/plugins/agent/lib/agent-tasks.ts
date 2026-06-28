@@ -9,10 +9,10 @@ import { createThread, deleteThread } from "./agent-store"
 export type TaskStatus = "active" | "running" | "done" | "failed"
 
 export const TASK_STATUS_META: Record<TaskStatus, { label: string; dot: string }> = {
-  active: { label: "进行中", dot: "bg-zinc-400" },
-  running: { label: "运行中", dot: "bg-amber-500" },
-  done: { label: "已完成", dot: "bg-emerald-500" },
-  failed: { label: "失败", dot: "bg-red-500" },
+  active: { label: "进行中", dot: "bg-muted-foreground/60" },
+  running: { label: "运行中", dot: "bg-warning" },
+  done: { label: "已完成", dot: "bg-success" },
+  failed: { label: "失败", dot: "bg-destructive" },
 }
 
 export interface AgentTask {
@@ -53,6 +53,8 @@ export function listTasks(workspaceId: string): AgentTask[] {
     .sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+// 写侧 CRUD (createTask/setTaskStatus/setTaskStarred/deleteTask) + TASK_STATUS_META: 供任务管理 UI;
+// 当前 ai-tasks 视图仅消费读侧 (attach/get/subscribe), 写侧待接管理操作。
 /** 新建任务: 先建 core 线程, 再落任务记录 (id 对齐线程)。 */
 export async function createTask(workspaceId: string): Promise<AgentTask> {
   const thread = await createThread()

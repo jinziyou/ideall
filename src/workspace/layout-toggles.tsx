@@ -18,7 +18,7 @@ export default function LayoutToggles() {
         aria-label="切换侧栏"
         aria-pressed={!sidebarCollapsed}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-shell transition-colors hover:bg-accent",
+          "flex h-8 w-8 items-center justify-center rounded-shell outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           sidebarCollapsed ? "text-muted-foreground" : "text-foreground",
         )}
       >
@@ -31,7 +31,7 @@ export default function LayoutToggles() {
         aria-label="切换 AI 对话栏"
         aria-pressed={rightOpen}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-shell transition-colors hover:bg-accent",
+          "flex h-8 w-8 items-center justify-center rounded-shell outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           rightOpen ? "text-primary" : "text-muted-foreground",
         )}
       >

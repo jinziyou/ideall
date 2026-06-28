@@ -1,4 +1,4 @@
-// 把用户 home 的本地数据 (关注 / 书签 / 资源 / 收藏夹) 汇成紧凑快照, 作为 AI 助手的上下文。
+// 把用户 home 的本地数据 (笔记 / 关注 / 书签 / 资源 / 收藏夹) 汇成紧凑快照, 作为 AI 助手的上下文。
 // 只读、只取元数据 (文件不含内容 Blob), 全部来自本机 IndexedDB; 发送时随系统提示一并给模型。
 import { getFilesPort } from "@protocol/files"
 import { getActiveNodeRef } from "@/lib/active-node"

@@ -14,6 +14,8 @@ const OFF: AcpServerStatus = { listening: false, port: null, connections: 0 }
 let state: AcpServerStatus = OFF
 const listeners = new Set<() => void>()
 
+// 读侧三件套 (get/getServer/subscribe): 供 React 经 useSyncExternalStore 订阅暴露状态;
+// 状态指示器 UI 待接 (写侧 set/bump 已由 acp-expose 生命周期维护)。
 export function getAcpServerStatus(): AcpServerStatus {
   return state
 }

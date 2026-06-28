@@ -7,6 +7,8 @@ export interface UiActions {
   openTab: (kind: NodeKind, id: string, title: string) => void
   /** 关闭一个节点标签。 */
   closeTab: (kind: NodeKind, id: string) => void
+  /** 把外链交给「浏览器」模块打开 (插件外链经此, 不在插件 iframe 内跳转); 无宿主时为 undefined。 */
+  openExternal?: (url: string) => void | Promise<void>
   // —— AI 区段动作 (agent 插件视图经端口触达工作区, 守 plugin↛app 边界); 无宿主时为 undefined。 ——
   /** 打开全局 AI 设置标签。 */
   openAiSettings?: () => void

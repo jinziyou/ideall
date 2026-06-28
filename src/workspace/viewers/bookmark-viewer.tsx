@@ -6,7 +6,7 @@ import { ExternalLink, Loader2 } from "lucide-react"
 import { Button } from "@/ui/button"
 import { openExternal } from "@/lib/safe-url"
 import { getBookmark } from "@/files/stores/bookmarks-store"
-import type { Bookmark } from "@/modules/home/model"
+import type { Bookmark } from "@protocol/files"
 import { renameNodeTab } from "../store"
 import type { NodeViewerProps } from "../node-viewers"
 

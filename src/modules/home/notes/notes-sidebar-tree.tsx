@@ -5,7 +5,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
 import { undoableDeleteToast } from "@/lib/undo-toast"
-import type { NoteMeta } from "../model"
+import type { NoteMeta } from "@protocol/files"
 import {
   addNote,
   deleteNote,
@@ -16,7 +16,7 @@ import {
 import { PageTree, type InsertPos } from "./notes-tree"
 import { openNodeTab, useActiveId, getTabs } from "@/workspace/store"
 import { parseNodeParams } from "@/workspace/node-tab"
-import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/sidebar-tree-bus"
+import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/tree/sidebar-tree-bus"
 
 const EXPANDED_KEY = "ideall:notes:sidebar-expanded"
 

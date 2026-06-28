@@ -33,7 +33,7 @@ import {
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { cn } from "@/lib/utils"
 import { safeHref, openExternal } from "@/lib/safe-url"
-import { Bookmark, BookmarkFolder } from "../model"
+import { Bookmark, BookmarkFolder } from "@protocol/files"
 import {
   addFolder,
   deleteBookmark,

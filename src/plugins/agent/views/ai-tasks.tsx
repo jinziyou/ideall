@@ -14,7 +14,7 @@ import { getUiActions } from "@/lib/ui-actions"
 import AgentPanel from "./agent-panel"
 import ContextComposer from "./context-composer"
 import PrecisePrompt from "./precise-prompt"
-import { EmptyState } from "./ui-kit"
+import { EmptyState } from "@/ui/empty-state"
 import { resolveWorkspaceRun } from "../lib/agent-resolve"
 import { resolveSkills } from "../lib/agent-skills"
 import {
@@ -53,10 +53,7 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
   if (!ws) {
     return (
       <div className="grid h-full place-items-center p-6">
-        <EmptyState
-          icon={Boxes}
-          title="工作空间不存在"
-        />
+        <EmptyState icon={Boxes} title="工作空间不存在" variant="halo" bordered={false} />
       </div>
     )
   }

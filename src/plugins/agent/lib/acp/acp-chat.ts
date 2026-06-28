@@ -1,6 +1,6 @@
 // 外部 ACP 智能体对话的纯折叠逻辑 (客户端方向 UI 用) —— 把一轮里的 session/update 通知折叠成
 // 可渲染的「助手消息」视图模型 (文本 + 工具事件)。纯函数、无 React/IO, 便于单测 (外部 agent 行为最易出错的一环)。
-import type { AgentToolEvent } from "./model"
+import type { AgentToolEvent } from "../model"
 import type { PermissionOption, SessionUpdate, ToolCallStatus } from "@agentclientprotocol/sdk"
 
 /** 一轮 (一次 prompt→stop) 的累积: 助手文本 + 工具调用 (按 toolCallId 跟踪状态)。 */

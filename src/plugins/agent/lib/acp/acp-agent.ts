@@ -5,7 +5,7 @@
 // 进程内 e2e 单测 (见 acp-agent.test.ts)。生产侧把 runTurn 接到 runAgent 见 acp-expose.ts。
 //
 // 安全: prompt 一律经注入的 runTurn 进 ideall 内核 (runAgent→connectAgentMcp→agentGrant), 四道安全闸不变。
-import type { AgentToolEvent } from "./model"
+import type { AgentToolEvent } from "../model"
 import type { ContentBlock } from "@agentclientprotocol/sdk"
 
 /** 一轮 prompt 的内核回调钩子 (注入便于测试 / 与 runAgent 解耦)。 */

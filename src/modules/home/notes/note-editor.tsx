@@ -14,7 +14,7 @@ import { BasicMarksKit } from "@/ui/editor/plugins/basic-marks-kit"
 import { ListKit } from "@/ui/editor/plugins/list-kit"
 import { CodeBlockKit } from "@/ui/editor/plugins/code-block-kit"
 import { SlashKit } from "@/ui/editor/plugins/slash-kit"
-import { NoteContent } from "../model"
+import { NoteContent } from "@protocol/files"
 import { enqueueNoteDraft } from "@/files/note-write-queue"
 // 保存回传元数据类型下沉到数据层 (写队列是其产出方); 此处再导出以兼容现有 ./note-editor 引用。
 import type { NoteEditorSaved } from "@/files/note-write-queue"

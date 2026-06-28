@@ -10,10 +10,10 @@ import { Input } from "@/ui/input"
 import { Badge } from "@/ui/badge"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/node-format"
-import type { NoteMeta } from "../model"
+import type { NoteMeta } from "@protocol/files"
 import { addNote, listNotes } from "@/files/stores/notes-store"
 import { openNodeTab } from "@/workspace/store"
-import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/sidebar-tree-bus"
+import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/tree/sidebar-tree-bus"
 import { EmptyState } from "@/ui/empty-state"
 
 export default function NotesManager() {

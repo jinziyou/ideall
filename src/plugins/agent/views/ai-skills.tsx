@@ -16,7 +16,8 @@ import {
   deleteSkill,
   type AgentSkill,
 } from "../lib/agent-skills"
-import { AddButton, AiPage, Chip, EmptyState, ListRow, Panel, Toggle } from "./ui-kit"
+import { AddButton, AiPage, Chip, ListRow, Panel, Toggle } from "./ui-kit"
+import { EmptyState } from "@/ui/empty-state"
 
 import { Button } from "@/ui/button"
 import { Checkbox } from "@/ui/checkbox"
@@ -57,6 +58,8 @@ export default function AiSkills() {
         <EmptyState
           icon={Sparkles}
           title="还没有技能"
+          variant="halo"
+          bordered={false}
           action={
             <AddButton
               label="新建技能"

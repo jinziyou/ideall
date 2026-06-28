@@ -325,7 +325,7 @@ Content-Security-Policy: frame-ancestors tauri://localhost https://tauri.localho
 - `src/plugins/embed/host.tsx`：`EmbedHost`——建 `MessageChannel`、握手、按 manifest 起 `McpServer`、注册授权工具、生命周期清理。
 - `src/plugins/embed/transport.ts`：`MessagePortTransport`（§4.2）。
 - `src/plugins/embed/tools.ts` / `grant.ts` / `local-mcp-server.ts`：按授权把权限位映射到 `getServerPort()` / `getFilesPort()` / `auth-store` 调用并起本地 MCP server。
-- `src/modules/community/page.tsx`、`src/modules/info/page.tsx`：从原生组件改为挂 `EmbedHost`（保留 `(discover)` 外壳/nav）。
+- info / community 的发现界面：由 `src/workspace/registry.tsx` 按标签 kind 直接挂 `EmbedHost`（`info`/`community` 两个 registry 项，`<EmbedHost manifest={…EmbedManifest} />`）——不再走独立的模块 `page.tsx`。
 - `src-tauri/tauri.conf.json`：设 CSP（§4.2）。capabilities 已够用（`http:*`、`opener`）。
 
 ### 10.2 server 接线（要点）

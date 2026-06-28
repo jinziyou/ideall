@@ -14,7 +14,7 @@ import { entityLabelText } from "@/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import type { SubscriptionType } from "@protocol/subscription"
-import type { Subscription } from "../model"
+import type { Subscription } from "@protocol/subscription"
 import {
   addSubscription,
   listSubscriptions,

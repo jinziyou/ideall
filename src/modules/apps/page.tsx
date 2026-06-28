@@ -18,7 +18,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
 import { EmptyState } from "@/ui/empty-state"
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover"
 
-/** 与 Rust `category_label` 映射一致的标准分类 (展示顺序)。 */
+/**
+ * 标准分类的展示顺序。**手工同步契约**: 此列表必须与 src-tauri/src/installed_apps.rs 的 `category_label`
+ * 输出标签集一致 —— 那边新增/改名一类, 这里须同步增改, 否则未识别标签会落入「其他」分组。
+ */
 const STANDARD_CATEGORY_ORDER = [
   "办公",
   "开发",
@@ -96,7 +99,7 @@ function AppIcon({ app, size = "md" }: { app: InstalledApp; size?: "md" | "lg" }
         src={src}
         alt=""
         onError={() => setFailed(true)}
-        className={cn(dim, "shrink-0 rounded-[14px] object-contain shadow-sm ring-1 ring-border/30")}
+        className={cn(dim, "shrink-0 rounded-md object-contain shadow-sm ring-1 ring-border/30")}
       />
     )
   }
@@ -105,7 +108,7 @@ function AppIcon({ app, size = "md" }: { app: InstalledApp; size?: "md" | "lg" }
     <span
       className={cn(
         dim,
-        "flex shrink-0 items-center justify-center rounded-[14px] bg-muted/80 font-semibold text-muted-foreground ring-1 ring-border/30",
+        "flex shrink-0 items-center justify-center rounded-md bg-muted/80 font-semibold text-muted-foreground ring-1 ring-border/30",
         text,
       )}
     >
@@ -150,9 +153,9 @@ function AppsSkeleton() {
               {Array.from({ length: 8 }).map((__, j) => (
                 <div
                   key={j}
-                  className="flex flex-col items-center gap-3 rounded-xl bg-muted/20 p-5"
+                  className="flex flex-col items-center gap-3 rounded-lg bg-muted/20 p-5"
                 >
-                  <div className="h-11 w-11 animate-pulse rounded-[14px] bg-muted/50" />
+                  <div className="h-11 w-11 animate-pulse rounded-md bg-muted/50" />
                   <div className="h-3 w-16 animate-pulse rounded bg-muted/50" />
                 </div>
               ))}
@@ -180,7 +183,7 @@ function AppTile({
       disabled={launching}
       onClick={() => onLaunch(app)}
       className={cn(
-        "group flex flex-col items-center gap-3 rounded-xl p-5 text-center transition-[background-color,box-shadow,transform]",
+        "group flex flex-col items-center gap-3 rounded-lg p-5 text-center transition-[background-color,box-shadow,transform]",
         "bg-background/50 ring-1 ring-border/40",
         "hover:bg-background hover:shadow-sm hover:ring-spoke-tool/25",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -296,7 +299,7 @@ export default function AppsPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
       <PageHeader total={apps.length} filtered={filtered.length} loading={loading} />
 
-      <div className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+      <div className="rounded-lg border border-border/60 bg-card p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -333,7 +336,7 @@ export default function AppsPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}

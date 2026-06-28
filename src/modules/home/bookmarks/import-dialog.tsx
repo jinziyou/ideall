@@ -13,7 +13,7 @@ import {
 } from "@/ui/dialog"
 import { Button } from "@/ui/button"
 import { Label } from "@/ui/label"
-import { BookmarkFolder } from "../model"
+import { BookmarkFolder } from "@protocol/files"
 import { parseBookmarksHtml, ParsedBookmark } from "@/files/bookmark-import"
 import { addFolder, bulkAddBookmarks } from "@/files/stores/bookmarks-store"
 

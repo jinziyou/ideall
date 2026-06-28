@@ -7,6 +7,7 @@ import AgentPanel, { type AgentPanelHandle } from "@/plugins/agent/views/agent-p
 import { getActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
 import { getAgentSettings, isConfigured, subscribeAgentSettings } from "@/plugins/agent/lib/agent-settings"
 import { SurfacePanel } from "@/plugins/agent/views/ui-kit"
+import { IconButton } from "@/ui/icon-button"
 import { useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings } from "./store"
 
 export default function RightAiPanel() {
@@ -37,17 +38,10 @@ export default function RightAiPanel() {
             </span>
           </span>
           <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => panelRef.current?.newChat()}
-              aria-label="新对话"
-              title="新对话"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
+            <IconButton onClick={() => panelRef.current?.newChat()} aria-label="新对话" title="新对话">
               <Plus className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
+            </IconButton>
+            <IconButton
               onClick={() => {
                 const ws = getActiveWorkspace()
                 if (ws) openAiTasks(ws.id, ws.name)
@@ -56,28 +50,15 @@ export default function RightAiPanel() {
               }}
               aria-label="展开为工作空间任务"
               title="展开为任务"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <Maximize2 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => openAiSettings()}
-              aria-label="AI 设置"
-              title="设置"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
+            </IconButton>
+            <IconButton onClick={() => openAiSettings()} aria-label="AI 设置" title="设置">
               <Settings className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setRightPanel(false)}
-              aria-label="关闭 AI 对话栏"
-              title="关闭"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
+            </IconButton>
+            <IconButton onClick={() => setRightPanel(false)} aria-label="关闭 AI 对话栏" title="关闭">
               <X className="h-4 w-4" />
-            </button>
+            </IconButton>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">
