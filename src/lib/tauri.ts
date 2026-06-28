@@ -76,9 +76,6 @@ export type BrowserBounds = {
   y: number
   w: number
   h: number
-  /** 收藏浮钮左上角 (可选, 持久化位置) */
-  fabX?: number
-  fabY?: number
 }
 
 async function tauriInvoke(cmd: string, args?: Record<string, unknown>): Promise<void> {
@@ -123,20 +120,4 @@ export async function onBrowserUrl(cb: (url: string) => void): Promise<() => voi
   if (!isTauri()) return () => {}
   const { listen } = await import("@tauri-apps/api/event")
   return listen<string>("browser://url", (e) => cb(e.payload))
-}
-
-/** 监听原生收藏浮钮点击 (browser://favorite); 返回取消监听; 非 Tauri 为 no-op。 */
-export async function onBrowserFavorite(cb: () => void): Promise<() => void> {
-  if (!isTauri()) return () => {}
-  const { listen } = await import("@tauri-apps/api/event")
-  return listen("browser://favorite", () => cb())
-}
-
-export type BrowserFabMoved = { x: number; y: number }
-
-/** 监听收藏浮钮拖拽结束 (browser://fab-moved); 返回取消监听; 非 Tauri 为 no-op。 */
-export async function onBrowserFabMoved(cb: (pos: BrowserFabMoved) => void): Promise<() => void> {
-  if (!isTauri()) return () => {}
-  const { listen } = await import("@tauri-apps/api/event")
-  return listen<BrowserFabMoved>("browser://fab-moved", (e) => cb(e.payload))
 }

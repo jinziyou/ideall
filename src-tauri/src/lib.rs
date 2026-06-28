@@ -19,13 +19,9 @@ mod oauth_callback;
 mod browser_linux;
 #[cfg(desktop)]
 mod window_placement;
-#[cfg(desktop)]
-mod browser_fab;
 
 #[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_LABEL: &str = "browser_view";
-#[cfg(all(desktop, not(target_os = "linux")))]
-const BROWSER_FAB_LABEL: &str = "browser_fab";
 
 // 主窗口内容区矩形 (CSS 像素, 相对窗口左上)。直接当 Logical 传, 勿乘 devicePixelRatio (Tauri 自动按 scale 换算)。
 #[cfg(desktop)]
@@ -35,11 +31,6 @@ pub(crate) struct Bounds {
     y: f64,
     w: f64,
     h: f64,
-    /// 收藏浮钮左上角 (窗口坐标, CSS 像素); 持久化自前端 localStorage。
-    #[serde(default)]
-    fab_x: Option<f64>,
-    #[serde(default)]
-    fab_y: Option<f64>,
 }
 
 #[cfg(desktop)]
@@ -72,12 +63,8 @@ fn open_browser_view(
     let parsed = parse_http_url(&target)?;
     let main = app.get_webview_window("main").ok_or("主窗口不存在")?;
     let window = main.as_ref().window();
-    browser_fab::sync_content(&b);
     // 单例: 已存在则先关。
     if let Some(w) = app.get_webview(BROWSER_LABEL) {
-        let _ = w.close();
-    }
-    if let Some(w) = app.get_webview(BROWSER_FAB_LABEL) {
         let _ = w.close();
     }
     let app_nav = app.clone();
@@ -99,39 +86,6 @@ fn open_browser_view(
             LogicalSize::new(b.w, b.h),
         )
         .map_err(|e| e.to_string())?;
-
-    let fab = browser_fab::bounds(&b);
-    let fab_url = browser_fab::data_url()?;
-    let app_fab = app.clone();
-    let fab_builder = WebviewBuilder::new(BROWSER_FAB_LABEL, WebviewUrl::External(fab_url))
-        .on_navigation(move |target| {
-            if browser_fab::is_favorite_nav(&target) {
-                let _ = app_fab.emit("browser://favorite", ());
-                return false;
-            }
-            if let Some((dx, dy)) = browser_fab::parse_fab_delta(&target) {
-                if let Some(m) = browser_fab::apply_delta(dx, dy) {
-                    if let Some(fv) = app_fab.get_webview(BROWSER_FAB_LABEL) {
-                        let _ = fv.set_position(LogicalPosition::new(m.x, m.y));
-                    }
-                }
-                return false;
-            }
-            if browser_fab::is_fab_commit(&target) {
-                if let Some((x, y)) = browser_fab::custom_pos() {
-                    let _ = app_fab.emit("browser://fab-moved", browser_fab::FabMoved { x, y });
-                }
-                return false;
-            }
-            true
-        });
-    window
-        .add_child(
-            fab_builder,
-            LogicalPosition::new(fab.x, fab.y),
-            LogicalSize::new(fab.w, fab.h),
-        )
-        .map_err(|e| e.to_string())?;
     Ok(())
     }
 }
@@ -148,19 +102,11 @@ fn browser_set_bounds(
 
     #[cfg(not(target_os = "linux"))]
     {
-    browser_fab::sync_content(&b);
     let wv = _app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?;
     wv.set_position(LogicalPosition::new(b.x, b.y))
         .map_err(|e| e.to_string())?;
     wv.set_size(LogicalSize::new(b.w, b.h))
         .map_err(|e| e.to_string())?;
-    let fab = browser_fab::bounds(&b);
-    if let Some(fv) = _app.get_webview(BROWSER_FAB_LABEL) {
-        fv.set_position(LogicalPosition::new(fab.x, fab.y))
-            .map_err(|e| e.to_string())?;
-        fv.set_size(LogicalSize::new(fab.w, fab.h))
-            .map_err(|e| e.to_string())?;
-    }
     Ok(())
     }
 }
@@ -240,11 +186,7 @@ fn browser_hide(_app: AppHandle) -> Result<(), String> {
         _app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .hide()
-            .map_err(|e| e.to_string())?;
-        if let Some(fv) = _app.get_webview(BROWSER_FAB_LABEL) {
-            fv.hide().map_err(|e| e.to_string())?;
-        }
-        Ok(())
+            .map_err(|e| e.to_string())
     }
 }
 #[cfg(desktop)]
@@ -258,11 +200,7 @@ fn browser_show(_app: AppHandle) -> Result<(), String> {
         _app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .show()
-            .map_err(|e| e.to_string())?;
-        if let Some(fv) = _app.get_webview(BROWSER_FAB_LABEL) {
-            fv.show().map_err(|e| e.to_string())?;
-        }
-        Ok(())
+            .map_err(|e| e.to_string())
     }
 }
 #[cfg(desktop)]
@@ -274,9 +212,6 @@ fn browser_close(_app: AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     {
         if let Some(w) = _app.get_webview(BROWSER_LABEL) {
-            w.close().map_err(|e| e.to_string())?;
-        }
-        if let Some(w) = _app.get_webview(BROWSER_FAB_LABEL) {
             w.close().map_err(|e| e.to_string())?;
         }
         Ok(())

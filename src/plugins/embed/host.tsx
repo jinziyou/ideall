@@ -9,7 +9,10 @@ import { useOnlineStatus } from "@/lib/use-online-status"
 import { MessagePortTransport } from "./transport"
 import { createLocalMcpServer } from "./local-mcp-server"
 import { firstPartyGrant } from "./grant"
-import { registerConnection } from "./connections"
+import {
+  registerConnection,
+} from "./connections"
+import { registerEmbedNavigator } from "./embed-nav"
 import {
   HELLO_MESSAGE_TYPE,
   INIT_MESSAGE_TYPE,
@@ -155,10 +158,15 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       const obs = new MutationObserver(sendTheme)
       obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
 
+      const deregisterNav = registerEmbedNavigator(manifest.id, (route) => {
+        uiPort.postMessage({ type: "navigated", payload: { route } })
+      })
+
       let toreDown = false
       const teardown = () => {
         if (toreDown) return
         toreDown = true
+        deregisterNav()
         obs.disconnect()
         void server.close()
         try {

@@ -4,18 +4,29 @@
 // 点击区段/面板 → openTab (标签栏显示「面板」); 点击具体 node → openNodeTab (显示「内容」)。
 
 import * as React from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, Rss } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { buildTree, type Tree } from "@/files/notes-tree-util"
 import { listNodeSummaries, type NodeSummary } from "@/files/stores/nodes-store"
+import {
+  listSubscriptionsByTypes,
+} from "@/files/stores/subscriptions-store"
 import type { NodeKind } from "@protocol/node"
+import type { Subscription } from "@protocol/subscription"
+import { onFilesUpdated } from "@protocol/flowback"
 import {
   iconForNodeKind,
   staticTreeRoots,
   subscriptionsTreeRoots,
-  embedTreeRoots,
+  infoTreeRoots,
+  communityTreeRoots,
+  browserTreeRoots,
   type SidebarTreeNode,
 } from "./sidebar-tree-data"
+import { getBookmark } from "@/files/stores/bookmarks-store"
+import { browserNavigate, browserShow, isTauri } from "@/lib/tauri"
+import { safeHref } from "@/lib/safe-url"
+import { requestEmbedRoute } from "@/plugins/embed/embed-nav"
 import {
   openTab,
   openNodeTab,
@@ -45,13 +56,33 @@ const NotesSidebarTree = React.lazy(
 
 const EXPANDED_KEY = "ideall:sidebar-tree:expanded"
 
+const SIDEBAR_DATA_MODULES = new Set<ModuleId>(["browser", "info", "community"])
+
 function rootsForModule(moduleId: ModuleId): SidebarTreeNode[] {
-  // 浏览器由活动栏直达开标签, 侧栏仅保留提示文案, 避免「侧栏入口 + 主区标签」双入口。
-  if (moduleId === "browser") return []
+  if (moduleId === "browser") return browserTreeRoots()
   if (moduleId === "subscriptions") return subscriptionsTreeRoots()
-  if (moduleId === "info") return embedTreeRoots("info")
-  if (moduleId === "community") return embedTreeRoots("community")
+  if (moduleId === "info") return infoTreeRoots()
+  if (moduleId === "community") return communityTreeRoots()
   return staticTreeRoots(moduleId)
+}
+
+function defaultExpandedSection(moduleId: ModuleId): string | null {
+  if (moduleId === "browser") return "section:bookmarks"
+  if (moduleId === "info") return "section:entities"
+  if (moduleId === "community") return "section:peers"
+  return null
+}
+
+function entityEmbedRoute(sub: Subscription): string | null {
+  const label = sub.entityLabel ?? ""
+  const name = sub.entityName ?? sub.title
+  if (!label || !name) return null
+  return `/info/entity?label=${encodeURIComponent(label)}&name=${encodeURIComponent(name)}`
+}
+
+function peerEmbedRoute(sub: Subscription): string {
+  const q = new URLSearchParams({ openPeer: sub.key, openPeerName: sub.title })
+  return `/community?${q.toString()}`
 }
 
 function isNodeActive(activeId: string | null, kind: NodeKind, id: string): boolean {
@@ -79,12 +110,20 @@ export default function SidebarTree() {
 
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
   const [nodeCache, setNodeCache] = React.useState<Map<string, NodeSummary[]>>(new Map())
+  const [subscriptionCache, setSubscriptionCache] = React.useState<Map<string, Subscription[]>>(
+    new Map(),
+  )
 
   const wsState = React.useSyncExternalStore(
     subscribeWorkspaces,
     getWorkspacesState,
     getServerWorkspacesState,
   )
+
+  const clearCaches = React.useCallback(() => {
+    setNodeCache(new Map())
+    setSubscriptionCache(new Map())
+  }, [])
 
   React.useEffect(() => {
     try {
@@ -122,17 +161,53 @@ export default function SidebarTree() {
     }
   }, [])
 
-  React.useEffect(() => subscribeSidebarTreeRefresh(() => setNodeCache(new Map())), [])
+  const loadSubscriptions = React.useCallback(
+    async (sectionId: string, types: Subscription["type"][]) => {
+      if (types.length === 0) return
+      try {
+        const subs = await listSubscriptionsByTypes(types)
+        setSubscriptionCache((prev) => new Map(prev).set(sectionId, subs))
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  )
+
+  React.useEffect(() => subscribeSidebarTreeRefresh(clearCaches), [clearCaches])
+  React.useEffect(() => onFilesUpdated(clearCaches), [clearCaches])
+
+  React.useEffect(() => {
+    const sectionId = defaultExpandedSection(activeModule)
+    if (!sectionId) return
+    setExpanded((prev) => {
+      if (prev.has(sectionId)) return prev
+      const next = new Set(prev)
+      next.add(sectionId)
+      return next
+    })
+  }, [activeModule])
 
   React.useEffect(() => {
     const roots = rootsForModule(activeModule)
     for (const root of roots) {
       if (root.id === "section:notes") continue
-      if (!expanded.has(root.id) || !root.childKinds?.length) continue
-      if (nodeCache.has(root.id)) continue
-      void loadNodes(root.id, root.childKinds)
+      if (!expanded.has(root.id)) continue
+      if (root.childKinds?.length && !nodeCache.has(root.id)) {
+        void loadNodes(root.id, root.childKinds)
+      }
+      if (root.subscriptionTypes?.length && !subscriptionCache.has(root.id)) {
+        void loadSubscriptions(root.id, root.subscriptionTypes)
+      }
     }
-  }, [activeModule, expanded, nodeCache, loadNodes])
+  }, [
+    activeModule,
+    expanded,
+    nodeCache,
+    subscriptionCache,
+    loadNodes,
+    loadSubscriptions,
+  ])
 
   const roots = React.useMemo(() => {
     if (activeModule === "agent") {
@@ -147,7 +222,7 @@ export default function SidebarTree() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
       {activeModule === "tool" && <SidebarWebSearch />}
-      {mod.sidebarHint && (
+      {mod.sidebarHint && !SIDEBAR_DATA_MODULES.has(activeModule) && (
         <p className="px-2 pb-2 pt-1 text-xs leading-relaxed text-muted-foreground">
           {mod.sidebarHint}
         </p>
@@ -163,14 +238,30 @@ export default function SidebarTree() {
             activeKind={activeKind}
             activeWorkspaceId={activeWorkspaceId}
             nodeCache={nodeCache}
+            subscriptionCache={subscriptionCache}
             workspaces={activeModule === "agent" ? wsState.workspaces : undefined}
+            activeModule={activeModule}
             onToggle={toggleExpand}
             onLoadNodes={loadNodes}
+            onLoadSubscriptions={loadSubscriptions}
           />
         ))}
       </nav>
     </div>
   )
+}
+
+async function openBookmarkInBrowser(id: string) {
+  const bm = await getBookmark(id)
+  if (!bm) return
+  const href = safeHref(bm.url)
+  if (!href) return
+  if (!isTauri()) {
+    window.open(href, "_blank", "noopener,noreferrer")
+    return
+  }
+  await browserNavigate(href)
+  await browserShow()
 }
 
 function TreeRow({
@@ -181,9 +272,12 @@ function TreeRow({
   activeKind,
   activeWorkspaceId,
   nodeCache,
+  subscriptionCache,
   workspaces,
+  activeModule,
   onToggle,
   onLoadNodes,
+  onLoadSubscriptions,
 }: {
   node: SidebarTreeNode
   depth: number
@@ -192,12 +286,16 @@ function TreeRow({
   activeKind: string | null
   activeWorkspaceId: string | null
   nodeCache: Map<string, NodeSummary[]>
+  subscriptionCache: Map<string, Subscription[]>
   workspaces?: { id: string; name: string }[]
+  activeModule: ModuleId
   onToggle: (id: string) => void
   onLoadNodes: (sectionId: string, kinds: NodeKind[]) => void
+  onLoadSubscriptions: (sectionId: string, types: Subscription["type"][]) => void
 }) {
   const Icon = node.icon
   const isOpen = expanded.has(node.id)
+  const subscriptions = subscriptionCache.get(node.id)
 
   const active =
     node.nodeKind === "node" && node.nodeRef
@@ -207,6 +305,15 @@ function TreeRow({
         : node.descriptor?.kind?.startsWith("ai-")
           ? activeKind === node.descriptor.kind
           : isDescriptorActive(activeId, node.descriptor)
+
+  const ensureChildrenLoaded = () => {
+    if (node.childKinds?.length && node.id !== "section:notes" && !nodeCache.has(node.id)) {
+      onLoadNodes(node.id, node.childKinds)
+    }
+    if (node.subscriptionTypes?.length && !subscriptionCache.has(node.id)) {
+      onLoadSubscriptions(node.id, node.subscriptionTypes)
+    }
+  }
 
   const handleClick = () => {
     if (node.nodeKind === "node" && node.nodeRef) {
@@ -232,13 +339,7 @@ function TreeRow({
     if (node.descriptor) openTab(node.descriptor)
     if (node.hasChildren && !isOpen) {
       onToggle(node.id)
-      if (
-        node.childKinds?.length &&
-        node.id !== "section:notes" &&
-        !nodeCache.has(node.id)
-      ) {
-        onLoadNodes(node.id, node.childKinds)
-      }
+      ensureChildrenLoaded()
     }
   }
 
@@ -246,14 +347,7 @@ function TreeRow({
     e.stopPropagation()
     if (!node.hasChildren) return
     onToggle(node.id)
-    if (
-      !isOpen &&
-      node.childKinds?.length &&
-      node.id !== "section:notes" &&
-      !nodeCache.has(node.id)
-    ) {
-      onLoadNodes(node.id, node.childKinds)
-    }
+    if (!isOpen) ensureChildrenLoaded()
   }
 
   const forest: Tree<NodeSummary>[] =
@@ -337,6 +431,26 @@ function TreeRow({
         </React.Suspense>
       )}
 
+      {isOpen &&
+        node.subscriptionTypes?.length &&
+        subscriptions?.map((sub) => (
+          <SubscriptionRow
+            key={sub.id}
+            sub={sub}
+            depth={depth + 1}
+            activeModule={activeModule}
+          />
+        ))}
+
+      {isOpen && node.subscriptionTypes?.length && subscriptions?.length === 0 && (
+        <p
+          style={{ paddingLeft: `${(depth + 1) * 12 + 28}px` }}
+          className="py-1.5 text-xs text-muted-foreground"
+        >
+          暂无关注
+        </p>
+      )}
+
       {forest.map(({ item, children }) => (
         <NodeTreeBranch
           key={item.id}
@@ -345,9 +459,59 @@ function TreeRow({
           depth={depth + 1}
           expanded={expanded}
           activeId={activeId}
+          activeModule={activeModule}
           onToggle={onToggle}
         />
       ))}
+    </div>
+  )
+}
+
+function SubscriptionRow({
+  sub,
+  depth,
+  activeModule,
+}: {
+  sub: Subscription
+  depth: number
+  activeModule: ModuleId
+}) {
+  const handleClick = () => {
+    if (activeModule === "info" && sub.type === "entity") {
+      const route = entityEmbedRoute(sub)
+      if (route) requestEmbedRoute("info", route)
+      return
+    }
+    if (activeModule === "community" && sub.type === "peer") {
+      requestEmbedRoute("community", peerEmbedRoute(sub))
+    }
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          handleClick()
+        }
+      }}
+      style={{ paddingLeft: `${depth * 12 + 4}px` }}
+      className={cn(
+        "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm transition-colors",
+        "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+      )}
+    >
+      <span className="h-5 w-5 shrink-0" />
+      {sub.favicon ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={sub.favicon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-sm" />
+      ) : (
+        <Rss className="h-3.5 w-3.5 shrink-0" />
+      )}
+      <span className="min-w-0 flex-1 truncate text-left">{sub.title || sub.key}</span>
     </div>
   )
 }
@@ -358,6 +522,7 @@ function NodeTreeBranch({
   depth,
   expanded,
   activeId,
+  activeModule,
   onToggle,
 }: {
   item: NodeSummary
@@ -365,6 +530,7 @@ function NodeTreeBranch({
   depth: number
   expanded: Set<string>
   activeId: string | null
+  activeModule: ModuleId
   onToggle: (id: string) => void
 }) {
   const id = `node:${item.kind}:${item.id}`
@@ -372,17 +538,30 @@ function NodeTreeBranch({
   const Icon = iconForNodeKind(item.kind)
   const active = isNodeActive(activeId, item.kind, item.id)
   const hasKids = children.length > 0
+  const inBrowser = activeModule === "browser"
+
+  const handleNodeClick = () => {
+    if (inBrowser && item.kind === "bookmark") {
+      void openBookmarkInBrowser(item.id)
+      return
+    }
+    if (inBrowser && item.kind === "folder") {
+      if (hasKids) onToggle(id)
+      return
+    }
+    openNodeTab({ kind: item.kind, id: item.id }, item.title || "无标题")
+  }
 
   return (
     <div>
       <div
         role="button"
         tabIndex={0}
-        onClick={() => openNodeTab({ kind: item.kind, id: item.id }, item.title || "无标题")}
+        onClick={handleNodeClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
-            openNodeTab({ kind: item.kind, id: item.id }, item.title || "无标题")
+            handleNodeClick()
           }
         }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
@@ -423,6 +602,7 @@ function NodeTreeBranch({
             depth={depth + 1}
             expanded={expanded}
             activeId={activeId}
+            activeModule={activeModule}
             onToggle={onToggle}
           />
         ))}

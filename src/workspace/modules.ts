@@ -145,7 +145,7 @@ export const MODULES: ModuleConfig[] = [
     icon: MODULE_META.info.icon,
     colorClass: MODULE_META.info.tintClass,
     sidebarTitle: "资讯",
-    sidebarHint: "嵌入插件：聚合资讯，关注与收藏汇入「我的」；原文在「浏览器」打开。",
+    sidebarHint: "侧栏为已关注的实体；点击条目在资讯应用中打开。",
     entries: [
       {
         label: "资讯主页",
@@ -162,7 +162,7 @@ export const MODULES: ModuleConfig[] = [
     icon: MODULE_META.community.icon,
     colorClass: MODULE_META.community.tintClass,
     sidebarTitle: "社区",
-    sidebarHint: "嵌入插件：社区发布与关注；外链在「浏览器」打开。",
+    sidebarHint: "侧栏为已关注的社区发布者；点击条目查看其发布。",
     entries: [
       {
         label: "社区主页",
@@ -180,7 +180,7 @@ export const MODULES: ModuleConfig[] = [
     icon: Globe,
     colorClass: "text-spoke-community",
     sidebarTitle: "浏览器",
-    sidebarHint: "浏览网页，点页面右下角 ★ 一键收藏到「我的」→ 收藏（仅桌面 App）。",
+    sidebarHint: "侧栏为收藏夹与书签；点击条目在内嵌浏览器中打开（仅桌面 App）。",
     entries: [
       {
         label: "浏览器",
