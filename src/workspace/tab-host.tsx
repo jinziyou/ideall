@@ -11,7 +11,8 @@
 // 既简单又避免「每次切标签 overflow 标签反复 mount/flush/unmount」的抖动。
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { useTabs, useActiveId } from "./store"
+import { isTauri, browserHide } from "@/lib/tauri"
+import { useTabs, useActiveId, useActiveTabKind } from "./store"
 import { TabContent, tabLayout } from "./registry"
 import type { Tab } from "./types"
 
@@ -27,6 +28,14 @@ function heavyCat(tab: Tab): "fill" | "iframe" | null {
 export default function TabHost() {
   const tabs = useTabs()
   const activeId = useActiveId()
+  const activeKind = useActiveTabKind()
+
+  // 切离「浏览器」标签时强制收起原生子 webview (Linux overlay 否则会挡 iframe 点击)。
+  React.useEffect(() => {
+    if (activeKind === "browser-view" || activeKind === null) return
+    if (isTauri()) void browserHide().catch(() => {})
+  }, [activeKind])
+
   // LRU 顺序: 最近激活在末尾。openTab 即激活, 故每个曾打开的标签都进过此表。
   // 用 React 官方「渲染期按 key 调整派生态」模式维护 (非 effect): 当 activeId / 标签集变化时
   // 在 render 期重排一次, React 会以新态重渲染后再提交, 避免 set-state-in-effect 的级联渲染。

@@ -1,7 +1,8 @@
 // 工作区模块配置 (桌面工作区壳的单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 两种模式 (模式切换):
 //   本地(local): 我的(home) · 关注(subscriptions) · 工具(tool) —— 本机数据 + 常用工具 (含聚合搜索)
-//   连接(connected): 资讯(info) · 社区(community) —— 联网的发现
+//   连接(connected): 资讯(info) · 社区(community) —— 嵌入 SPA 插件 (wonita/portal iframe, 客户端路由)
+//                    浏览器(browser) —— 外部网页资源 (内嵌 webview, 仅桌面 App)
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏的「本地搜索」搜本机内容, 两者职责分离。
 //
 // 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
@@ -144,7 +145,7 @@ export const MODULES: ModuleConfig[] = [
     icon: MODULE_META.info.icon,
     colorClass: MODULE_META.info.tintClass,
     sidebarTitle: "资讯",
-    sidebarHint: "聚合发布者与实体资讯，关注与收藏汇入「我的」。",
+    sidebarHint: "嵌入插件：聚合资讯，关注与收藏汇入「我的」；原文在「浏览器」打开。",
     entries: [
       {
         label: "资讯主页",
@@ -161,7 +162,7 @@ export const MODULES: ModuleConfig[] = [
     icon: MODULE_META.community.icon,
     colorClass: MODULE_META.community.tintClass,
     sidebarTitle: "社区",
-    sidebarHint: "发现社区发布者并关注，他们的发布汇入「我的」。",
+    sidebarHint: "嵌入插件：社区发布与关注；外链在「浏览器」打开。",
     entries: [
       {
         label: "社区主页",
@@ -172,7 +173,7 @@ export const MODULES: ModuleConfig[] = [
     ],
   },
   {
-    // 浏览器 = 内嵌 webview 浏览任意外站; 活动栏点图标直达 browser-view 标签 (仅桌面 App; 见 browser-view.tsx / src-tauri lib.rs)。
+    // 浏览器 = 外部资源模块 (内嵌 webview); 插件/宿主 UI 的外链均经此打开 (见 browser-open.ts)。
     id: "browser",
     mode: "connected",
     label: "浏览器",

@@ -15,12 +15,14 @@ import {
   browserReload,
   browserHide,
   browserClose,
+  browserShow,
   onBrowserUrl,
   onBrowserFavorite,
   onBrowserFabMoved,
   type BrowserBounds,
 } from "@/lib/tauri"
 import { loadBrowserFabPos, saveBrowserFabPos } from "./browser-fab-pos"
+import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-open"
 
 const START_URL = "https://www.google.com"
 
@@ -38,8 +40,9 @@ export default function BrowserView() {
   )
   const contentRef = React.useRef<HTMLDivElement | null>(null)
   const openedRef = React.useRef(false)
-  const currentUrlRef = React.useRef(START_URL)
-  const [addr, setAddr] = React.useState(START_URL)
+  const initialUrl = React.useMemo(() => takePendingBrowserUrl() ?? START_URL, [])
+  const currentUrlRef = React.useRef(initialUrl)
+  const [addr, setAddr] = React.useState(initialUrl)
 
   const favorite = React.useCallback(() => {
     void (async () => {
@@ -65,6 +68,17 @@ export default function BrowserView() {
       await addBookmark({ url: href, title })
       toast.success("已收藏到「我的 → 收藏」")
     })()
+  }, [])
+
+  React.useEffect(() => {
+    return subscribePendingBrowserUrl((url) => {
+      currentUrlRef.current = url
+      setAddr(url)
+      if (openedRef.current) {
+        browserNavigate(url).catch(() => toast.error("导航失败"))
+        browserShow().catch(() => {})
+      }
+    })
   }, [])
 
   React.useEffect(() => {

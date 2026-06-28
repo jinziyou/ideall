@@ -22,8 +22,9 @@ const resolvers = new Map<SubscriptionType, ContentResolver>()
 /** 注册某些关注类型的内容解析器 (组合根在启动时调用)。 */
 export function registerContentResolver(types: SubscriptionType[], fn: ContentResolver): void {
   for (const t of types) {
-    // 开发期对重复注册告警: 让 manifest 声明重叠 (同一类型被两个 app 认领) 尽早暴露, 而非静默覆盖。
-    if (process.env.NODE_ENV !== "production" && resolvers.has(t)) {
+    const prev = resolvers.get(t)
+    if (prev === fn) continue // HMR / StrictMode 重复 registerAll: 同函数幂等跳过
+    if (process.env.NODE_ENV !== "production" && prev) {
       console.warn(
         `[content] 关注类型 "${t}" 的解析器被重复注册并覆盖, 请检查各 manifest 的 types 是否重叠`,
       )

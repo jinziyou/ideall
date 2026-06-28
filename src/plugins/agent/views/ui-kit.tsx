@@ -227,7 +227,13 @@ export function ListRow({
   active?: boolean
   onClick?: () => void
 }) {
-  const inner = (
+  const cls = cn(
+    "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
+    active
+      ? "border-primary/40 bg-primary/5"
+      : "bg-card hover:border-foreground/20 hover:bg-accent/50",
+  )
+  const main = (
     <>
       {leading && <span className="flex shrink-0 items-center">{leading}</span>}
       <span className="min-w-0 flex-1 text-left">
@@ -238,25 +244,29 @@ export function ListRow({
           </span>
         )}
       </span>
-      {trailing && (
-        <span className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          {trailing}
-        </span>
-      )}
     </>
   )
-  const cls = cn(
-    "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
-    active
-      ? "border-primary/40 bg-primary/5"
-      : "bg-card hover:border-foreground/20 hover:bg-accent/50",
-  )
-  return onClick ? (
-    <button type="button" onClick={onClick} className={cls}>
-      {inner}
-    </button>
-  ) : (
-    <div className={cls}>{inner}</div>
+  if (!onClick) {
+    return (
+      <div className={cls}>
+        {main}
+        {trailing && <span className="flex shrink-0 items-center gap-2">{trailing}</span>}
+      </div>
+    )
+  }
+  return (
+    <div className={cls}>
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {main}
+      </button>
+      {trailing && (
+        <span className="flex shrink-0 items-center gap-2">{trailing}</span>
+      )}
+    </div>
   )
 }
 

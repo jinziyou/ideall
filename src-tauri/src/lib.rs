@@ -1,10 +1,14 @@
 // 内嵌浏览器 (连接模式, 路线 A): 主窗口内嵌原生子 webview 显示外站, 工具条由可信本地前端渲染。
 // Linux/WSL: Tauri add_child 默认 gtk::Box 堆叠 (子 webview 落窗口底部) → browser_linux.rs 用 gtk::Fixed 精确定位。
 // 非 Linux: Window::add_child + 前端 getBoundingClientRect 同步 bounds。切走标签 hide; WSLg 内嵌浏览器或需 GDK_BACKEND=x11。
-#[cfg(desktop)]
+#[cfg(all(desktop, not(target_os = "linux")))]
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
 #[cfg(desktop)]
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
+use tauri::AppHandle;
+#[cfg(desktop)]
+use tauri::Manager;
+#[cfg(all(desktop, not(target_os = "linux")))]
+use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
 
 // ACP (Agent Client Protocol) 外部智能体传输 —— 子进程 stdin/stdout 哑管道 (NDJSON 行框定), 仅桌面。
 #[cfg(desktop)]
@@ -14,11 +18,13 @@ mod oauth_callback;
 #[cfg(all(desktop, target_os = "linux"))]
 mod browser_linux;
 #[cfg(desktop)]
+mod window_placement;
+#[cfg(desktop)]
 mod browser_fab;
 
-#[cfg(desktop)]
+#[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_LABEL: &str = "browser_view";
-#[cfg(desktop)]
+#[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_FAB_LABEL: &str = "browser_fab";
 
 // 主窗口内容区矩形 (CSS 像素, 相对窗口左上)。直接当 Logical 传, 勿乘 devicePixelRatio (Tauri 自动按 scale 换算)。
@@ -134,7 +140,7 @@ fn open_browser_view(
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_set_bounds(
-    app: AppHandle,
+    _app: AppHandle,
     b: Bounds,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
@@ -143,13 +149,13 @@ fn browser_set_bounds(
     #[cfg(not(target_os = "linux"))]
     {
     browser_fab::sync_content(&b);
-    let wv = app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?;
+    let wv = _app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?;
     wv.set_position(LogicalPosition::new(b.x, b.y))
         .map_err(|e| e.to_string())?;
     wv.set_size(LogicalSize::new(b.w, b.h))
         .map_err(|e| e.to_string())?;
     let fab = browser_fab::bounds(&b);
-    if let Some(fv) = app.get_webview(BROWSER_FAB_LABEL) {
+    if let Some(fv) = _app.get_webview(BROWSER_FAB_LABEL) {
         fv.set_position(LogicalPosition::new(fab.x, fab.y))
             .map_err(|e| e.to_string())?;
         fv.set_size(LogicalSize::new(fab.w, fab.h))
@@ -163,7 +169,7 @@ fn browser_set_bounds(
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_navigate(
-    app: AppHandle,
+    _app: AppHandle,
     url: String,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
@@ -172,7 +178,7 @@ fn browser_navigate(
     #[cfg(not(target_os = "linux"))]
     {
     let parsed = parse_http_url(&url)?;
-    app.get_webview(BROWSER_LABEL)
+    _app.get_webview(BROWSER_LABEL)
         .ok_or("浏览器视图不存在")?
         .navigate(parsed)
         .map_err(|e| e.to_string())
@@ -181,13 +187,13 @@ fn browser_navigate(
 
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_back(app: AppHandle) -> Result<(), String> {
+fn browser_back(_app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return browser_linux::back();
 
     #[cfg(not(target_os = "linux"))]
     {
-        app.get_webview(BROWSER_LABEL)
+        _app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .eval("history.back()")
             .map_err(|e| e.to_string())
@@ -195,13 +201,13 @@ fn browser_back(app: AppHandle) -> Result<(), String> {
 }
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_forward(app: AppHandle) -> Result<(), String> {
+fn browser_forward(_app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return browser_linux::forward();
 
     #[cfg(not(target_os = "linux"))]
     {
-        app.get_webview(BROWSER_LABEL)
+        _app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .eval("history.forward()")
             .map_err(|e| e.to_string())
@@ -209,13 +215,13 @@ fn browser_forward(app: AppHandle) -> Result<(), String> {
 }
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_reload(app: AppHandle) -> Result<(), String> {
+fn browser_reload(_app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return browser_linux::reload();
 
     #[cfg(not(target_os = "linux"))]
     {
-        app.get_webview(BROWSER_LABEL)
+        _app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .eval("location.reload()")
             .map_err(|e| e.to_string())
@@ -225,17 +231,17 @@ fn browser_reload(app: AppHandle) -> Result<(), String> {
 // 隐藏/显示/关闭子 webview (标签切走 hide, 切回 show, 关标签 close)。
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_hide(app: AppHandle) -> Result<(), String> {
+fn browser_hide(_app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return browser_linux::hide();
 
     #[cfg(not(target_os = "linux"))]
     {
-        app.get_webview(BROWSER_LABEL)
+        _app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .hide()
             .map_err(|e| e.to_string())?;
-        if let Some(fv) = app.get_webview(BROWSER_FAB_LABEL) {
+        if let Some(fv) = _app.get_webview(BROWSER_FAB_LABEL) {
             fv.hide().map_err(|e| e.to_string())?;
         }
         Ok(())
@@ -243,17 +249,17 @@ fn browser_hide(app: AppHandle) -> Result<(), String> {
 }
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_show(app: AppHandle) -> Result<(), String> {
+fn browser_show(_app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return browser_linux::show();
 
     #[cfg(not(target_os = "linux"))]
     {
-        app.get_webview(BROWSER_LABEL)
+        _app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .show()
             .map_err(|e| e.to_string())?;
-        if let Some(fv) = app.get_webview(BROWSER_FAB_LABEL) {
+        if let Some(fv) = _app.get_webview(BROWSER_FAB_LABEL) {
             fv.show().map_err(|e| e.to_string())?;
         }
         Ok(())
@@ -261,16 +267,16 @@ fn browser_show(app: AppHandle) -> Result<(), String> {
 }
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_close(app: AppHandle) -> Result<(), String> {
+fn browser_close(_app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return browser_linux::close();
 
     #[cfg(not(target_os = "linux"))]
     {
-        if let Some(w) = app.get_webview(BROWSER_LABEL) {
+        if let Some(w) = _app.get_webview(BROWSER_LABEL) {
             w.close().map_err(|e| e.to_string())?;
         }
-        if let Some(w) = app.get_webview(BROWSER_FAB_LABEL) {
+        if let Some(w) = _app.get_webview(BROWSER_FAB_LABEL) {
             w.close().map_err(|e| e.to_string())?;
         }
         Ok(())
@@ -495,6 +501,25 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // HTTP: App 内 fetch 经 Rust 侧发出, 绕过 webview CORS (agent 直连任意 LLM 端点)。
         .plugin(tauri_plugin_http::init());
+
+    // 多显示器: 未在 tauri.conf 指定 x/y 时, 等窗口尺寸就绪后居中到主屏 (见 window_placement.rs)。
+    #[cfg(desktop)]
+    let builder = builder.setup(|app| {
+        let conf = app
+            .config()
+            .app
+            .windows
+            .iter()
+            .find(|w| w.label == "main")
+            .or_else(|| app.config().app.windows.first())
+            .cloned();
+        if conf.as_ref().is_some_and(|w| w.x.is_none() && w.y.is_none()) {
+            if let Some(window) = app.get_webview_window("main") {
+                window_placement::schedule_initial_placement(&window, conf.unwrap());
+            }
+        }
+        Ok(())
+    });
 
     // agent 出站守卫命令两端通用; 内嵌浏览器命令仅桌面 (Window::add_child = desktop + unstable feature)。
     // invoke_handler 只能设一次, 故按平台分别注册全集 / 仅 agent_guarded_fetch。

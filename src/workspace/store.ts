@@ -10,6 +10,7 @@ import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { HOME_OVERVIEW } from "./home-sections"
 import { moduleById } from "./modules"
+import { isTauri, browserHide } from "@/lib/tauri"
 
 const STORAGE_KEY = "ideall:workspace:v1"
 
@@ -181,9 +182,16 @@ export function hydrateWorkspace() {
 
 // —— 动作 ——
 
+/** 切离「浏览器」标签时收起原生子 webview, 避免其叠在插件 iframe 上拦截点击。 */
+function hideBrowserWebviewUnlessBrowserTab(kind: string) {
+  if (kind === "browser-view") return
+  if (isTauri()) void browserHide().catch(() => {})
+}
+
 /** 打开 (或激活已存在的) 标签。同时把模式镜头同步到该标签所属模式。
  *  source 默认 user (UI/路由触发); agent 经 ui.openTab 打开时传 "agent" —— 仅影响隐式同意, 不改打开行为。 */
 export function openTab(d: TabDescriptor, source: ActiveSource = "user") {
+  hideBrowserWebviewUnlessBrowserTab(d.kind)
   const id = tabKey(d)
   const exists = state.tabs.some((t) => t.id === id)
   const tabs = exists ? state.tabs : [...state.tabs, { ...d, id }]
@@ -267,6 +275,7 @@ export function closeTab(id: string) {
     // 焦点转移到相邻标签时, 同步活动模块与模式镜头 (否则活动栏/侧栏/状态栏会停在旧模块)。
     // AI 区段 (module:"agent") mode-中性: 焦点落到它时设 activeModule=agent 但保留关闭前的 mode 镜头。
     if (next) {
+      hideBrowserWebviewUnlessBrowserTab(next.kind)
       if (next.module === "agent") {
         activeModule = "agent"
       } else {
@@ -281,6 +290,7 @@ export function closeTab(id: string) {
 export function setActiveTab(id: string) {
   const t = state.tabs.find((x) => x.id === id)
   if (!t) return
+  hideBrowserWebviewUnlessBrowserTab(t.kind)
   // AI 区段 (module:"agent") mode-中性: 激活它设 activeModule=agent 但不改 mode (否则点 AI 标签会翻 connected)。
   if (t.module === "agent") {
     setState({ activeId: id, activeModule: "agent", activeSource: "user" })
@@ -311,6 +321,7 @@ export function toggleModule(m: ModuleId) {
   const id = tabKey(first.descriptor)
   const exists = state.tabs.some((t) => t.id === id)
   const tabs = exists ? state.tabs : [...state.tabs, { ...first.descriptor, id }]
+  hideBrowserWebviewUnlessBrowserTab(first.descriptor.kind)
   setState({
     tabs,
     activeId: id,
@@ -326,6 +337,7 @@ export function openHome() {
   const id = tabKey(HOME_OVERVIEW)
   const exists = state.tabs.some((t) => t.id === id)
   const tabs = exists ? state.tabs : [...state.tabs, { ...HOME_OVERVIEW, id }]
+  hideBrowserWebviewUnlessBrowserTab(HOME_OVERVIEW.kind)
   setState({
     tabs,
     activeId: id,
@@ -352,6 +364,7 @@ export function setMode(mode: WsMode) {
   const id = tabKey(entry.descriptor)
   const exists = state.tabs.some((t) => t.id === id)
   const tabs = exists ? state.tabs : [...state.tabs, { ...entry.descriptor, id }]
+  hideBrowserWebviewUnlessBrowserTab(entry.descriptor.kind)
   setState({
     mode,
     tabs,

@@ -336,6 +336,10 @@ pub fn hide() -> Result<(), String> {
         if let Some(wv) = inner.webview.as_ref() {
             wv.set_visible(false).map_err(|e| e.to_string())?;
         }
+        // 仅隐藏 webview 不够: gtk::Fixed overlay 仍占矩形并拦截下方 iframe 的点击 (WSL/Linux)。
+        if let Some(fixed) = inner.overlay_fixed.as_ref() {
+            fixed.hide();
+        }
         set_fab_visible(inner, false);
         Ok(())
     })
@@ -343,6 +347,9 @@ pub fn hide() -> Result<(), String> {
 
 pub fn show() -> Result<(), String> {
     with_browser(|inner| {
+        if let Some(fixed) = inner.overlay_fixed.as_ref() {
+            fixed.show_all();
+        }
         if let Some(wv) = inner.webview.as_ref() {
             wv.set_visible(true).map_err(|e| e.to_string())?;
         }

@@ -49,6 +49,7 @@ pub fn set_custom_pos(x: f64, y: f64) -> FabMoved {
     FabMoved { x: fb.x, y: fb.y }
 }
 
+#[cfg(all(desktop, not(target_os = "linux")))]
 pub fn apply_delta(dx: f64, dy: f64) -> Option<FabMoved> {
     STATE.with(|s| {
         let mut st = s.borrow_mut();
