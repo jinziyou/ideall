@@ -1,8 +1,13 @@
-// 工作区模块配置 (单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
+// 工作区模块配置 (桌面工作区壳的单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 两种模式 (模式切换):
 //   本地(local): 我的(home) · 关注(subscriptions) · 工具(tool) —— 本机数据 + 常用工具 (含聚合搜索)
 //   连接(connected): 资讯(info) · 社区(community) —— 联网的发现
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏的「本地搜索」搜本机内容, 两者职责分离。
+//
+// 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
+//   · 本文件 (modules.ts): 桌面 IDE 式工作区 (活动栏/侧栏/标签) + descriptorForPath 路由解析。
+//   · shell/nav-config.ts:  移动端 Sheet/底栏 + ⌘K 命令台 (扁平 href 链接范式)。
+// 桌面是「模块→标签」、移动是「href→路由」两种范式; 命令台经 router.push→OpenWorkspaceTab 标记桥接到同一标签, 故无需统一。
 
 import type { ComponentType } from "react"
 import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"

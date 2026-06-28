@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { NoteMeta } from "../model"
 import { buildNoteTree, type TreeNode } from "@/files/notes-tree-util"
+import { EmptyState } from "@/ui/empty-state"
 
 /** 拖放落点的相对位置: 目标行上缘=插到其前; 下缘=插到其后; 中部=作其子页。 */
 type DropZone = "before" | "after" | "inside"
@@ -100,11 +101,7 @@ export function PageTree({
   )
 
   if (forest.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-        还没有页面。点上方「新建」开始。
-      </div>
-    )
+    return <EmptyState title="还没有页面。点上方「新建」开始。" />
   }
 
   return (

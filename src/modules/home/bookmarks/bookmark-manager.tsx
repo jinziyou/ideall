@@ -19,6 +19,7 @@ import {
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { Badge } from "@/ui/badge"
+import { EmptyState } from "@/ui/empty-state"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -265,9 +266,10 @@ export default function BookmarkManager() {
 
         {/* 链接列表 */}
         {filtered.length === 0 ? (
-          <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-            {bookmarks.length === 0 ? "还没有书签。新增一条或导入试试。" : "没有匹配的书签。"}
-          </div>
+          <EmptyState
+            icon={bookmarks.length === 0 ? Inbox : undefined}
+            title={bookmarks.length === 0 ? "还没有书签。新增一条或导入试试。" : "没有匹配的书签。"}
+          />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visible.map((b) => (

@@ -7,6 +7,7 @@ import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { PinToolButton } from "@/shared/feeders"
 import { openExternal } from "@/lib/safe-url"
+import { jumpToSearchEngine } from "@/lib/search-jump"
 import { isTauri } from "@/lib/tauri"
 
 const HISTORY_LIMIT = 10
@@ -123,8 +124,7 @@ export default function QuickJump({
     if (trimmed) recordHistory(trimmed)
     // 支持关键词的引擎: 直接带词跳转 (外链经 openExternal: App 走系统浏览器, web 走新标签)
     if (trimmed && provider.queryUrl) {
-      const url = provider.queryUrl.replace("{q}", encodeURIComponent(trimmed))
-      openExternal(url)
+      jumpToSearchEngine(provider.queryUrl, trimmed)
       return
     }
     // 不支持关键词跳转: 复制到剪贴板后打开首页, 方便用户粘贴

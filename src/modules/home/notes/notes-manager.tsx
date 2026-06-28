@@ -14,6 +14,7 @@ import type { NoteMeta } from "../model"
 import { addNote, listNotes } from "@/files/stores/notes-store"
 import { openNodeTab } from "@/workspace/store"
 import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/sidebar-tree-bus"
+import { EmptyState } from "@/ui/empty-state"
 
 export default function NotesManager() {
   const [notes, setNotes] = React.useState<NoteMeta[]>([])
@@ -100,18 +101,18 @@ export default function NotesManager() {
       </div>
 
       {notes.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center text-muted-foreground">
-          <FileText className="h-10 w-10 opacity-40" />
-          <p className="text-sm">还没有笔记</p>
-          <Button variant="outline" onClick={handleNewRoot}>
-            <FilePlus2 className="mr-2 h-4 w-4" />
-            新建第一篇
-          </Button>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="还没有笔记"
+          action={
+            <Button variant="outline" onClick={handleNewRoot}>
+              <FilePlus2 className="mr-2 h-4 w-4" />
+              新建第一篇
+            </Button>
+          }
+        />
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
-          没有匹配的笔记。
-        </div>
+        <EmptyState title="没有匹配的笔记。" />
       ) : (
         <div className="flex flex-col gap-1">
           {!searching && (

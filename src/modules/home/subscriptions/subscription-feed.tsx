@@ -21,6 +21,7 @@ import {
   removeSubscription,
 } from "@/files/stores/subscriptions-store"
 import { undoableToast } from "@/lib/undo-toast"
+import { EmptyState } from "@/ui/empty-state"
 
 /** 每个关注来源在关注流里展示的最新条数。 */
 const PER_SOURCE = 5
@@ -137,26 +138,28 @@ export default function SubscriptionFeed({
 
   if (tools.length === 0 && feeds.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-16 text-center">
-        <Rss className="h-8 w-8 text-muted-foreground" />
-        <p className="max-w-sm text-sm text-muted-foreground">
-          还没有关注。去「发现」关注，内容会汇入这里。
-        </p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button asChild size="sm">
-            <Link href="/info">浏览资讯</Link>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/info/search">搜索</Link>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/community">社区</Link>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/tool">工具</Link>
-          </Button>
-        </div>
-      </div>
+      <EmptyState
+        bordered={false}
+        icon={Rss}
+        title="还没有关注"
+        description="去「发现」关注，内容会汇入这里。"
+        action={
+          <>
+            <Button asChild size="sm">
+              <Link href="/info">浏览资讯</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/info/search">搜索</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/community">社区</Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/tool">工具</Link>
+            </Button>
+          </>
+        }
+      />
     )
   }
 

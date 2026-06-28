@@ -22,6 +22,12 @@ import { CMDK_OPEN, openCommandPalette } from "@/lib/command-palette-bus"
 import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import { HOME_SUBPAGES, SPOKES } from "@/shell/nav-config"
+import {
+  loadLocalSearchItems,
+  LOCAL_SEARCH_ICON,
+  LOCAL_SEARCH_ORDER,
+  type LocalSearchItem,
+} from "@/workspace/local-search-items"
 
 // openCommandPalette / CMDK_OPEN 已抽到 @/lib/command-palette-bus (纯事件总线),
 // 使 components 的触发器无需反向 import app/shell; 此处 re-export 维持既有 ./command-palette 导入点。
@@ -35,6 +41,10 @@ export { openCommandPalette }
 export default function CommandPalette() {
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
+  // 受控输入: 内容项 (笔记/书签/资源/关注) 仅在用户输入时才展示, 避免一打开就糊一屏本机内容
+  // (⌘K 主要是命令/跳转入口; 内容搜索是兑现占位文案「跳到书签」的补充)。
+  const [query, setQuery] = React.useState("")
+  const [content, setContent] = React.useState<LocalSearchItem[]>([])
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, () => null)
   // updater 仅桌面 (Tauri) 生效; 取常量快照 (SSR / web = false), 避免 effect 内同步 setState 的级联渲染 lint。
   const isDesktop = React.useSyncExternalStore(
@@ -47,10 +57,12 @@ export default function CommandPalette() {
     function onKey(e: KeyboardEvent) {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
+        setQuery("") // 每次开/关都清空, 下次打开回到命令视图 (在事件回调里重置, 不在 effect 体内同步 setState)
         setOpen((v) => !v)
       }
     }
     function onOpen() {
+      setQuery("")
       setOpen(true)
     }
     document.addEventListener("keydown", onKey)
@@ -60,6 +72,22 @@ export default function CommandPalette() {
       window.removeEventListener(CMDK_OPEN, onOpen)
     }
   }, [])
+
+  // 打开时预加载本机内容 (供输入后即时过滤); 输入清空由开/关的事件回调负责 (避免 effect 内同步 setState)。
+  React.useEffect(() => {
+    if (!open) return
+    let alive = true
+    loadLocalSearchItems()
+      .then((items) => {
+        if (alive) setContent(items)
+      })
+      .catch(() => {
+        /* 本地读取失败时静默, 仅退化为无内容搜索 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [open])
 
   function go(href: string) {
     setOpen(false)
@@ -108,7 +136,11 @@ export default function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="跳到书签、切换主题、同步数据…" />
+      <CommandInput
+        value={query}
+        onValueChange={setQuery}
+        placeholder="跳到书签 / 笔记 / 资源、切换主题、同步数据…"
+      />
       <CommandList>
         <CommandEmpty>没有匹配的命令或位置</CommandEmpty>
         <CommandGroup heading="发现">
@@ -181,6 +213,35 @@ export default function CommandPalette() {
             </CommandItem>
           )}
         </CommandGroup>
+        {/* 本机内容 (笔记/关注/书签/资源): 仅在输入时展示, 按标题模糊匹配 (cmdk 据 keywords 过滤)。 */}
+        {query.trim() && content.length > 0
+          ? LOCAL_SEARCH_ORDER.map((g) => {
+              const gi = content.filter((i) => i.group === g)
+              if (gi.length === 0) return null
+              const Icon = LOCAL_SEARCH_ICON[g]
+              return (
+                <React.Fragment key={g}>
+                  <CommandSeparator />
+                  <CommandGroup heading={g}>
+                    {gi.map((i) => (
+                      <CommandItem
+                        key={i.id}
+                        value={i.id}
+                        keywords={[i.label]}
+                        onSelect={() => {
+                          i.run()
+                          setOpen(false)
+                        }}
+                      >
+                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{i.label}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </React.Fragment>
+              )
+            })
+          : null}
       </CommandList>
     </CommandDialog>
   )

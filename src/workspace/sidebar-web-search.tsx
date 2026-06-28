@@ -4,6 +4,7 @@
 import * as React from "react"
 import { Search } from "lucide-react"
 import { SEARCH_ENGINES } from "@/modules/tool/engines"
+import { jumpToSearchEngine } from "@/lib/search-jump"
 
 const ENGINES = SEARCH_ENGINES.filter((e) => e.queryUrl)
 
@@ -17,11 +18,7 @@ export default function SidebarWebSearch() {
     if (!term) return
     const eng = ENGINES.find((x) => x.name === engine) ?? ENGINES[0]
     if (!eng.queryUrl) return
-    window.open(
-      eng.queryUrl.replace("{q}", encodeURIComponent(term)),
-      "_blank",
-      "noopener,noreferrer",
-    )
+    jumpToSearchEngine(eng.queryUrl, term)
   }
 
   return (

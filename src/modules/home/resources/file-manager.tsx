@@ -43,6 +43,7 @@ import { undoableDeleteToast } from "@/lib/undo-toast"
 import { fileKind, FileKind, formatBytes, formatTime } from "@/lib/node-format"
 import FilePreviewDialog from "./file-preview-dialog"
 import { useIncrementalList } from "@/lib/use-incremental-list"
+import { EmptyState } from "@/ui/empty-state"
 
 const KIND_ICON: Record<FileKind, React.ComponentType<{ className?: string }>> = {
   image: ImageIcon,
@@ -421,9 +422,10 @@ export default function FileManager() {
           加载中…
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
-          {files.length === 0 ? "还没有文件。上传一个试试。" : "没有匹配的文件。"}
-        </div>
+        <EmptyState
+          icon={files.length === 0 ? FileIcon : undefined}
+          title={files.length === 0 ? "还没有文件。上传一个试试。" : "没有匹配的文件。"}
+        />
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {visible.map((file) => (
