@@ -56,17 +56,17 @@ export interface AgentPanelProps {
 
 const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function AgentPanel(
   {
-  compact = false,
-  resolveRun,
-  configured: configuredProp,
-  modelLabel,
-  skills = BUILTIN_SKILLS,
-  onOpenSettings,
-  scopeIds,
-  onThreadCreated,
-  newLabel = "新对话",
-  emptyLabel = "还没有对话",
-}: AgentPanelProps = {},
+    compact = false,
+    resolveRun,
+    configured: configuredProp,
+    modelLabel,
+    skills = BUILTIN_SKILLS,
+    onOpenSettings,
+    scopeIds,
+    onThreadCreated,
+    newLabel = "新对话",
+    emptyLabel = "还没有对话",
+  }: AgentPanelProps = {},
   ref,
 ) {
   const settings = React.useSyncExternalStore(
@@ -366,9 +366,7 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
     ? threads.filter((t) => scopeIds.includes(t.id) || t.id === activeId)
     : threads
 
-  const statusLabel = configured
-    ? modelLabel ?? settings.model
-    : "未配置模型"
+  const statusLabel = configured ? (modelLabel ?? settings.model) : "未配置模型"
 
   return (
     <div className={cn("flex h-full min-h-0", !compact && "md:gap-6")}>
@@ -384,7 +382,9 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
           </button>
           <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
             {shownThreads.length === 0 && (
-              <p className="px-2 py-6 text-center text-[13px] text-muted-foreground">{emptyLabel}</p>
+              <p className="px-2 py-6 text-center text-[13px] text-muted-foreground">
+                {emptyLabel}
+              </p>
             )}
             {shownThreads.map((t) => {
               const active = t.id === activeId
@@ -428,7 +428,13 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Chip tone={configured ? "ok" : "warn"}>{statusLabel}</Chip>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={openSettings} title="设置">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={openSettings}
+                title="设置"
+              >
                 <Settings className="h-4 w-4" />
                 <span className="sr-only">设置</span>
               </Button>
@@ -456,49 +462,54 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
               compact ? "gap-5 px-4 py-6" : "max-w-2xl gap-6 py-2",
             )}
           >
-            {messages.length === 0 ? null : (
-              messages.map((m) => (
-                <ChatMessage key={m.id} message={m} streaming={m.id === streamingId} compact={compact} />
-              ))
-            )}
+            {messages.length === 0
+              ? null
+              : messages.map((m) => (
+                  <ChatMessage
+                    key={m.id}
+                    message={m}
+                    streaming={m.id === streamingId}
+                    compact={compact}
+                  />
+                ))}
           </div>
         </div>
 
         {pendingApproval && (
           <div className={cn("shrink-0", compact ? "px-4 pb-3" : "mt-4")}>
             <ComposerShell className="flex items-center justify-between gap-3 text-sm">
-            <span className="min-w-0 text-[13px]">
-              <span className="font-medium">请求执行工具</span>
-              <span className="ml-1 font-mono text-muted-foreground">
-                {pendingApproval.name}
-                {pendingApproval.argsText ? `(${pendingApproval.argsText})` : ""}
+              <span className="min-w-0 text-[13px]">
+                <span className="font-medium">请求执行工具</span>
+                <span className="ml-1 font-mono text-muted-foreground">
+                  {pendingApproval.name}
+                  {pendingApproval.argsText ? `(${pendingApproval.argsText})` : ""}
+                </span>
               </span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  setPendingApproval((p) => {
-                    p?.resolve(false)
-                    return null
-                  })
-                }
-              >
-                拒绝
-              </Button>
-              <Button
-                size="sm"
-                onClick={() =>
-                  setPendingApproval((p) => {
-                    p?.resolve(true)
-                    return null
-                  })
-                }
-              >
-                允许
-              </Button>
-            </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setPendingApproval((p) => {
+                      p?.resolve(false)
+                      return null
+                    })
+                  }
+                >
+                  拒绝
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    setPendingApproval((p) => {
+                      p?.resolve(true)
+                      return null
+                    })
+                  }
+                >
+                  允许
+                </Button>
+              </span>
             </ComposerShell>
           </div>
         )}
@@ -587,7 +598,13 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
                 onKeyDown={onComposerKeyDown}
               />
               {sending ? (
-                <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={stop} title="停止">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={stop}
+                  title="停止"
+                >
                   <X className="h-4 w-4" />
                   <span className="sr-only">停止</span>
                 </Button>

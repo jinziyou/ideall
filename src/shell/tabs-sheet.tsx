@@ -54,7 +54,9 @@ export default function TabsSheet() {
                       }}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
                     >
-                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", MODULE_DOT[t.module])} />
+                      <span
+                        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", MODULE_DOT[t.module])}
+                      />
                       <span className="shrink-0 rounded bg-muted px-1 py-px text-[10px] font-medium text-muted-foreground">
                         {TAB_VIEW_LABEL[tabViewType(t)]}
                       </span>

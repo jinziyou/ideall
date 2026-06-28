@@ -115,9 +115,7 @@ export default function NotesManager() {
         <EmptyState title="没有匹配的笔记。" />
       ) : (
         <div className="flex flex-col gap-1">
-          {!searching && (
-            <p className="px-1 text-xs font-medium text-muted-foreground">最近编辑</p>
-          )}
+          {!searching && <p className="px-1 text-xs font-medium text-muted-foreground">最近编辑</p>}
           {filtered.map((n) => (
             <button
               key={n.id}

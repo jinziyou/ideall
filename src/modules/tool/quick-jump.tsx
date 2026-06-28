@@ -82,12 +82,7 @@ type QuickJumpProps = {
   historyKey?: string
 }
 
-export default function QuickJump({
-  title,
-  placeholder,
-  providers,
-  historyKey,
-}: QuickJumpProps) {
+export default function QuickJump({ title, placeholder, providers, historyKey }: QuickJumpProps) {
   const [keyword, setKeyword] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
 

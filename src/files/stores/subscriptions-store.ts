@@ -107,9 +107,7 @@ export async function listSubscriptions(): Promise<Subscription[]> {
 }
 
 /** 按类型筛选活跃关注 (侧栏 info/community 用)。 */
-export async function listSubscriptionsByTypes(
-  types: SubscriptionType[],
-): Promise<Subscription[]> {
+export async function listSubscriptionsByTypes(types: SubscriptionType[]): Promise<Subscription[]> {
   if (types.length === 0) return []
   const want = new Set(types)
   return (await listSubscriptions()).filter((s) => want.has(s.type))

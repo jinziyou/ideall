@@ -246,9 +246,7 @@ export function ListRow({
       >
         {main}
       </button>
-      {trailing && (
-        <span className="flex shrink-0 items-center gap-2">{trailing}</span>
-      )}
+      {trailing && <span className="flex shrink-0 items-center gap-2">{trailing}</span>}
     </div>
   )
 }
@@ -268,7 +266,13 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
 }
 
 /** 对话输入壳: 圆角面板 + 内边距, 贴底 composer 复用。 */
-export function ComposerShell({ children, className }: { children: React.ReactNode; className?: string }) {
+export function ComposerShell({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
   return (
     <div className={cn("rounded-lg border bg-card p-3 shadow-none", className)}>{children}</div>
   )
@@ -283,7 +287,12 @@ export function SurfacePanel({
   className?: string
 }) {
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card", className)}>
+    <div
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card",
+        className,
+      )}
+    >
       {children}
     </div>
   )

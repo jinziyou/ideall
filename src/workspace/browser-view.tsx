@@ -139,10 +139,18 @@ export default function BrowserView() {
           <IconButton onClick={() => browserBack().catch(() => {})} title="后退" aria-label="后退">
             <ArrowLeft className="h-4 w-4" />
           </IconButton>
-          <IconButton onClick={() => browserForward().catch(() => {})} title="前进" aria-label="前进">
+          <IconButton
+            onClick={() => browserForward().catch(() => {})}
+            title="前进"
+            aria-label="前进"
+          >
             <ArrowRight className="h-4 w-4" />
           </IconButton>
-          <IconButton onClick={() => browserReload().catch(() => {})} title="刷新" aria-label="刷新">
+          <IconButton
+            onClick={() => browserReload().catch(() => {})}
+            title="刷新"
+            aria-label="刷新"
+          >
             <RotateCw className="h-4 w-4" />
           </IconButton>
           <form

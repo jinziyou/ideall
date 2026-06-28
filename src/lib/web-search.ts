@@ -30,8 +30,6 @@ const ALLOWED_CONTENT_TYPES = new Set([
   "text/xml",
 ])
 
-
-
 // ── HTML → 文本 (regex, 无 DOMParser) ───────────────────────────────────────────────────────────────
 
 function decodeEntities(s: string): string {

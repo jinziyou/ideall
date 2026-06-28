@@ -73,4 +73,3 @@ export function setAcpSettings(next: AcpSettings): void {
   }
   for (const l of listeners) l()
 }
-

@@ -286,11 +286,7 @@ export default function AppsPage() {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <PageHeader total={0} filtered={0} loading={false} />
-        <EmptyState
-          icon={AppWindow}
-          title="本机应用列表仅在桌面 App 中可用"
-          bordered
-        />
+        <EmptyState icon={AppWindow} title="本机应用列表仅在桌面 App 中可用" bordered />
       </div>
     )
   }
@@ -492,8 +488,7 @@ function CategoryBar({
 }) {
   const [moreOpen, setMoreOpen] = React.useState(false)
   const [moreQuery, setMoreQuery] = React.useState("")
-  const customActive =
-    category !== null && category !== "其他" && !isStandardCategory(category)
+  const customActive = category !== null && category !== "其他" && !isStandardCategory(category)
 
   const filteredCustom = React.useMemo(() => {
     const q = moreQuery.trim().toLowerCase()

@@ -9,10 +9,7 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
-import {
-  computeSiblingSortKey,
-  type InsertPos,
-} from "@/files/notes-tree-util"
+import { computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
 import { planBookmarksSeed } from "@/files/migrate/nodes-migrate"
 import {
   idbBulkDelete,
@@ -349,8 +346,7 @@ export async function moveBookmark(
   await seedBookmarksOnce()
   if (newParentId !== null) {
     const folder = await idbGet<FolderNode>(STORE_NODES, newParentId)
-    if (!folder || folder.kind !== "folder" || !isLive(folder))
-      throw new Error("目标收藏夹不存在")
+    if (!folder || folder.kind !== "folder" || !isLive(folder)) throw new Error("目标收藏夹不存在")
   }
   const live = await liveBookmarkTreeItems()
   if (!live.some((n) => n.id === id)) return

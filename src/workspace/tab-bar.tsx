@@ -12,7 +12,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
-import { useTabs, useActiveId, setActiveTab, closeTab, closeAllTabs, closeOtherTabs, reorderTabs } from "./store"
+import {
+  useTabs,
+  useActiveId,
+  setActiveTab,
+  closeTab,
+  closeAllTabs,
+  closeOtherTabs,
+  reorderTabs,
+} from "./store"
 import type { Tab } from "./types"
 import { tabViewType, TAB_VIEW_LABEL } from "./tab-view-type"
 import { MODULE_DOT } from "./module-dot"
@@ -24,13 +32,7 @@ const TAB_MAX_PX = 240
 const tabTailTrigger =
   "flex h-full shrink-0 items-center outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 
-function TabBarTail({
-  tabs,
-  activeId,
-}: {
-  tabs: Tab[]
-  activeId: string | null
-}) {
+function TabBarTail({ tabs, activeId }: { tabs: Tab[]; activeId: string | null }) {
   const [mgmtOpen, setMgmtOpen] = React.useState(false)
   const [listOpen, setListOpen] = React.useState(false)
 
@@ -47,7 +49,11 @@ function TabBarTail({
             type="button"
             title="管理标签"
             aria-label="管理标签"
-            className={cn(tabTailTrigger, "gap-1 rounded-shell pl-1.5 pr-0.5", mgmtOpen && "bg-accent text-foreground")}
+            className={cn(
+              tabTailTrigger,
+              "gap-1 rounded-shell pl-1.5 pr-0.5",
+              mgmtOpen && "bg-accent text-foreground",
+            )}
             onContextMenu={(e) => {
               e.preventDefault()
               setMgmtOpen(true)
@@ -85,7 +91,11 @@ function TabBarTail({
             type="button"
             title="全部标签"
             aria-label={`全部标签，共 ${tabs.length} 个`}
-            className={cn(tabTailTrigger, "rounded-shell px-1 pr-1.5", listOpen && "bg-accent text-foreground")}
+            className={cn(
+              tabTailTrigger,
+              "rounded-shell px-1 pr-1.5",
+              listOpen && "bg-accent text-foreground",
+            )}
           >
             <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" strokeWidth={2} />
           </button>
@@ -227,7 +237,9 @@ function TabItem({
       <span
         className={cn(
           "shrink-0 rounded-full transition-[width,height,box-shadow]",
-          active ? "h-2.5 w-2.5 shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_3px_hsl(var(--primary)/0.55)]" : "h-2 w-2",
+          active
+            ? "h-2.5 w-2.5 shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_3px_hsl(var(--primary)/0.55)]"
+            : "h-2 w-2",
           MODULE_DOT[t.module],
         )}
       />

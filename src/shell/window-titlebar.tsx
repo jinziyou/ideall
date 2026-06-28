@@ -73,7 +73,9 @@ export default function WindowTitleBar() {
       <div className="flex shrink-0 items-stretch">
         <TitleBarButton
           label="最小化"
-          onClick={() => void getWindowApi().then(({ getCurrentWindow }) => getCurrentWindow().minimize())}
+          onClick={() =>
+            void getWindowApi().then(({ getCurrentWindow }) => getCurrentWindow().minimize())
+          }
         >
           <Minus className="h-3.5 w-3.5" strokeWidth={2.25} />
         </TitleBarButton>
@@ -87,7 +89,9 @@ export default function WindowTitleBar() {
         </TitleBarButton>
         <TitleBarButton
           label="关闭"
-          onClick={() => void getWindowApi().then(({ getCurrentWindow }) => getCurrentWindow().close())}
+          onClick={() =>
+            void getWindowApi().then(({ getCurrentWindow }) => getCurrentWindow().close())
+          }
           className="hover:bg-destructive hover:text-destructive-foreground"
         >
           <X className="h-3.5 w-3.5" strokeWidth={2.25} />

@@ -66,10 +66,7 @@ export function computeSiblingSortKey(
 ): string {
   const parentOf = buildParentOf(items)
   const siblingKeys = items
-    .filter(
-      (n) =>
-        n.id !== excludeId && effectiveParentId(n.id, n.parentId, parentOf) === parentId,
-    )
+    .filter((n) => n.id !== excludeId && effectiveParentId(n.id, n.parentId, parentOf) === parentId)
     .map((n) => n.sortKey)
     .filter((k) => typeof k === "string" && k.length > 0)
     .sort()

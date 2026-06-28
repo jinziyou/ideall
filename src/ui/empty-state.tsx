@@ -49,7 +49,9 @@ export function EmptyState({
       <div>
         <p className={cn(compact ? "text-[13px] font-medium" : "text-sm")}>{title}</p>
       </div>
-      {action ? <div className="flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
+      {action ? (
+        <div className="flex flex-wrap items-center justify-center gap-2">{action}</div>
+      ) : null}
     </div>
   )
 }

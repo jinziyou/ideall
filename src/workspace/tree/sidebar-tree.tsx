@@ -8,9 +8,7 @@ import { ChevronRight, Rss } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { buildTree, type Tree } from "@/files/notes-tree-util"
 import { listNodeSummaries, type NodeSummary } from "@/files/stores/nodes-store"
-import {
-  listSubscriptionsByTypes,
-} from "@/files/stores/subscriptions-store"
+import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
 import type { NodeKind } from "@protocol/node"
 import type { Subscription } from "@protocol/subscription"
 import { onFilesUpdated } from "@protocol/flowback"
@@ -46,9 +44,7 @@ import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
 import type { ModuleId } from "../types"
 
-const NotesSidebarTree = React.lazy(
-  () => import("@/modules/home/notes/notes-sidebar-tree"),
-)
+const NotesSidebarTree = React.lazy(() => import("@/modules/home/notes/notes-sidebar-tree"))
 
 const EXPANDED_KEY = "ideall:sidebar-tree:expanded"
 
@@ -197,14 +193,7 @@ export default function SidebarTree() {
         void loadSubscriptions(root.id, root.subscriptionTypes)
       }
     }
-  }, [
-    activeModule,
-    expanded,
-    nodeCache,
-    subscriptionCache,
-    loadNodes,
-    loadSubscriptions,
-  ])
+  }, [activeModule, expanded, nodeCache, subscriptionCache, loadNodes, loadSubscriptions])
 
   const roots = React.useMemo(() => {
     if (activeModule === "agent") {
@@ -412,12 +401,7 @@ function TreeRow({
       {isOpen &&
         node.subscriptionTypes?.length &&
         subscriptions?.map((sub) => (
-          <SubscriptionRow
-            key={sub.id}
-            sub={sub}
-            depth={depth + 1}
-            activeModule={activeModule}
-          />
+          <SubscriptionRow key={sub.id} sub={sub} depth={depth + 1} activeModule={activeModule} />
         ))}
 
       {isOpen && node.subscriptionTypes?.length && subscriptions?.length === 0 && (

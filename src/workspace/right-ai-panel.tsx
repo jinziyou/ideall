@@ -5,7 +5,11 @@ import * as React from "react"
 import { Bot, Maximize2, Plus, Settings, X } from "lucide-react"
 import AgentPanel, { type AgentPanelHandle } from "@/plugins/agent/views/agent-panel"
 import { getActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
-import { getAgentSettings, isConfigured, subscribeAgentSettings } from "@/plugins/agent/lib/agent-settings"
+import {
+  getAgentSettings,
+  isConfigured,
+  subscribeAgentSettings,
+} from "@/plugins/agent/lib/agent-settings"
 import { SurfacePanel } from "@/plugins/agent/views/ui-kit"
 import { IconButton } from "@/ui/icon-button"
 import { useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings } from "./store"
@@ -38,7 +42,11 @@ export default function RightAiPanel() {
             </span>
           </span>
           <div className="flex items-center gap-0.5">
-            <IconButton onClick={() => panelRef.current?.newChat()} aria-label="新对话" title="新对话">
+            <IconButton
+              onClick={() => panelRef.current?.newChat()}
+              aria-label="新对话"
+              title="新对话"
+            >
               <Plus className="h-4 w-4" />
             </IconButton>
             <IconButton
@@ -56,7 +64,11 @@ export default function RightAiPanel() {
             <IconButton onClick={() => openAiSettings()} aria-label="AI 设置" title="设置">
               <Settings className="h-4 w-4" />
             </IconButton>
-            <IconButton onClick={() => setRightPanel(false)} aria-label="关闭 AI 对话栏" title="关闭">
+            <IconButton
+              onClick={() => setRightPanel(false)}
+              aria-label="关闭 AI 对话栏"
+              title="关闭"
+            >
               <X className="h-4 w-4" />
             </IconButton>
           </div>

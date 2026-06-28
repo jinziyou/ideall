@@ -9,9 +9,7 @@ import { useOnlineStatus } from "@/lib/use-online-status"
 import { MessagePortTransport } from "./transport"
 import { createLocalMcpServer } from "./local-mcp-server"
 import { firstPartyGrant } from "./grant"
-import {
-  registerConnection,
-} from "./connections"
+import { registerConnection } from "./connections"
 import { registerEmbedNavigator } from "./embed-nav"
 import {
   HELLO_MESSAGE_TYPE,
