@@ -1,6 +1,6 @@
 "use client"
 
-// 「我的 · 概览」极简仪表盘: 4 个区段入口 (关注/收藏/发布/笔记) + 最近动态。
+// 「我的 · 概览」极简仪表盘: 5 个区段入口 (关注/收藏/资源/发布/笔记) + 最近动态。
 // 入口点击经 openTab 直接开/激活对应区段标签 (module:"home", 不切走「我的」侧栏)。
 // 全部本地优先: 计数与动态只读本机数据 (发布是远端/登录态, 不在此计数)。
 
@@ -93,6 +93,7 @@ export default function Overview() {
           // 关注计数排除已钉工具 (tool), 与「关注」语义一致。
           subscriptions: subs.filter((s) => s.type !== "tool").length,
           bookmarks: bookmarks.length,
+          resources: files.length,
           notes: notes.length,
         },
         flow: buildFlow(subs, bookmarks, files, notes),
@@ -114,8 +115,8 @@ export default function Overview() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-      {/* 区段入口: 关注 / 收藏 / 发布 / 笔记 */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* 区段入口: 关注 / 收藏 / 资源 / 发布 / 笔记 */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {HOME_SECTIONS.map((s) => {
           const Icon = s.icon
           const count = data?.counts[s.id]

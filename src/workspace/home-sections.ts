@@ -3,7 +3,7 @@
 // 概览由活动栏「我的」钮直达, 不在侧栏列; 侧栏以文件树展示各区段及其 node 子项 (见 sidebar-tree)。
 
 import type { ComponentType } from "react"
-import { Bookmark, Megaphone, NotebookPen, Rss } from "lucide-react"
+import { Bookmark, FolderOpen, Megaphone, NotebookPen, Rss } from "lucide-react"
 import type { TabDescriptor } from "./types"
 
 export type HomeSection = {
@@ -21,7 +21,8 @@ export const HOME_OVERVIEW: TabDescriptor = {
   path: "/home",
 }
 
-/** 二级侧栏区段 (上→下): 关注 · 收藏 · 发布 · 笔记。 */
+/** 二级侧栏区段 (上→下): 关注 · 收藏 · 资源 · 发布 · 笔记。
+ *  「资源」是「我的」五类本机数据之一 (笔记/书签/资源/关注/对话), 此前漏列 → 桌面侧栏/概览无入口, 现补回。 */
 export const HOME_SECTIONS: HomeSection[] = [
   {
     // 关注 = 订阅流, 归到「我的」(module:home); params 让它成为独立标签实例,
@@ -37,6 +38,12 @@ export const HOME_SECTIONS: HomeSection[] = [
     label: "收藏",
     icon: Bookmark,
     descriptor: { kind: "home-bookmarks", module: "home", title: "收藏", path: "/home/bookmarks" },
+  },
+  {
+    id: "resources",
+    label: "资源",
+    icon: FolderOpen,
+    descriptor: { kind: "home-resources", module: "home", title: "资源", path: "/home/resources" },
   },
   {
     id: "publications",

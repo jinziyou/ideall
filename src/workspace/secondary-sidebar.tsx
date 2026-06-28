@@ -16,6 +16,9 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
 
   return (
     <aside
+      // 折叠用 w-0/opacity-0 (非 display:none) 以保过渡动画 → 子树仍在 Tab 顺序里;
+      // inert 一并禁用可聚焦性并解决 aria-hidden 内含可聚焦元素的冲突 (WCAG 4.1.2)。
+      inert={collapsed}
       aria-hidden={collapsed}
       className={cn(
         "hidden h-full shrink-0 overflow-hidden bg-card transition-[width,opacity] duration-200 md:flex",

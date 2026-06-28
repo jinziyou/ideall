@@ -275,6 +275,7 @@ function TreeRow({
         }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         aria-current={active ? "page" : undefined}
+        aria-expanded={node.hasChildren ? isOpen : undefined}
         className={cn(
           "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm transition-colors",
           active
@@ -291,6 +292,7 @@ function TreeRow({
             isOpen && "rotate-90",
           )}
           aria-label={isOpen ? "折叠" : "展开"}
+          aria-expanded={node.hasChildren ? isOpen : undefined}
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
@@ -385,6 +387,7 @@ function NodeTreeBranch({
         }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         aria-current={active ? "page" : undefined}
+        aria-expanded={hasKids ? isOpen : undefined}
         className={cn(
           "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm transition-colors",
           active
@@ -404,6 +407,7 @@ function NodeTreeBranch({
             isOpen && "rotate-90",
           )}
           aria-label={isOpen ? "折叠" : "展开"}
+          aria-expanded={hasKids ? isOpen : undefined}
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </button>

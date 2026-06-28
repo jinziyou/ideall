@@ -54,6 +54,7 @@ export function iconForNodeKind(kind: NodeKind): ComponentType<{ className?: str
 const HOME_SECTION_KINDS: Record<string, NodeKind[]> = {
   subscriptions: ["feed"],
   bookmarks: ["folder", "bookmark"],
+  resources: ["file"],
   publications: [],
   notes: ["note"],
 }

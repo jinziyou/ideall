@@ -6,18 +6,8 @@ import { Command } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { openCommandPalette } from "@/lib/command-palette-bus"
 import { moduleById } from "./modules"
+import { MODULE_DOT } from "./module-dot"
 import { useActiveModule, useMode, useTabs } from "./store"
-import type { ModuleId } from "./types"
-
-const DOT: Record<ModuleId, string> = {
-  home: "bg-primary",
-  subscriptions: "bg-spoke-info",
-  info: "bg-spoke-info",
-  community: "bg-spoke-community",
-  browser: "bg-spoke-tool",
-  tool: "bg-spoke-tool",
-  agent: "bg-primary",
-}
 
 export default function StatusBar() {
   const activeModule = useActiveModule()
@@ -28,7 +18,7 @@ export default function StatusBar() {
   return (
     <footer className="hidden h-7 shrink-0 items-center gap-3 border-t bg-secondary/40 px-3 text-[11px] text-muted-foreground md:flex">
       <span className="flex items-center gap-1.5">
-        <span className={cn("h-1.5 w-1.5 rounded-full", DOT[activeModule])} />
+        <span className={cn("h-1.5 w-1.5 rounded-full", MODULE_DOT[activeModule])} />
         {mode === "local" ? "本地" : "连接"} · {mod.label}
       </span>
       <span className="tabular-nums">{tabs.length} 个标签</span>
