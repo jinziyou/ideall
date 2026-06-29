@@ -7,6 +7,7 @@ import assert from "node:assert/strict"
 import {
   openNodeTab,
   promoteTab,
+  promoteActiveTab,
   closeTab,
   closeAllTabs,
   setActiveTab,
@@ -74,6 +75,27 @@ test("promoteTab 仅对当前预览标签生效", () => {
   assert.equal(getTransientId(), id, "对非预览 id 无效")
   promoteTab(id)
   assert.equal(getTransientId(), null)
+})
+
+test("promoteActiveTab: 编辑即钉住 —— 激活的预览标签提升为常驻", () => {
+  closeAllTabs()
+  openNodeTab({ kind: "note", id: "ed" }, "编辑", "user", { transient: true })
+  const id = getActiveId()!
+  assert.equal(getTransientId(), id)
+  promoteActiveTab()
+  assert.equal(getTransientId(), null, "激活的预览标签被钉为常驻")
+  promoteActiveTab() // 幂等
+  assert.equal(getTransientId(), null)
+})
+
+test("promoteActiveTab: 激活标签非预览时不动预览槽", () => {
+  closeAllTabs()
+  openNodeTab({ kind: "note", id: "prev2" }, "预览", "user", { transient: true })
+  const previewId = getTransientId()!
+  openNodeTab({ kind: "file", id: "perm" }, "常驻", "user") // 激活变常驻, 预览槽仍是 prev2
+  assert.notEqual(getActiveId(), previewId)
+  promoteActiveTab()
+  assert.equal(getTransientId(), previewId, "激活非预览 → 预览槽不变")
 })
 
 test("常驻打开新标签不消耗预览槽; 关闭预览标签清空 transientId", () => {

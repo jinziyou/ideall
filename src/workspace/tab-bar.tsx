@@ -24,7 +24,7 @@ import {
   reorderTabs,
 } from "./store"
 import type { Tab } from "./types"
-import { tabViewType, TAB_VIEW_LABEL } from "./tab-view-type"
+import { tabViewType, TAB_VIEW_LABEL, tabElId, tabPanelId } from "./tab-view-type"
 import { MODULE_DOT } from "./module-dot"
 
 /** Chrome 近似: 最小保留色点 + 截断标题, 最大 ~240px; 溢出时横向滚动。 */
@@ -189,6 +189,8 @@ function TabItem({
     <div
       ref={tabRef}
       role="tab"
+      id={tabElId(t.id)}
+      aria-controls={tabPanelId(t.id)}
       tabIndex={active ? 0 : -1}
       aria-selected={active}
       title={transient ? `${t.title} · 预览 (双击钉住)` : t.title}

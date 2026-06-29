@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import { isTauri, browserHide } from "@/lib/tauri"
 import { useTabs, useActiveId, useActiveTabKind } from "./store"
 import { TabContent, tabLayout } from "./registry"
+import { tabElId, tabPanelId } from "./tab-view-type"
 import type { Tab } from "./types"
 
 const MAX_ALIVE_FILL = 8 // 同时保活的 fill 查看器 (笔记等) 上限
@@ -95,6 +96,9 @@ export default function TabHost() {
         return (
           <div
             key={t.id}
+            role="tabpanel"
+            id={tabPanelId(t.id)}
+            aria-labelledby={tabElId(t.id)}
             className={cn("h-full w-full", !active && "hidden")}
             aria-hidden={!active}
           >

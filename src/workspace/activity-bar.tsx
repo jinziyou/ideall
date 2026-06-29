@@ -25,11 +25,10 @@ export default function ActivityBar() {
       key="ai"
       type="button"
       onClick={toggleAiSidebar}
-      title="AI"
       aria-current={aiActive ? "true" : undefined}
       aria-expanded={aiActive && !sidebarCollapsed}
       className={cn(
-        "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[10px] font-medium transition-colors",
+        "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[11px] font-medium transition-colors",
         aiActive
           ? "bg-accent text-foreground"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -60,11 +59,10 @@ export default function ActivityBar() {
                 <button
                   type="button"
                   onClick={() => toggleModule(m.id)}
-                  title={m.label}
                   aria-current={active ? "true" : undefined}
                   aria-expanded={active && !sidebarCollapsed}
                   className={cn(
-                    "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[10px] font-medium transition-colors",
+                    "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[11px] font-medium transition-colors",
                     active
                       ? "bg-accent text-foreground"
                       : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",

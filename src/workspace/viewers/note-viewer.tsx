@@ -6,7 +6,7 @@ import dynamic from "next/dynamic"
 import { ChevronRight, Loader2 } from "lucide-react"
 import { getNote, getAncestors } from "@/files/stores/notes-store"
 import type { Note, NoteMeta } from "@protocol/files"
-import { openNodeTab, renameNodeTab } from "../store"
+import { openNodeTab, renameNodeTab, promoteActiveTab } from "../store"
 import type { NodeViewerProps } from "../node-viewers"
 
 const NoteEditor = dynamic(() => import("@/modules/home/notes/note-editor"), {
@@ -83,6 +83,7 @@ export default function NoteViewer({ nodeId }: NodeViewerProps) {
         initialContent={note.content}
         initialTags={note.tags}
         onSaved={(meta) => renameNodeTab({ kind: "note", id: note.id }, meta.title || "无标题")}
+        onDirty={promoteActiveTab}
       />
     </div>
   )

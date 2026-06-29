@@ -36,12 +36,15 @@ export default function NoteEditor({
   initialContent,
   initialTags,
   onSaved,
+  onDirty,
 }: {
   noteId: string
   initialTitle: string
   initialContent: NoteContent
   initialTags: string[]
   onSaved?: (meta: NoteEditorSaved) => void
+  /** 首次用户编辑时回调一次 (供「编辑即钉住」: 把预览标签提升为常驻)。 */
+  onDirty?: () => void
 }) {
   const [title, setTitle] = React.useState(initialTitle)
   const [tags, setTags] = React.useState(initialTags.join(", "))
@@ -54,9 +57,11 @@ export default function NoteEditor({
   const dirtyRef = React.useRef(false)
   const initialJsonRef = React.useRef(JSON.stringify(initialContent))
   const onSavedRef = React.useRef(onSaved)
-  // 提交后同步最新 onSaved (不在 render 期写 ref), 保持 flush 稳定且不依赖 onSaved
+  const onDirtyRef = React.useRef(onDirty)
+  // 提交后同步最新 onSaved/onDirty (不在 render 期写 ref), 保持 flush/schedule 稳定且不依赖它们
   React.useEffect(() => {
     onSavedRef.current = onSaved
+    onDirtyRef.current = onDirty
   })
 
   const editor = usePlateEditor({
@@ -86,7 +91,10 @@ export default function NoteEditor({
   }, [noteId])
 
   const schedule = React.useCallback(() => {
-    dirtyRef.current = true
+    if (!dirtyRef.current) {
+      dirtyRef.current = true
+      onDirtyRef.current?.() // 首次用户编辑 → 通知外层 (编辑即钉住)
+    }
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(flush, AUTOSAVE_DELAY)
   }, [flush])

@@ -282,10 +282,17 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: 
   })
 }
 
-/** 把预览标签提升为常驻 (双击标签条/侧栏行, 或内容里发生编辑时调用); 非当前预览标签则忽略。 */
+/** 把预览标签提升为常驻 (双击标签条/侧栏行调用); 非当前预览标签则忽略。 */
 export function promoteTab(id: string) {
   if (state.transientId !== id) return
   setState({ transientId: null })
+}
+
+/** 若当前激活标签正是预览标签, 提升为常驻 (供「编辑即钉住」: 内容编辑器首次编辑时调用, 避免改到一半被下次预览替换)。 */
+export function promoteActiveTab() {
+  if (state.activeId && state.activeId === state.transientId) {
+    setState({ transientId: null })
+  }
 }
 
 /** 打开全局设置标签 (外观 / 本机 / 已连接应用)。 */

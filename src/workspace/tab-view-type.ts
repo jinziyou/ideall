@@ -5,6 +5,11 @@ import type { Tab } from "./types"
 
 export type TabViewType = "overview" | "panel" | "config" | "content"
 
+// 标签条 role=tab ↔ 内容区 role=tabpanel 的关联 id (无障碍: aria-controls / aria-labelledby)。
+// tab.id 含 ":" "=" "&" 等字符, 经 encodeURIComponent 转成合法且唯一的 id 片段。
+export const tabElId = (id: string) => `wstab-${encodeURIComponent(id)}`
+export const tabPanelId = (id: string) => `wstabpanel-${encodeURIComponent(id)}`
+
 export const TAB_VIEW_LABEL: Record<TabViewType, string> = {
   overview: "概览",
   panel: "面板",
