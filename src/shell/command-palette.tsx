@@ -2,7 +2,16 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Bookmark, Copy, DownloadCloud, Globe, Hexagon, RefreshCw, SunMoon } from "lucide-react"
+import {
+  Bookmark,
+  Copy,
+  DownloadCloud,
+  Globe,
+  Hexagon,
+  LayoutGrid,
+  RefreshCw,
+  SunMoon,
+} from "lucide-react"
 import { toast } from "sonner"
 import {
   CommandDialog,
@@ -151,12 +160,19 @@ export default function CommandPalette() {
               <CommandShortcut className="font-mono">{s.href}</CommandShortcut>
             </CommandItem>
           ))}
-          {/* 浏览器 = 内嵌 webview, 仅桌面 App; 移动端不放此入口 (无法工作)。 */}
+          {/* 浏览器 (内嵌 webview) 与 应用 (本机已装应用) 均仅桌面 App 可用; 移动端不放 (无法工作)。 */}
           {isDesktop && (
             <CommandItem value="发现 浏览器 browser web 网页" onSelect={() => go("/browser")}>
               <Globe className="h-4 w-4" />
               浏览器
               <CommandShortcut className="font-mono">/browser</CommandShortcut>
+            </CommandItem>
+          )}
+          {isDesktop && (
+            <CommandItem value="应用 apps 本机应用 installed 启动" onSelect={() => go("/apps")}>
+              <LayoutGrid className="h-4 w-4" />
+              应用
+              <CommandShortcut className="font-mono">/apps</CommandShortcut>
             </CommandItem>
           )}
         </CommandGroup>

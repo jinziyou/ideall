@@ -42,6 +42,7 @@ import {
 import { subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
 import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
+import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import type { ModuleId } from "../types"
 
 const NotesSidebarTree = React.lazy(() => import("@/modules/home/notes/notes-sidebar-tree"))
@@ -207,7 +208,8 @@ export default function SidebarTree() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
-      <nav className="flex flex-col gap-0.5">
+      {/* WAI-ARIA 树: 容器 role=tree, 每行 role=treeitem + aria-level; 方向键导航见 tree-keynav。 */}
+      <nav role="tree" aria-label="文件树" className="flex flex-col gap-0.5">
         {roots.map((node) => (
           <TreeRow
             key={node.id}
@@ -337,19 +339,36 @@ function TreeRow({
   return (
     <div>
       <div
-        role="button"
+        role="treeitem"
         tabIndex={0}
+        aria-level={depth + 1}
+        aria-selected={active || undefined}
+        aria-expanded={node.hasChildren ? isOpen : undefined}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onKeyDown={(e) => {
+          if (onTreeArrowNav(e)) return
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
             openRow(false)
+          } else if (e.key === "ArrowRight") {
+            if (node.hasChildren && !isOpen) {
+              e.preventDefault()
+              onToggle(node.id)
+              ensureChildrenLoaded()
+            } else if (focusTreeSibling(e.currentTarget, 1)) {
+              e.preventDefault()
+            }
+          } else if (e.key === "ArrowLeft") {
+            if (node.hasChildren && isOpen) {
+              e.preventDefault()
+              onToggle(node.id)
+            } else if (focusTreeSibling(e.currentTarget, -1)) {
+              e.preventDefault()
+            }
           }
         }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
-        aria-current={active ? "page" : undefined}
-        aria-expanded={node.hasChildren ? isOpen : undefined}
         className={cn(
           "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           active
@@ -357,19 +376,19 @@ function TreeRow({
             : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
         )}
       >
-        <button
-          type="button"
+        {/* 展开箭头: 展示性 (aria-hidden + 非按钮), 避免「行内嵌可聚焦按钮」违反 WCAG 4.1.2 + 双 Tab 停靠/双重朗读;
+            键盘展开/折叠走行的 ←/→, 鼠标点箭头仍可 (span onClick + stopPropagation)。 */}
+        <span
+          aria-hidden="true"
           onClick={handleChevron}
           className={cn(
-            "grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground transition-transform hover:bg-accent",
+            "grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded text-muted-foreground transition-transform hover:bg-accent",
             !node.hasChildren && "invisible",
             isOpen && "rotate-90",
           )}
-          aria-label={isOpen ? "折叠" : "展开"}
-          aria-expanded={node.hasChildren ? isOpen : undefined}
         >
           <ChevronRight className="h-3.5 w-3.5" />
-        </button>
+        </span>
         <Icon className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{node.label}</span>
       </div>
@@ -381,18 +400,20 @@ function TreeRow({
           return (
             <div
               key={ws.id}
-              role="button"
+              role="treeitem"
               tabIndex={0}
+              aria-level={depth + 2}
+              aria-selected={wsActive || undefined}
               onClick={() => openAiTasks(ws.id, ws.name, { transient: true })}
               onDoubleClick={() => openAiTasks(ws.id, ws.name)}
               onKeyDown={(e) => {
+                if (onTreeArrowNav(e)) return
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault()
                   openAiTasks(ws.id, ws.name)
                 }
               }}
               style={{ paddingLeft: `${(depth + 1) * 12 + 4}px` }}
-              aria-current={wsActive ? "page" : undefined}
               className={cn(
                 "flex cursor-pointer items-center gap-1.5 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                 wsActive
@@ -480,10 +501,14 @@ function SubscriptionRow({
 
   return (
     <div
-      role="button"
+      role="treeitem"
       tabIndex={0}
+      aria-level={depth + 1}
+      // 订阅行从不可选: 与其它行一致地「未选中即省略」(undefined → 不渲染属性), 而非显式 false。
+      aria-selected={undefined}
       onClick={handleClick}
       onKeyDown={(e) => {
+        if (onTreeArrowNav(e)) return
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
           handleClick()
@@ -491,7 +516,7 @@ function SubscriptionRow({
       }}
       style={{ paddingLeft: `${depth * 12 + 4}px` }}
       className={cn(
-        "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm transition-colors",
+        "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >

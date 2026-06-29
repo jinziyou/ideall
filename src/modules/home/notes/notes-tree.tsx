@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { NoteMeta } from "@protocol/files"
 import { buildNoteTree, type TreeNode } from "@/files/notes-tree-util"
+import { onTreeArrowNav, focusTreeSibling } from "@/workspace/tree/tree-keynav"
 import { EmptyState } from "@/ui/empty-state"
 
 /** 拖放落点的相对位置: 目标行上缘=插到其前; 下缘=插到其后; 中部=作其子页。 */
@@ -202,6 +203,11 @@ function PageTreeRow({
   return (
     <div>
       <div
+        role="treeitem"
+        tabIndex={0}
+        aria-level={depth + 2}
+        aria-selected={active || undefined}
+        aria-expanded={hasKids ? isOpen : undefined}
         draggable
         onDragStart={(e) => {
           e.stopPropagation()
@@ -228,9 +234,30 @@ function PageTreeRow({
           onCommitDrop(id, zoneFromEvent(e))
         }}
         onClick={() => onSelect(id)}
+        onKeyDown={(e) => {
+          if (onTreeArrowNav(e)) return
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onSelect(id)
+          } else if (e.key === "ArrowRight") {
+            if (hasKids && !isOpen) {
+              e.preventDefault()
+              onToggle(id)
+            } else if (focusTreeSibling(e.currentTarget, 1)) {
+              e.preventDefault()
+            }
+          } else if (e.key === "ArrowLeft") {
+            if (hasKids && isOpen) {
+              e.preventDefault()
+              onToggle(id)
+            } else if (focusTreeSibling(e.currentTarget, -1)) {
+              e.preventDefault()
+            }
+          }
+        }}
         style={{ paddingLeft: `${depth * 14 + 4}px` }}
         className={cn(
-          "group relative flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1 text-sm transition-colors",
+          "group relative flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           active ? "bg-primary/10 font-medium text-primary" : "hover:bg-accent/60",
           hint === "inside" && "bg-primary/15 ring-1 ring-inset ring-primary/40",
         )}
@@ -243,22 +270,21 @@ function PageTreeRow({
           <span className="pointer-events-none absolute inset-x-1 bottom-0 h-0.5 rounded bg-primary" />
         )}
 
-        {/* 展开箭头 (仅有子页时可点) */}
-        <button
-          type="button"
+        {/* 展开箭头: 展示性 (aria-hidden + 非按钮); 键盘走行的 ←/→, 鼠标点箭头仍可。 */}
+        <span
+          aria-hidden="true"
           onClick={(e) => {
             e.stopPropagation()
             if (hasKids) onToggle(id)
           }}
           className={cn(
-            "grid h-4 w-4 shrink-0 place-items-center rounded text-muted-foreground transition-transform hover:bg-accent",
+            "grid h-4 w-4 shrink-0 cursor-pointer place-items-center rounded text-muted-foreground transition-transform hover:bg-accent",
             !hasKids && "invisible",
             isOpen && "rotate-90",
           )}
-          aria-label={isOpen ? "折叠" : "展开"}
         >
           <ChevronRight className="h-3.5 w-3.5" />
-        </button>
+        </span>
 
         <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate" title={note.title || "无标题"}>

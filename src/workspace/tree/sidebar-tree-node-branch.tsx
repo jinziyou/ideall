@@ -7,6 +7,7 @@ import type { Tree } from "@/files/notes-tree-util"
 import type { NodeSummary } from "@/files/stores/nodes-store"
 import type { NodeKind } from "@protocol/node"
 import { iconForNodeKind } from "./sidebar-tree-data"
+import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import { getBookmark } from "@/files/stores/bookmarks-store"
 import { navigateExternal } from "../browser-open"
 import { openNodeTab, getTabs } from "../store"
@@ -128,19 +129,35 @@ export function NodeTreeBranch({
   return (
     <div>
       <div
-        role="button"
+        role="treeitem"
         tabIndex={0}
+        aria-level={depth + 1}
+        aria-selected={active || undefined}
+        aria-expanded={hasKids ? isOpen : undefined}
         onClick={handleNodeClick}
         onDoubleClick={handleNodeDoubleClick}
         onKeyDown={(e) => {
+          if (onTreeArrowNav(e)) return
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
             openNode(false)
+          } else if (e.key === "ArrowRight") {
+            if (hasKids && !isOpen) {
+              e.preventDefault()
+              onToggle(id)
+            } else if (focusTreeSibling(e.currentTarget, 1)) {
+              e.preventDefault()
+            }
+          } else if (e.key === "ArrowLeft") {
+            if (hasKids && isOpen) {
+              e.preventDefault()
+              onToggle(id)
+            } else if (focusTreeSibling(e.currentTarget, -1)) {
+              e.preventDefault()
+            }
           }
         }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
-        aria-current={active ? "page" : undefined}
-        aria-expanded={hasKids ? isOpen : undefined}
         className={cn(
           "group relative flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           active
@@ -157,22 +174,21 @@ export function NodeTreeBranch({
           <span className="pointer-events-none absolute inset-x-1 bottom-0 h-0.5 rounded bg-primary" />
         )}
 
-        <button
-          type="button"
+        {/* 展开箭头: 展示性 (aria-hidden + 非按钮); 键盘走行的 ←/→, 鼠标点箭头仍可。 */}
+        <span
+          aria-hidden="true"
           onClick={(e) => {
             e.stopPropagation()
             if (hasKids) onToggle(id)
           }}
           className={cn(
-            "grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground transition-transform hover:bg-accent",
+            "grid h-5 w-5 shrink-0 cursor-pointer place-items-center rounded text-muted-foreground transition-transform hover:bg-accent",
             !hasKids && "invisible",
             isOpen && "rotate-90",
           )}
-          aria-label={isOpen ? "折叠" : "展开"}
-          aria-expanded={hasKids ? isOpen : undefined}
         >
           <ChevronRight className="h-3.5 w-3.5" />
-        </button>
+        </span>
         <Icon className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{item.title || "无标题"}</span>
       </div>
