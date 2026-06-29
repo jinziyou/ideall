@@ -282,32 +282,44 @@ function TreeRow({
     }
   }
 
-  const handleClick = () => {
+  // 行点击语义 (VS Code 式): 单击 = 预览 (transient, 复用单一预览槽, 随手看不堆标签);
+  // 双击 / 键盘 Enter = 常驻 (钉住)。纯容器行 (无 descriptor) 则单击 = 双向展开/折叠。
+  const openRow = (transient: boolean) => {
     if (node.nodeKind === "node" && node.nodeRef) {
-      openNodeTab(node.nodeRef, node.label)
+      openNodeTab(node.nodeRef, node.label, "user", { transient })
       return
     }
     if (node.descriptor?.kind === "ai-tasks" && node.descriptor.params?.workspaceId) {
-      openAiTasks(node.descriptor.params.workspaceId, node.descriptor.title)
+      openAiTasks(node.descriptor.params.workspaceId, node.descriptor.title, { transient })
       return
     }
     if (node.descriptor?.kind === "ai-mcp") {
-      openAiSection("ai-mcp")
+      openAiSection("ai-mcp", { transient })
       return
     }
     if (node.descriptor?.kind === "ai-skills") {
-      openAiSection("ai-skills")
+      openAiSection("ai-skills", { transient })
       return
     }
     if (node.descriptor?.kind === "ai-rules") {
-      openAiSection("ai-rules")
+      openAiSection("ai-rules", { transient })
       return
     }
-    if (node.descriptor) openTab(node.descriptor)
-    if (node.hasChildren && !isOpen) {
-      onToggle(node.id)
-      ensureChildrenLoaded()
+    if (node.descriptor) {
+      openTab(node.descriptor, "user", { transient })
+      return
     }
+    // 纯容器 (无 descriptor 的 section/文件夹): 行点击 = 双向展开/折叠 (修复「已展开时点行无反馈」死区)。
+    if (node.hasChildren) {
+      onToggle(node.id)
+      if (!isOpen) ensureChildrenLoaded()
+    }
+  }
+
+  const handleClick = () => openRow(true)
+  // 双击 → 把预览标签钉成常驻 (走非瞬态打开, 命中预览槽即提升; 纯容器行无视)。
+  const handleDoubleClick = () => {
+    if ((node.nodeKind === "node" && node.nodeRef) || node.descriptor) openRow(false)
   }
 
   const handleChevron = (e: React.MouseEvent) => {
@@ -328,10 +340,11 @@ function TreeRow({
         role="button"
         tabIndex={0}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
-            handleClick()
+            openRow(false)
           }
         }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
@@ -370,7 +383,8 @@ function TreeRow({
               key={ws.id}
               role="button"
               tabIndex={0}
-              onClick={() => openAiTasks(ws.id, ws.name)}
+              onClick={() => openAiTasks(ws.id, ws.name, { transient: true })}
+              onDoubleClick={() => openAiTasks(ws.id, ws.name)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault()

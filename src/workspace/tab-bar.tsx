@@ -15,7 +15,9 @@ import {
 import {
   useTabs,
   useActiveId,
+  useTransientId,
   setActiveTab,
+  promoteTab,
   closeTab,
   closeAllTabs,
   closeOtherTabs,
@@ -147,11 +149,16 @@ function TabCloseButton({
         e.stopPropagation()
         onClose()
       }}
+      // 关闭走标签本体的 Delete/Backspace (见 TabItem onKeyDown), 故关闭钮不进 Tab 序 —— 否则
+      // roving tabindex 的 tablist 会被它打破 (Tab 不到非激活标签本体却能停到其关闭钮)。
+      tabIndex={-1}
       className={cn(
-        "ml-auto -mr-0.5 flex h-7 w-7 min-h-7 min-w-7 shrink-0 items-center justify-center rounded-shell text-muted-foreground outline-none transition-[opacity,background-color,color]",
+        "relative ml-auto -mr-0.5 flex h-7 w-7 min-h-7 min-w-7 shrink-0 items-center justify-center rounded-shell text-muted-foreground outline-none transition-[opacity,background-color,color]",
         "hover:bg-accent hover:text-foreground active:bg-accent/80",
         "opacity-0 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
         "group-hover/tab:opacity-100 pointer-coarse:opacity-100",
+        // 触屏 (pointer-coarse): 视觉仍 28px, 命中区经伪元素扩到 ~44px (WCAG 2.5.8 舒适触达)。
+        "pointer-coarse:before:absolute pointer-coarse:before:-inset-2 pointer-coarse:before:content-['']",
         active && "opacity-100",
         className,
       )}
@@ -166,6 +173,7 @@ function TabItem({
   index: i,
   tabs,
   active,
+  transient,
   dragIdRef,
   tabRef,
 }: {
@@ -173,6 +181,7 @@ function TabItem({
   index: number
   tabs: Tab[]
   active: boolean
+  transient: boolean
   dragIdRef: React.MutableRefObject<string | null>
   tabRef: (el: HTMLDivElement | null) => void
 }) {
@@ -182,6 +191,7 @@ function TabItem({
       role="tab"
       tabIndex={active ? 0 : -1}
       aria-selected={active}
+      title={transient ? `${t.title} · 预览 (双击钉住)` : t.title}
       draggable
       onDragStart={() => {
         dragIdRef.current = t.id
@@ -192,6 +202,7 @@ function TabItem({
         dragIdRef.current = null
       }}
       onClick={() => setActiveTab(t.id)}
+      onDoubleClick={() => promoteTab(t.id)}
       onKeyDown={(e) => {
         const el = e.currentTarget
         if (e.key === "Enter" || e.key === " ") {
@@ -232,6 +243,8 @@ function TabItem({
         active
           ? "z-[1] -mb-px border-b-2 border-primary bg-background font-medium text-foreground shadow-[inset_0_1px_0_0_hsl(var(--border)/0.35)]"
           : "border-r border-border/40 text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+        // 预览/瞬态标签: 斜体 (VS Code 式), 区分于已钉住的常驻标签。
+        transient && "italic",
       )}
     >
       <span
@@ -257,6 +270,7 @@ function TabItem({
 export default function TabBar() {
   const tabs = useTabs()
   const activeId = useActiveId()
+  const transientId = useTransientId()
   const dragIdRef = React.useRef<string | null>(null)
   const tabRefs = React.useRef(new Map<string, HTMLDivElement>())
 
@@ -275,7 +289,7 @@ export default function TabBar() {
         >
           {tabs.length === 0 ? (
             <span className="flex items-center px-3 text-xs text-muted-foreground">
-              从左侧选择一个面板打开
+              从左侧活动栏选择一个模块开始（单击预览 · 双击钉住）
             </span>
           ) : (
             tabs.map((t, i) => (
@@ -285,6 +299,7 @@ export default function TabBar() {
                 index={i}
                 tabs={tabs}
                 active={t.id === activeId}
+                transient={t.id === transientId}
                 dragIdRef={dragIdRef}
                 tabRef={(el) => {
                   if (el) tabRefs.current.set(t.id, el)

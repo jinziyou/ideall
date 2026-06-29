@@ -1,34 +1,33 @@
 "use client"
 
-// 活动栏 (IDE 式标签工作区侧栏的图标轨): 按当前模式渲染模块图标 (+ crossMode 跨模式模块)。
-// logo / 模式切换 / 设置 / 账户 已上移到顶边栏 (top-bar)。
-// 点图标 = 切到该模块并展开二级侧栏 (再点同模块收起)；不直接开标签 (由侧栏条目开)。
-// 「工具」: 本地/连接活动栏均展示, 打开不翻 mode (与 AI 区段同类)。
-// 「AI」钮: 仅本地(local)模式, 放在「我的」(home) 紧下方; 连接(connected)模式不展示。
+// 活动栏 (IDE 式标签工作区侧栏的图标轨): 扁平单轨 —— 全部模块同时可见, 按 mode 字段视觉分两组
+// (本机/我的 · 连接/发现), 组间一条细分隔。不再有「本地/连接」模式开关 (那曾藏起一半入口并会随标签自动翻转)。
+// 点模块图标 = 切到该模块并展开二级侧栏 (再点已激活模块 = 收起侧栏, 含「我的」语义统一);
+// 落地面板以「预览」(transient) 方式开, 点遍多个模块只复用单一预览槽, 不堆常驻标签 (详见 store)。
+// 「AI」钮: 紧随「我的」(home) 下方, 始终可见。
 
 import { Fragment } from "react"
 import { Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNodeCount } from "@/shell/use-node-count"
-import { modulesForMode } from "./modules"
-import { useActiveModule, useMode, toggleModule, openHome, openAiSettings } from "./store"
+import { MODULE_GROUPS } from "./modules"
+import { useActiveModule, useSidebarCollapsed, toggleModule, toggleAiSidebar } from "./store"
 
 export default function ActivityBar() {
   const activeModule = useActiveModule()
-  const mode = useMode()
+  const sidebarCollapsed = useSidebarCollapsed()
   // AI 钮高亮 = 任一 AI 区段标签激活 (activeModule==="agent")。
   const aiActive = activeModule === "agent"
   const { count, flash } = useNodeCount()
-  const modules = modulesForMode(mode)
 
-  // AI 钮: 仅本地模式, 渲染在「我的」下方 (见下方 home 分支); 连接模式不展示。
   const aiButton = (
     <button
       key="ai"
       type="button"
-      onClick={openAiSettings}
+      onClick={toggleAiSidebar}
       title="AI"
       aria-current={aiActive ? "true" : undefined}
+      aria-expanded={aiActive && !sidebarCollapsed}
       className={cn(
         "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[10px] font-medium transition-colors",
         aiActive
@@ -46,49 +45,61 @@ export default function ActivityBar() {
 
   return (
     <aside className="hidden h-full w-14 shrink-0 flex-col items-center gap-1 border-r bg-card px-2 py-2.5 md:flex">
-      {modules.map((m) => {
-        const Icon = m.icon
-        const active = activeModule === m.id
-        const badge = m.id === "home" ? count : undefined
-        return (
-          <Fragment key={m.id}>
-            <button
-              type="button"
-              onClick={() => (m.id === "home" ? openHome() : toggleModule(m.id))}
-              title={m.label}
-              aria-current={active ? "true" : undefined}
-              className={cn(
-                "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[10px] font-medium transition-colors",
-                active
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-              )}
-            >
-              {active && (
-                <span className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-              )}
-              <span className="relative">
-                <Icon
-                  className={cn("h-[1.2rem] w-[1.2rem]", active ? "text-primary" : m.colorClass)}
-                />
-                {typeof badge === "number" && badge > 0 && (
-                  <span
-                    className={cn(
-                      "absolute -right-2 -top-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-pop px-1 text-[9px] font-bold tabular-nums text-pop-foreground",
-                      flash && "animate-flowback motion-reduce:animate-none",
+      {MODULE_GROUPS.map((group, gi) => (
+        <Fragment key={group.id}>
+          {/* 组间分隔: 把「本机/我的」与「连接/发现」分成两簇 (取代旧的模式开关)。 */}
+          {gi > 0 && (
+            <div className="my-1 h-px w-7 shrink-0 rounded-full bg-border" aria-hidden="true" />
+          )}
+          {group.modules.map((m) => {
+            const Icon = m.icon
+            const active = activeModule === m.id
+            const badge = m.id === "home" ? count : undefined
+            return (
+              <Fragment key={m.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleModule(m.id)}
+                  title={m.label}
+                  aria-current={active ? "true" : undefined}
+                  aria-expanded={active && !sidebarCollapsed}
+                  className={cn(
+                    "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[10px] font-medium transition-colors",
+                    active
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  )}
+                >
+                  {active && (
+                    <span className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+                  )}
+                  <span className="relative">
+                    <Icon
+                      className={cn(
+                        "h-[1.2rem] w-[1.2rem]",
+                        active ? "text-primary" : m.colorClass,
+                      )}
+                    />
+                    {typeof badge === "number" && badge > 0 && (
+                      <span
+                        className={cn(
+                          "absolute -right-2 -top-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-pop px-1 text-[9px] font-bold tabular-nums text-pop-foreground",
+                          flash && "animate-flowback motion-reduce:animate-none",
+                        )}
+                      >
+                        {badge > 99 ? "99+" : badge}
+                      </span>
                     )}
-                  >
-                    {badge > 99 ? "99+" : badge}
                   </span>
-                )}
-              </span>
-              <span className="leading-none">{m.label}</span>
-            </button>
-            {/* AI 紧随「我的」下方 (仅 local 模式; 连接模式无「我的」→ 不展示 AI) */}
-            {m.id === "home" && aiButton}
-          </Fragment>
-        )
-      })}
+                  <span className="leading-none">{m.label}</span>
+                </button>
+                {/* AI 紧随「我的」(home) 下方, 始终可见 */}
+                {m.id === "home" && aiButton}
+              </Fragment>
+            )
+          })}
+        </Fragment>
+      ))}
     </aside>
   )
 }

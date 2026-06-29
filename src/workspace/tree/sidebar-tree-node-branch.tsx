@@ -78,7 +78,9 @@ export function NodeTreeBranch({
     (dragId === item.id || isUnder(item.id, dragId))
   const hint = dropHint?.id === item.id ? dropHint.zone : null
 
-  const handleNodeClick = () => {
+  // 与 TreeRow 一致的 VS Code 式语义: 单击 = 预览 (transient, 复用单一预览槽);
+  // 双击 / 键盘 Enter = 钉为常驻。浏览器内书签/文件夹是导航/展开, 不开标签 (无瞬态概念)。
+  const openNode = (transient: boolean) => {
     if (inBrowser && item.kind === "bookmark") {
       void openBookmarkInBrowser(item.id)
       return
@@ -87,8 +89,11 @@ export function NodeTreeBranch({
       if (hasKids) onToggle(id)
       return
     }
-    openNodeTab({ kind: item.kind, id: item.id }, item.title || "无标题")
+    openNodeTab({ kind: item.kind, id: item.id }, item.title || "无标题", "user", { transient })
   }
+
+  const handleNodeClick = () => openNode(true)
+  const handleNodeDoubleClick = () => openNode(false)
 
   const rowProps =
     draggable && onDragStart && onDragEnd && onHint && onCommitDrop && zoneFromEvent
@@ -126,10 +131,11 @@ export function NodeTreeBranch({
         role="button"
         tabIndex={0}
         onClick={handleNodeClick}
+        onDoubleClick={handleNodeDoubleClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
-            handleNodeClick()
+            openNode(false)
           }
         }}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}

@@ -59,8 +59,12 @@ export default function TabHost() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-muted/25 px-6 text-center text-muted-foreground">
         <p className="text-sm font-medium text-foreground">没有打开的标签</p>
-        <p className="max-w-xs text-[13px] leading-relaxed">
-          从左侧活动栏选择一个模块，再从侧栏打开一个面板。
+        {/* 文案按视口分叉: 移动端没有活动栏/常驻侧栏, 不能指向桌面控件。 */}
+        <p className="hidden max-w-xs text-[13px] leading-relaxed md:block">
+          从左侧活动栏选择一个模块，再在侧栏中打开文件或面板（单击预览 · 双击钉住）。
+        </p>
+        <p className="max-w-xs text-[13px] leading-relaxed md:hidden">
+          点击底部导航选择一个分区，或用顶部菜单浏览文件。
         </p>
       </div>
     )

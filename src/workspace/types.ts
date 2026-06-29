@@ -1,7 +1,8 @@
 // 工作区标签模型 (现代面板式多标签工作区)。
 // kind 唯一决定标签内容 (registry 查表)；同 kind(+params) 复用同一标签实例 (id=tabKey)。
 
-// 工作区模式 (模式切换): 本地 = 只存本机的个人数据; 连接 = 联网的发现/工具/AI。
+// 活动栏视觉分组键 (不再是可切换的工作区模式): 本机/我的 = 只存本机的个人数据;
+// 连接/发现 = 联网的发现/工具/AI。仅用于把活动栏图标分两簇 (见 modules MODULE_GROUPS)。
 export type WsMode = "local" | "connected"
 
 export type ModuleId =
@@ -18,7 +19,7 @@ export type ModuleId =
 export type TabDescriptor = {
   /** registry 键, 如 "home-overview" | "info" | "tool-search"。 */
   kind: string
-  /** 归属模块 (驱动活动栏高亮 / 模式 / 状态栏 / 标签色点)。 */
+  /** 归属模块 (驱动活动栏高亮 / 侧栏 / 标签色点)。 */
   module: ModuleId
   /** 标签标题。 */
   title: string

@@ -9,7 +9,6 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Header } from "@/shell/header"
-import WindowTitleBar from "@/shell/window-titlebar"
 import BottomTabBar from "@/shell/bottom-tab-bar"
 import TopBar from "./top-bar"
 import ActivityBar from "./activity-bar"
@@ -17,7 +16,6 @@ import RightAiPanel from "./right-ai-panel"
 import SecondarySidebar from "./secondary-sidebar"
 import TabBar from "./tab-bar"
 import TabHost from "./tab-host"
-import StatusBar from "./status-bar"
 import {
   getActiveId,
   getTabs,
@@ -105,10 +103,9 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
       </React.Suspense>
 
       <div className="flex h-dvh flex-col">
-        <WindowTitleBar />
-        {/* 移动顶栏 (md:hidden 由组件内部控制) */}
+        {/* 移动顶栏 (md:hidden 由组件内部控制; Tauri 窄窗兼作标题栏) */}
         <Header />
-        {/* 桌面顶边栏 (hidden md:flex): 模式切换 + 设置 + 账户 */}
+        {/* 桌面顶边栏 (hidden md:flex; Tauri 下兼作标题栏, 窗控已并入) */}
         <TopBar />
 
         <div className="flex min-h-0 flex-1">
@@ -125,8 +122,6 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
           {/* 右侧 AI 对话栏 (桌面停靠 / 移动全屏覆盖; 关闭态不渲染) */}
           <RightAiPanel />
         </div>
-
-        <StatusBar />
 
         {/* 移动底栏 (md:hidden 由组件内部控制; fixed) */}
         <BottomTabBar />
