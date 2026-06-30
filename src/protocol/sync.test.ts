@@ -16,7 +16,7 @@ import {
 } from "./sync"
 import type { Subscription } from "@protocol/subscription"
 
-function sub(id: string, title: string, updatedAt?: number): Subscription {
+function sub(id: string, title: string, updatedAt: number): Subscription {
   return { id, type: "publisher", key: id, title, favicon: "", createdAt: 1000, updatedAt }
 }
 
@@ -54,14 +54,6 @@ test("unionMerge: 并集保留各自独有 id", () => {
     .map((s) => s.id)
     .sort()
   assert.deepEqual(ids, ["a", "b"])
-})
-
-test("unionMerge: updatedAt 缺省回退 createdAt", () => {
-  // 本地无 updatedAt (createdAt=1000) vs 远端 updatedAt=500 → 本地 1000 胜
-  const local: Subscription[] = [
-    { id: "a", type: "publisher", key: "a", title: "本地", favicon: "", createdAt: 1000 },
-  ]
-  assert.equal(unionMerge(local, [sub("a", "远端", 500)])[0].title, "本地")
 })
 
 test("subsEqual: 顺序无关相等 / 字段变 / 长度变", () => {

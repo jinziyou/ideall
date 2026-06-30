@@ -19,7 +19,7 @@ import { getSyncBlob, putSyncBlob } from "./sync-api"
  * 远端项最小结构校验。AES-GCM 已防无密钥方篡改, 但持正确同步码的某端 (失陷/老旧) 仍可能上传缺字段/类型错误的项;
  * 尤其 id 缺失会让 unionMerge 以 undefined 作 Map 键、导致多条相互覆盖。过滤合并关键字段非法的项。
  * 时间戳须有界 (isSaneSyncTimestamp): 远未来 createdAt/updatedAt 会永远赢 LWW 钉死被投毒项, 远未来 deletedAt
- * 会造 GC 清不掉的不死墓碑。向后兼容: 字段缺省仍放行 (缺时间戳的项 recordTs=NaN, 本就赢不了 LWW), 只拒非法值。
+ * 会造 GC 清不掉的不死墓碑。createdAt/updatedAt 必填 (当前写入方一律带; 缺失即非法记录, 拒之)。
  */
 function isValidRemoteSub(s: unknown, now: number): s is Subscription {
   if (!s || typeof s !== "object") return false
@@ -29,8 +29,8 @@ function isValidRemoteSub(s: unknown, now: number): s is Subscription {
     typeof o.type === "string" &&
     typeof o.key === "string" &&
     typeof o.title === "string" &&
-    (o.createdAt === undefined || isSaneSyncTimestamp(o.createdAt, now)) &&
-    (o.updatedAt === undefined || isSaneSyncTimestamp(o.updatedAt, now)) &&
+    isSaneSyncTimestamp(o.createdAt, now) &&
+    isSaneSyncTimestamp(o.updatedAt, now) &&
     // 墓碑亦合法 (deletedAt 缺省=活跃, 有则须为有界数字); 非法/远未来类型会污染 LWW 比较或造不死墓碑。
     (o.deletedAt === undefined || isSaneSyncTimestamp(o.deletedAt, now))
   )

@@ -7,16 +7,12 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import { genId } from "@/lib/id"
 import { sortKeyBetween } from "@/files/sort-key"
-import { planThreadsSeed } from "@/files/migrate/nodes-migrate"
 import {
-  idbBulkDelete,
-  idbBulkPut,
   idbDelete,
   idbGet,
   idbGetAll,
   idbPut,
   idbReadModifyWrite,
-  STORE_AGENT_THREADS,
   STORE_NODES,
 } from "@/lib/idb"
 
@@ -48,33 +44,6 @@ function threadToNode(t: Thread, sortKey: string): ThreadNode {
   }
 }
 
-// ---- 懒迁移: 折叠步 D —— 旧 agentThreads 仓库 → thread 节点 ----
-
-let seedPromise: Promise<void> | null = null
-
-/** 折叠步 D 懒迁移 (模块级 once): 旧 agentThreads 仓库 → thread 节点, 清空旧仓库。 */
-export function seedThreadsOnce(): Promise<void> {
-  if (!seedPromise) {
-    seedPromise = doSeedThreads().catch((e) => {
-      seedPromise = null
-      throw e
-    })
-  }
-  return seedPromise
-}
-
-async function doSeedThreads(): Promise<void> {
-  const [rawThreads, existingNodes] = await Promise.all([
-    idbGetAll<Record<string, unknown>>(STORE_AGENT_THREADS),
-    idbGetAll<{ id: string }>(STORE_NODES),
-  ])
-  const plan = planThreadsSeed(rawThreads, new Set(existingNodes.map((n) => n.id)), Date.now())
-  if (!plan) return // 旧仓库已空
-  // 先写 thread 节点再清旧仓库; 顺序 put→delete 不丢, existingNodeIds 探测幂等。
-  if (plan.puts.length) await idbBulkPut(STORE_NODES, plan.puts)
-  if (plan.drainThreadIds.length) await idbBulkDelete(STORE_AGENT_THREADS, plan.drainThreadIds)
-}
-
 // ---- nodes 仓库内 kind 作用域读 + sortKey 追加 ----
 
 async function allThreadNodes(): Promise<ThreadNode[]> {
@@ -104,7 +73,6 @@ function nextKey(after: string | null): string {
 
 /** 线程列表, 按最近更新倒序。 */
 export async function listThreads(): Promise<Thread[]> {
-  await seedThreadsOnce()
   return (await allThreadNodes())
     .filter(isLive)
     .map(nodeToThread)
@@ -112,7 +80,6 @@ export async function listThreads(): Promise<Thread[]> {
 }
 
 export async function getThread(id: string): Promise<Thread | undefined> {
-  await seedThreadsOnce()
   const n = await idbGet<ThreadNode>(STORE_NODES, id)
   if (!n || n.kind !== "thread" || !isLive(n)) return undefined
   return nodeToThread(n)
@@ -120,7 +87,6 @@ export async function getThread(id: string): Promise<Thread | undefined> {
 
 /** 活跃线程数 —— 数量徽标用。 */
 export async function countThreads(): Promise<number> {
-  await seedThreadsOnce()
   return (await allThreadNodes()).filter(isLive).length
 }
 
@@ -128,7 +94,6 @@ export async function countThreads(): Promise<number> {
 
 /** 新建空线程并落库。 */
 export async function createThread(): Promise<Thread> {
-  await seedThreadsOnce()
   const now = Date.now()
   const thread: Thread = {
     id: genId("thread"),
@@ -144,7 +109,6 @@ export async function createThread(): Promise<Thread> {
 
 /** 整体写回线程 (消息内联); 刷新 updatedAt, 保留/追加 sortKey。 */
 export async function saveThread(thread: Thread): Promise<void> {
-  await seedThreadsOnce()
   const all = await allThreadNodes()
   const cur = all.find((n) => n.id === thread.id)
   const sortKey = cur?.sortKey || nextKey(maxKey(all))
@@ -153,13 +117,11 @@ export async function saveThread(thread: Thread): Promise<void> {
 
 /** 物理删除 (线程本地独占, 无需墓碑传播); kind 守卫确保只删 thread 节点 (与其它 kind 作用域操作一致)。 */
 export async function deleteThread(id: string): Promise<void> {
-  await seedThreadsOnce()
   const n = await idbGet<ThreadNode>(STORE_NODES, id)
   if (n && n.kind === "thread") await idbDelete(STORE_NODES, id)
 }
 
 export async function renameThread(id: string, title: string): Promise<void> {
-  await seedThreadsOnce()
   await idbReadModifyWrite<ThreadNode>(STORE_NODES, id, (current) =>
     current && current.kind === "thread"
       ? { ...current, title: title.trim() || current.title, updatedAt: Date.now() }

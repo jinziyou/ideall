@@ -95,16 +95,19 @@ export type Node = BaseNode & (
 
 ---
 
-## 3. 四步折叠路线
+## 3. 折叠现状(clean-slate)
 
-复用 `migrateNotesTreeOnce` 懒迁移范式(纯转换函数 + I/O 包装,幂等、可恢复、不在 `onupgradeneeded` 内做 I/O)。每步独立上线、可随时叫停。`onupgradeneeded` 只 `createObjectStore`(零 I/O → 升级安全)。
+**已采用 clean-slate**:旧数据(本地 IndexedDB + 服务端 DB)一次性清空、重新跑,故**不做增量数据迁移**——迁移机制(`*-migrate.ts`/`migrateNotesTreeOnce`/`seed*Once`/drain、legacy per-kind 旧库)已全部删除。`onupgradeneeded` 只 `createObjectStore`(`STORE_NODES` + `STORE_BLOBS`,零 I/O → 升级安全),所有 kind 一律在统一库里全新落地。
 
-| 步 | 内容 | 首次同步风险 |
-|---|---|---|
-| **A** notes 播种 | 加 `kind:"note"`,`nodes-store` = `notes-store` 泛化(notes 是第一次折叠) | 无(已在同步) |
-| **B** bookmarks/files | 随机 id + 从未同步 → 首次同步**只会重复不会 LWW 丢**;补 `updatedAt=createdAt/sortKey`;硬删改软删;Blob 拆 `STORE_BLOBS` | 仅重复(按 URL/hash 去重启发式,不静默自动合并) |
-| **C** subscriptions | **保留确定性 id `feed:type:key`,绝不 genId**;同步边界 `feed 节点 ↔ 旧 Subscription wire` 投影,`"subs"` scope 零改;**含墓碑全量带过来**(漏带=已删关注复活) | 一次性归一 churn(老记录补 updatedAt) |
-| **D** threads | 跨 plugin/core 边界,agent 插件改经 `FilesPort` 消费(修依赖反转破例);同步默认关(对象 LWW 截断 messages[]);本地独占故硬删 | 默认不同步 |
+各 kind 在 `STORE_NODES` 的落地形态(节点↔域类型投影只在各 `*-store` 门面内发生):
+
+| kind | 落地形态 |
+|---|---|
+| **note** | 树 + sortKey + 同步,逻辑零改;`Note` 域类型无 `kind`,写路径按 `kind==="note"` 投影 |
+| **bookmark / folder** | `sortKey/updatedAt` + 软删(`deletedAt`,非硬删) |
+| **file** | Blob 旁存 `STORE_BLOBS`,节点存 `blobRef`;软删 |
+| **feed** | **确定性 id `feed:type:key`,绝不 genId**;同步边界 `feed 节点 ↔ 旧 Subscription wire` 投影,`"subs"` scope 零改;含墓碑 |
+| **thread** | 跨 plugin/core 边界,agent 插件经 `FilesPort` 消费(修依赖反转破例);同步默认关(对象 LWW 会截断 `messages[]`);本地独占故硬删 |
 
 `nodes-store` 读写主体见独立实现(`listNodes(kind)/listChildren/getNode/readBlob/getAncestors/createNode/updateNode(RMW)/moveNode/deleteNode({soft})/restoreNodes`),三处按 kind 分叉:`nodeText`(全文摘要)、file 的 Blob 旁存、content 归一化。树工具(`effectiveParentId/buildParentOf/cmpSibling`)、`computeSortKey`、`collectSubtreeIds` 逐字复用。
 
@@ -228,10 +231,10 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 - [ ] sk 只对"物理顺序相对前块变了"的块重算,未移动块沿用 `blockMeta[id].sk`。
 - [ ] `applyBlockPatch` upsert 加 v 守卫:`v = max(u.v, curMeta[id].v+1)`,仅 `u.v >` 现有才覆盖(防 live-merge 并入的高版本块被陈旧 base 低版本 upsert 复活)。
 - [ ] `diffBlocks`/`applyBlockPatch` 严格只取顶层块,不下钻嵌套块。
-- [ ] 存量补 block id 用**确定性 hash**(noteId+块序+内容指纹)而非随机 genId(两端独立迁移得同 id,消跨端竞争)。
+- [ ] block id 用**确定性 hash**(noteId+块序+内容指纹)而非随机 genId(两端独立生成得同 id,消跨端竞争)。
 
 **数据层**
-- [ ] 每个 `planXFold` 配 `*.test.ts` 锁"零丢数据 + 幂等"(纯本地无后端备份)。
+- [x] ~~每个 `planXFold` 配 `*.test.ts` 锁"零丢数据 + 幂等"~~ —— clean-slate 后迁移机制删除,无 fold 步骤;`onupgradeneeded` 只建仓零 I/O。
 - [ ] 写队列 vs `notes-manager` 同 noteId 双挂载并发协调。
 
 ---

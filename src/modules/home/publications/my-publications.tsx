@@ -16,7 +16,7 @@ import { deletePublication, getPeerPublications, publish, type Publication } fro
 
 /**
  * 「我的 · 发布」: 登录用户发布内容 (供社区关注) + 管理自己的发布。
- * 自己的发布列表复用公开端点 GET /peer/{id}/publications (id = 当前用户)。
+ * 自己的发布列表复用公开端点 GET /v1/peers/{id}/publications (id = 当前用户)。
  */
 export default function MyPublications() {
   const session = React.useSyncExternalStore(subscribeSession, getSession, () => null)

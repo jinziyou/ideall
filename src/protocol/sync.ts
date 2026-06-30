@@ -5,13 +5,13 @@
 // 都满足该形状 (id + 版本时间 + 软删墓碑), 故共用同一套 LWW 并集 / 墓碑 GC, 不各写一份。
 
 /**
- * 可跨端同步的记录的最小形状 —— LWW 合并只需: 主键 id、版本时间 (updatedAt 缺省回退 createdAt)、
- * 软删墓碑 (deletedAt)。关注 / 笔记等实体结构上满足即可参与同一套合并。
+ * 可跨端同步的记录的最小形状 —— LWW 合并只需: 主键 id、版本时间 (updatedAt)、软删墓碑 (deletedAt)。
+ * 关注 / 笔记等实体结构上满足即可参与同一套合并。
  */
 export interface SyncRecord {
   id: string
   createdAt: number
-  updatedAt?: number
+  updatedAt: number
   deletedAt?: number
 }
 
@@ -38,9 +38,9 @@ export function getSyncPort(): SyncPort | null {
   return syncPort
 }
 
-/** 单条记录的「版本时间」(LWW 比较用; updatedAt 缺省回退 createdAt, 兼容存量)。 */
+/** 单条记录的「版本时间」(LWW 比较用)。 */
 function recordTs(s: SyncRecord): number {
-  return s.updatedAt ?? s.createdAt
+  return s.updatedAt
 }
 
 /**

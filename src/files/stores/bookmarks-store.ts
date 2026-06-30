@@ -10,16 +10,12 @@ import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
 import { computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
-import { planBookmarksSeed } from "@/files/migrate/nodes-migrate"
 import {
-  idbBulkDelete,
   idbBulkPut,
   idbGet,
   idbGetAll,
   idbPut,
   idbReadModifyWrite,
-  STORE_BOOKMARKS,
-  STORE_FOLDERS,
   STORE_NODES,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@/files/flowback"
@@ -70,43 +66,6 @@ function bookmarkToNode(b: Bookmark, sortKey: string, updatedAt: number): Bookma
   }
 }
 
-// ---- 懒迁移: 折叠步 B —— 书签/收藏夹播种进 nodes 仓库 ----
-
-let seedPromise: Promise<void> | null = null
-
-/**
- * 折叠步 B 懒迁移 (模块级 once): 把旧 bookmarks/bookmarkFolders 仓库播种进 STORE_NODES 并清空旧仓库。
- * 每个读写入口先 await。失败不缓存 (置回 null) 可重试。不放 onupgradeneeded 内 (同笔记迁移理由)。
- */
-export function seedBookmarksOnce(): Promise<void> {
-  if (!seedPromise) {
-    seedPromise = doSeedBookmarks().catch((e) => {
-      seedPromise = null
-      throw e
-    })
-  }
-  return seedPromise
-}
-
-async function doSeedBookmarks(): Promise<void> {
-  const [rawBookmarks, rawFolders, existingNodes] = await Promise.all([
-    idbGetAll<Record<string, unknown>>(STORE_BOOKMARKS),
-    idbGetAll<Record<string, unknown>>(STORE_FOLDERS),
-    idbGetAll<{ id: string }>(STORE_NODES),
-  ])
-  const plan = planBookmarksSeed(
-    rawBookmarks,
-    rawFolders,
-    new Set(existingNodes.map((n) => n.id)),
-    Date.now(),
-  )
-  if (!plan) return // 旧仓库已空 (无存量 / 已播种清空)
-  // 先写 nodes 再清空旧仓库; 顺序 put→delete 不丢数据, existingNodeIds 探测保证幂等。
-  if (plan.puts.length) await idbBulkPut(STORE_NODES, plan.puts)
-  if (plan.drainBookmarkIds.length) await idbBulkDelete(STORE_BOOKMARKS, plan.drainBookmarkIds)
-  if (plan.drainFolderIds.length) await idbBulkDelete(STORE_FOLDERS, plan.drainFolderIds)
-}
-
 // ---- nodes 仓库内 kind 作用域读 + sortKey 追加 ----
 
 async function allBookmarkNodes(): Promise<BookmarkNode[]> {
@@ -148,13 +107,11 @@ function nextKeys(after: string | null, count: number): string[] {
 // ---- 收藏夹 ----
 
 export async function listFolders(): Promise<BookmarkFolder[]> {
-  await seedBookmarksOnce()
   const folders = (await allFolderNodes()).filter(isLive).map(nodeToFolder)
   return folders.sort((a, b) => a.createdAt - b.createdAt)
 }
 
 export async function addFolder(name: string): Promise<BookmarkFolder> {
-  await seedBookmarksOnce()
   const existing = await allFolderNodes()
   const now = Date.now()
   const node: FolderNode = {
@@ -173,7 +130,6 @@ export async function addFolder(name: string): Promise<BookmarkFolder> {
 }
 
 export async function renameFolder(id: string, name: string): Promise<void> {
-  await seedBookmarksOnce()
   await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
     current && current.kind === "folder"
       ? { ...current, title: name.trim() || current.title, updatedAt: Date.now() }
@@ -183,7 +139,6 @@ export async function renameFolder(id: string, name: string): Promise<void> {
 
 /** 删除收藏夹 (软删墓碑); 夹内活跃书签移动到未分组 (parentId = null)。 */
 export async function deleteFolder(id: string): Promise<void> {
-  await seedBookmarksOnce()
   const now = Date.now()
   const orphans = (await allBookmarkNodes())
     .filter(isLive)
@@ -200,20 +155,17 @@ export async function deleteFolder(id: string): Promise<void> {
 // ---- 书签 ----
 
 export async function listBookmarks(): Promise<Bookmark[]> {
-  await seedBookmarksOnce()
   const items = (await allBookmarkNodes()).filter(isLive).map(nodeToBookmark)
   return items.sort((a, b) => b.createdAt - a.createdAt)
 }
 
 /** 活跃书签数 (过滤墓碑) —— 数量徽标用。 */
 export async function countBookmarks(): Promise<number> {
-  await seedBookmarksOnce()
   return (await allBookmarkNodes()).filter(isLive).length
 }
 
 /** 读取单条书签 (投影); 墓碑 / 非书签 kind 视为不存在。供书签查看器自取数。 */
 export async function getBookmark(id: string): Promise<Bookmark | undefined> {
-  await seedBookmarksOnce()
   const n = await idbGet<BookmarkNode>(STORE_NODES, id)
   if (!n || n.kind !== "bookmark" || !isLive(n)) return undefined
   return nodeToBookmark(n)
@@ -229,7 +181,6 @@ export type NewBookmark = {
 }
 
 export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
-  await seedBookmarksOnce()
   const existing = await allBookmarkNodes()
   const now = Date.now()
   const node: BookmarkNode = {
@@ -254,7 +205,6 @@ export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
 
 /** 批量导入 (浏览器书签导入用), 一次事务写入 */
 export async function bulkAddBookmarks(inputs: NewBookmark[]): Promise<Bookmark[]> {
-  await seedBookmarksOnce()
   const existing = await allBookmarkNodes()
   const now = Date.now()
   const keys = nextKeys(maxKey(existing), inputs.length)
@@ -284,7 +234,6 @@ export async function updateBookmark(
   id: string,
   patch: Partial<Omit<Bookmark, "id" | "createdAt">>,
 ): Promise<void> {
-  await seedBookmarksOnce()
   // 单事务读-改-写 + 按主键单取; kind 守卫防误改其它 kind 节点。
   await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) => {
     if (!current || current.kind !== "bookmark") return undefined
@@ -304,7 +253,6 @@ export async function updateBookmark(
 
 /** 删除书签 (软删墓碑; 撤销靠 restoreBookmark 复活)。 */
 export async function deleteBookmark(id: string): Promise<void> {
-  await seedBookmarksOnce()
   const now = Date.now()
   await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
     current && current.kind === "bookmark"
@@ -343,7 +291,6 @@ export async function moveBookmark(
   newParentId: string | null,
   pos?: InsertPos,
 ): Promise<void> {
-  await seedBookmarksOnce()
   if (newParentId !== null) {
     const folder = await idbGet<FolderNode>(STORE_NODES, newParentId)
     if (!folder || folder.kind !== "folder" || !isLive(folder)) throw new Error("目标收藏夹不存在")
@@ -361,7 +308,6 @@ export async function moveBookmark(
 
 /** 收藏夹同级重排 (parentId 恒为 null)。 */
 export async function moveFolder(id: string, pos?: InsertPos): Promise<void> {
-  await seedBookmarksOnce()
   const live = await liveBookmarkTreeItems()
   if (!live.some((n) => n.id === id)) return
   const sortKey = computeSiblingSortKey(live, null, pos, id)
@@ -375,7 +321,6 @@ export async function moveFolder(id: string, pos?: InsertPos): Promise<void> {
 
 /** 撤销删除: 把刚删除的书签复活 (清墓碑 + bump updatedAt, 保留 id/createdAt/分组)。 */
 export async function restoreBookmark(bookmark: Bookmark): Promise<void> {
-  await seedBookmarksOnce()
   const now = Date.now()
   const existing = await allBookmarkNodes()
   const fallbackKey = nextKeys(maxKey(existing), 1)[0]

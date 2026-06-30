@@ -20,9 +20,8 @@ export interface NameEntity {
   name: string
   /** 所属周 (周一 0 点) epoch 毫秒 */
   period: number
-  /** 词条富化: 是否有百科词条 (缺省兼容旧数据) */
+  /** 词条富化: 是否有维基词条 (缺省兼容旧数据) */
   has_entry?: boolean
-  baike_url?: string | null
   wikipedia_url?: string | null
 }
 
@@ -48,7 +47,7 @@ export interface Info {
   publish_time: number
 }
 
-/** `/info/analysis` 响应项: Info 平铺 + 关联强度分数 (向后兼容按 Info 读)。 */
+/** `GET /v1/articles/{id}/related` 响应项: Info 平铺 + 关联强度分数 (向后兼容按 Info 读)。 */
 export type RelatedInfo = Info & {
   /** 与目标共享的实体数 (全实体口径) */
   shared: number
@@ -72,7 +71,7 @@ export interface EntityPeriodCount {
   period: number
 }
 
-/** 实体详情聚合 (`GET /info/entity?label=&name=`)。实体不存在时 `mention_count = 0`。 */
+/** 实体详情聚合 (`GET /v1/entities/{label}/{name}`)。实体不存在时 `mention_count = 0`。 */
 export interface EntityDetail {
   label: string
   name: string
@@ -81,7 +80,6 @@ export interface EntityDetail {
   first_seen: number
   last_seen: number
   has_entry: boolean
-  baike_url?: string | null
   wikipedia_url?: string | null
   /** 共现实体 top N (按共同出现的信息条数倒序) */
   co_entities: EntityBrief[]
@@ -121,7 +119,7 @@ export interface Publication {
   created_at: number
 }
 
-/** 发布入参 (POST /me/publications)。 */
+/** 发布入参 (POST /v1/me/publications)。 */
 export interface PublishDraft {
   title: string
   url?: string
@@ -180,7 +178,7 @@ export interface ServerPort {
   login(payload: AuthCredentials): Promise<ApiResult<AuthBody>>
   register(payload: AuthCredentials): Promise<ApiResult<AuthBody>>
   getMe(token: string): Promise<ApiResult<CurrentUser>>
-  /** 更新发布资料 (PUT /me/profile)。嵌入桥 `me.updateProfile` 用; token 由宿主持有, 不出 iframe。 */
+  /** 更新发布资料 (PUT /v1/me/profile)。嵌入桥 `me.updateProfile` 用; token 由宿主持有, 不出 iframe。 */
   updateProfile(
     token: string,
     patch: { name?: string; avatar?: string },

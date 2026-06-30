@@ -1,7 +1,7 @@
 // syncNow 编排集成测试 (node:test + tsx)。
 // syncNow 是跨端同步真实落地编排 (跨重试累积合并 / 解密 / unionMerge / GC / 脏数据过滤 / 409 冲突),
 // 此前仅其纯函数零件被隔离单测、编排本身无覆盖 (M-15)。本测以内存 FilesPort + stub 的
-// /sync/{id} 服务端 (乐观并发) + 真实 sync-crypto 加解密, 端到端驱动编排各分支。
+// /v1/sync/{id} 服务端 (乐观并发, {data} 包络) + 真实 sync-crypto 加解密, 端到端驱动编排各分支。
 import { test, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import { syncNow } from "./subscription-sync"
@@ -43,7 +43,8 @@ function makeServer(initial: SyncBlob | null = null) {
     const url = String(input)
     if (!url.includes("/sync/")) throw new Error("unexpected url: " + url)
     if ((init.method ?? "GET") === "GET") {
-      return state.blob ? text(200, JSON.stringify(state.blob)) : text(404, "")
+      // v1 GET /sync/{id} 返回 {data: SyncBlob} 包络 (404 = 尚无数据)。
+      return state.blob ? text(200, JSON.stringify({ data: state.blob })) : text(404, "")
     }
     // PUT: 乐观并发
     if (state.force409Once) {

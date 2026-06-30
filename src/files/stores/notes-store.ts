@@ -7,8 +7,6 @@ import type { NodeKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
-import { planNotesTreeMigration } from "@/files/migrate/notes-migrate"
-import { planNodesSeed } from "@/files/migrate/nodes-migrate"
 import { effectiveParentId, buildParentOf, cmpSibling } from "@/files/notes-tree-util"
 import {
   seedBlockMeta,
@@ -19,15 +17,12 @@ import {
   type BlockMetaMap,
 } from "@/files/note-blocks"
 import {
-  idbBulkDelete,
   idbBulkPut,
   idbBulkPutDelete,
   idbGet,
   idbGetAll,
   idbPut,
   idbReadModifyWrite,
-  STORE_NOTES,
-  STORE_NOTEBOOKS,
   STORE_NODES,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@/files/flowback"
@@ -118,69 +113,6 @@ function toMeta(note: Note, hasChildren: boolean, withText: boolean): NoteMeta {
   }
 }
 
-// ---- 懒迁移: 旧「笔记本→笔记」扁平模型 → 递归页树 ----
-
-let migrationPromise: Promise<void> | null = null
-
-/**
- * 幂等懒迁移 (模块级 once): notebookId→parentId + sortKey, 旧笔记本→根级目录页 (复用 notebook.id)。
- * 每个读写入口先 await 此函数。失败不缓存 (置回 null), 下次读路径可重试 (上层 toast)。
- * 不放在 idb 的 onupgradeneeded 内: 那里报错会 abort DB open 且无恢复 UI、大库经 onblocked 冻结全部读写。
- */
-export function migrateNotesTreeOnce(): Promise<void> {
-  if (!migrationPromise) {
-    migrationPromise = doMigrateNotesTree().catch((e) => {
-      migrationPromise = null
-      throw e
-    })
-  }
-  return migrationPromise
-}
-
-async function doMigrateNotesTree(): Promise<void> {
-  const [rawNotes, rawNotebooks] = await Promise.all([
-    idbGetAll<Record<string, unknown>>(STORE_NOTES),
-    idbGetAll<Record<string, unknown>>(STORE_NOTEBOOKS),
-  ])
-  const plan = planNotesTreeMigration(rawNotes, rawNotebooks, Date.now())
-  if (!plan) return // 无存量 / 已迁移
-  // 先写 notes (目录页 + 转换后笔记) 再清空旧 noteNotebooks; 顺序 put→delete 不丢数据, 探测保证幂等。
-  if (plan.puts.length) await idbBulkPut(STORE_NOTES, plan.puts)
-  if (plan.deleteNotebookIds.length) await idbBulkDelete(STORE_NOTEBOOKS, plan.deleteNotebookIds)
-}
-
-// ---- 懒迁移: 折叠步 A —— 笔记播种进统一 nodes 仓库 (加 kind:"note") ----
-
-let seedPromise: Promise<void> | null = null
-
-/**
- * 折叠步 A 懒迁移 (模块级 once): 先跑旧「笔记本→树」迁移 (STORE_NOTES), 再把笔记播种进 STORE_NODES
- * (加 kind:"note") 并清空旧 notes 仓库 (单一真相)。所有读写入口先 await 此函数。
- * 失败不缓存 (置回 null), 下次读路径可重试。不放 onupgradeneeded 内 (同 migrateNotesTreeOnce 理由)。
- */
-export function seedNodesOnce(): Promise<void> {
-  if (!seedPromise) {
-    seedPromise = doSeedNodes().catch((e) => {
-      seedPromise = null
-      throw e
-    })
-  }
-  return seedPromise
-}
-
-async function doSeedNodes(): Promise<void> {
-  await migrateNotesTreeOnce() // 步 A 之前: 旧扁平笔记本 → 递归树 (仍在 STORE_NOTES 内)
-  const [rawNotes, existingNodes] = await Promise.all([
-    idbGetAll<Record<string, unknown>>(STORE_NOTES),
-    idbGetAll<{ id: string }>(STORE_NODES),
-  ])
-  const plan = planNodesSeed(rawNotes, new Set(existingNodes.map((n) => n.id)))
-  if (!plan) return // 旧 notes 仓库已空 (无存量 / 已播种清空)
-  // 先写 nodes 再清空旧 notes; 顺序 put→delete 不丢数据, existingNodeIds 探测保证幂等。
-  if (plan.puts.length) await idbBulkPut(STORE_NODES, plan.puts)
-  if (plan.drainNoteIds.length) await idbBulkDelete(STORE_NOTES, plan.drainNoteIds)
-}
-
 /**
  * 取 nodes 仓库内全部「笔记」节点 (按 kind 过滤, 含墓碑)。其余 kind 节点 (后续折叠 B/C/D 入库) 不返回 ——
  * 这是 notes-store 在统一 nodes 仓库下只见笔记的边界, 防 listNotes / 同步 GC 误伤其它 kind。
@@ -266,7 +198,6 @@ function computeSortKey(
  * opts.text=false 跳过全文 walk (excerpt/search 留空), 供只用 标题/时间 的消费方提速。
  */
 export async function listNotes(opts?: { text?: boolean }): Promise<NoteMeta[]> {
-  await seedNodesOnce()
   const withText = opts?.text !== false
   const all = await allNoteNodes()
   const live = all.filter(isLive)
@@ -283,7 +214,6 @@ export async function listNotes(opts?: { text?: boolean }): Promise<NoteMeta[]> 
 
 /** 列出某父页下的活跃直接子页面 (按同级序)。parentId=null 为根级。 */
 export async function listNoteChildren(parentId: string | null): Promise<NoteMeta[]> {
-  await seedNodesOnce()
   const all = await allNoteNodes()
   const live = all.filter(isLive)
   const parentOf = buildParentOf(live)
@@ -300,7 +230,6 @@ export async function listNoteChildren(parentId: string | null): Promise<NoteMet
 
 /** 取从根到「该页的直接父」的祖先链 (不含自身), 面包屑用。按 effectiveParentId 上溯, 与页树一致 (环成员归根)。 */
 export async function getAncestors(id: string): Promise<NoteMeta[]> {
-  await seedNodesOnce()
   const all = await allNoteNodes()
   const live = all.filter(isLive)
   const byId = new Map(live.map((n) => [n.id, n]))
@@ -320,7 +249,6 @@ export async function getAncestors(id: string): Promise<NoteMeta[]> {
 
 /** 读取单条完整笔记 (含 content); 已删除 (墓碑) 或非笔记 kind 视为不存在。 */
 export async function getNote(id: string): Promise<Note | undefined> {
-  await seedNodesOnce()
   const note = await idbGet<NoteRow>(STORE_NODES, id)
   if (!note || note.kind !== KIND_NOTE || !isLive(note)) return undefined
   // 确保带稳定块 id + blockMeta (旧记录懒补; 编辑器据此与本地块版本对齐); 空正文归一为合法空文档。
@@ -330,7 +258,6 @@ export async function getNote(id: string): Promise<Note | undefined> {
 
 /** 活跃笔记数 (过滤墓碑) —— 数量徽标用。目录页也计入 (「目录也是文件」)。 */
 export async function countNotes(): Promise<number> {
-  await seedNodesOnce()
   const all = await allNoteNodes()
   return all.filter(isLive).length
 }
@@ -338,7 +265,6 @@ export async function countNotes(): Promise<number> {
 // ---- 笔记 (写) ----
 
 export async function addNote(input: NewNote = {}): Promise<Note> {
-  await seedNodesOnce()
   const all = await allNoteNodes()
   const live = all.filter(isLive)
   const parentId = input.parentId ?? null
@@ -373,7 +299,6 @@ export async function updateNote(
   id: string,
   patch: Partial<Pick<Note, "title" | "content" | "tags" | "parentId" | "sortKey">>,
 ): Promise<Note | undefined> {
-  await seedNodesOnce()
   const next = await idbReadModifyWrite<NoteRow>(STORE_NODES, id, (current) => {
     if (!current || current.kind !== KIND_NOTE) return undefined // 不存在 / 非笔记 kind → 不写
     const now = Date.now()
@@ -410,7 +335,6 @@ export async function moveNote(
   newParentId: string | null,
   pos?: InsertPos,
 ): Promise<Note | undefined> {
-  await seedNodesOnce()
   const all = await allNoteNodes()
   const live = all.filter(isLive)
   if (!live.some((n) => n.id === id)) return undefined
@@ -433,7 +357,6 @@ export async function moveNote(
  * 返回被删的完整笔记 (含正文), 供 restoreSubtree 撤销。
  */
 export async function deleteNote(id: string): Promise<Note[]> {
-  await seedNodesOnce()
   const all = await allNoteNodes()
   const live = all.filter(isLive)
   const subtreeIds = collectSubtreeIds(id, live)
@@ -474,14 +397,12 @@ export async function restoreSubtree(notes: Note[]): Promise<void> {
 
 /** 列出全部笔记含墓碑 + 完整正文 —— 同步合并/上传用。 */
 export async function listAllNotes(): Promise<Note[]> {
-  await seedNodesOnce()
   return allNoteNodes()
 }
 
 /** 同步落地: 写入合并 + GC 后的权威全集, 并物理清除集合外的过期墓碑 (一次事务批处理)。 */
 export async function bulkPutNotes(notes: Note[]): Promise<void> {
-  await seedNodesOnce()
-  // 写前归一 kind:"note" (远端/旧端记录可能无 kind), 同步块加 kind 对旧端向后兼容 (额外字段被忽略)。
+  // Note 域类型不带 kind, 写 nodes 仓库前归一为 NoteRow (打 kind:"note", 统一库按 kind 收纳)。
   const rows = notes.map(asNoteRow)
   // existing 按 note 作用域取 —— 过期墓碑 GC 只针对笔记, 绝不波及 nodes 仓库内其它 kind 的记录。
   const existing = await allNoteNodes()

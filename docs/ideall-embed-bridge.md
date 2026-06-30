@@ -63,9 +63,9 @@
         └────────────┬───────────────┘                              └─────────────┬─────────────┘
                      │ 带 token 的写                                                │ 公共读 (读开放)
                      ▼                                                              ▼
-              ┌──────────────────────────  wonita apiserver (api.wonita.link)  ──────────────────┐
-              │  /info* /peers* (读开放)   /me/publications (JWT)   /authorize/* (X25519)         │
-              └────────────────────────────────────────────────────────────────────────────────┘
+              ┌────────────────────────  wonita apiserver (api.wonita.link)  ─────────────────────────┐
+              │  /v1/articles* /v1/peers* (读开放)   /v1/me/publications (JWT)   /v1/auth/* (X25519)  │
+              └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **能力面（mcpPort）**：请求/响应、要 schema 的调用 —— 身份、发布、本地 hub、agent、导航、（可选）可换后端 data 代理。
@@ -185,9 +185,9 @@ export class MessagePortTransport implements Transport {
 | `identity.me` | — | `CurrentUser \| null` | `identity:read` | `getSession()` / `ServerPort.getMe(token)` |
 | `community.publish` | `{title:string, url?:string, body?:string}` | `Publication` | `identity.publish` | `ServerPort.publish(hostToken, draft)` |
 | `community.deletePublication` | `{id:number}` | `{ok:true}` | `identity.publish` | `ServerPort.deletePublication(hostToken, id)` |
-| `me.updateProfile` | `{name?:string, avatar?:string}` | `{ok:true}` | `identity.publish` | ⚠️ 需在 `ServerPort` 新增 `updateProfile(token, patch)`（封装 `PUT /me/profile`，现 `server-port.ts` 未暴露） |
+| `me.updateProfile` | `{name?:string, avatar?:string}` | `{ok:true}` | `identity.publish` | ✅ 已由 `ServerPort.updateProfile(token, patch)` 提供（封装 `PUT /v1/me/profile`，204 无响应体） |
 
-> `community.publish` 入参 schema 复用 `PublishDraft`（`server-port.ts`，已有）。`community.publish` / `deletePublication` 对应的 `ServerPort.publish/deletePublication` 已存在；仅 `me.updateProfile` 需补一个 `ServerPort` 方法。页面**不传 token**；宿主从 `auth-store` 取。未登录时宿主返回 `-32002 not-authenticated`，页面据此提示"在 ideall 中登录"。
+> `community.publish` 入参 schema 复用 `PublishDraft`（`server-port.ts`，已有）。`community.publish` / `deletePublication` 对应的 `ServerPort.publish/deletePublication` 已存在；`me.updateProfile` 对应的 `ServerPort.updateProfile` 亦已补齐。页面**不传 token**；宿主从 `auth-store` 取。未登录时宿主返回 `-32002 not-authenticated`，页面据此提示"在 ideall 中登录"。
 
 **hub / 本地主权数据**
 

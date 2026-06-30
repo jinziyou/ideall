@@ -8,22 +8,8 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
 import { safeHref } from "@/lib/safe-url"
 import { sortKeyBetween } from "@/files/sort-key"
-import {
-  feedNodeId,
-  subToFeedNode,
-  feedNodeToSub,
-  planFeedsSeed,
-} from "@/files/migrate/nodes-migrate"
-import {
-  idbBulkDelete,
-  idbBulkPut,
-  idbBulkPutDelete,
-  idbGet,
-  idbGetAll,
-  idbPut,
-  STORE_NODES,
-  STORE_SUBSCRIPTIONS,
-} from "@/lib/idb"
+import { feedNodeId, subToFeedNode, feedNodeToSub } from "@/files/feed-node"
+import { idbBulkPutDelete, idbGet, idbGetAll, idbPut, STORE_NODES } from "@/lib/idb"
 import { notifyFilesUpdated } from "@/files/flowback"
 
 type FeedNode = NodeOfKind<"feed">
@@ -41,33 +27,6 @@ export function faviconForUrl(url: string): string {
   } catch {
     return ""
   }
-}
-
-// ---- 懒迁移: 折叠步 C —— 关注播种进 nodes 仓库 (含墓碑全量) ----
-
-let seedPromise: Promise<void> | null = null
-
-/** 折叠步 C 懒迁移 (模块级 once): 旧 subscriptions 仓库 → feed 节点 (确定性 id), 清空旧仓库。 */
-export function seedFeedsOnce(): Promise<void> {
-  if (!seedPromise) {
-    seedPromise = doSeedFeeds().catch((e) => {
-      seedPromise = null
-      throw e
-    })
-  }
-  return seedPromise
-}
-
-async function doSeedFeeds(): Promise<void> {
-  const [rawSubs, existingNodes] = await Promise.all([
-    idbGetAll<Record<string, unknown>>(STORE_SUBSCRIPTIONS),
-    idbGetAll<{ id: string }>(STORE_NODES),
-  ])
-  const plan = planFeedsSeed(rawSubs, new Set(existingNodes.map((n) => n.id)), Date.now())
-  if (!plan) return // 旧仓库已空
-  // 先写 feed 节点 (含墓碑) 再清旧仓库; 顺序 put→delete 不丢, existingNodeIds 探测幂等。
-  if (plan.puts.length) await idbBulkPut(STORE_NODES, plan.puts)
-  if (plan.drainSubIds.length) await idbBulkDelete(STORE_SUBSCRIPTIONS, plan.drainSubIds)
 }
 
 // ---- feed 节点读 + sortKey 追加 ----
@@ -99,7 +58,6 @@ function nextKey(after: string | null): string {
 
 /** 列出活跃关注 (过滤墓碑)。UI / 插件 / 嵌入桥读路径。 */
 export async function listSubscriptions(): Promise<Subscription[]> {
-  await seedFeedsOnce()
   return (await allFeedNodes())
     .filter(isLive)
     .map(feedNodeToSub)
@@ -115,19 +73,16 @@ export async function listSubscriptionsByTypes(types: SubscriptionType[]): Promi
 
 /** 列出全部关注含墓碑 —— 仅跨端同步合并用 (墓碑需进合并/上传才能传播删除)。 */
 export async function listAllSubscriptions(): Promise<Subscription[]> {
-  await seedFeedsOnce()
   return (await allFeedNodes()).map(feedNodeToSub)
 }
 
 export async function isSubscribed(type: SubscriptionType, key: string): Promise<boolean> {
-  await seedFeedsOnce()
   const n = await idbGet<FeedNode>(STORE_NODES, feedNodeId(type, key.trim()))
   return Boolean(n && n.kind === "feed" && isLive(n)) // 墓碑 / 非 feed 视为未关注
 }
 
 /** 读取单条关注 (投影); 墓碑 / 非 feed kind 视为不存在。供关注查看器自取数 (按 feed 节点 id)。 */
 export async function getSubscription(id: string): Promise<Subscription | undefined> {
-  await seedFeedsOnce()
   const n = await idbGet<FeedNode>(STORE_NODES, id)
   if (!n || n.kind !== "feed" || !isLive(n)) return undefined
   return feedNodeToSub(n)
@@ -137,7 +92,6 @@ export async function getSubscription(id: string): Promise<Subscription | undefi
 
 /** 关注; 活跃项已存在则原样返回 (幂等); 命中墓碑则复活 (清除 deletedAt + 新 updatedAt, 保留原 createdAt)。 */
 export async function addSubscription(input: NewSubscription): Promise<Subscription> {
-  await seedFeedsOnce()
   const key = input.key.trim()
   const id = feedNodeId(input.type, key)
   const existing = await idbGet<FeedNode>(STORE_NODES, id)
@@ -181,7 +135,6 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
  * 从而让删除跨端收敛。未关注 / 已是墓碑则幂等无操作。
  */
 export async function removeSubscription(type: SubscriptionType, key: string): Promise<void> {
-  await seedFeedsOnce()
   const id = feedNodeId(type, key.trim())
   const existing = await idbGet<FeedNode>(STORE_NODES, id)
   if (!existing || existing.kind !== "feed" || !isLive(existing)) return // 未关注 / 已墓碑 → 幂等
@@ -195,7 +148,6 @@ export async function removeSubscription(type: SubscriptionType, key: string): P
  * 投影回 feed 节点整批 put; 并物理删除「落地时刻 nodes 库中仍残留的过期 feed 墓碑」(据当前真实库, 仅限 feed kind)。
  */
 export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> {
-  await seedFeedsOnce()
   const existing = await allFeedNodes() // feed 作用域: 过期墓碑 GC 绝不波及其它 kind 节点
   const keyById = new Map(existing.map((n) => [n.id, n.sortKey]))
   let lastKey = maxKey(existing)

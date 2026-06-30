@@ -18,7 +18,7 @@ import { mergeNoteContent, pruneBlockTombstones, type Block } from "@protocol/no
 import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/lib/sync-crypto"
 import { getSyncBlob, putSyncBlob } from "./sync-api"
 
-const noteTs = (n: Note): number => n.updatedAt ?? n.createdAt
+const noteTs = (n: Note): number => n.updatedAt
 
 const hasBlocks = (n: Note): boolean => !!n.blockMeta && Object.keys(n.blockMeta).length > 0
 
@@ -64,7 +64,8 @@ function gcNotes(notes: Note[], now: number): Note[] {
   )
 }
 
-/** blockMeta 形状校验: 缺省合法 (旧端); 存在则每项须 {v:number, by:string, sk:string, del?:number}。
+/** blockMeta 形状校验: 缺省合法 (blockMeta 本就可选 —— 空正文/未块级就绪的笔记走整篇 LWW 兜底);
+ *  存在则每项须 {v:number, by:string, sk:string, del?:number}。
  *  块墓碑 del 须有界 (远未来 del 会逃过块墓碑 GC 成不死块墓碑), 与 node 级 deletedAt 同口径。 */
 function isValidBlockMeta(bm: unknown, now: number): boolean {
   if (bm == null) return true

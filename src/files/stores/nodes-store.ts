@@ -1,21 +1,13 @@
 // 统一 Node 库的跨 kind 只读读取层 —— 供侧栏「一切皆文件」文件树 / places 导航。
-// 各 kind 的物理迁移仍归各自 *-store 的懒迁移 (seedXxxOnce); 此处只做协调触发 + 跨 kind 汇总读。
-// 写路径仍走各 kind 专属 store (notes-store/bookmarks-store/...), 此处不重复写逻辑。
+// 跨 kind 汇总读 STORE_NODES; 写路径仍走各 kind 专属 store (notes-store/bookmarks-store/...), 此处不重复写逻辑。
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node"
 import { NODE_KINDS } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import { safeHref } from "@/lib/safe-url"
 import { idbGet, idbGetAll, STORE_NODES } from "@/lib/idb"
 import { buildParentOf, effectiveParentId, type TreeItem } from "@/files/notes-tree-util"
+import { addNote, updateNote, moveNote, deleteNote } from "@/files/stores/notes-store"
 import {
-  seedNodesOnce,
-  addNote,
-  updateNote,
-  moveNote,
-  deleteNote,
-} from "@/files/stores/notes-store"
-import {
-  seedBookmarksOnce,
   addBookmark,
   updateBookmark,
   deleteBookmark,
@@ -25,15 +17,14 @@ import {
   moveBookmark,
   moveFolder,
 } from "@/files/stores/bookmarks-store"
-import { seedFilesOnce, updateFileMeta, deleteFile, getFile } from "@/files/stores/files-store"
+import { updateFileMeta, deleteFile, getFile } from "@/files/stores/files-store"
 import {
-  seedFeedsOnce,
   addSubscription,
   removeSubscription,
   getSubscription,
 } from "@/files/stores/subscriptions-store"
-import { seedThreadsOnce, deleteThread, renameThread } from "@/files/stores/threads-store"
-import { feedNodeId } from "@/files/migrate/nodes-migrate"
+import { deleteThread, renameThread } from "@/files/stores/threads-store"
+import { feedNodeId } from "@/files/feed-node"
 
 /** 跨 kind 节点摘要 (侧栏文件树用): TreeItem + kind + 是否有活跃子节点。 */
 export interface NodeSummary extends TreeItem {
@@ -41,28 +32,8 @@ export interface NodeSummary extends TreeItem {
   hasChildren: boolean
 }
 
-/** 全部本地 node kind (fs.read 不知 kind 时触发全部 seed; fs.list kind 缺省时遍历全部)。 */
+/** 全部本地 node kind (fs.list kind 缺省时遍历全部)。 */
 export const ALL_NODE_KINDS: NodeKind[] = [...NODE_KINDS]
-
-/** kind → 触发其物理迁移的 seed once (folder 与 bookmark 同属书签迁移)。 */
-const SEED_OF_KIND: Partial<Record<NodeKind, () => Promise<void>>> = {
-  note: seedNodesOnce,
-  bookmark: seedBookmarksOnce,
-  folder: seedBookmarksOnce,
-  file: seedFilesOnce,
-  feed: seedFeedsOnce,
-  thread: seedThreadsOnce,
-}
-
-/** 触发所请求 kind 的懒迁移 (确保旧仓库已播种进 STORE_NODES, 否则直读 STORE_NODES 会漏旧数据)。 */
-async function ensureSeeded(kinds: NodeKind[]): Promise<void> {
-  const seeds = new Set<() => Promise<void>>()
-  for (const k of kinds) {
-    const fn = SEED_OF_KIND[k]
-    if (fn) seeds.add(fn)
-  }
-  await Promise.all([...seeds].map((fn) => fn()))
-}
 
 type RawNode = {
   id: string
@@ -79,7 +50,6 @@ type RawNode = {
  */
 export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[]> {
   if (kinds.length === 0) return []
-  await ensureSeeded(kinds)
   const want = new Set(kinds)
   const all = await idbGetAll<RawNode>(STORE_NODES)
   const live = all.filter((n) => n.kind != null && want.has(n.kind) && n.deletedAt == null)
@@ -106,15 +76,13 @@ export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[
 /** 列出指定 kind 的活跃完整节点 (供 fs.list / fs://nodes; 调用方按需 stripNode 净化)。 */
 export async function listNodesRaw(kinds: NodeKind[]): Promise<Node[]> {
   if (kinds.length === 0) return []
-  await ensureSeeded(kinds)
   const want = new Set(kinds)
   const all = await idbGetAll<Node>(STORE_NODES)
   return all.filter((n) => n.kind != null && want.has(n.kind) && n.deletedAt == null)
 }
 
-/** 取单个活跃完整节点 (供 fs.read; 调用方按 kind 二次 gate / 净化)。kind 未知故触发全部 seed。 */
+/** 取单个活跃完整节点 (供 fs.read; 调用方按 kind 二次 gate / 净化)。 */
 export async function getNodeRaw(id: string): Promise<Node | undefined> {
-  await ensureSeeded(ALL_NODE_KINDS)
   const n = await idbGet<Node>(STORE_NODES, id)
   if (!n || n.deletedAt != null) return undefined
   return n
@@ -286,7 +254,6 @@ const BLOB_READ_CAP = 1024 * 1024 // 1MB
 export async function readBlobBase64(
   id: string,
 ): Promise<{ mime: string; size: number; base64: string } | undefined> {
-  await seedFilesOnce()
   const f = await getFile(id)
   if (!f) return undefined
   if (f.size > BLOB_READ_CAP) {

@@ -9,17 +9,13 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
-import { planFilesSeed } from "@/files/migrate/nodes-migrate"
 import {
-  idbBulkDelete,
-  idbBulkPut,
   idbDelete,
   idbGet,
   idbGetAll,
   idbPutAcrossStores,
   idbReadModifyWrite,
   STORE_BLOBS,
-  STORE_FILES,
   STORE_NODES,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@/files/flowback"
@@ -38,34 +34,6 @@ function nodeToMeta(n: FileNode): FileMeta {
     createdAt: n.createdAt,
     tags: n.tags,
   }
-}
-
-// ---- 懒迁移: 折叠步 B 续 —— 文件 (内联 Blob) 拆为节点 + 旁存 Blob ----
-
-let seedPromise: Promise<void> | null = null
-
-/** 折叠步 B 续懒迁移 (模块级 once): 旧 files 仓库 (内联 Blob) → nodes (blobRef) + blobs (二进制), 清空旧仓库。 */
-export function seedFilesOnce(): Promise<void> {
-  if (!seedPromise) {
-    seedPromise = doSeedFiles().catch((e) => {
-      seedPromise = null
-      throw e
-    })
-  }
-  return seedPromise
-}
-
-async function doSeedFiles(): Promise<void> {
-  const [rawFiles, existingNodes] = await Promise.all([
-    idbGetAll<Record<string, unknown>>(STORE_FILES),
-    idbGetAll<{ id: string }>(STORE_NODES),
-  ])
-  const plan = planFilesSeed(rawFiles, new Set(existingNodes.map((n) => n.id)), Date.now())
-  if (!plan) return
-  // 先写 blob + 节点, 再清旧仓库; 顺序保证不丢 (blob/node 落地后才删内联源)。
-  if (plan.blobPuts.length) await idbBulkPut(STORE_BLOBS, plan.blobPuts)
-  if (plan.nodePuts.length) await idbBulkPut(STORE_NODES, plan.nodePuts)
-  if (plan.drainFileIds.length) await idbBulkDelete(STORE_FILES, plan.drainFileIds)
 }
 
 // ---- nodes 仓库内 kind 作用域读 + sortKey 追加 ----
@@ -97,20 +65,17 @@ function nextKey(after: string | null): string {
 
 /** 列出所有文件元数据 (不含 Blob), 按创建时间倒序 */
 export async function listFiles(): Promise<FileMeta[]> {
-  await seedFilesOnce()
   const files = (await allFileNodes()).filter(isLive).map(nodeToMeta)
   return files.sort((a, b) => b.createdAt - a.createdAt)
 }
 
 /** 活跃文件数 (过滤墓碑) —— 数量徽标用。 */
 export async function countFiles(): Promise<number> {
-  await seedFilesOnce()
   return (await allFileNodes()).filter(isLive).length
 }
 
 /** 读取单个完整文件 (含 Blob); 墓碑 / 非文件 kind / Blob 缺失视为不存在。 */
 export async function getFile(id: string): Promise<StoredFile | undefined> {
-  await seedFilesOnce()
   const node = await idbGet<FileNode>(STORE_NODES, id)
   if (!node || node.kind !== "file" || !isLive(node)) return undefined
   const rec = await idbGet<BlobRecord>(STORE_BLOBS, node.blobRef.key)
@@ -130,7 +95,6 @@ export async function getFile(id: string): Promise<StoredFile | undefined> {
 
 /** 保存一个浏览器 File 对象, 返回元数据 */
 export async function addFile(file: File, tags: string[] = []): Promise<FileMeta> {
-  await seedFilesOnce()
   const existing = await allFileNodes()
   const now = Date.now()
   const id = genId("f")
@@ -160,7 +124,6 @@ export async function updateFileMeta(
   id: string,
   patch: Partial<Pick<StoredFile, "name" | "tags">>,
 ): Promise<void> {
-  await seedFilesOnce()
   // 单事务读-改-写; kind 守卫防误改其它 kind 节点。name→title 投影。
   await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) => {
     if (!current || current.kind !== "file") return undefined
@@ -175,7 +138,6 @@ export async function updateFileMeta(
 
 /** 删除文件 (软删墓碑 + 物理删 Blob; 撤销靠 restoreFile 从快照重放)。 */
 export async function deleteFile(id: string): Promise<void> {
-  await seedFilesOnce()
   const now = Date.now()
   // 先墓碑节点 (隐藏该文件), 再删大 Blob (墓碑只留轻量节点)。
   const tomb = await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) =>
@@ -187,7 +149,6 @@ export async function deleteFile(id: string): Promise<void> {
 
 /** 撤销删除: 把刚删除的文件 (含 Blob) 复活 (重放 Blob + 节点清墓碑, 保留 id/createdAt)。 */
 export async function restoreFile(file: StoredFile): Promise<void> {
-  await seedFilesOnce()
   const now = Date.now()
   const existing = await allFileNodes()
   // 软删后墓碑节点仍在 → 复用其 sortKey/parentId 复活; 极端兜底 (节点不存在) 用追加键重建。

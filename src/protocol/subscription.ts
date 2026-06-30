@@ -23,8 +23,8 @@ export interface Subscription {
   searchKeyword?: string
   searchDomain?: string
   createdAt: number
-  /** 最后更新时间 (跨端 LWW 合并用; 缺省视为 createdAt, 兼容无此字段的存量数据)。 */
-  updatedAt?: number
+  /** 最后更新时间 (跨端 LWW 合并用)。 */
+  updatedAt: number
   /**
    * 软删除墓碑 (tombstone) 时间戳 epoch 毫秒; 缺省 = 活跃关注。
    * 跨端同步用: 删除写墓碑而非物理删, 让「删除」按 LWW 跨端收敛 (否则另一端会把已删项带回 = 复活)。

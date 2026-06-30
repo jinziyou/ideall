@@ -44,7 +44,7 @@ src/ 已按终端分层重组: 路由薄标记 / 终端外壳 / 一切皆标签 
 | **app** | `@/app/*` | Next 路由层 —— 仅「开标签」薄标记 (page.tsx 几乎全是 re-export `@/workspace/open-workspace-tab`; 唯一例外 `app/auth/page.tsx` 是独立登录页, 渲染 `@/shell/auth-form`) + 根 layout/error/loading/not-found + globals.css |
 | **shell** | `@/shell/*` | 终端外壳 —— 命令台 / header / bottom-tab-bar / 主题 (theme/theme-applier) / account / mobile-nav / nav-config + `boot` (组合根, 能力/boot manifest 的唯一注册处; embed 的视图挂载 manifest 是既有例外, 且并非每个插件都有 boot manifest —— 如 agent 无) / `boot-gate` (启动闸) |
 | **workspace** | `@/workspace/*` | 一切皆标签 —— `tab-host` (keep-alive 多标签) / `registry` (kind→渲染; 也分派非 node 标签如 `browser-view` 内嵌浏览器) / store / `viewers` (按 kind: note/file/bookmark/feed/thread) / `modules` (模块配置单一真相源) / node-ref / node-tab / `tree/` (跨 kind 文件树: sidebar-tree / sidebar-tree-data / draggable-node-forest / home-sections, 根命名空间 places 概念) / local-search-dialog + local-search-items, 以及活动栏 / 二级侧栏 / 标签条 / 状态栏 4 件 IDE chrome |
-| **files** | `@/files/*` | 一切皆文件 —— 统一 Node 数据层。`stores/` (各 kind store + `nodes-store` 跨 kind 协调层); `migrate/` (懒迁移 plan*); 顶层 Node 原语: note-blocks / sort-key / notes-tree-util / note-write-queue / flowback / `files-port` (FilesPort 实现) / bookmark-import / spoke-meta |
+| **files** | `@/files/*` | 一切皆文件 —— 统一 Node 数据层。`stores/` (各 kind store + `nodes-store` 跨 kind 协调层); 顶层 Node 原语: note-blocks / sort-key / notes-tree-util / note-write-queue / flowback / feed-node (关注↔feed 节点投影) / `files-port` (FilesPort 实现) / bookmark-import / spoke-meta |
 | **modules** | `@/modules/*` | 功能模块 —— `home` (「我的」: 本机笔记/书签/资源/关注/对话的功能 UI = overview/notes/bookmarks/resources/publications/subscriptions) / `info` / `community` / `tool` / `apps` (本机已安装应用启动器, Tauri 桌面 / 本地模式; 由 `src-tauri/src/installed_apps.rs` + `src/lib/installed-apps.ts` 支撑) |
 | **plugins** | `@/plugins/*` | 插件 —— `agent` (AI 环境层, BYO-key) / `sync` (跨端 E2E 同步) / `embed` (嵌入页 + AI 共用的 Grant→`createLocalMcpServer` 能力链路) |
 | **protocol** | `@protocol/*` | 契约 / 端口 (纯类型 / 纯函数, 不含 UI): node (统一 Node 联合) / files (FilesPort + 投影域类型 Note/Bookmark/StoredFile/Subscription/Thread) / note-merge / subscription / content / flowback / sync (SyncPort) / server-port (ServerPort) / peer / auth |
@@ -84,7 +84,7 @@ pnpm install
 pnpm dev          # 开发服 (SSR) http://localhost:5020 —— 同时是 Tauri 开发壳的加载源
 pnpm build        # 静态导出 → out/ (output: export; 等同 pnpm app:export)
 pnpm lint         # 含 protocol 纯度强制 (no-restricted-imports)
-pnpm test         # tsx + node --test：运行全部 src/**/*.test.ts (现 30+ 文件) —— protocol/node·sync·server-port、plugins/sync 合并、lib/sync-crypto·egress-guard·safe-url、agent (含 acp/*、agent-mcp*、oauth)、embed grant、files migrate 等
+pnpm test         # tsx + node --test：运行全部 src/**/*.test.ts —— protocol/node·sync·server-port、plugins/sync 合并、lib/sync-crypto·egress-guard·safe-url、agent (含 acp/*、agent-mcp*、oauth)、embed grant、files 原语 (note-blocks·sort-key·notes-tree-util) 等
 
 # App (Tauri 跨平台桌面/移动; 工程在 src-tauri/, 见 docs/app.md)
 pnpm app:dev      # 桌面开发壳 (加载 pnpm dev 的 localhost:5020)

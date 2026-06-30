@@ -14,7 +14,7 @@
 
 **选 union-merge + 按 `updatedAt` 的 LWW**（`@protocol/sync#unionMerge`）：
 
-- 按 `id` 取本地 ∪ 远端；同 `id` 取 `updatedAt`（缺省回退 `createdAt`）较新者胜，并列本地优先（稳定）。
+- 按 `id` 取本地 ∪ 远端；同 `id` 取 `updatedAt` 较新者胜，并列本地优先（稳定）。
 - 幂等 + 可结合：每轮把新拉到的远端并入累积 `merged` 即可，天然支持「409 重试→重新 GET→再合并」。
 
 **为什么不用更强的 CRDT（如逐字段 OR-Set / 版本向量）？**
