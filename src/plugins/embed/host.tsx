@@ -34,13 +34,15 @@ function currentTheme(): ThemeTokens {
  *  - 失败兜底 (M-1): 加载超时 / iframe onError / 源校验失败 → failed 态, 渲染「重试」卡片
  *    (零后端 / 断网 / 服务不可达时不再永久转圈); 重试经 reloadKey 重建 iframe。
  */
-// 加载超时: 起桥后多久未收到页面 'ready' 即判失败 (覆盖断网 / 零后端 / 服务不可达)。
-const LOAD_TIMEOUT_MS = 12_000
+// 加载超时: iframe 内 portal 完成 hello→init→ready 握手后撤 loading; 从 iframe onLoad 起算
+// (勿从宿主 effect 起算 —— 外网/WSL 下 wonita.link 常 >12s 才进 JS, 会误报「加载失败」)。
+const LOAD_TIMEOUT_MS = 30_000
 
 type EmbedStatus = "loading" | "ready" | "failed" | "revoked"
 
 export function EmbedHost({ manifest }: { manifest: Manifest }) {
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null)
+  const failTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
   const [status, setStatus] = React.useState<EmbedStatus>("loading")
   const [reloadKey, setReloadKey] = React.useState(0)
@@ -98,6 +100,18 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     setReloadKey((k) => k + 1) // 改 iframe key → 强制重建, 重新走握手
   }, [])
 
+  const disarmFailTimer = React.useCallback(() => {
+    if (failTimerRef.current != null) {
+      window.clearTimeout(failTimerRef.current)
+      failTimerRef.current = null
+    }
+  }, [])
+
+  const armFailTimer = React.useCallback(() => {
+    disarmFailTimer()
+    failTimerRef.current = window.setTimeout(() => setStatus("failed"), LOAD_TIMEOUT_MS)
+  }, [disarmFailTimer])
+
   React.useEffect(() => {
     if (configError) {
       console.error("[EmbedHost]", configError)
@@ -105,9 +119,6 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     }
     const iframe = iframeRef.current
     if (!iframe || !entryOrigin) return
-
-    // 超时兜底: 到点仍未 ready 即判失败 (ready 时会清掉此定时器)。
-    const failTimer = window.setTimeout(() => setStatus("failed"), LOAD_TIMEOUT_MS)
 
     let started = false
     const cleanups: Array<() => void> = []
@@ -145,7 +156,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       uiPort.onmessage = (e: MessageEvent) => {
         const msg = e.data as { type?: string } | undefined
         if (msg?.type === "ready") {
-          window.clearTimeout(failTimer)
+          disarmFailTimer()
           setStatus("ready")
         }
         // set-title / request-resize / loading: 当前外壳不需要 (iframe 满高), 预留。
@@ -210,11 +221,11 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     window.addEventListener("message", onHello)
 
     return () => {
-      window.clearTimeout(failTimer)
+      disarmFailTimer()
       window.removeEventListener("message", onHello)
       cleanups.forEach((f) => f())
     }
-  }, [manifest, router, reloadKey, configError, entryOrigin, connId])
+  }, [manifest, router, reloadKey, configError, entryOrigin, connId, armFailTimer, disarmFailTimer])
 
   return (
     // 高度由外层标签容器决定 (工作区 TabHost 提供 h-full); 不再自算视口高度。
@@ -261,6 +272,10 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
         ref={iframeRef}
         src={embedSrc ?? manifest.entry}
         title={manifest.name}
+        onLoad={() => {
+          // 外网 portal 进 JS 前可能很久; 超时从 load 起算, 避免 effect 挂载即倒计时。
+          if (effectiveStatus === "loading") armFailTimer()
+        }}
         onError={() => setStatus("failed")}
         // allow-same-origin: 被嵌入页需真实 origin (CORS 直连语料 + 宿主源校验); 隔膜靠跨域 + token 不出宿主, 非 sandbox。
         sandbox="allow-scripts allow-forms allow-popups allow-same-origin"

@@ -1,9 +1,8 @@
 "use client"
 
-// 桌面顶边栏 (现代面板式标签工作区, Tauri 下兼作标题栏): 左 = logo; 中 = 本地搜索;
+// 桌面顶边栏 (现代面板式标签工作区, Tauri 下兼作标题栏): 左 = logo + 本地/连接模式切换; 中 = 本地搜索;
 // 右 = 命令台 + 布局开关 + 设置 + 账户 + (Tauri) 窗控。data-tauri-drag-region 让空白处可拖动窗口
 // (交互子元素不触发拖动); 窗控并入此栏后删去了独立的满宽标题栏。
-// 注: 旧的「本地/连接」模式切换已移除 —— 活动栏改为扁平单轨, 全部模块同时可见 (见 activity-bar)。
 import Link from "next/link"
 import { Command } from "lucide-react"
 import { WonitaMark } from "@/shared/wonita-mark"
@@ -11,6 +10,7 @@ import { openCommandPalette } from "@/lib/command-palette-bus"
 import { IconButton } from "@/ui/icon-button"
 import AccountMenu from "@/shell/account-menu"
 import WindowControls from "@/shell/window-controls"
+import ModeSwitch from "./mode-switch"
 import SettingsMenu from "./settings-menu"
 import TopSearch from "./top-search"
 import LayoutToggles from "./layout-toggles"
@@ -25,6 +25,7 @@ export default function TopBar() {
         <WonitaMark className="h-6 w-auto text-foreground" />
       </Link>
       <div className="mx-1 h-5 w-px shrink-0 bg-border" />
+      <ModeSwitch />
       <div data-tauri-drag-region className="flex flex-1 justify-center px-4">
         <TopSearch />
       </div>

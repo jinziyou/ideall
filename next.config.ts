@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   output: "export",
   // 静态导出无 Node 图片优化服务
   images: { unoptimized: true },
+  // Tauri app:dev 若误用 127.0.0.1 加载 dev 服, 放行跨域 dev 资源 (HMR 等), 避免整页点击失效。
+  allowedDevOrigins: ["127.0.0.1"],
 }
 
 export default nextConfig

@@ -10,6 +10,8 @@
     "build": "next build",
     "tauri": "tauri",
     "app:dev": "node scripts/app-dev.mjs",
+    "wsl:hosts": "node scripts/wsl-wonita-hosts.mjs",
+    "wsl:hosts:apply": "bash scripts/wsl-hosts-apply.sh",
     "app:export": "next build",
     "app:build": "tauri build",
     "lint": "eslint",

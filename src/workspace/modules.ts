@@ -1,8 +1,8 @@
 // 工作区模块配置 (桌面工作区壳的单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
-// 活动栏是「扁平单轨」(不再有「本地/连接」模式开关): 全部模块同时可见, 仅按 mode 字段视觉分两组 ——
+// 活动栏按当前「本地/连接」模式镜头过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
 //   本机/我的(local): 我的(home) · 关注(subscriptions) · 应用(apps)  ← + 活动栏 AI 钮
 //   连接/发现(connected): 资讯(info) · 社区(community) · 工具(tool) · 浏览器(browser)
-// mode 字段从「可切换镜头」降级为「分组键」(见 MODULE_GROUPS); 打开标签不再翻任何模式。
+//   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (与 AI 区段同类, 见 store isModeNeutralModule)。
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏的「本地搜索」搜本机内容, 两者职责分离。
 //
 // 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
@@ -25,8 +25,10 @@ export type SidebarEntry = {
 
 export type ModuleConfig = {
   id: ModuleId
-  /** 活动栏视觉分组键 (本机/我的 vs 连接/发现); 不再是可切换的工作区模式。 */
+  /** 所属工作区模式镜头 (本机/我的 vs 连接/发现); 活动栏按当前 mode 过滤展示。 */
   mode: WsMode
+  /** 跨模式常驻: 本地/连接活动栏均展示, 打开时不翻 mode (见 store isModeNeutralModule)。 */
+  crossMode?: boolean
   label: string
   icon: ComponentType<{ className?: string }>
   /** spoke 分类色 (text-*), 仅用于图标着色, 不大面积 fill。 */
@@ -150,6 +152,7 @@ export const MODULES: ModuleConfig[] = [
   {
     id: "tool",
     mode: "connected",
+    crossMode: true,
     label: MODULE_META.tool.label,
     icon: MODULE_META.tool.icon,
     colorClass: MODULE_META.tool.tintClass,
@@ -207,12 +210,16 @@ export function moduleById(id: ModuleId): ModuleConfig {
   return MODULES.find((m) => m.id === id) ?? MODULES[0]
 }
 
-/** 活动栏分组 (扁平单轨, 无「模式」开关): 本机/我的 组 + 连接/发现 组。各模块的 mode 字段仅作分组键。
- *  活动栏据此把全部模块按组渲染 (组间一条细分隔), 不再按模式过滤 → 所有目的地始终可见。 */
-export const MODULE_GROUPS: { id: WsMode; modules: ModuleConfig[] }[] = [
-  { id: "local", modules: MODULES.filter((m) => m.mode === "local") },
-  { id: "connected", modules: MODULES.filter((m) => m.mode === "connected") },
-]
+/** 某模式下的模块列表 (活动栏按当前镜头渲染; crossMode 模块两种模式均展示)。 */
+export function modulesForMode(mode: WsMode): ModuleConfig[] {
+  return MODULES.filter((m) => m.mode === mode || m.crossMode)
+}
+
+/** 打开/激活时不翻 mode 的模块 (AI 区段 + 跨模式工具): 保留当前镜头, 不由 module 反推。 */
+export function isModeNeutralModule(id: ModuleId): boolean {
+  if (id === "agent") return true
+  return MODULES.find((m) => m.id === id)?.crossMode === true
+}
 
 const ALL_ENTRIES = MODULES.flatMap((m) => m.entries)
 

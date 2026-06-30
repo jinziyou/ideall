@@ -5,17 +5,26 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 
 import {
+  openTab,
   openNodeTab,
   promoteTab,
   promoteActiveTab,
+  toggleModule,
+  setMode,
   closeTab,
   closeAllTabs,
   setActiveTab,
   getActiveId,
   getActiveSource,
   getTransientId,
+  getMode,
   getTabs,
 } from "./store"
+
+// —— 标签描述符夹具 (本地/连接各取一个 + 跨模式工具) ——
+const HOME = { kind: "home-overview", module: "home", title: "概览", path: "/home" } as const
+const INFO = { kind: "info", module: "info", title: "资讯", path: "/info" } as const
+const TOOL = { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" } as const
 
 test("openNodeTab 默认来源 user; 传 agent 标记 agent", () => {
   openNodeTab({ kind: "note", id: "u1" }, "用户开")
@@ -134,4 +143,59 @@ test("软上限: 预览标签不计入上限, 也不被回收", () => {
     "预览标签未被回收",
   )
   assert.equal(getTransientId(), previewId)
+})
+
+// —— 本地/连接 模式镜头 (恢复的双模式) ——
+
+test("openTab 同步模式镜头: 连接模块→connected, 本地模块→local", () => {
+  closeAllTabs()
+  openTab(INFO)
+  assert.equal(getMode(), "connected")
+  openTab(HOME)
+  assert.equal(getMode(), "local")
+})
+
+test("crossMode 工具是 mode-中性: 打开不翻镜头 (两个方向)", () => {
+  closeAllTabs()
+  openTab(INFO) // connected
+  openTab(TOOL) // 中性
+  assert.equal(getMode(), "connected", "连接态下开工具仍连接")
+  openTab(HOME) // local
+  openTab(TOOL) // 中性
+  assert.equal(getMode(), "local", "本地态下开工具仍本地")
+})
+
+test("setMode 切镜头并落到该模式首个模块; 同模式则无操作", () => {
+  closeAllTabs()
+  openTab(HOME) // local
+  setMode("connected")
+  assert.equal(getMode(), "connected")
+  const active = getTabs().find((t) => t.id === getActiveId())
+  assert.equal(active?.kind, "info", "连接模式落到资讯")
+  const before = getActiveId()
+  setMode("connected") // 已是该模式 → 无操作
+  assert.equal(getActiveId(), before, "点已激活模式不打扰当前标签")
+})
+
+test("setActiveTab 跟随模式; mode-中性标签激活不翻镜头", () => {
+  closeAllTabs()
+  openTab(INFO) // connected
+  openTab(HOME) // local, 现激活 home
+  const infoId = getTabs().find((t) => t.kind === "info")!.id
+  setActiveTab(infoId)
+  assert.equal(getMode(), "connected", "点回资讯标签 → 连接")
+  openTab(TOOL) // 中性, 不翻 → 仍 connected
+  const toolId = getTabs().find((t) => t.kind === "tool-search")!.id
+  openTab(HOME) // local
+  setActiveTab(toolId) // 激活中性工具 → 保留当前 (local) 镜头
+  assert.equal(getMode(), "local", "激活中性工具不翻镜头")
+})
+
+test("closeTab: 焦点转移到相邻标签时同步镜头", () => {
+  closeAllTabs()
+  openTab(HOME) // local, tab0
+  openTab(INFO) // connected, tab1 (激活)
+  assert.equal(getMode(), "connected")
+  closeTab(getActiveId()!) // 关 info → 焦点回 home
+  assert.equal(getMode(), "local", "焦点落到 home → 本地")
 })

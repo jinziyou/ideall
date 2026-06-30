@@ -6,16 +6,27 @@
 // (不重载); 超出上限的重标签被卸载 (草稿由写队列落盘)。轻标签全挂载。详见 tab-host.tsx。
 
 import * as React from "react"
-import type { ModuleId, Tab, TabDescriptor } from "./types"
+import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
-import { moduleById } from "./modules"
+import { moduleById, isModeNeutralModule } from "./modules"
 import { isTauri, browserHide } from "@/lib/tauri"
 
 const STORAGE_KEY = "ideall:workspace:v1"
 
+/** 模块 → 工作区模式镜头 (本地 / 连接)。打开/激活标签时据此自动同步镜头 (mode-中性模块例外, 见 isModeNeutralModule)。 */
+const MODE_OF: Record<ModuleId, WsMode> = {
+  home: "local",
+  subscriptions: "local",
+  apps: "local",
+  tool: "connected",
+  info: "connected",
+  community: "connected",
+  browser: "connected",
+  agent: "connected",
+}
+
 /** 全部合法模块 id (水合时据此清洗陈旧/污染标签: module 不在此集合的丢弃)。
- *  注: 「本地/连接」不再是可切换的模式镜头, 仅作活动栏的视觉分组 (见 modules MODULE_GROUPS)。
  *  用 Record<ModuleId,...> 构造 → 将来 ModuleId 增删而漏更新此处时编译期即报错 (而非静默丢标签)。 */
 const VALID_MODULES = new Set(
   Object.keys({
@@ -45,6 +56,8 @@ type State = {
    *  防 agent 用 ui.openTab 把任意笔记设为活动标签, 再经 referenced-context 自喂其正文给模型端点 (软绕 consent)。 */
   activeSource: ActiveSource
   activeModule: ModuleId
+  /** 当前工作区模式镜头 (本地/连接): 活动栏据此过滤展示哪一簇模块; 顶栏 ModeSwitch 切换。 */
+  mode: WsMode
   sidebarCollapsed: boolean
   /** 右侧 AI 对话栏是否展开 (AI 原生: 始终可呼出的右停靠面板)。 */
   rightPanelOpen: boolean
@@ -60,6 +73,7 @@ const DEFAULT: State = {
   transientId: null,
   activeSource: "user",
   activeModule: "home",
+  mode: "local",
   sidebarCollapsed: false,
   rightPanelOpen: false,
   lru: [],
@@ -115,6 +129,7 @@ function persist() {
         activeId: state.activeId,
         transientId: state.transientId,
         activeModule: state.activeModule,
+        mode: state.mode,
         rightPanelOpen: state.rightPanelOpen,
       }),
     )
@@ -133,6 +148,7 @@ export function hydrateWorkspace() {
     activeId: string | null
     transientId: string | null
     activeModule: ModuleId
+    mode: WsMode
     rightPanelOpen: boolean
   } | null = null
   try {
@@ -143,6 +159,7 @@ export function hydrateWorkspace() {
         activeId?: string | null
         transientId?: string | null
         activeModule?: ModuleId
+        mode?: WsMode
         rightPanelOpen?: boolean
       }
       if (Array.isArray(p.tabs)) {
@@ -151,6 +168,7 @@ export function hydrateWorkspace() {
           activeId: p.activeId ?? null,
           transientId: p.transientId ?? null,
           activeModule: p.activeModule ?? "home",
+          mode: p.mode ?? "local",
           rightPanelOpen: p.rightPanelOpen ?? false,
         }
       }
@@ -170,6 +188,8 @@ export function hydrateWorkspace() {
     // 激活标签: marker 先跑设置的当前路由优先, 否则历史; 且必须确实存在于 merged。
     const wantId = state.activeId ?? saved.activeId
     const activeTab = wantId ? (merged.find((x) => x.id === wantId) ?? null) : null
+    // mode-中性模块 (agent / 跨模式 tool): 不由 module 反推 mode, 沿用持久化镜头。
+    const modeNeutralActive = activeTab != null && isModeNeutralModule(activeTab.module)
     const aiActive = activeTab?.module === "agent"
     state = {
       ...state,
@@ -194,6 +214,14 @@ export function hydrateWorkspace() {
           : state.activeId
             ? state.activeModule
             : "home",
+      // 模式镜头由激活标签派生 (保证活动栏与标签自洽); mode-中性模块沿用持久化镜头。
+      mode: modeNeutralActive
+        ? saved.mode
+        : activeTab
+          ? MODE_OF[activeTab.module]
+          : state.activeId
+            ? state.mode
+            : saved.mode,
       rightPanelOpen: saved.rightPanelOpen,
       hydrated: true,
     }
@@ -262,10 +290,13 @@ function evictColdTabs(tabs: Tab[], protect: Set<string>): Tab[] {
 export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: OpenTabOpts) {
   hideBrowserWebviewUnlessBrowserTab(d.kind)
   const id = tabKey(d)
+  // mode-中性模块 (agent / 跨模式 tool): 打开不翻 mode 镜头; 否则同步到该模块所属模式。
+  const mode = isModeNeutralModule(d.module) ? state.mode : MODE_OF[d.module]
   if (opts?.transient) {
     setState({
       ...transientOpenPatch(d),
       activeModule: d.module,
+      mode,
       activeSource: source,
     })
     return
@@ -278,6 +309,7 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: 
     transientId: state.transientId === id ? null : state.transientId,
     activeId: id,
     activeModule: d.module,
+    mode,
     activeSource: source,
   })
 }
@@ -395,19 +427,23 @@ export function closeTab(id: string) {
   const tabs = state.tabs.filter((t) => t.id !== id)
   let activeId = state.activeId
   let activeModule = state.activeModule
+  let mode = state.mode
   if (state.activeId === id) {
     const next = tabs[idx] ?? tabs[idx - 1] ?? null
     activeId = next ? next.id : null
-    // 焦点转移到相邻标签时同步活动模块 (否则活动栏/侧栏会停在旧模块)。
+    // 焦点转移到相邻标签时同步活动模块与模式镜头 (否则活动栏/侧栏会停在旧模块)。
+    // mode-中性模块: 焦点落到它时保留关闭前的镜头。
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next.kind)
       activeModule = next.module
+      if (!isModeNeutralModule(next.module)) mode = MODE_OF[next.module]
     }
   }
   setState({
     tabs,
     activeId,
     activeModule,
+    mode,
     transientId: state.transientId === id ? null : state.transientId,
     activeSource: "user",
   })
@@ -434,6 +470,7 @@ export function closeOtherTabs(keepId: string) {
     tabs: [keep],
     activeId: keepId,
     activeModule: keep.module,
+    mode: isModeNeutralModule(keep.module) ? state.mode : MODE_OF[keep.module],
     transientId: state.transientId === keepId ? keepId : null,
     activeSource: "user",
   })
@@ -443,9 +480,13 @@ export function setActiveTab(id: string) {
   const t = state.tabs.find((x) => x.id === id)
   if (!t) return
   hideBrowserWebviewUnlessBrowserTab(t.kind)
+  // mode-中性模块 (agent / 跨模式 tool): 激活时不翻镜头 (否则点工具/AI 标签会翻镜头)。
+  if (isModeNeutralModule(t.module)) {
+    setState({ activeId: id, activeModule: t.module, activeSource: "user" })
+    return
+  }
   // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
-  // 仅同步活动模块 (活动栏/侧栏跟随), 不再翻任何「模式镜头」—— 扁平单轨, 没有可翻的东西。
-  setState({ activeId: id, activeModule: t.module, activeSource: "user" })
+  setState({ activeId: id, activeModule: t.module, mode: MODE_OF[t.module], activeSource: "user" })
 }
 
 /** 点活动栏图标: 同模块且侧栏展开 → 收起侧栏; 否则切到该模块、展开侧栏, 并以「预览」方式开其首个面板。 */
@@ -456,8 +497,10 @@ export function toggleModule(m: ModuleId) {
   }
   const mod = moduleById(m)
   const first = mod.entries[0]
+  // mode-中性模块 (跨模式工具): 切到它不翻镜头; 否则同步到该模块所属模式。
+  const mode = isModeNeutralModule(m) ? state.mode : MODE_OF[m]
   if (!first) {
-    setState({ activeModule: m, sidebarCollapsed: false })
+    setState({ activeModule: m, mode, sidebarCollapsed: false })
     return
   }
   hideBrowserWebviewUnlessBrowserTab(first.descriptor.kind)
@@ -465,6 +508,28 @@ export function toggleModule(m: ModuleId) {
   setState({
     ...transientOpenPatch(first.descriptor),
     activeModule: m,
+    mode,
+    sidebarCollapsed: false,
+    activeSource: "user",
+  })
+}
+
+/** 切换工作区模式镜头 (本地 / 连接): 活动模块归到该模式首个模块, 展开侧栏并以预览方式开其落地面板。
+ *  已是该模式则无操作 (点已激活的分段不打扰当前标签)。 */
+export function setMode(mode: WsMode) {
+  if (mode === state.mode) return
+  const firstModule: ModuleId = mode === "local" ? "home" : "info"
+  const mod = moduleById(firstModule)
+  const first = mod.entries[0]
+  if (!first) {
+    setState({ mode, activeModule: firstModule, sidebarCollapsed: false, activeSource: "user" })
+    return
+  }
+  hideBrowserWebviewUnlessBrowserTab(first.descriptor.kind)
+  setState({
+    ...transientOpenPatch(first.descriptor),
+    mode,
+    activeModule: firstModule,
     sidebarCollapsed: false,
     activeSource: "user",
   })
@@ -551,6 +616,13 @@ export function useActiveModule() {
     () => DEFAULT.activeModule,
   )
 }
+export function useMode() {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => state.mode,
+    () => DEFAULT.mode,
+  )
+}
 export function useSidebarCollapsed() {
   return React.useSyncExternalStore(
     subscribe,
@@ -580,6 +652,10 @@ export function getActiveId(): string | null {
 /** 当前预览/瞬态标签 id 的实时快照 (effect / 测试用)。 */
 export function getTransientId(): string | null {
   return state.transientId
+}
+/** 当前工作区模式镜头的实时快照 (effect / 测试用)。 */
+export function getMode(): WsMode {
+  return state.mode
 }
 /** 当前激活节点的激活来源 (user / agent)。隐私: active-node 端口对 agent 自激活的节点返回 null, 不计入隐式同意。 */
 export function getActiveSource(): ActiveSource {

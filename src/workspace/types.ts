@@ -1,8 +1,8 @@
 // 工作区标签模型 (现代面板式多标签工作区)。
 // kind 唯一决定标签内容 (registry 查表)；同 kind(+params) 复用同一标签实例 (id=tabKey)。
 
-// 活动栏视觉分组键 (不再是可切换的工作区模式): 本机/我的 = 只存本机的个人数据;
-// 连接/发现 = 联网的发现/工具/AI。仅用于把活动栏图标分两簇 (见 modules MODULE_GROUPS)。
+// 工作区模式镜头 (可切换): 本机/我的 = 只存本机的个人数据; 连接/发现 = 联网的发现/工具/AI。
+// 活动栏按当前 mode 过滤展示哪一簇模块 (见 modules modulesForMode); 顶栏 ModeSwitch 切换镜头。
 export type WsMode = "local" | "connected"
 
 export type ModuleId =
