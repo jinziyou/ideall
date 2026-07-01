@@ -7,14 +7,7 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import { genId } from "@/lib/id"
 import { sortKeyBetween } from "@/files/sort-key"
-import {
-  idbDelete,
-  idbGet,
-  idbGetAll,
-  idbPut,
-  idbReadModifyWrite,
-  STORE_NODES,
-} from "@/lib/idb"
+import { idbDelete, idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES } from "@/lib/idb"
 
 type ThreadNode = NodeOfKind<"thread">
 

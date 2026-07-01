@@ -155,8 +155,7 @@ async function applyWslClashProxy(env) {
   if (!ok) return false
 
   const proxy = `http://${host}:${port}`
-  const noProxy =
-    env.NO_PROXY ?? env.no_proxy ?? "localhost,127.0.0.1,::1,10.0.0.0/8"
+  const noProxy = env.NO_PROXY ?? env.no_proxy ?? "localhost,127.0.0.1,::1,10.0.0.0/8"
 
   env.HTTP_PROXY = proxy
   env.HTTPS_PROXY = proxy
@@ -218,8 +217,7 @@ async function main() {
 
   const alreadyUp = await portTaken(port)
   if (!alreadyUp) {
-    const nextArgs =
-      port === 5020 ? ["dev"] : ["exec", "next", "dev", "-p", String(port)]
+    const nextArgs = port === 5020 ? ["dev"] : ["exec", "next", "dev", "-p", String(port)]
     nextChild = spawn("pnpm", nextArgs, { stdio: "inherit", env, shell: isWin })
     nextChild.on("exit", (code) => {
       if (code !== 0 && code !== null) {
