@@ -10,14 +10,7 @@ import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
 import { computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
-import {
-  idbBulkPut,
-  idbGet,
-  idbGetAll,
-  idbPut,
-  idbReadModifyWrite,
-  STORE_NODES,
-} from "@/lib/idb"
+import { idbBulkPut, idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES } from "@/lib/idb"
 import { notifyFilesUpdated } from "@/files/flowback"
 
 type BookmarkNode = NodeOfKind<"bookmark">
