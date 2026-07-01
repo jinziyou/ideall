@@ -88,6 +88,38 @@ export interface ThemeTokens {
   tokens?: Record<string, string>
 }
 
+// 主题 token 白名单 (§8): 宿主把这些 CSS 自定义属性的**已解析值**随 theme 事件下发, 嵌入页写到
+// :root 内联样式, 从而套宿主真实色板 (而非仅镜像 globals.css, 防两仓色板漂移)。
+// 两仓 (宿主 / 被嵌入页) 须一致; 仅列两侧 D 皮肤共有的语义 token (portal 私有的 spoke-guest /
+// border-strong / panel-muted / elev-* 不在此列, 由 portal 自身 globals.css 按 .dark 类推导)。
+export const THEME_TOKEN_VARS = [
+  "--background",
+  "--foreground",
+  "--card",
+  "--card-foreground",
+  "--popover",
+  "--popover-foreground",
+  "--primary",
+  "--primary-foreground",
+  "--secondary",
+  "--secondary-foreground",
+  "--muted",
+  "--muted-foreground",
+  "--accent",
+  "--accent-foreground",
+  "--destructive",
+  "--destructive-foreground",
+  "--border",
+  "--input",
+  "--ring",
+  "--pop",
+  "--pop-foreground",
+  "--flowback",
+  "--spoke-info",
+  "--spoke-community",
+  "--spoke-tool",
+] as const
+
 /** `ideall:init` 消息体 (宿主 → iframe)。 */
 export interface IdeallInitMessage {
   type: typeof INIT_MESSAGE_TYPE

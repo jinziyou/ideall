@@ -15,6 +15,7 @@ import {
   HELLO_MESSAGE_TYPE,
   INIT_MESSAGE_TYPE,
   PROTOCOL_VERSION,
+  THEME_TOKEN_VARS,
   type ThemeTokens,
 } from "./protocol"
 import type { Manifest } from "./manifest"
@@ -22,7 +23,16 @@ import type { Manifest } from "./manifest"
 function currentTheme(): ThemeTokens {
   const dark =
     typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-  return { mode: dark ? "dark" : "light" }
+  // 随主题下发已解析的 CSS token 值 (§8): 嵌入页据此套宿主真实色板, 不再仅靠 globals.css 镜像。
+  const tokens: Record<string, string> = {}
+  if (typeof document !== "undefined" && typeof window !== "undefined") {
+    const cs = getComputedStyle(document.documentElement)
+    for (const v of THEME_TOKEN_VARS) {
+      const val = cs.getPropertyValue(v).trim()
+      if (val) tokens[v] = val
+    }
+  }
+  return { mode: dark ? "dark" : "light", tokens }
 }
 
 /**
@@ -42,7 +52,11 @@ type EmbedStatus = "loading" | "ready" | "failed" | "revoked"
 
 export function EmbedHost({ manifest }: { manifest: Manifest }) {
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null)
-  const failTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 浏览器 setTimeout 回 number (非 NodeJS.Timeout); 显式钉 number 避免 @types/node 全局串味致类型不符。
+  const failTimerRef = React.useRef<number | null>(null)
+  const uiPortRef = React.useRef<MessagePort | null>(null) // 建桥后持 uiPort, 供 visibility 推送
+  const containerRef = React.useRef<HTMLDivElement | null>(null) // 观测自身可见性 (页签 display:none 判定)
+  const visibleRef = React.useRef(true)
   const router = useRouter()
   const [status, setStatus] = React.useState<EmbedStatus>("loading")
   const [reloadKey, setReloadKey] = React.useState(0)
@@ -151,15 +165,16 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       const server = createLocalMcpServer(grant, { navigate: (r) => router.push(r) })
       void server.connect(new MessagePortTransport(mcp.port1))
 
-      // UI 面 (uiPort): 接收页面事件 + 推送主题。
+      // UI 面 (uiPort): 接收页面事件 + 推送主题 / 可见性。
       const uiPort = ui.port1
+      uiPortRef.current = uiPort
       uiPort.onmessage = (e: MessageEvent) => {
         const msg = e.data as { type?: string } | undefined
         if (msg?.type === "ready") {
           disarmFailTimer()
           setStatus("ready")
         }
-        // set-title / request-resize / loading: 当前外壳不需要 (iframe 满高), 预留。
+        // set-title / request-resize / loading: 满高 iframe + 固定模块标题下无需, 预留。
       }
       uiPort.start()
 
@@ -175,6 +190,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       const teardown = () => {
         if (toreDown) return
         toreDown = true
+        uiPortRef.current = null
         deregisterNav()
         obs.disconnect()
         void server.close()
@@ -227,9 +243,39 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     }
   }, [manifest, router, reloadKey, configError, entryOrigin, connId, armFailTimer, disarmFailTimer])
 
+  // 宿主页签激活态 → uiPort visibility (§8): ideall 用 display:none 保活非激活嵌入标签, iframe 自身
+  // visibilityState 不随之变。若不下发, 隐藏页签的 portal 仍按「可见」续心跳 → presence 在线数虚高。
+  // 插件不得反向 import 工作区 (架构边界), 故用 IntersectionObserver 观测自身盒子: 页签 display:none →
+  // 不相交 → 判隐藏。OS 级窗口切走由 iframe 自身 document.hidden 覆盖, 与此互补。
+  const sendVisibility = React.useCallback((visible: boolean) => {
+    visibleRef.current = visible
+    const port = uiPortRef.current
+    if (!port) return
+    try {
+      port.postMessage({ type: "visibility", payload: { visible } })
+    } catch {
+      /* 端口已关: 忽略 */
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof IntersectionObserver === "undefined") return
+    const io = new IntersectionObserver((entries) => {
+      sendVisibility(entries.some((e) => e.isIntersecting))
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [sendVisibility])
+
+  // 桥就绪 (portal 发 ready) 时补发当前可见性 —— IO 首帧回调时 uiPort 可能尚未建立。
+  React.useEffect(() => {
+    if (status === "ready") sendVisibility(visibleRef.current)
+  }, [status, sendVisibility])
+
   return (
     // 高度由外层标签容器决定 (工作区 TabHost 提供 h-full); 不再自算视口高度。
-    <div className="relative h-full w-full">
+    <div ref={containerRef} className="relative h-full w-full">
       {effectiveStatus === "loading" && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
