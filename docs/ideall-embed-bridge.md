@@ -224,6 +224,8 @@ export class MessagePortTransport implements Transport {
 
 预置 agent 工作流，供嵌入应用一键调用：`summarize-selection`、`compare-entities`、`digest-peer`。映射到 `agent.run` 的固定模板。
 
+> **实现现状（设计已 pivot）**：`agent.run`（§5.2）与本节 Prompts **均未**作为嵌入工具落地——ideall 的 agent 改为经**宿主侧回环**直接消费同一 MCP server（见 `src/plugins/agent/`），而非 iframe 调 `agent.run`；故被嵌入页拿不到、也不需要 `agent.*`。同理 `data.*`（§5.2）**按设计留空未实现**——被嵌入页对公共语料一律**页面直连**取数，不经宿主 data 代理。上表 `agent.*` / `data.*` 行属保留的协议契约面，当前无对应注册工具（实际注册项见 `src/plugins/embed/tools.ts`）。
+
 ---
 
 ## 6. 权限模型与 manifest
@@ -246,11 +248,13 @@ export class MessagePortTransport implements Transport {
 }
 ```
 
-info 的 manifest 类似，典型 `permissions`: `["data.info:read"?, "hub.subscriptions:write", "agent.invoke", "host.external"]`（公共语料直连，故 `data.info:read` 通常不需要）。
+info 的 manifest 类似，典型 `permissions`: `["data.info:read"?, "hub.subscriptions:write", "host.external"]`（公共语料直连，故 `data.info:read` 通常不需要；`agent.invoke` 已从示例移除——manifest 不携带它，agent 走宿主侧回环，见 §5.3 注）。
 
 ### 6.2 权限位清单
 
 `identity:read`、`identity.publish`、`hub.subscriptions:read|write`、`hub.bookmarks:read|write`、`agent.invoke`、`host.nav`、`host.external`、`data.info:read`、`data.peers:read`。
+
+> 其中 `agent.invoke` 与 `data.*:read` 为**保留位、当前未实现**（agent 走宿主侧回环、公共语料页面直连，见 §5.3 注）；实际生效的授权位以 `src/plugins/embed/protocol.ts` 的 `PERMISSIONS` 为准。
 
 ### 6.3 授权流程
 
@@ -369,7 +373,7 @@ if (perms.includes("hub.subscriptions:write"))
 1. **放行被嵌入**：服务端去 `X-Frame-Options`、设 `frame-ancestors`（§9.3）。
 2. **接握手 + transport**：监听 `ideall:init`、校验 origin、取 ports、起 MCP client、`initialize`。封进 `@ideall/embed-sdk` 后一行 `await IdeallEmbed.connect()`。
 3. **取数分流**：公共语料**仍页面直连** wonita；发布/删除/profile、订阅/收藏、当前身份**改走 MCP**；页面不再自存 token、嵌入态不做登录。
-4. **双模式检测（两个嵌入态信号）**：① **URL 标记**——ideall 给 iframe `src` 注入 `?embed=ideall&embedApp=<id>`（宿主 `src/plugins/embed/host.tsx`，query 不改 origin），被嵌入页**首帧**即可据此判嵌入态、立刻去 chrome，**无闪烁**；② **`ideall:init` 握手**——收到即确认嵌入态并接 transport（§4）。两信号皆缺、超时（~800ms）无 init=独立站点态。
+4. **双模式检测（两个嵌入态信号）**：① **主判据 = 同步 URL 标记**——ideall 给 iframe `src` 注入 `?embed=ideall&embedApp=<id>`（宿主 `src/plugins/embed/host.tsx`，query 不改 origin），被嵌入页**首帧**即可据此判嵌入态、立刻去 chrome，**无闪烁**；② **`ideall:init` 握手**——收到即确认嵌入态并接 transport（§4）。两信号皆缺、超时无 init=独立站点态；此超时非 ~800ms 而是 **8s 水合容差下限**（`Math.max(timeoutMs, 8000)`，见 `wonita/portal/src/embed/client.ts`），吸收宿主慢水合 / dev 冷编译。
 
 ```ts
 const ideall = await IdeallEmbed.tryConnect({ timeoutMs: 800 })  // 嵌入则连上, 否则 null
@@ -416,6 +420,8 @@ class IdeallEmbed {
 }
 ```
 
+> 注：`tryConnect` 的实际超时有 **8s 下限**（`Math.max(timeoutMs ?? 800, 8000)`）以吸收宿主慢水合 / dev 冷编译；顶层窗口（非 iframe）立即返回 `null`（独立态），仅 iframe 内才等握手。双模式主判据是同步 `?embed=ideall` URL 标记（§11.4），此超时仅兜底。
+
 宿主侧也复用本包的 `MessagePortTransport`。
 
 ---
@@ -432,7 +438,7 @@ class IdeallEmbed {
 
 | 情况 | 行为 |
 | --- | --- |
-| 无 `ideall:init`（超时） | 页面进独立站点态 |
+| 无 `ideall:init`（超时，实际 **8s 水合容差下限**） | 页面进独立站点态；主判据为同步 `?embed=ideall` URL 标记（§11.4），超时仅兜底 |
 | `-32001 permission-denied` | 页面隐藏对应入口（理论上授权位已过滤，属兜底） |
 | `-32002 not-authenticated` | 提示在 ideall 登录，可附 `host.navigate("/auth")` |
 | 宿主协议过旧 | 提示升级 ideall；非关键功能降级 |
