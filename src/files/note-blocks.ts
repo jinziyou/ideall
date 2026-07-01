@@ -1,5 +1,5 @@
 // note 块级并发合并的**写侧**逻辑 (§7) —— 编辑器/存储用 (app 层, 用 sortKey 生成器)。
-// 跨端合并/GC 等纯契约在 @protocol/note-merge (与 unionMerge 同层, sync 插件共用); 此处 re-export 以便就近引用。
+// 跨端合并/GC 等纯接口约定在 @protocol/note-merge (与 unionMerge 同层, sync 插件共用); 此处 re-export 以便就近引用。
 import { sortKeyBetween } from "@/files/sort-key"
 import {
   rebuildContent,
@@ -94,7 +94,7 @@ export function diffBlocks(
 
 /**
  * 把块补丁原子应用到存量 note (§7.3): 只 set/delete 被点名的块, 未点名块 (并发追加的 B4) 原样保留。
- * upsert v 守卫 (§9): 仅 patch.v > 现有才覆盖, 落地 v = max(u.v, cur.v+1)。delete = 写墓碑。
+ * upsert v 守卫 (§9): 仅 patch.v > 现有才覆盖, 落地 v = max(u.v, cur.v+1)。delete = 写删除标记。
  */
 export function applyBlockPatch(
   content: Block[],
@@ -106,7 +106,7 @@ export function applyBlockPatch(
   const meta: BlockMetaMap = { ...blockMeta }
   for (const u of patch.upsert) {
     const cur = meta[u.id]
-    if (cur && u.v <= cur.v) continue // 陈旧 → 跳过, 不复活 live-merge 的高版本
+    if (cur && u.v <= cur.v) continue // 陈旧 → 跳过, 不恢复 live-merge 的高版本
     meta[u.id] = { v: Math.max(u.v, (cur?.v ?? 0) + 1), by: u.by, sk: u.sk }
     byId.set(u.id, u.block)
   }
@@ -133,7 +133,7 @@ export function deterministicBlockId(noteId: string, index: number, block: Block
 }
 
 /**
- * 为存量 note 补稳定 id + 初始 blockMeta。已有 id 沿用; 缺 id 用确定性 hash。空 content 归一为带稳定 id
+ * 为存量 note 补稳定 id + 初始 blockMeta。已有 id 沿用; 缺 id 用确定性 hash。空 content 规范化为带稳定 id
  * 的空段落 (§7.4: 否则两端各发不同 genId 的空段落, union 当两块永不收敛)。
  */
 export function seedBlockMeta(

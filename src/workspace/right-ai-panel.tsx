@@ -56,7 +56,7 @@ export default function RightAiPanel() {
                 else openAiSettings()
                 setRightPanel(false)
               }}
-              aria-label="展开为工作空间任务"
+              aria-label="展开为工作区任务"
               title="展开为任务"
             >
               <Maximize2 className="h-4 w-4" />

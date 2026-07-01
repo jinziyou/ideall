@@ -146,7 +146,7 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
           )}
           {guardMissing && (
             <p className="rounded-md border border-l-2 border-l-pop bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
-              提示：最终提示里似乎缺少「数据非指令」防注入说明，而你启用了「我的」数据。外部来源的标题可能含注入文本，建议保留该护栏。
+              提示：最终提示里似乎缺少「数据非指令」防注入说明，而你启用了「我的」数据。外部来源的标题可能含注入文本，建议保留该安全提示句。
             </p>
           )}
           <Button

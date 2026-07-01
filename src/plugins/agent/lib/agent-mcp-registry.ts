@@ -1,4 +1,4 @@
-// MCP server 注册表 (唯一真源) —— 连接器/外部数据与工具。
+// MCP server 注册表 (唯一数据来源) —— 连接器/外部数据与工具。
 // 内置「本地能力 (loopback)」固定一行 (映射 AGENT_PERMISSIONS 工具), 不可删; 其余为用户添加的外部 server。
 // 注: 外部传输 (stdio / SSE / Streamable-HTTP) 接缝预留, 实际连接随 ACP 落地 (见 acp-*.ts); 当前外部行仅存配置。
 // 本地优先 localStorage; 工作空间按 toolAllowlist 选用其工具 (见 agent-workspace.ts)。

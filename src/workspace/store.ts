@@ -2,7 +2,7 @@
 
 // 工作区状态 (多标签 + 活动模块 + 二级侧栏折叠)。
 // 用 useSyncExternalStore (与本仓库 sync-code / session / theme 同范式), 不引入额外状态库。
-// 标签 keep-alive: tab-host 对激活 + 最近的重标签 (iframe/编辑器) 做 LRU 保活、非激活态 display:none
+// 标签 keep-alive: tab-host 对激活 + 最近的重标签 (iframe/编辑器) 做 LRU 保持后台运行、非激活态 display:none
 // (不重载); 超出上限的重标签被卸载 (草稿由写队列落盘)。轻标签全挂载。详见 tab-host.tsx。
 
 import * as React from "react"
@@ -14,7 +14,7 @@ import { isTauri, browserHide } from "@/lib/tauri"
 
 const STORAGE_KEY = "ideall:workspace:v1"
 
-/** 模块 → 工作区模式镜头 (本地 / 连接)。打开/激活标签时据此自动同步镜头 (mode-中性模块例外, 见 isModeNeutralModule)。 */
+/** 模块 → 工作区模式视图 (本地 / 连接)。打开/激活标签时据此自动同步视图 (mode-中性模块例外, 见 isModeNeutralModule)。 */
 const MODE_OF: Record<ModuleId, WsMode> = {
   home: "local",
   subscriptions: "local",
@@ -56,7 +56,7 @@ type State = {
    *  防 agent 用 ui.openTab 把任意笔记设为活动标签, 再经 referenced-context 自喂其正文给模型端点 (软绕 consent)。 */
   activeSource: ActiveSource
   activeModule: ModuleId
-  /** 当前工作区模式镜头 (本地/连接): 活动栏据此过滤展示哪一簇模块; 顶栏 ModeSwitch 切换。 */
+  /** 当前工作区模式视图 (本地/连接): 活动栏据此过滤展示哪一簇模块; 顶栏 ModeSwitch 切换。 */
   mode: WsMode
   sidebarCollapsed: boolean
   /** 右侧 AI 对话栏是否展开 (AI 原生: 始终可呼出的右停靠面板)。 */
@@ -188,7 +188,7 @@ export function hydrateWorkspace() {
     // 激活标签: marker 先跑设置的当前路由优先, 否则历史; 且必须确实存在于 merged。
     const wantId = state.activeId ?? saved.activeId
     const activeTab = wantId ? (merged.find((x) => x.id === wantId) ?? null) : null
-    // mode-中性模块 (agent / 跨模式 tool): 不由 module 反推 mode, 沿用持久化镜头。
+    // mode-中性模块 (agent / 跨模式 tool): 不由 module 反推 mode, 沿用持久化视图。
     const modeNeutralActive = activeTab != null && isModeNeutralModule(activeTab.module)
     const aiActive = activeTab?.module === "agent"
     state = {
@@ -214,7 +214,7 @@ export function hydrateWorkspace() {
           : state.activeId
             ? state.activeModule
             : "home",
-      // 模式镜头由激活标签派生 (保证活动栏与标签自洽); mode-中性模块沿用持久化镜头。
+      // 模式视图由激活标签派生 (保证活动栏与标签自洽); mode-中性模块沿用持久化视图。
       mode: modeNeutralActive
         ? saved.mode
         : activeTab
@@ -290,7 +290,7 @@ function evictColdTabs(tabs: Tab[], protect: Set<string>): Tab[] {
 export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: OpenTabOpts) {
   hideBrowserWebviewUnlessBrowserTab(d.kind)
   const id = tabKey(d)
-  // mode-中性模块 (agent / 跨模式 tool): 打开不翻 mode 镜头; 否则同步到该模块所属模式。
+  // mode-中性模块 (agent / 跨模式 tool): 打开不翻 mode 视图; 否则同步到该模块所属模式。
   const mode = isModeNeutralModule(d.module) ? state.mode : MODE_OF[d.module]
   if (opts?.transient) {
     setState({
@@ -320,7 +320,7 @@ export function promoteTab(id: string) {
   setState({ transientId: null })
 }
 
-/** 若当前激活标签正是预览标签, 提升为常驻 (供「编辑即钉住」: 内容编辑器首次编辑时调用, 避免改到一半被下次预览替换)。 */
+/** 若当前激活标签正是预览标签, 提升为常驻 (供「编辑即固定」: 内容编辑器首次编辑时调用, 避免改到一半被下次预览替换)。 */
 export function promoteActiveTab() {
   if (state.activeId && state.activeId === state.transientId) {
     setState({ transientId: null })
@@ -397,7 +397,7 @@ export function openAiSection(kind: "ai-mcp" | "ai-skills" | "ai-rules", opts?: 
   openAgentTab({ kind, module: "agent", title: AI_SECTION_TITLE[kind] }, opts)
 }
 
-/** 打开某工作空间的任务标签 (params.workspaceId 区分实例; 不设 path → 不参与 URL 同步)。 */
+/** 打开某工作区的任务标签 (params.workspaceId 区分实例; 不设 path → 不参与 URL 同步)。 */
 export function openAiTasks(workspaceId: string, title: string, opts?: OpenTabOpts) {
   openAgentTab({ kind: "ai-tasks", module: "agent", title, params: { workspaceId } }, opts)
 }
@@ -431,8 +431,8 @@ export function closeTab(id: string) {
   if (state.activeId === id) {
     const next = tabs[idx] ?? tabs[idx - 1] ?? null
     activeId = next ? next.id : null
-    // 焦点转移到相邻标签时同步活动模块与模式镜头 (否则活动栏/侧栏会停在旧模块)。
-    // mode-中性模块: 焦点落到它时保留关闭前的镜头。
+    // 焦点转移到相邻标签时同步活动模块与模式视图 (否则活动栏/侧栏会停在旧模块)。
+    // mode-中性模块: 焦点落到它时保留关闭前的视图。
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next.kind)
       activeModule = next.module
@@ -480,7 +480,7 @@ export function setActiveTab(id: string) {
   const t = state.tabs.find((x) => x.id === id)
   if (!t) return
   hideBrowserWebviewUnlessBrowserTab(t.kind)
-  // mode-中性模块 (agent / 跨模式 tool): 激活时不翻镜头 (否则点工具/AI 标签会翻镜头)。
+  // mode-中性模块 (agent / 跨模式 tool): 激活时不翻视图 (否则点工具/AI 标签会翻视图)。
   if (isModeNeutralModule(t.module)) {
     setState({ activeId: id, activeModule: t.module, activeSource: "user" })
     return
@@ -497,7 +497,7 @@ export function toggleModule(m: ModuleId) {
   }
   const mod = moduleById(m)
   const first = mod.entries[0]
-  // mode-中性模块 (跨模式工具): 切到它不翻镜头; 否则同步到该模块所属模式。
+  // mode-中性模块 (跨模式工具): 切到它不翻视图; 否则同步到该模块所属模式。
   const mode = isModeNeutralModule(m) ? state.mode : MODE_OF[m]
   if (!first) {
     setState({ activeModule: m, mode, sidebarCollapsed: false })
@@ -514,7 +514,7 @@ export function toggleModule(m: ModuleId) {
   })
 }
 
-/** 切换工作区模式镜头 (本地 / 连接): 活动模块归到该模式首个模块, 展开侧栏并以预览方式开其落地面板。
+/** 切换工作区模式视图 (本地 / 连接): 活动模块归到该模式首个模块, 展开侧栏并以预览方式开其落地面板。
  *  已是该模式则无操作 (点已激活的分段不打扰当前标签)。 */
 export function setMode(mode: WsMode) {
   if (mode === state.mode) return
@@ -589,7 +589,7 @@ export function useTransientId() {
   )
 }
 
-/** 当前激活标签的 kind (活动栏 AI 钉钮高亮用); 无激活标签 → null。 */
+/** 当前激活标签的 kind (活动栏 AI 固定钮高亮用); 无激活标签 → null。 */
 export function useActiveTabKind(): string | null {
   return React.useSyncExternalStore(
     subscribe,
@@ -598,7 +598,7 @@ export function useActiveTabKind(): string | null {
   )
 }
 
-/** 当前激活的 ai-tasks 标签所属工作空间 id (AI 侧栏高亮用; 返回原始串保证快照稳定); 否则 null。 */
+/** 当前激活的 ai-tasks 标签所属工作区 id (AI 侧栏高亮用; 返回原始串保证快照稳定); 否则 null。 */
 export function useActiveWorkspaceId(): string | null {
   return React.useSyncExternalStore(
     subscribe,
@@ -653,7 +653,7 @@ export function getActiveId(): string | null {
 export function getTransientId(): string | null {
   return state.transientId
 }
-/** 当前工作区模式镜头的实时快照 (effect / 测试用)。 */
+/** 当前工作区模式视图的实时快照 (effect / 测试用)。 */
 export function getMode(): WsMode {
   return state.mode
 }

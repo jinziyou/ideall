@@ -18,7 +18,7 @@ import { getFilesPort } from "@protocol/files"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 统一「收入我的」原语「收入我的」(反馈原语) —— 把发现模块上的任意条目 (文章 / 事件 / 链接) 落进本地的「我的」。
+ * 统一的「加入我的」基础组件 (feeders) —— 把发现模块上的任意条目 (文章 / 事件 / 链接) 加入本地的「我的」。
  * 按传入的能力渲染菜单项: 收藏到书签 / 关注发布者; 另带原文 / 全面报道 直达。
  * 经 protocol 的 FilesPort 写入, 广播 FILES_UPDATED 让头部计数 +1。
  */
@@ -92,15 +92,15 @@ export function SaveToMine({
         variant="ghost"
         size="icon"
         className={cn("h-8 w-8", pulseCls, className)}
-        title="收入「我的」"
+        title="加入「我的」"
       >
         <Plus className="h-4 w-4" />
-        <span className="sr-only">收入「我的」</span>
+        <span className="sr-only">加入「我的」</span>
       </Button>
     ) : (
       <Button size="sm" className={cn("gap-1.5", pulseCls, className)}>
         <Plus className="h-4 w-4" />
-        收入「我的」
+        加入「我的」
       </Button>
     )
 

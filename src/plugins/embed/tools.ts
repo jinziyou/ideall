@@ -26,7 +26,7 @@ function fail(code: number, message: string): ToolResult {
 const subType = z.enum(["publisher", "entity", "tool", "search", "peer"])
 
 // 节点 kind 白名单 (fs.* 文件面)。缺省 kind = 列全部命名空间。
-// 从 @protocol/node 的单一真相源 NODE_KINDS 派生, 杜绝与 NodeKind 联合漂移 (红队 §should-fix)。
+// 从 @protocol/node 的唯一数据来源 NODE_KINDS 派生, 杜绝与 NodeKind 联合漂移 (红队 §should-fix)。
 const nodeKind = z.enum([...NODE_KINDS] as [NodeKind, ...NodeKind[]])
 const ALL_NODE_KINDS: NodeKind[] = [...NODE_KINDS]
 
@@ -93,7 +93,7 @@ export function registerGrantedTools(
     )
   }
 
-  // ── hub / 本地主权数据 ──────────────────────────────────────────────────────
+  // ── hub / 本机私有数据 ──────────────────────────────────────────────────────
   if (has("hub.subscriptions:read")) {
     server.tool(TOOL.hubIsSubscribed, { type: subType, key: z.string() }, async (a) =>
       ok(await host.files.isSubscribed(a.type, a.key)),
@@ -264,7 +264,7 @@ export function registerGrantedTools(
     })
   }
 
-  // ── ui.* 标签面 (§6.1): 把节点物化为标签 ─────────────────────────────────────
+  // ── ui.* 标签面 (§6.1): 把节点打开为标签页 ─────────────────────────────────────
   if (has("ui.tabs") && ctx.openTab) {
     server.tool(
       TOOL.uiOpenTab,

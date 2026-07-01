@@ -51,11 +51,11 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
       const r = await runExposeSelfTest(acp.listenPort || undefined)
       if (r.ok) {
         toast.success(
-          `暴露自测通过（:${r.port}）：收到 ${r.updates ?? 0} 条更新，stopReason=${r.stopReason}`,
+          `自检通过（:${r.port}）：收到 ${r.updates ?? 0} 条更新，stopReason=${r.stopReason}`,
           { description: r.text ? `回执：${r.text.slice(0, 80)}` : undefined },
         )
       } else {
-        toast.error("暴露自测失败：" + (r.error ?? "未知"))
+        toast.error("自检失败：" + (r.error ?? "未知"))
       }
     } finally {
       setSelftesting(false)
@@ -240,7 +240,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
                   disabled={selftesting}
                   onClick={() => void exposeSelfTest()}
                 >
-                  {selftesting ? "自测中…" : "暴露自测"}
+                  {selftesting ? "自检中…" : "连接自检"}
                 </Button>
                 <span className="text-xs text-muted-foreground">
                   起监听并用内置客户端连回自测一轮（仅桌面）

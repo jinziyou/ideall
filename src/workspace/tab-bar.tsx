@@ -193,7 +193,7 @@ function TabItem({
       aria-controls={tabPanelId(t.id)}
       tabIndex={active ? 0 : -1}
       aria-selected={active}
-      title={transient ? `${t.title} · 预览 (双击钉住)` : t.title}
+      title={transient ? `${t.title} · 预览 (双击固定)` : t.title}
       draggable
       onDragStart={() => {
         dragIdRef.current = t.id
@@ -245,7 +245,7 @@ function TabItem({
         active
           ? "z-[1] -mb-px border-b-2 border-primary bg-background font-medium text-foreground shadow-[inset_0_1px_0_0_hsl(var(--border)/0.35)]"
           : "border-r border-border/40 text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-        // 预览/瞬态标签: 斜体 (VS Code 式), 区分于已钉住的常驻标签。
+        // 预览/瞬态标签: 斜体 (VS Code 式), 区分于已固定的常驻标签。
         transient && "italic",
       )}
     >
@@ -291,7 +291,7 @@ export default function TabBar() {
         >
           {tabs.length === 0 ? (
             <span className="flex items-center px-3 text-xs text-muted-foreground">
-              从左侧活动栏选择一个模块开始（单击预览 · 双击钉住）
+              从左侧活动栏选择一个模块开始（单击预览 · 双击固定）
             </span>
           ) : (
             tabs.map((t, i) => (

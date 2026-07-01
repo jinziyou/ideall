@@ -1,7 +1,7 @@
 // 登录密码学 (浏览器): 复刻 wonita 服务 (orion 0.17) 的 X25519 + XChaCha20-Poly1305 方案。
 // 共享密钥 = raw X25519(clientPriv, serverPub) (orion key_agreement 不哈希, 仅查低阶点);
 // 密码用 XChaCha20-Poly1305 加密, encrypted_password = nonce(24) || 密文 || tag(16) 的 hex。
-// 明文密码只在浏览器内加密 —— 上送 wonita 服务时只过密文。
+// 明文密码只在浏览器内加密 —— 上传 wonita 服务时只过密文。
 // WebCrypto 无 XChaCha, 故用 @noble (与 orion 字节对齐)。
 
 import { x25519 } from "@noble/curves/ed25519.js"
@@ -25,7 +25,7 @@ export function newClientId(): string {
 
 export type ClientKeypair = { priv: Uint8Array; publicHex: string }
 
-/** 生成客户端 X25519 密钥对; publicHex 作为 client_secret 上送。 */
+/** 生成客户端 X25519 密钥对; publicHex 作为 client_secret 上传。 */
 export function newKeypair(): ClientKeypair {
   const priv = x25519.utils.randomSecretKey()
   return { priv, publicHex: toHex(x25519.getPublicKey(priv)) }

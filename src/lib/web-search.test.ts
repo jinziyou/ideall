@@ -85,7 +85,7 @@ test("egress 守卫: 协议/私网/端口/userinfo/非法 URL 一律拦, 不发 
     ["https://[::1]/", "blocked-host"], // IPv6 环回
     ["https://[fd00::1]/", "blocked-host"], // ULA
     ["https://[fe80::1]/", "blocked-host"], // link-local
-    // IPv4-mapped IPv6: new URL 归一化成 16 进制 (::ffff:7f00:1 等), 必须按字节解回 IPv4 拦截 (红队确认的 SSRF 绕过)。
+    // IPv4-mapped IPv6: new URL 规范化成 16 进制 (::ffff:7f00:1 等), 必须按字节解回 IPv4 拦截 (红队确认的 SSRF 绕过)。
     ["https://[::ffff:127.0.0.1]/", "blocked-host"], // → ::ffff:7f00:1 环回
     ["https://[::ffff:169.254.169.254]/latest/meta-data/", "blocked-host"], // → 云元数据
     ["https://[::ffff:10.0.0.1]/", "blocked-host"], // → 私网 10/8

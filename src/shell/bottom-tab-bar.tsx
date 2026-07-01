@@ -80,7 +80,7 @@ function TabItem({
  * 中央按钮直达 AI 对话 (/home/agent → 呼出右侧/全屏对话面板)。
  * 注: 桌面活动栏「AI」钮当前打开的是「AI 设置」标签 (非对话), 两端目的地暂不一致 ——
  *     待 AI 主入口语义统一 (均首呼对话) 后再对齐, 见导航优化方案决策 #4。
- * 命令台在移动端由顶栏的 CommandTrigger 提供, 不再与中央按钮混用。
+ * 命令面板在移动端由顶栏的 CommandTrigger 提供, 不再与中央按钮混用。
  */
 export default function BottomTabBar() {
   const pathname = usePathname()

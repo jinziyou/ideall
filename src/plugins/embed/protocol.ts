@@ -2,7 +2,7 @@
 // 与被嵌入页 (wonita/portal `src/embed/protocol.ts`) 必须保持一致 (两个独立仓库, 各持一份)。
 // 设计见 docs/ideall-embed-bridge.md。
 
-/** 端口移交握手消息 type (宿主 → iframe, 随附两个 MessagePort)。 */
+/** 交接通信端口的握手消息 type (宿主 → iframe, 随附两个 MessagePort)。 */
 export const INIT_MESSAGE_TYPE = "ideall:init"
 
 /** 被嵌入页就绪握手 (iframe → 宿主, 主动索取 init, 消除 'load' 时序竞争)。 */
@@ -30,7 +30,7 @@ export const TOOL = {
   fsWrite: "fs.write",
   fsMove: "fs.move",
   fsDelete: "fs.delete",
-  // ui.* 标签面 (§6.1): 让消费方把节点物化为标签。
+  // ui.* 标签面 (§6.1): 让消费方把节点打开为标签页。
   uiOpenTab: "ui.openTab",
   uiCloseTab: "ui.closeTab",
   hostNavigate: "host.navigate",

@@ -10,7 +10,7 @@ import WindowControls from "./window-controls"
 
 /**
  * 移动端顶栏 (md:hidden) —— 桌面端由左侧图标轨 (rail.tsx) 取代。
- * 移动端主导航走底部标签栏 (bottom-tab-bar.tsx); 此处提供全量菜单 / logo / 命令台触发器 / 文件树 / 标签 / 主题 / 账户。
+ * 移动端主导航走底部标签栏 (bottom-tab-bar.tsx); 此处提供全量菜单 / logo / 命令面板触发器 / 文件树 / 标签 / 主题 / 账户。
  * 文件树 (FileTreeSheet) 与标签 (TabsSheet) 补齐移动端此前缺失的层级浏览与多标签切换/关闭入口。
  * data-tauri-drag-region + WindowControls: 当 Tauri 窗口被收窄到 <md (此时本栏取代顶边栏) 仍保有窗口拖拽与窗控。
  */

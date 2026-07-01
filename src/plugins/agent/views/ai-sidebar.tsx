@@ -78,10 +78,10 @@ export default function AiSidebar({
       <div className="mt-6">
         <div className="flex items-center gap-2 px-1 pb-2">
           <Boxes className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1 text-xs font-medium text-muted-foreground">工作空间</span>
+          <span className="flex-1 text-xs font-medium text-muted-foreground">工作区</span>
           <button
             type="button"
-            title="新建工作空间"
+            title="新建工作区"
             onClick={() => {
               const ws = createWorkspace()
               ui?.openAiTasks?.(ws.id, ws.name)
@@ -89,7 +89,7 @@ export default function AiSidebar({
             className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span className="sr-only">新建工作空间</span>
+            <span className="sr-only">新建工作区</span>
           </button>
         </div>
         <div className="space-y-0.5">
@@ -190,12 +190,12 @@ function WorkspaceRow({
         </button>
         <button
           type="button"
-          title="配置工作空间"
+          title="配置工作区"
           onClick={onOpen}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
         >
           <Settings2 className="h-3.5 w-3.5" />
-          <span className="sr-only">配置工作空间</span>
+          <span className="sr-only">配置工作区</span>
         </button>
       </div>
       {open && (

@@ -80,7 +80,7 @@ export function NodeTreeBranch({
   const hint = dropHint?.id === item.id ? dropHint.zone : null
 
   // 与 TreeRow 一致的 VS Code 式语义: 单击 = 预览 (transient, 复用单一预览槽);
-  // 双击 / 键盘 Enter = 钉为常驻。浏览器内书签/文件夹是导航/展开, 不开标签 (无瞬态概念)。
+  // 双击 / 键盘 Enter = 固定为常驻。浏览器内书签/文件夹是导航/展开, 不开标签 (无瞬态概念)。
   const openNode = (transient: boolean) => {
     if (inBrowser && item.kind === "bookmark") {
       void openBookmarkInBrowser(item.id)

@@ -23,11 +23,11 @@ import type {
 
 type Wire = components["schemas"]
 
-// ── v1 响应包络: 所有 v1 端点统一返回 `{ data, meta? }` (见 wonita infra/response.rs)。 ──────────────
-/** wonita v1 统一成功包络。`meta` 仅列表端点带 (分页/受限标记), 单资源端点省略。 */
+// ── v1 响应封装: 所有 v1 端点统一返回 `{ data, meta? }` (见 wonita infra/response.rs)。 ──────────────
+/** wonita v1 统一成功响应封装。`meta` 仅列表端点带 (分页/受限标记), 单资源端点省略。 */
 type Enveloped<T> = { data: T; meta?: Wire["Meta"] | null }
 
-/** 把 `{data, meta}` 包络的 ApiResult 解一层到 `data`; ok=false 透传, 空体 (204) → data:null。 */
+/** 把 `{data, meta}` 封装的 ApiResult 解一层到 `data`; ok=false 透传, 空体 (204) → data:null。 */
 function unwrap<T>(res: ApiResult<Enveloped<T>>): ApiResult<T> {
   if (!res.ok) return res
   return { ok: true, data: res.data ? res.data.data : null }
@@ -43,7 +43,7 @@ function encodeArticleId(url: string): string {
 
 // ── 漂移门 (编译期, 零运行时): wire DTO 必须仍可赋给 ideall 领域类型。 ────────────────────────────
 // wonita 服务改/删 ideall 依赖的字段 → `gen:api` 重生成 server.d.ts → 下面恒等映射的返回类型注解
-// 编译失败 → CI 红。这是「契约权威在 ideall」落到类型层的硬保证。
+// 编译失败 → CI 红。这是「接口约定权威在 ideall」落到类型层的硬保证。
 // (InfoQuery→ArticleSearch 的漂移门见下方 `buildQueryBody` 的显式返回类型注解。)
 const _contractGates = {
   info: (x: Wire["Info"]): Info => x,
@@ -54,7 +54,7 @@ const _contractGates = {
   publishDraft: (x: PublishDraft): Wire["NewPublication"] => x,
   authBody: (x: Wire["AuthBody"]): AuthBody => x,
   authCredentials: (x: AuthCredentials): Wire["AuthPayload"] => x,
-  // GET /v1/auth/session 的 claims → CurrentUser: avatar 缺省归一为 null, 保持领域「avatar 必有」契约。
+  // GET /v1/auth/session 的 claims → CurrentUser: avatar 缺省规范化为 null, 保持领域「avatar 必有」的接口约定。
   currentUser: (x: Wire["UserClaimsData"]): CurrentUser => ({ ...x, avatar: x.avatar ?? null }),
 }
 void _contractGates
@@ -68,7 +68,7 @@ export function looksLikeMillis(t: number): boolean {
 function warnIfNotMillis(where: string, t: number | undefined): void {
   if (process.env.NODE_ENV !== "production" && typeof t === "number" && !looksLikeMillis(t)) {
     console.warn(
-      `[server-adapter] ${where} 时间戳疑似非毫秒 (got ${t}); wonita 服务契约要求 epoch 毫秒 (info-timestamp-unit-ms)`,
+      `[server-adapter] ${where} 时间戳疑似非毫秒 (got ${t}); wonita 服务接口约定要求 epoch 毫秒 (info-timestamp-unit-ms)`,
     )
   }
 }
@@ -78,7 +78,7 @@ const DEFAULT_PAGE_SIZE_OFFSET: [number, number] = [200, 0]
 
 /**
  * 领域 `InfoQuery` → wire `ArticleSearch` (POST /v1/articles/search 请求体)。
- * `page_size_offset` 元组拆成 `limit`/`offset` 两字段 (v1 契约口径)。
+ * `page_size_offset` 元组拆成 `limit`/`offset` 两字段 (v1 接口约定口径)。
  * 返回类型显式标注 wire DTO = 编译期漂移门: wonita 改 ArticleSearch 字段 → gen:api 重生成 → 此处编译失败。
  */
 function buildQueryBody(params: InfoQuery): Wire["ArticleSearch"] {
@@ -123,7 +123,7 @@ export const httpServerAdapter: ServerPort = {
 
   async getInfo(url) {
     // 返回完整 ApiResult: 调用方 (全面报道整页) 须区分「取数失败 (可重试)」与「真不存在 (data:null)」。
-    // GET /v1/articles/{id} 命中 200{data}, 不存在 404 —— 故 404 归一为 ok:true & data:null。
+    // GET /v1/articles/{id} 命中 200{data}, 不存在 404 —— 故 404 规范化为 ok:true & data:null。
     const res = await apiFetch<Enveloped<Info>>(`${API_V1}/articles/${encodeArticleId(url)}`, {
       cache: "no-store",
       defaultErrorMessage: "获取信息详情失败",
@@ -224,7 +224,7 @@ export const httpServerAdapter: ServerPort = {
   },
 
   async getMe(token) {
-    // GET /v1/auth/session → {data: UserClaimsData}; 映射到 CurrentUser (avatar 缺省归一为 null)。
+    // GET /v1/auth/session → {data: UserClaimsData}; 映射到 CurrentUser (avatar 缺省规范化为 null)。
     const res = await apiFetch<Enveloped<Wire["UserClaimsData"]>>(`${API_V1}/auth/session`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",

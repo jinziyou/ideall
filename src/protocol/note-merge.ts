@@ -1,6 +1,6 @@
-// note 块级合并的跨端契约 (§7.4 / §8) —— 与 unionMerge 同层 (@protocol/sync), 供 sync 插件 (plugin) 与
+// note 块级合并的跨端接口约定 (§7.4 / §8) —— 与 unionMerge 同层 (@protocol/sync), 供 sync 插件 (plugin) 与
 // notes-store (app) 共用 (守 components↛app 边界)。纯逻辑, 不引 platejs / 不生成 sortKey (只比较)。
-// 块级三件套: 稳定 id + per-block (v,by) LWW + 块 sortKey + 墓碑 + 纯 join/GC 分离。
+// 块级三件套: 稳定 id + per-block (v,by) LWW + 块 sortKey + 删除标记 + 纯 join/GC 分离。
 
 export type BlockId = string
 
@@ -40,7 +40,7 @@ export function pickMeta(a: BlockMeta | undefined, b: BlockMeta | undefined): Bl
   return a
 }
 
-/** 由 id→块 映射 + blockMeta 重建活跃块数组 (过滤墓碑, 按 (sk,id) 排序)。 */
+/** 由 id→块 映射 + blockMeta 重建活跃块数组 (过滤删除标记, 按 (sk,id) 排序)。 */
 export function rebuildContent(byId: Map<BlockId, Block>, meta: BlockMetaMap): Block[] {
   const live: Block[] = []
   for (const [id, b] of byId) if (meta[id] && meta[id].del == null) live.push(b)
@@ -50,8 +50,8 @@ export function rebuildContent(byId: Map<BlockId, Block>, meta: BlockMetaMap): B
 }
 
 /**
- * 跨端纯 join 合并 (§7.4 雷B: 不接收 now、不丢任何 id、过期墓碑照样保留):
- * per-block (v,by) 取胜 + (sk,id) 排序, 墓碑以更高 v 压制陈旧活跃副本 → 交换/结合/幂等成立。GC 分离。
+ * 跨端纯 join 合并 (§7.4 雷B: 不接收 now、不丢任何 id、过期删除标记照样保留):
+ * per-block (v,by) 取胜 + (sk,id) 排序, 删除标记以更高 v 压制陈旧活跃副本 → 交换/结合/幂等成立。GC 分离。
  */
 export function mergeNoteContent(
   localContent: Block[],
@@ -78,10 +78,10 @@ export function mergeNoteContent(
   return { content: rebuildContent(byId, meta), blockMeta: meta }
 }
 
-/** 块墓碑 TTL: 90 天 (与 node 级一致)。 */
+/** 块删除标记 TTL: 90 天 (与 node 级一致)。 */
 export const BLOCK_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000
 
-/** 块墓碑 GC (单独一步, 合并后对权威全集统一应用)。纯函数 (now 注入)。 */
+/** 块删除标记 GC (单独一步, 合并后对完整数据统一应用)。纯函数 (now 注入)。 */
 export function pruneBlockTombstones(
   meta: BlockMetaMap,
   now: number,

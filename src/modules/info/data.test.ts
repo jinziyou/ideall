@@ -1,6 +1,6 @@
 // M-4 配套: 消费方解耦验证 (node:test + tsx)。
 // 证明真实的 info 取数 facade (data.ts) 全程经 getServerPort() 路由, 故能在被替换的任意后端上运行 ——
-// 后端可换不止停在端口层, 业务消费方确实不与 wonita 绑死。port 层完整契约/缺省回退证明见 protocol/server-port.test.ts。
+// 后端可换不止停在端口层, 业务消费方确实不与 wonita 绑死。port 层完整接口约定/缺省回退证明见 protocol/server-port.test.ts。
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
@@ -24,8 +24,8 @@ const MEM_INFO: Info = {
 }
 
 // 只实现 info facade 会触达的方法, 其余以 notUsed 占位 (本测试不应触达)。
-// 直接 `: ServerPort` 注解使对象字面量受编译期契约门约束 —— 将来 ServerPort 新增方法 / notUsed 写错即编译失败,
-// 守住「消费方按完整契约对接任意后端」这条本测试要证的保证 (勿改回 as 转型, 那会吞掉该校验)。
+// 直接 `: ServerPort` 注解使对象字面量受编译期接口约定约束 —— 将来 ServerPort 新增方法 / notUsed 写错即编译失败,
+// 守住「消费方按完整接口约定对接任意后端」这条本测试要证的保证 (勿改回 as 转型, 那会吞掉该校验)。
 function makeInfoBackend(): ServerPort {
   const notUsed = () => {
     throw new Error("info facade 不应调用此方法")

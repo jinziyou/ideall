@@ -28,7 +28,7 @@ const CAPABILITY_OPTIONS: { perm: Permission; label: string; hint: string }[] = 
   { perm: "fs:read", label: "读取「我的」", hint: "列出关注 / 书签 / 资源 / 笔记标题" },
   { perm: "fs:write", label: "修改「我的」", hint: "增改书签 / 收藏夹 / 关注" },
   { perm: "fs.notes:write", label: "写入笔记", hint: "新建 / 编辑笔记" },
-  { perm: "ui.tabs", label: "打开标签", hint: "把节点物化为工作区标签" },
+  { perm: "ui.tabs", label: "打开标签", hint: "把节点打开为工作区标签页" },
   { perm: "web:search", label: "联网搜索", hint: "web.search 搜索引擎" },
   { perm: "web:fetch", label: "抓取网页", hint: "web.fetch 读取网页正文" },
 ]
@@ -325,7 +325,7 @@ function WorkspaceRulesPicker({ ws }: { ws: AgentWorkspace }) {
       ))}
       {wsRules.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          还没有工作空间级规则。在左侧「规则」区段新建（范围选「工作空间」）。
+          还没有工作区级规则。在左侧「规则」区段新建（范围选「工作区」）。
         </p>
       ) : (
         wsRules.map((r) => (

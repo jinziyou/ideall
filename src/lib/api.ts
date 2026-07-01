@@ -45,7 +45,7 @@ export async function apiFetch<T = unknown>(
     return {
       ok: false,
       message:
-        e instanceof Error && e.message ? `网络错误: ${e.message}` : "网络错误, 无法连接到服务",
+        e instanceof Error && e.message ? `网络错误: ${e.message}` : "无法连接到服务器，请检查网络",
     }
   }
 
@@ -65,7 +65,7 @@ export async function apiFetch<T = unknown>(
   }
 
   if (parsed === __PARSE_FAILED) {
-    return { ok: false, status: response.status, message: "响应格式错误, 无法解析" }
+    return { ok: false, status: response.status, message: "数据加载失败，请重试" }
   }
 
   return { ok: true, data: parsed as T }

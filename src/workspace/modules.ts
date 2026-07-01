@@ -1,5 +1,5 @@
-// 工作区模块配置 (桌面工作区壳的单一真相源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
-// 活动栏按当前「本地/连接」模式镜头过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
+// 工作区模块配置 (桌面工作区壳的唯一数据来源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
+// 活动栏按当前「本地/连接」模式视图过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
 //   本机/我的(local): 我的(home) · 关注(subscriptions) · 应用(apps)  ← + 活动栏 AI 钮
 //   连接/发现(connected): 资讯(info) · 社区(community) · 工具(tool) · 浏览器(browser)
 //   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (与 AI 区段同类, 见 store isModeNeutralModule)。
@@ -7,8 +7,8 @@
 //
 // 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
 //   · 本文件 (modules.ts): 桌面 IDE 式工作区 (活动栏/侧栏/标签) + descriptorForPath 路由解析。
-//   · shell/nav-config.ts:  移动端 Sheet/底栏 + ⌘K 命令台 (扁平 href 链接范式)。
-// 桌面是「模块→标签」、移动是「href→路由」两种范式; 命令台经 router.push→OpenWorkspaceTab 标记桥接到同一标签, 故无需统一。
+//   · shell/nav-config.ts:  移动端 Sheet/底栏 + ⌘K 命令面板 (扁平 href 链接范式)。
+// 桌面是「模块→标签」、移动是「href→路由」两种范式; 命令面板经 router.push→OpenWorkspaceTab 标记桥接到同一标签, 故无需统一。
 
 import type { ComponentType } from "react"
 import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"
@@ -25,13 +25,13 @@ export type SidebarEntry = {
 
 export type ModuleConfig = {
   id: ModuleId
-  /** 所属工作区模式镜头 (本机/我的 vs 连接/发现); 活动栏按当前 mode 过滤展示。 */
+  /** 所属工作区模式视图 (本机/我的 vs 连接/发现); 活动栏按当前 mode 过滤展示。 */
   mode: WsMode
   /** 跨模式常驻: 本地/连接活动栏均展示, 打开时不翻 mode (见 store isModeNeutralModule)。 */
   crossMode?: boolean
   label: string
   icon: ComponentType<{ className?: string }>
-  /** spoke 分类色 (text-*), 仅用于图标着色, 不大面积 fill。 */
+  /** 分区色 (text-*), 仅用于图标着色, 不大面积 fill。 */
   colorClass?: string
   sidebarTitle: string
   entries: SidebarEntry[]
@@ -64,10 +64,10 @@ const homeEntries: SidebarEntry[] = [
     descriptor: { kind: "home-resources", module: "home", title: "资源", path: "/home/resources" },
   },
   {
-    // 「我的」语境下书签即「收藏」(标签/区段名统一为收藏; 底层仍是 bookmark 节点)。
-    label: "收藏",
+    // 「我的」语境下的书签区段 (标签/区段名统一为「书签」; 底层仍是 bookmark 节点)。
+    label: "书签",
     icon: MODULE_META.bookmarks.icon,
-    descriptor: { kind: "home-bookmarks", module: "home", title: "收藏", path: "/home/bookmarks" },
+    descriptor: { kind: "home-bookmarks", module: "home", title: "书签", path: "/home/bookmarks" },
   },
 ]
 
@@ -210,12 +210,12 @@ export function moduleById(id: ModuleId): ModuleConfig {
   return MODULES.find((m) => m.id === id) ?? MODULES[0]
 }
 
-/** 某模式下的模块列表 (活动栏按当前镜头渲染; crossMode 模块两种模式均展示)。 */
+/** 某模式下的模块列表 (活动栏按当前视图渲染; crossMode 模块两种模式均展示)。 */
 export function modulesForMode(mode: WsMode): ModuleConfig[] {
   return MODULES.filter((m) => m.mode === mode || m.crossMode)
 }
 
-/** 打开/激活时不翻 mode 的模块 (AI 区段 + 跨模式工具): 保留当前镜头, 不由 module 反推。 */
+/** 打开/激活时不翻 mode 的模块 (AI 区段 + 跨模式工具): 保留当前视图, 不由 module 反推。 */
 export function isModeNeutralModule(id: ModuleId): boolean {
   if (id === "agent") return true
   return MODULES.find((m) => m.id === id)?.crossMode === true

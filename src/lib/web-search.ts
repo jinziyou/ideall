@@ -277,7 +277,7 @@ export async function webSearch(
     query: q,
     engine: "none",
     results: [],
-    note: "实时网页结果暂不可用（可能被限流，或当前非 App 形态受 CORS 限制）；可在浏览器打开搜索结果页。",
+    note: "实时网页结果暂不可用（可能被限流，或当前为网页版）；可在浏览器打开搜索结果页。",
     serpUrl: "https://duckduckgo.com/?q=" + encodeURIComponent(q),
   }
 }

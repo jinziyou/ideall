@@ -96,7 +96,7 @@ export function TabContent({ tab }: { tab: Tab }) {
     if (!ref || !entry) {
       return (
         <div className="p-6 text-sm text-muted-foreground">
-          {ref ? `暂不支持的节点类型：${ref.kind}` : `非法节点标签：${tab.id}`}
+          {ref ? `暂不支持这种内容（${ref.kind}）` : `无法打开此内容（${tab.id}）`}
         </div>
       )
     }

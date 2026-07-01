@@ -45,7 +45,7 @@ type RawNode = {
 }
 
 /**
- * 列出指定 kind 的活跃节点摘要 (过滤墓碑)。供侧栏跨 kind 文件树 / places 导航。
+ * 列出指定 kind 的活跃节点摘要 (过滤删除标记)。供侧栏跨 kind 文件树 / places 导航。
  * hasChildren 仅在所请求 kinds 集合内计算 (跨 place 的父子不串台)。
  */
 export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[]> {
@@ -223,7 +223,7 @@ export async function moveNode(
   return getNodeRaw(id)
 }
 
-/** fs.delete: 按 kind 删 (note/bookmark/folder/file 软删墓碑; feed 取消关注墓碑; thread 硬删)。 */
+/** fs.delete: 按 kind 删 (note/bookmark/folder/file 软删标记; feed 取消关注写删除标记; thread 硬删)。 */
 export async function deleteNode(kind: NodeKind, id: string): Promise<void> {
   switch (kind) {
     case "note":

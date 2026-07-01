@@ -1,4 +1,4 @@
-// 「我的」(home) 的区段单一真相源: 二级侧栏的 4 个常驻区段 + 概览首页描述符。
+// 「我的」(home) 的区段唯一数据来源: 二级侧栏的 4 个常驻区段 + 概览首页描述符。
 // 全部归属 module:"home" —— 点击在主区开/激活对应标签, 活动栏「我的」保持高亮, 侧栏不切走。
 // 概览由活动栏「我的」钮直达, 不在侧栏列; 侧栏以文件树展示各区段及其 node 子项 (见 sidebar-tree)。
 
@@ -21,7 +21,7 @@ export const HOME_OVERVIEW: TabDescriptor = {
   path: "/home",
 }
 
-/** 二级侧栏区段 (上→下): 关注 · 收藏 · 资源 · 发布 · 笔记。
+/** 二级侧栏区段 (上→下): 关注 · 书签 · 资源 · 发布 · 笔记。
  *  「资源」是「我的」五类本机数据之一 (笔记/书签/资源/关注/对话), 此前漏列 → 桌面侧栏/概览无入口, 现补回。 */
 export const HOME_SECTIONS: HomeSection[] = [
   {
@@ -35,9 +35,9 @@ export const HOME_SECTIONS: HomeSection[] = [
   },
   {
     id: "bookmarks",
-    label: "收藏",
+    label: "书签",
     icon: Bookmark,
-    descriptor: { kind: "home-bookmarks", module: "home", title: "收藏", path: "/home/bookmarks" },
+    descriptor: { kind: "home-bookmarks", module: "home", title: "书签", path: "/home/bookmarks" },
   },
   {
     id: "resources",

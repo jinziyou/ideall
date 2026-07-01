@@ -27,13 +27,13 @@ import { syncManifest } from "@/plugins/sync/manifest"
 
 let booted = false
 
-/** 幂等: 注册所有 app/plugin 能力。客户端启动闸 (BootGate) 调一次。 */
+/** 幂等: 注册所有 app/plugin 能力。客户端启动前置步骤 (BootGate) 调一次。 */
 export function registerAll(): void {
   if (booted) return
   booted = true
   // 「我的」数据端口 (core 实现, 供 agent 等插件经 protocol 读写「我的」本机数据)。
   registerFilesPort(filesPort)
-  // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点物化为工作区标签 (守 components↛app 边界, 由 app 注入)。
+  // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点打开为工作区标签 (守 components↛app 边界, 由 app 注入)。
   registerUiActions({
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
     openTab: (kind, id, title) => openNodeTab({ kind, id }, title, "agent"),

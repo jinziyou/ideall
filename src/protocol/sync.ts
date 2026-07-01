@@ -1,11 +1,11 @@
-// 跨端同步契约 —— 加密同步块的形状 + 纯合并逻辑 (LWW 并集)。
-// AES/HKDF 密码学与编排在 sync 插件内; 此处只放跨端共享的契约与可独立单测的纯逻辑。
+// 跨端同步接口约定 —— 加密同步块的形状 + 纯合并逻辑 (LWW 并集)。
+// AES/HKDF 密码学与编排在 sync 插件内; 此处只放跨端共享的接口约定与可独立单测的纯逻辑。
 //
 // 合并逻辑对「可同步记录」泛型化 (SyncRecord): 关注 (Subscription) 与笔记 (Note) 等本地优先实体
-// 都满足该形状 (id + 版本时间 + 软删墓碑), 故共用同一套 LWW 并集 / 墓碑 GC, 不各写一份。
+// 都满足该形状 (id + 版本时间 + 软删除标记), 故共用同一套 LWW 并集 / 删除标记 GC, 不各写一份。
 
 /**
- * 可跨端同步的记录的最小形状 —— LWW 合并只需: 主键 id、版本时间 (updatedAt)、软删墓碑 (deletedAt)。
+ * 可跨端同步的记录的最小形状 —— LWW 合并只需: 主键 id、版本时间 (updatedAt)、软删除标记 (deletedAt)。
  * 关注 / 笔记等实体结构上满足即可参与同一套合并。
  */
 export interface SyncRecord {
@@ -53,7 +53,7 @@ export const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000
 /**
  * 同步时间戳合理性: 有限非负数字, 且不超过 now + 容许时钟偏移。now 注入便于测试。
  * 防御「持正确同步码但失陷/老旧的对端上传远未来时间戳」—— 它会永远赢得 recordTs LWW,
- * 钉死一条被投毒的记录, 或造一条 GC 永远清不掉、合法删除/复活也盖不过的不死墓碑。
+ * 钉死一条被投毒的记录, 或造一条 GC 永远清不掉、合法删除/恢复也盖不过的不死删除标记。
  * 入站校验 (isValidRemoteSub/isValidRemoteNote) 用它对每条远端记录的时间戳设上界。
  */
 export function isSaneSyncTimestamp(ts: unknown, now: number): boolean {
@@ -64,10 +64,10 @@ export function isSaneSyncTimestamp(ts: unknown, now: number): boolean {
  * 按 id 取并集, 同 id 取 updatedAt 较新者胜 (LWW; 并列本地优先, 保证稳定)。
  * 旧实现无条件本地优先, 会静默丢弃远端对已有关注的字段更新。
  *
- * 墓碑 (deletedAt 已设, 见 Subscription) 也只是一条 Subscription, 原样参与同一 LWW:
- * 删除 (removeSubscription 写墓碑并 bump updatedAt) 较新 → 墓碑胜 → 删除跨端收敛 (不再被对端复活);
- * 删除后又重新关注 (addSubscription 清除 deletedAt 并 bump updatedAt) 较新 → 活跃项胜 → 复活。
- * 调用方读路径需自行过滤墓碑 (见 isLive); 过期墓碑由 pruneExpiredTombstones GC。
+ * 删除标记 (deletedAt 已设, 见 Subscription) 也只是一条 Subscription, 原样参与同一 LWW:
+ * 删除 (removeSubscription 写删除标记并 bump updatedAt) 较新 → 删除标记胜 → 删除跨端收敛 (不再被对端恢复);
+ * 删除后又重新关注 (addSubscription 清除 deletedAt 并 bump updatedAt) 较新 → 活跃项胜 → 恢复。
+ * 调用方读路径需自行过滤删除标记 (见 isLive); 过期删除标记由 pruneExpiredTombstones GC。
  */
 export function unionMerge<T extends SyncRecord>(local: T[], remote: T[]): T[] {
   const map = new Map<string, T>()
@@ -79,32 +79,32 @@ export function unionMerge<T extends SyncRecord>(local: T[], remote: T[]): T[] {
   return [...map.values()]
 }
 
-// ── 墓碑 (tombstone) GC ────────────────────────────────────────────────────────────
-// 删除以墓碑保留, 而非物理删, 以便跨端传播删除。墓碑需在所有端都见过该删除后才可安全清除;
-// 保留期取足够长 (远超任何合理的多端离线窗口), 之后物理 GC, 避免墓碑无限累积撑大同步块。
+// ── 删除标记 (tombstone) GC ────────────────────────────────────────────────────────────
+// 删除以删除标记保留, 而非物理删, 以便跨端传播删除。删除标记需在所有端都见过该删除后才可安全清除;
+// 保留期取足够长 (远超任何合理的多端离线窗口), 之后物理 GC, 避免删除标记无限累积撑大同步块。
 // 取舍记录见 docs/sync-lww-tradeoff.md。
 
-/** 墓碑保留期: 90 天。超过即视为所有端已收敛, 可安全物理清除。 */
+/** 删除标记保留期: 90 天。超过即视为所有端已收敛, 可安全物理清除。 */
 export const TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000
 
-/** 是否为墓碑 (软删除项)。 */
+/** 是否为删除标记 (软删除项)。 */
 export function isTombstone(s: SyncRecord): boolean {
   return s.deletedAt != null
 }
 
-/** 是否为活跃记录 (非墓碑) —— 读路径过滤用。 */
+/** 是否为活跃记录 (非删除标记) —— 读路径过滤用。 */
 export function isLive(s: SyncRecord): boolean {
   return s.deletedAt == null
 }
 
-/** 墓碑是否已过保留期 (now − deletedAt > ttl), 可安全 GC; 非墓碑恒 false。now 注入便于测试。 */
+/** 删除标记是否已过保留期 (now − deletedAt > ttl), 可安全 GC; 非删除标记恒 false。now 注入便于测试。 */
 export function isExpiredTombstone(s: SyncRecord, now: number, ttlMs = TOMBSTONE_TTL_MS): boolean {
   return s.deletedAt != null && now - s.deletedAt > ttlMs
 }
 
 /**
- * GC: 移除已过保留期的墓碑; 活跃记录与未过期墓碑保留。纯函数 (now 注入)。
- * 同步落地前对合并结果调用, 使本地与远端同步块都不再携带过期墓碑。
+ * GC: 移除已过保留期的删除标记; 活跃记录与未过期删除标记保留。纯函数 (now 注入)。
+ * 同步落地前对合并结果调用, 使本地与远端同步块都不再携带过期删除标记。
  */
 export function pruneExpiredTombstones<T extends SyncRecord>(
   records: T[],
@@ -115,11 +115,11 @@ export function pruneExpiredTombstones<T extends SyncRecord>(
 }
 
 /**
- * 落地侧物理删除候选 id: 库中**当前**已过保留期、且不在本批写入集合 (keepIds) 里的墓碑。
+ * 落地侧物理删除候选 id: 库中**当前**已过保留期、且不在本批写入集合 (keepIds) 里的删除标记。
  * 据「落地时刻真实库状态」而非同步快照判定 —— 故绝不删:
- *   - 同步往返窗口内并发新增的活跃关注 (它非墓碑, 本轮未上传, 下轮自然带上);
- *   - 正被写回的复活项 / 并发写入的新墓碑 (在 keepIds 里, 或尚未过期)。
- * 仅清掉「kept 已 prune 掉、库里残留」的过期墓碑, 使本地随远端同步块一起收敛。
+ *   - 同步往返窗口内并发新增的活跃关注 (它非删除标记, 本轮未上传, 下轮自然带上);
+ *   - 正被写回的恢复项 / 并发写入的新删除标记 (在 keepIds 里, 或尚未过期)。
+ * 仅清掉「kept 已 prune 掉、库里残留」的过期删除标记, 使本地随远端同步块一起收敛。
  */
 export function expiredTombstoneIdsToDelete(
   existing: SyncRecord[],

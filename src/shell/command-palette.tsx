@@ -43,7 +43,7 @@ import {
 export { openCommandPalette }
 
 /**
- * ⌘K 命令台 —— 全局唯一实例 (挂根布局)。浮层引擎: 跳发现模块 (资讯/社区/工具) 或我的各子区,
+ * ⌘K 命令面板 —— 全局唯一实例 (挂根布局)。浮层引擎: 跳发现模块 (资讯/社区/工具) 或我的各子区,
  * 并可直接执行系统命令 (切深浅色 / 立即同步 / 复制同步码)。
  * 由 ⌘K / Ctrl+K 或任意 openCommandPalette() 触发器 (图标轨 / 移动顶栏 / 各页页头) 唤起。
  */
@@ -193,7 +193,7 @@ export default function CommandPalette() {
             切换深浅色
           </CommandItem>
           {/* 同步入口始终存在: 未配置同步码时给「开启」入口 (跳关注页顶部的 SyncPanel),
-              避免新用户在唯一命令台里搜不到同步而误以为没有该功能。 */}
+              避免新用户在唯一命令面板里搜不到同步而误以为没有该功能。 */}
           {code ? (
             <>
               <CommandItem value="立即同步 跨端 sync" onSelect={() => syncNow(code)}>

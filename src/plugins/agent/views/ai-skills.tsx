@@ -136,7 +136,7 @@ export default function AiSkills() {
                     placeholder="一句说明"
                   />
                   <p className="text-[13px] leading-relaxed text-muted-foreground">
-                    描述承重：也是「自动」模式下模型路由的匹配键。
+                    这段描述很重要：「自动」模式下也用它来匹配模型。
                   </p>
                 </div>
 

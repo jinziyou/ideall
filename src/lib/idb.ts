@@ -170,8 +170,8 @@ export async function idbPutAcrossStores(
 }
 
 /**
- * 单事务批量 put + delete —— 用于跨端同步落地: 写回合并全集与清理过期墓碑须原子,
- * 否则 put 成功后 delete 中断会留下「已写回但墓碑未清」的中间态 (与 FilesPort「一次事务批处理」承诺不符)。
+ * 单事务批量 put + delete —— 用于跨端同步落地: 写回合并后的完整数据与清理过期删除标记须原子,
+ * 否则 put 成功后 delete 中断会留下「已写回但删除标记未清」的中间态 (与 FilesPort「一次事务批处理」承诺不符)。
  */
 export async function idbBulkPutDelete<T>(
   storeName: string,

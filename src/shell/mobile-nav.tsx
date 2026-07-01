@@ -46,7 +46,7 @@ function MLink({
   )
 }
 
-/** 移动端导航 (Sheet), 与桌面共用 nav-config 单一真相源。 */
+/** 移动端导航 (Sheet), 与桌面共用 nav-config 这一唯一数据来源。 */
 export default function MobileNav() {
   const [open, setOpen] = React.useState(false)
   const pathname = usePathname()

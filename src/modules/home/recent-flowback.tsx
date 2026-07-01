@@ -3,11 +3,11 @@ import { ChevronRight, CornerDownLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/node-format"
 
-/** 一条「关注」记录: 把发现模块的对象 / 资源收入「我的」的一次动作。 */
+/** 一条「关注」记录: 把发现模块的对象 / 资源加入「我的」的一次动作。 */
 export type FlowItem = {
   id: string
   ts: number
-  /** 圆点色 (Tailwind bg-* 类): spoke 色做分类, bg-pop 表示落入本地的「我的」 */
+  /** 圆点色 (Tailwind bg-* 类): 板块色做分类, bg-pop 表示落入本地的「我的」 */
   dotClass: string
   label: string
   title: string
@@ -31,7 +31,7 @@ function groupOf(ts: number): GroupName {
 }
 
 /**
- * 「最近关注」时间线 —— 重设计的脊柱: 关注第一次有了肉眼可见的落点。
+ * 「最近关注」时间线 —— 重新设计的主时间线: 关注第一次有了肉眼可见的呈现位置。
  * 跨 subscriptions / bookmarks / files 按时间倒序合并, 分今天 / 本周 / 更早。
  */
 export function RecentFlowback({ items }: { items: FlowItem[] }) {

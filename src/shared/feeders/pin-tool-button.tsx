@@ -10,7 +10,7 @@ import { undoableToast } from "@/lib/undo-toast"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 「钉到「我的」」开关 (反馈原语) —— 把工具 (搜索引擎 / AI / 导航站) 关注为 home 的快捷启动项。
+ * 「固定到「我的」」开关 (基础组件) —— 把工具 (搜索引擎 / AI / 导航站) 关注为 home 的快捷启动项。
  * 经 protocol 的 FilesPort 写入 (本地优先)。图标按钮形态, 作为工具卡的角标叠加。
  */
 export function PinToolButton({
@@ -50,8 +50,8 @@ export function PinToolButton({
       if (pinned) {
         await hub.removeSubscription("tool", url)
         setPinned(false)
-        // 误点取消可一键撤销 (addSubscription 复活墓碑: 清 deletedAt, 保留 createdAt)
-        undoableToast(`已取消钉住 ${name}`, () =>
+        // 误点取消可一键撤销 (addSubscription 恢复被软删的记录: 清 deletedAt, 保留 createdAt)
+        undoableToast(`已取消固定 ${name}`, () =>
           getFilesPort()
             .addSubscription({ type: "tool", key: url, title: name })
             .then(() => setPinned(true)),
@@ -59,12 +59,12 @@ export function PinToolButton({
       } else {
         await hub.addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
-        flowbackToast(`已钉住 ${name}`, () => router.push("/home/subscriptions"))
+        flowbackToast(`已固定 ${name}`, () => router.push("/home/subscriptions"))
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }
     } catch {
-      toast.error(pinned ? "取消钉住失败，请重试" : "钉住失败，请重试")
+      toast.error(pinned ? "取消固定失败，请重试" : "固定失败，请重试")
     } finally {
       setBusy(false)
     }
@@ -75,8 +75,8 @@ export function PinToolButton({
       type="button"
       onClick={toggle}
       disabled={pinned === null || busy}
-      title={pinned ? "取消钉住" : "钉到「我的」"}
-      aria-label={pinned ? `取消钉住 ${name}` : `钉到「我的」 ${name}`}
+      title={pinned ? "取消固定" : "固定到「我的」"}
+      aria-label={pinned ? `取消固定 ${name}` : `固定到「我的」 ${name}`}
       className={cn(
         // 触屏放大命中区 (角标叠在卡角, 桌面保持紧凑)
         "rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 pointer-coarse:p-2",

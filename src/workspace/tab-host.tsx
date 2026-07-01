@@ -1,13 +1,13 @@
 "use client"
 
 // 标签内容宿主: keep-alive + LRU。重型标签 (fill 查看器 / iframe 嵌入) 全挂载会 OOM
-// (Plate 每实例独立 editor 链; iframe 进程不暂停), 故按 LRU 保活最近若干个、卸载更久未用者。
-// 非激活态用 display:none (切标签不重载、iframe 不重新握手 MCP)。
+// (Plate 每实例独立 editor 链; iframe 进程不暂停), 故按 LRU 保持后台运行最近若干个、卸载更久未用者。
+// 非激活态用 display:none (切标签不重载、iframe 不重新与 MCP 建立连接)。
 //
 // 逐出安全性 (对设计稿 §5.3 的简化, 已 live 验证): 设计稿用 evicting-as-state + 逐出前 flushNode
-// 的「保活到落库完成」舞蹈, 那是为修已废弃的 flushRef+await 方案。但 P1a 写队列已让卸载本身安全 ——
+// 的「保持后台运行到落库完成」舞蹈, 那是为修已废弃的 flushRef+await 方案。但 P1a 写队列已让卸载本身安全 ——
 // NoteEditor 卸载 cleanup 同步 enqueueNoteDraft, worker 独立于组件继续落库; 且只逐出**非激活**标签
-// (激活项恒保活), 用户无感。故此处用朴素 LRU (直接卸载 overflow 非激活标签), 无 evicting 舞蹈,
+// (激活项恒保持后台运行), 用户无感。故此处用朴素 LRU (直接卸载 overflow 非激活标签), 无 evicting 舞蹈,
 // 既简单又避免「每次切标签 overflow 标签反复 mount/flush/unmount」的抖动。
 import * as React from "react"
 import { cn } from "@/lib/utils"
@@ -17,10 +17,10 @@ import { TabContent, tabLayout } from "./registry"
 import { tabElId, tabPanelId } from "./tab-view-type"
 import type { Tab } from "./types"
 
-const MAX_ALIVE_FILL = 8 // 同时保活的 fill 查看器 (笔记等) 上限
-const MAX_ALIVE_IFRAME = 2 // 同时保活的嵌入应用 iframe 上限 (重新握手代价高, 上限防累积)
+const MAX_ALIVE_FILL = 8 // 同时保持后台运行的 fill 查看器 (笔记等) 上限
+const MAX_ALIVE_IFRAME = 2 // 同时保持后台运行的嵌入应用 iframe 上限 (重新建立连接代价高, 上限防累积)
 
-/** 重型类别 (参与 LRU 逐出); padded 轻面板永久保活 → null。 */
+/** 重型类别 (参与 LRU 逐出); padded 轻面板永久保持后台运行 → null。 */
 function heavyCat(tab: Tab): "fill" | "iframe" | null {
   if (tab.kind === "info" || tab.kind === "community") return "iframe"
   return tabLayout(tab) === "fill" ? "fill" : null
@@ -62,7 +62,7 @@ export default function TabHost() {
         <p className="text-sm font-medium text-foreground">没有打开的标签</p>
         {/* 文案按视口分叉: 移动端没有活动栏/常驻侧栏, 不能指向桌面控件。 */}
         <p className="hidden max-w-xs text-[13px] leading-relaxed md:block">
-          从左侧活动栏选择一个模块，再在侧栏中打开文件或面板（单击预览 · 双击钉住）。
+          从左侧活动栏选择一个模块，再在侧栏中打开文件或面板（单击预览 · 双击固定）。
         </p>
         <p className="max-w-xs text-[13px] leading-relaxed md:hidden">
           点击底部导航选择一个分区，或用顶部菜单浏览文件。
@@ -71,7 +71,7 @@ export default function TabHost() {
     )
   }
 
-  // 应挂载集: 每池保活最近 cap 个 + padded 全挂 + 激活项强制挂。
+  // 应挂载集: 每池保持后台运行最近 cap 个 + padded 全挂 + 激活项强制挂。
   const byId = new Map(tabs.map((t) => [t.id, t]))
   const alive = new Set<string>()
   const keepRecent = (cat: "fill" | "iframe", cap: number) => {

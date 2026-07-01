@@ -12,7 +12,7 @@ import { undoableToast } from "@/lib/undo-toast"
 import { flowbackToast } from "./flowback-toast"
 
 /**
- * 关注开关 (反馈原语) —— 把「发现」里的来源 (发布者 / 实体 / peer) 关注回「我的」(home)。
+ * 关注开关 (基础组件) —— 把「发现」里的来源 (发布者 / 实体 / 社区用户) 关注回「我的」(home)。
  * 经 protocol 的 FilesPort 写入 (本地优先, 浏览器 IndexedDB), 发现模块不直接依赖底层存储。
  * 可在 info / community 等模块复用。
  */
