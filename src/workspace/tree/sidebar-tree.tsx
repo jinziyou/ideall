@@ -39,7 +39,7 @@ import {
   getServerWorkspacesState,
   subscribeWorkspaces,
 } from "@/plugins/agent/lib/agent-workspace"
-import { subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
+import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
 import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
 import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
@@ -169,7 +169,15 @@ export default function SidebarTree() {
   )
 
   React.useEffect(() => subscribeSidebarTreeRefresh(clearCaches), [clearCaches])
-  React.useEffect(() => onFilesUpdated(clearCaches), [clearCaches])
+  // 笔记区走独立 NotesSidebarTree, 不经过 nodeCache; notifyFilesUpdated 时须同步 refreshSidebarTree。
+  React.useEffect(
+    () =>
+      onFilesUpdated(() => {
+        clearCaches()
+        refreshSidebarTree()
+      }),
+    [clearCaches],
+  )
 
   React.useEffect(() => {
     const sectionId = defaultExpandedSection(activeModule)

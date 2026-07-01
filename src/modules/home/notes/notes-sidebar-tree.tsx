@@ -98,6 +98,31 @@ export default function NotesSidebarTree({ depth = 1 }: { depth?: number }) {
 
   React.useEffect(() => subscribeSidebarTreeRefresh(() => void reload()), [reload])
 
+  // 当前打开的笔记若在子层级, 自动展开祖先行以便侧栏树可见。
+  React.useEffect(() => {
+    const id = activeNoteId(activeId)
+    if (!id || notes.length === 0) return
+    const byId = new Map(notes.map((n) => [n.id, n]))
+    const ancestors: string[] = []
+    let cur = byId.get(id)?.parentId ?? null
+    while (cur != null && byId.has(cur)) {
+      ancestors.push(cur)
+      cur = byId.get(cur)?.parentId ?? null
+    }
+    if (ancestors.length === 0) return
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      let changed = false
+      for (const a of ancestors) {
+        if (!next.has(a)) {
+          next.add(a)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [activeId, notes])
+
   React.useEffect(() => {
     try {
       localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded]))
