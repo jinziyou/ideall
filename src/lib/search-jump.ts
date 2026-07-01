@@ -1,4 +1,4 @@
-// 聚合搜索跳转的单一真相源: 把搜索引擎模板里的 {q} 占位替换为已编码关键词, 经 openExternal
+// 聚合搜索跳转的唯一数据来源: 把搜索引擎模板里的 {q} 占位替换为已编码关键词, 经 openExternal
 // 打开 (App 走系统浏览器, web 走新标签)。供侧栏「聚合搜索」与工具页 QuickJump 复用, 避免各处手抄
 // `window.open(queryUrl.replace(...))` 漂移 (此前侧栏用裸 window.open, 桌面 App 下不经系统浏览器)。
 

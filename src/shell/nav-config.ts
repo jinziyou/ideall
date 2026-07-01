@@ -2,10 +2,10 @@ import { Bot } from "lucide-react"
 import type { ComponentType } from "react"
 import { MODULE_META } from "@/workspace/module-meta"
 
-// 移动端 Sheet/底栏 + ⌘K 命令台的导航真相源 (扁平 href 链接范式)。
+// 移动端 Sheet/底栏 + ⌘K 命令面板的导航唯一数据来源 (扁平 href 链接范式)。
 // 与桌面工作区的 workspace/modules.ts 是「有意分工的两源」而非重复: 二者经 MODULE_META 共享身份 (label/icon/色),
 // 各自只描述自己界面的导航形态。详见 modules.ts 顶部说明。勿合并。
-/** 导航真相源 (移动 + ⌘K) —— 身份取自 MODULE_META, 杜绝手抄漂移。 */
+/** 导航唯一数据来源 (移动 + ⌘K) —— 身份取自 MODULE_META, 杜绝手抄漂移。 */
 export type NavLink = {
   href: string
   label: string
@@ -28,7 +28,7 @@ export const SPOKES: NavLink[] = [
     label: MODULE_META.info.label,
     icon: MODULE_META.info.icon,
     dot: MODULE_META.info.dotClass,
-    hint: "关注发布者与实体 · 收藏文章",
+    hint: "关注发布者与实体 · 文章加书签",
   },
   {
     href: "/community",
@@ -42,11 +42,11 @@ export const SPOKES: NavLink[] = [
     label: MODULE_META.tool.label,
     icon: MODULE_META.tool.icon,
     dot: MODULE_META.tool.dotClass,
-    hint: "钉住工具 · 把搜索存成关注",
+    hint: "固定工具 · 把搜索存成关注",
   },
 ]
 
-/** 我的子区 (「我的」内部分区), 供命令台 / 移动菜单跳转。label/icon 见 MODULE_META。 */
+/** 我的子区 (「我的」内部分区), 供命令面板 / 移动菜单跳转。label/icon 见 MODULE_META。 */
 export const HOME_SUBPAGES: NavLink[] = [
   { href: "/home", label: MODULE_META.overview.label, icon: MODULE_META.overview.icon },
   {

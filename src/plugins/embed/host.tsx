@@ -99,7 +99,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       }
     }
     // 嵌入态信号 (URL 标记): 被嵌入页首帧即可据 ?embed=ideall 去掉自身导航/头尾 (外壳由 ideall 提供),
-    // 无需等异步 ideall:init 握手 → 消除「init 到达前导航闪一下」。契约见 docs/ideall-embed-bridge.md §11。
+    // 无需等异步 ideall:init 握手 → 消除「init 到达前导航闪一下」。接口约定见 docs/ideall-embed-bridge.md §11。
     // query 标记不改 origin, 不影响上方源校验与 postMessage 的 targetOrigin (= entryOrigin)。
     url.searchParams.set("embed", "ideall")
     url.searchParams.set("embedApp", manifest.id)
@@ -146,7 +146,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       const mcp = new MessageChannel()
       const ui = new MessageChannel()
 
-      // 端口移交: 把两条 channel 的 port2 转移给 iframe (此后点对点, 不再 window 广播)。
+      // 交接通信端口: 把两条 channel 的 port2 转移给 iframe (此后点对点, 不再 window 广播)。
       win.postMessage(
         {
           type: INIT_MESSAGE_TYPE,
@@ -243,7 +243,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     }
   }, [manifest, router, reloadKey, configError, entryOrigin, connId, armFailTimer, disarmFailTimer])
 
-  // 宿主页签激活态 → uiPort visibility (§8): ideall 用 display:none 保活非激活嵌入标签, iframe 自身
+  // 宿主页签激活态 → uiPort visibility (§8): ideall 用 display:none 让非激活嵌入标签保持后台运行, iframe 自身
   // visibilityState 不随之变。若不下发, 隐藏页签的 portal 仍按「可见」续心跳 → presence 在线数虚高。
   // 插件不得反向 import 工作区 (架构边界), 故用 IntersectionObserver 观测自身盒子: 页签 display:none →
   // 不相交 → 判隐藏。OS 级窗口切走由 iframe 自身 document.hidden 覆盖, 与此互补。
@@ -303,9 +303,9 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
       {effectiveStatus === "revoked" && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center">
           <Unplug className="h-8 w-8 text-muted-foreground" />
-          <div className="text-sm font-medium">已断开与 {manifest.name} 的连接</div>
+          <div className="text-sm font-medium">已撤销对 {manifest.name} 的授权</div>
           <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
-            你在设置里吊销了该嵌入应用的宿主授权，它已失去全部宿主能力。重新连接将再次授予。
+            你在设置里撤销了该应用的授权，它已失去全部访问权。重新连接将再次授予。
           </p>
           <Button variant="outline" size="sm" onClick={retry}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />

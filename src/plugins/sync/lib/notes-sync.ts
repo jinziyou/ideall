@@ -1,7 +1,7 @@
 // 笔记跨端同步编排 (sync 插件) —— 本地优先 + 端到端加密, 与关注同构但走独立加密块 (notes scope)。
-// 拉远端密文 → 解密 → 与本地按 id 合并 → GC 过期墓碑 → 写本地 → 加密 → 推远端。
+// 拉远端密文 → 解密 → 与本地按 id 合并 → GC 过期删除标记 → 写本地 → 加密 → 推远端。
 // 合并 (§7): 整篇删除走 node 级 LWW (deletedAt); 正文走**块级合并** (mergeNoteContent) —— 跨端并发改不同块
-// 无损、同块并发 LWW 一方胜 (§7.5); 标题/标签按整篇 updatedAt LWW。块墓碑 GC 与合并分离 (§7.4)。
+// 无损、同块并发 LWW 一方胜 (§7.5); 标题/标签按整篇 updatedAt LWW。块级删除标记的 GC 与合并分离 (§7.4)。
 // 取舍记录见 docs/sync-lww-tradeoff.md。笔记读写经 @protocol/files 的 FilesPort (不直接依赖 core 存储)。
 //
 // 注: 当前笔记整篇随每次同步重新加密上传 (单 blob)。块级 v 已支撑只传变更块, 改增量上传属后续性能优化。
@@ -25,7 +25,7 @@ const hasBlocks = (n: Note): boolean => !!n.blockMeta && Object.keys(n.blockMeta
 /** 合并两份同 id 笔记: 整篇删除/标题/标签按 updatedAt LWW; 两边都已块级就绪则正文走块级合并 (§7)。 */
 export function mergeTwoNotes(a: Note, b: Note): Note {
   const winner = noteTs(a) >= noteTs(b) ? a : b
-  // 较新一方是墓碑 → 整篇删除胜 (node 级 LWW, 块合并无意义)。
+  // 较新一方是删除标记 → 整篇删除胜 (node 级 LWW, 块合并无意义)。
   if (winner.deletedAt != null) return { ...winner }
   // 块级合并仅当两边都有 blockMeta —— 缺一方 (旧记录 / 未升级老端) 则整篇 LWW 兜底, 否则 mergeNoteContent
   // 遇空 meta 会因无块元数据而重建出空正文 → 丢内容。两端都升级且都写过笔记后, 块级合并自然生效。
@@ -57,7 +57,7 @@ export function mergeNotes(local: Note[], remote: Note[]): Note[] {
   return [...map.values()]
 }
 
-/** 合并后 GC: node 级过期墓碑 (剔整条) + 每条笔记的块级过期墓碑 (§7.4 单独一步)。 */
+/** 合并后 GC: node 级过期删除标记 (剔整条) + 每条笔记的块级过期删除标记 (§7.4 单独一步)。 */
 function gcNotes(notes: Note[], now: number): Note[] {
   return pruneExpiredTombstones(notes, now).map((n) =>
     n.blockMeta ? { ...n, blockMeta: pruneBlockTombstones(n.blockMeta, now) } : n,
@@ -66,7 +66,7 @@ function gcNotes(notes: Note[], now: number): Note[] {
 
 /** blockMeta 形状校验: 缺省合法 (blockMeta 本就可选 —— 空正文/未块级就绪的笔记走整篇 LWW 兜底);
  *  存在则每项须 {v:number, by:string, sk:string, del?:number}。
- *  块墓碑 del 须有界 (远未来 del 会逃过块墓碑 GC 成不死块墓碑), 与 node 级 deletedAt 同口径。 */
+ *  块级删除标记的 del 须有界 (远未来 del 会逃过块级删除标记 GC 成永不清除的删除标记), 与 node 级 deletedAt 同口径。 */
 function isValidBlockMeta(bm: unknown, now: number): boolean {
   if (bm == null) return true
   if (typeof bm !== "object") return false
@@ -84,7 +84,7 @@ function isValidBlockMeta(bm: unknown, now: number): boolean {
  * 远端笔记最小结构校验。AES-GCM 已防无密钥方篡改, 但持正确同步码的某端仍可能上传缺字段/类型错误的项;
  * 尤其 id / sortKey / parentId 非法会污染 LWW 合并与树重建。过滤合并关键字段非法的项。
  * content 须为对象数组 (null 元素会让 blockMapById 取 .id 崩溃 → 一条投毒笔记瘫痪全端同步);
- * blockMeta 须类型正确 (脏 v 会破坏 pickMeta 的可交换性 → 合并不收敛/churn; 脏 del 会逃过墓碑 GC)。
+ * blockMeta 须类型正确 (脏 v 会破坏 pickMeta 的可交换性 → 合并不收敛/churn; 脏 del 会逃过删除标记 GC)。
  */
 export function isValidRemoteNote(s: unknown, now: number = Date.now()): s is Note {
   if (!s || typeof s !== "object") return false
@@ -97,7 +97,7 @@ export function isValidRemoteNote(s: unknown, now: number = Date.now()): s is No
     Array.isArray(o.content) &&
     o.content.every((it) => it != null && typeof it === "object") &&
     Array.isArray(o.tags) &&
-    // 时间戳须有界 (防远未来 updatedAt 永久赢 LWW 钉死被投毒笔记 / 远未来 deletedAt 造不死墓碑)。
+    // 时间戳须有界 (防远未来 updatedAt 永久赢 LWW 钉死被投毒笔记 / 远未来 deletedAt 造永不清除的删除标记)。
     isSaneSyncTimestamp(o.createdAt, now) &&
     isSaneSyncTimestamp(o.updatedAt, now) &&
     (o.deletedAt === undefined || isSaneSyncTimestamp(o.deletedAt, now)) &&
@@ -115,7 +115,7 @@ export async function syncNotes(code: string): Promise<SyncResult> {
   const hub = getFilesPort()
   const now = Date.now() // 入站时间戳上界基准 (整次同步用同一基准即可, 窗口远大于同步耗时)
 
-  // 含墓碑 + 完整正文读: 删除靠墓碑进合并/上传才能传播; 读路径 (UI) 另有 listNotes 过滤墓碑。
+  // 含删除标记 + 完整正文读: 删除靠删除标记进合并/上传才能传播; 读路径 (UI) 另有 listNotes 过滤删除标记。
   const localAll = await hub.listAllNotes()
   let merged = localAll
   let kept = localAll

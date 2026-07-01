@@ -78,7 +78,7 @@ export function tierAtLeast(a: GrantTier, b: GrantTier): boolean {
 }
 
 /**
- * 敏感授权位要求的最低信任档: 主权写 / 私密读 / 以用户身份发布 钉死 first-party。
+ * 敏感授权位要求的最低信任档: 写私有数据 / 私密读 / 以用户身份发布 钉死 first-party。
  * 未列出的位 = any-origin (不额外抬门槛, 仅靠 permissions 成员判定)。
  * 现状所有 Grant 均 first-party, 故此门当前不改变行为; 是 verified/any-origin 接入前的前置闸。
  */

@@ -12,7 +12,7 @@ export default function NotFound() {
           <CardDescription>这个地址不在「我的」，也不在「发现」里。</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-3">
-          {/* 可点击的命令台入口 (触屏也能用; ⌘K 仅在桌面尺寸显示) */}
+          {/* 可点击的命令面板入口 (触屏也能用; ⌘K 仅在桌面尺寸显示) */}
           <CommandTrigger className="min-w-0 flex-1" />
           <Button asChild>
             <Link href="/home">回到「我的」</Link>

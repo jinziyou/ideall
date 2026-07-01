@@ -43,7 +43,7 @@ export default function NoteEditor({
   initialContent: NoteContent
   initialTags: string[]
   onSaved?: (meta: NoteEditorSaved) => void
-  /** 首次用户编辑时回调一次 (供「编辑即钉住」: 把预览标签提升为常驻)。 */
+  /** 首次用户编辑时回调一次 (供「编辑即固定」: 把预览标签提升为常驻)。 */
   onDirty?: () => void
 }) {
   const [title, setTitle] = React.useState(initialTitle)
@@ -93,7 +93,7 @@ export default function NoteEditor({
   const schedule = React.useCallback(() => {
     if (!dirtyRef.current) {
       dirtyRef.current = true
-      onDirtyRef.current?.() // 首次用户编辑 → 通知外层 (编辑即钉住)
+      onDirtyRef.current?.() // 首次用户编辑 → 通知外层 (编辑即固定)
     }
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(flush, AUTOSAVE_DELAY)

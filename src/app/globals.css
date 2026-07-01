@@ -25,7 +25,7 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
 
-  /* D 皮肤: --pop = 关键动作 / 回流填充色 (靛蓝); spoke-* 仅做分类圆点 / tint / 标签, 永不大面积 fill */
+  /* D 皮肤: --pop = 关键动作 / 加入「我的」填充色 (靛蓝); spoke-* 仅做分类圆点 / tint / 标签, 永不大面积 fill */
   --color-pop: hsl(var(--pop));
   --color-pop-foreground: hsl(var(--pop-foreground));
   --color-flowback: hsl(var(--flowback));
@@ -56,7 +56,7 @@
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
-  /* 回流「收入中枢」成功时的余晖脉冲 (motion-reduce 下由组件守卫) */
+  /* 加入「我的」成功时的余晖脉冲 (motion-reduce 下由组件守卫) */
   --animate-flowback: flowback-settle 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   --color-highlight: var(--highlight);
 
@@ -96,7 +96,7 @@
  * 设计系统: D 皮肤 (亮色软圆角便当) + A 布局 (图标轨 + 上下文栏 + ⌘K)
  * - 亮色底 + 白卡 + 柔阴影; 友好靛蓝 (--primary / --pop) 作唯一强调色, 每屏只给一个主操作。
  * - --spoke-* 三色 (资讯蓝 / 社区绿 / 工具紫) 仅用于小圆点 / tint / 标签, 绝不大面积 fill。
- * - --pop == --flowback == 关键动作 / 回流(收入中枢) 的语义色 (= 靛蓝)。
+ * - --pop == --flowback == 关键动作 / 加入「我的」的语义色 (= 靛蓝)。
  * - 默认跟随系统 (见 src/lib/theme), 暗色见 .dark。
  */
 :root {
@@ -121,7 +121,7 @@
   --border: 220 26% 91%;
   --input: 220 26% 91%;
   --ring: 229 88% 63%;
-  /* 关键动作 / 回流 语义色 (靛蓝) + 其前景 */
+  /* 关键动作 / 加入「我的」语义色 (靛蓝) + 其前景 */
   --pop: 229 84% 60%;
   --pop-foreground: 0 0% 100%;
   --flowback: 229 84% 60%;

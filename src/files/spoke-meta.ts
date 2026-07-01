@@ -1,4 +1,4 @@
-// 关注类型 → spoke 视觉映射的单一真相源 (home 渲染关注项专用; app→protocol 合法依赖)。
+// 关注类型 → 分区色视觉映射的唯一数据来源 (home 渲染关注项专用; app→protocol 合法依赖)。
 // 注意: 类名必须保持完整静态字面量 (Tailwind 4 摇树), 禁止拼接。
 
 import type { SubscriptionType } from "@protocol/subscription"
@@ -33,6 +33,6 @@ export const SUB_SPOKE_META: Record<SubscriptionType, SpokeMeta> = {
   tool: {
     dotClass: "bg-spoke-tool",
     topBorderClass: "border-t-spoke-tool",
-    actionLabel: "钉住工具",
+    actionLabel: "固定工具",
   },
 }

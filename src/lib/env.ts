@@ -10,5 +10,5 @@
 export const SERVER_ADDR: string =
   process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "https://api.wonita.link"
 
-/** wonita 服务 v1 资源化契约的 base URL —— 所有端点 (articles/entities/auth/me/peers/sync…) 都挂在 `/v1` 下。 */
+/** wonita 服务 v1 资源化接口约定的 base URL —— 所有端点 (articles/entities/auth/me/peers/sync…) 都挂在 `/v1` 下。 */
 export const API_V1: string = `${SERVER_ADDR}/v1`

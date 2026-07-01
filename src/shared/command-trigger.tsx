@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils"
 import { openCommandPalette } from "@/lib/command-palette-bus"
 
 /**
- * 可见的命令台触发器 (药丸形) —— 方案 3 混合: ⌘K 浮层引擎 + 显式入口。
- * 用于移动顶栏与各页页头 (页头右上「⌕ 命令 ⌘K」), 点击即唤起全局命令台。
+ * 可见的命令面板触发器 (药丸形) —— 方案 3 混合: ⌘K 浮层引擎 + 显式入口。
+ * 用于移动顶栏与各页页头 (页头右上「⌕ 命令 ⌘K」), 点击即唤起全局命令面板。
  */
 export default function CommandTrigger({ className }: { className?: string }) {
   return (

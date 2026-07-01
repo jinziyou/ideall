@@ -61,7 +61,7 @@ test("isNodeKind: NODE_KINDS 全 true, 其余 false", () => {
   assert.equal(isNodeKind("bogus"), false)
 })
 
-// 单一真相源锁: NODE_KINDS 增删须改这里 (连带提醒同步 stripNode 穷尽 switch / tools.ts zod enum / nodes-store)。
+// 唯一数据来源锁: NODE_KINDS 增删须改这里 (连带提醒同步 stripNode 穷尽 switch / tools.ts zod enum / nodes-store)。
 test("NODE_KINDS: 锁定集合 (改动须自觉更新 + 同步派生处)", () => {
   assert.deepEqual([...NODE_KINDS].sort(), ["bookmark", "feed", "file", "folder", "note", "thread"])
 })

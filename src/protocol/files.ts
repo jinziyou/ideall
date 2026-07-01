@@ -1,5 +1,5 @@
-// 「我的」本地数据契约 —— core 拥有的本地优先实体 (资源 / 书签 / 收藏夹 / 笔记 / 对话)。
-// 这些类型既是 core 存储模型, 又经 FilesPort 暴露给 plugin (如 agent), 故属契约。
+// 「我的」本地数据接口约定 —— core 拥有的本地优先实体 (资源 / 书签 / 收藏夹 / 笔记 / 对话)。
+// 这些类型既是 core 存储模型, 又经 FilesPort 暴露给 plugin (如 agent), 故属接口约定。
 // (关注 Subscription 类型见 ./subscription)。
 import type { Subscription, SubscriptionType, NewSubscription } from "./subscription"
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "./node"
@@ -85,7 +85,7 @@ export interface Note {
   createdAt: number
   /** 最后编辑时间戳, 毫秒 (LWW 比较 + 同级排序回退) */
   updatedAt: number
-  /** 软删除墓碑 (epoch ms); 缺省 = 活跃。跨端同步靠墓碑传播删除 (见 @protocol/sync)。 */
+  /** 软删除标记 (epoch ms); 缺省 = 活跃。跨端同步靠删除标记传播删除 (见 @protocol/sync)。 */
   deletedAt?: number
   /**
    * 块级并发元数据 sidecar (§7): 按顶层块 id 记 {v,by,sk,del?}, 与 content 并列。
@@ -134,14 +134,14 @@ export type NewNote = {
  */
 export interface FilesPort {
   // 关注
-  /** 列出活跃关注 (过滤软删除墓碑)。UI / 插件读路径。 */
+  /** 列出活跃关注 (过滤软删除标记)。UI / 插件读路径。 */
   listSubscriptions(): Promise<Subscription[]>
-  /** 列出全部关注含墓碑 —— 跨端同步合并用 (墓碑须进合并/上传才能传播删除)。 */
+  /** 列出全部关注含删除标记 —— 跨端同步合并用 (删除标记须进合并/上传才能传播删除)。 */
   listAllSubscriptions(): Promise<Subscription[]>
   addSubscription(input: NewSubscription): Promise<Subscription>
   removeSubscription(type: SubscriptionType, key: string): Promise<void>
   isSubscribed(type: SubscriptionType, key: string): Promise<boolean>
-  /** 跨端同步落地: 写入合并 + GC 后的权威全集, 并物理清除集合外的过期墓碑 (一次事务批处理)。 */
+  /** 跨端同步落地: 写入合并 + GC 后的完整数据, 并物理清除集合外的过期删除标记 (一次事务批处理)。 */
   bulkPutSubscriptions(subs: Subscription[]): Promise<void>
   // 书签 / 收藏夹
   listBookmarks(): Promise<Bookmark[]>
@@ -154,14 +154,14 @@ export interface FilesPort {
   listFiles(): Promise<FileMeta[]>
   updateFileMeta(id: string, patch: Partial<Pick<StoredFile, "name" | "tags">>): Promise<void>
   // 笔记 (读接口, 供插件读取「我的」笔记; 写接口暂不开放给插件)
-  /** 列出活跃笔记元数据 (过滤墓碑)。 */
+  /** 列出活跃笔记元数据 (过滤删除标记)。 */
   listNotes(): Promise<NoteMeta[]>
   getNote(id: string): Promise<Note | undefined>
   /** 列出某父页下的活跃直接子页面 (元数据, 按同级序), 供树感知插件导航。 */
   listNoteChildren(parentId: string | null): Promise<NoteMeta[]>
-  /** 列出全部笔记含墓碑 + 完整正文 —— 跨端同步合并/上传用 (读路径另有 listNotes 过滤墓碑)。 */
+  /** 列出全部笔记含删除标记 + 完整正文 —— 跨端同步合并/上传用 (读路径另有 listNotes 过滤删除标记)。 */
   listAllNotes(): Promise<Note[]>
-  /** 跨端同步落地: 写入合并 + GC 后的权威全集 (一次事务批处理)。 */
+  /** 跨端同步落地: 写入合并 + GC 后的完整数据 (一次事务批处理)。 */
   bulkPutNotes(notes: Note[]): Promise<void>
   // 对话线程 (agent 插件经此读写, 不直接依赖 core 存储; 本地独占, 默认不同步, 硬删)
   /** 线程列表, 按最近更新倒序。 */
@@ -171,13 +171,13 @@ export interface FilesPort {
   createThread(): Promise<Thread>
   /** 整体写回线程 (消息内联, 调用方在内存改好 messages 后调用); 刷新 updatedAt。 */
   saveThread(thread: Thread): Promise<void>
-  /** 物理删除 (线程本地独占, 无需墓碑传播)。 */
+  /** 物理删除 (线程本地独占, 无需删除标记传播)。 */
   deleteThread(id: string): Promise<void>
   renameThread(id: string, title: string): Promise<void>
   // 统一 Node 文件面 (AI fs.* §6): 跨 kind 寻址读 (原始节点, 调用方按 kind gate / stripNode 净化)。
   /** 列出指定 kind 的活跃完整节点 (fs.list 后端)。 */
   fsListNodes(kinds: NodeKind[]): Promise<Node[]>
-  /** 取单个活跃完整节点 (fs.read 后端); 不存在 / 墓碑 → undefined。 */
+  /** 取单个活跃完整节点 (fs.read 后端); 不存在 / 删除标记 → undefined。 */
   fsGetNode(id: string): Promise<Node | undefined>
   /** fs.create 后端: 按 kind 新建, 回读为 Node (file 不可创建)。 */
   fsCreateNode(input: FsCreateInput): Promise<Node>

@@ -3,7 +3,7 @@
 // 后端可换 / 可自建是 ideall 的核心能力 (战略方向 D): 「wonita 只是默认与参考实现」。
 // 本测试把这条主张落到可执行保证上, 三件事:
 //   1. 编译期: 一个**纯内存、零 wonita / 零 wire DTO** 的 MemoryServerPort 能赋给 `ServerPort` —— 证明
-//      任意第三方 / 自建 / 嵌入式节点都能仅凭 ideall 自有领域类型实现完整契约。
+//      任意第三方 / 自建 / 嵌入式节点都能仅凭 ideall 自有领域类型实现完整接口约定。
 //   2. 运行期: registerServerPort() 覆盖后 getServerPort() 路由到它 —— 换后端的支点真的生效。
 //   3. 缺省回退: 未注册时 getServerPort() 回退官方 HTTP 适配器 —— 保住同构 (SSR 预渲染期可用)。
 //
@@ -126,7 +126,7 @@ test("后端可换·覆盖路由: registerServerPort() 覆盖后 getServerPort()
   assert.notEqual(getServerPort(), httpServerAdapter)
 })
 
-test("后端可换·端到端: 零 wonita 后端经真实业务 facade 驱动取数/鉴权/发布闭环 (含写/鉴权解耦)", async (t) => {
+test("后端可换·端到端: 零 wonita 后端经真实业务 facade 驱动取数/鉴权/发布完整流程 (含写/鉴权解耦)", async (t) => {
   const original = getServerPort()
   t.after(() => registerServerPort(original))
 
@@ -148,7 +148,7 @@ test("后端可换·端到端: 零 wonita 后端经真实业务 facade 驱动取
   const token = auth.ok && auth.data ? auth.data.token : ""
   assert.equal(token, "mem-token")
 
-  // 发布闭环: 经 peer-api facade 发布 → 列表可见 → 删除; 证明写路径全程走 getServerPort()
+  // 发布完整流程: 经 peer-api facade 发布 → 列表可见 → 删除; 证明写路径全程走 getServerPort()
   const pub = await publish(token, { title: "来自内存后端" })
   assert.ok(pub.ok && pub.data)
   const pubId = pub.ok && pub.data ? pub.data.id : -1

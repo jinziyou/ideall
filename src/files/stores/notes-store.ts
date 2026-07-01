@@ -1,7 +1,7 @@
 // 笔记本地存储仓库 —— 基于 IndexedDB。Notion 式「目录即页面」递归页树:
 // 每个 Note 既是页面又是目录, 经 parentId 无限嵌套; 同级以 sortKey (fractional index) 排序。
 // 照 bookmarks-store / files-store 的本地优先模式: 列表只回元数据 + 摘要, 完整正文按需单取。
-// 删除走软删墓碑 (deletedAt, 与关注一致), 以便跨端传播删除; 读路径过滤墓碑。
+// 删除走软删标记 (deletedAt, 与关注一致), 以便跨端传播删除; 读路径过滤删除标记。
 import { Note, NoteMeta, NoteContent, NewNote } from "@protocol/files"
 import type { NodeKind } from "@protocol/node"
 import { genId } from "@/lib/id"
@@ -31,7 +31,7 @@ import { notifyFilesUpdated } from "@/files/flowback"
 type NoteRow = Note & { kind: "note" }
 const KIND_NOTE: NodeKind = "note"
 
-/** 给一条 Note 打上 kind:"note" (写 nodes 仓库前归一)。 */
+/** 给一条 Note 打上 kind:"note" (写 nodes 仓库前规范化)。 */
 function asNoteRow(note: Note): NoteRow {
   return { ...note, kind: "note" }
 }
@@ -58,7 +58,7 @@ function deviceId(): string {
   return deviceIdCache
 }
 
-/** 确保笔记带稳定块 id + blockMeta (旧记录懒补; content 归一为非空)。返回归一后的 content+blockMeta。 */
+/** 确保笔记带稳定块 id + blockMeta (旧记录懒补; content 规范化为非空)。返回规范化后的 content+blockMeta。 */
 function ensureBlocks(note: NoteRow): { content: NoteContent; blockMeta: BlockMetaMap } {
   const content =
     Array.isArray(note.content) && note.content.length ? note.content : emptyNoteContent()
@@ -114,7 +114,7 @@ function toMeta(note: Note, hasChildren: boolean, withText: boolean): NoteMeta {
 }
 
 /**
- * 取 nodes 仓库内全部「笔记」节点 (按 kind 过滤, 含墓碑)。其余 kind 节点 (后续折叠 B/C/D 入库) 不返回 ——
+ * 取 nodes 仓库内全部「笔记」节点 (按 kind 过滤, 含删除标记)。其余 kind 节点 (后续折叠 B/C/D 入库) 不返回 ——
  * 这是 notes-store 在统一 nodes 仓库下只见笔记的边界, 防 listNotes / 同步 GC 误伤其它 kind。
  */
 async function allNoteNodes(): Promise<NoteRow[]> {
@@ -193,7 +193,7 @@ function computeSortKey(
 // ---- 笔记 (读) ----
 
 /**
- * 列出所有活跃笔记元数据 (过滤墓碑, 不含完整 content), 默认按最近编辑倒序。
+ * 列出所有活跃笔记元数据 (过滤删除标记, 不含完整 content), 默认按最近编辑倒序。
  * 树结构由 parentId + sortKey 表达, 调用方 (页树 UI) 自行按 effectiveParent + sortKey 组装层级。
  * opts.text=false 跳过全文 walk (excerpt/search 留空), 供只用 标题/时间 的消费方提速。
  */
@@ -247,16 +247,16 @@ export async function getAncestors(id: string): Promise<NoteMeta[]> {
   return chain
 }
 
-/** 读取单条完整笔记 (含 content); 已删除 (墓碑) 或非笔记 kind 视为不存在。 */
+/** 读取单条完整笔记 (含 content); 已删除 (删除标记) 或非笔记 kind 视为不存在。 */
 export async function getNote(id: string): Promise<Note | undefined> {
   const note = await idbGet<NoteRow>(STORE_NODES, id)
   if (!note || note.kind !== KIND_NOTE || !isLive(note)) return undefined
-  // 确保带稳定块 id + blockMeta (旧记录懒补; 编辑器据此与本地块版本对齐); 空正文归一为合法空文档。
+  // 确保带稳定块 id + blockMeta (旧记录懒补; 编辑器据此与本地块版本对齐); 空正文规范化为合法空文档。
   const { content, blockMeta } = ensureBlocks(note)
   return { ...note, content, blockMeta }
 }
 
-/** 活跃笔记数 (过滤墓碑) —— 数量徽标用。目录页也计入 (「目录也是文件」)。 */
+/** 活跃笔记数 (过滤删除标记) —— 数量徽标用。目录页也计入 (「目录也是文件」)。 */
 export async function countNotes(): Promise<number> {
   const all = await allNoteNodes()
   return all.filter(isLive).length
@@ -353,7 +353,7 @@ export async function moveNote(
 }
 
 /**
- * 级联删除整棵子树 (软删墓碑): 整棵子树写 deletedAt + 清空 content (压缩墓碑; 撤销靠返回的内存快照)。
+ * 级联删除整棵子树 (软删标记): 整棵子树写 deletedAt + 清空 content (压缩删除标记; 撤销靠返回的内存快照)。
  * 返回被删的完整笔记 (含正文), 供 restoreSubtree 撤销。
  */
 export async function deleteNote(id: string): Promise<Note[]> {
@@ -364,7 +364,7 @@ export async function deleteNote(id: string): Promise<Note[]> {
   const captured = [...subtreeIds].map((i) => byId.get(i)).filter((n): n is NoteRow => n != null)
   if (!captured.length) return []
   const now = Date.now()
-  // 墓碑: deletedAt 置位 + 正文清空 (墓碑只需进合并/传播删除; 撤销用 captured 内存快照)。
+  // 删除标记: deletedAt 置位 + 正文清空 (删除标记只需进合并/传播删除; 撤销用 captured 内存快照)。
   const tombstones: NoteRow[] = captured.map((n) => ({
     ...n,
     kind: "note",
@@ -378,8 +378,8 @@ export async function deleteNote(id: string): Promise<Note[]> {
 }
 
 /**
- * 撤销级联删除: 把捕获的整棵子树原样写回 (含正文), 清除墓碑并 bump updatedAt
- * (使复活在 LWW 下胜过刚写的墓碑, 跨端不被重新删除)。
+ * 撤销级联删除: 把捕获的整棵子树原样写回 (含正文), 清除删除标记并 bump updatedAt
+ * (使恢复在 LWW 下胜过刚写的删除标记, 跨端不被重新删除)。
  */
 export async function restoreSubtree(notes: Note[]): Promise<void> {
   if (!notes.length) return
@@ -395,16 +395,16 @@ export async function restoreSubtree(notes: Note[]): Promise<void> {
 
 // ---- 跨端同步钩子 (供 sync 插件经 FilesPort 调用) ----
 
-/** 列出全部笔记含墓碑 + 完整正文 —— 同步合并/上传用。 */
+/** 列出全部笔记含删除标记 + 完整正文 —— 同步合并/上传用。 */
 export async function listAllNotes(): Promise<Note[]> {
   return allNoteNodes()
 }
 
-/** 同步落地: 写入合并 + GC 后的权威全集, 并物理清除集合外的过期墓碑 (一次事务批处理)。 */
+/** 同步落地: 写入合并 + GC 后的完整数据, 并物理清除集合外的过期删除标记 (一次事务批处理)。 */
 export async function bulkPutNotes(notes: Note[]): Promise<void> {
-  // Note 域类型不带 kind, 写 nodes 仓库前归一为 NoteRow (打 kind:"note", 统一库按 kind 收纳)。
+  // Note 域类型不带 kind, 写 nodes 仓库前规范化为 NoteRow (打 kind:"note", 统一库按 kind 收纳)。
   const rows = notes.map(asNoteRow)
-  // existing 按 note 作用域取 —— 过期墓碑 GC 只针对笔记, 绝不波及 nodes 仓库内其它 kind 的记录。
+  // existing 按 note 作用域取 —— 过期删除标记 GC 只针对笔记, 绝不波及 nodes 仓库内其它 kind 的记录。
   const existing = await allNoteNodes()
   const keepIds = new Set(rows.map((n) => n.id))
   const toDelete = expiredTombstoneIdsToDelete(existing, keepIds, Date.now())

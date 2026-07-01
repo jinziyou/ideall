@@ -50,7 +50,7 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
 
 /**
  * 关注流 —— 把 home 已关注的来源汇聚到「我的」:
- *   - 工具 (tool): 顶部「已钉工具」快捷启动区 (无内容流, 点开即跳)
+ *   - 工具 (tool): 顶部「已固定工具」快捷启动区 (无内容流, 点开即跳)
  *   - 发布者 / 实体 / 搜索 / 社区发布者(peer): 各自最新条目卡片
  * 本地优先: 关注偏好读自 IndexedDB; 内容实时从 wonita 服务拉取。
  */
@@ -114,7 +114,7 @@ export default function SubscriptionFeed({
             }
           : prev,
       )
-      // 关注是长期积累的资产, 误点可一键撤销 (addSubscription 复活墓碑: 清 deletedAt, 保留 createdAt)
+      // 关注是长期积累的资产, 误点可一键撤销 (addSubscription 恢复被软删的记录: 清 deletedAt, 保留 createdAt)
       undoableToast(`已取消关注 ${sub.title}`, async () => {
         await addSubscription(sub)
         await load()
@@ -168,7 +168,7 @@ export default function SubscriptionFeed({
         <section className="flex flex-col gap-2">
           <h2 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-spoke-tool" />
-            已钉工具
+            已固定工具
           </h2>
           <div className="flex flex-wrap gap-2">
             {tools.map((t) => (
@@ -193,7 +193,7 @@ export default function SubscriptionFeed({
                   type="button"
                   onClick={() => unsubscribe(t)}
                   disabled={pending.has(t.id)}
-                  aria-label={`取消钉住 ${t.title}`}
+                  aria-label={`取消固定 ${t.title}`}
                   // 触屏放大命中区到 ~40px (桌面保持紧凑)
                   className="rounded-full p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 pointer-coarse:p-2"
                 >
@@ -305,7 +305,7 @@ export default function SubscriptionFeed({
                     <ul className="space-y-2.5">
                       {items.map((it) => (
                         <li key={it.key} className="flex flex-col gap-0.5">
-                          {/* it.url 来自他人 peer 发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
+                          {/* it.url 来自其他社区用户的发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
                           {safeHref(it.url) ? (
                             <a
                               href={safeHref(it.url)}

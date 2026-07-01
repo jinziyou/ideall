@@ -53,7 +53,7 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
   if (!ws) {
     return (
       <div className="grid h-full place-items-center p-6">
-        <EmptyState icon={Boxes} title="工作空间不存在" variant="halo" bordered={false} />
+        <EmptyState icon={Boxes} title="工作区不存在" variant="halo" bordered={false} />
       </div>
     )
   }
@@ -79,7 +79,7 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
           <input
             defaultValue={ws.name}
             onBlur={(e) => renameWorkspace(workspaceId, e.target.value)}
-            aria-label="工作空间名称"
+            aria-label="工作区名称"
             className="w-full max-w-xs truncate bg-transparent text-[15px] font-semibold leading-tight outline-none focus:rounded focus:bg-accent/60 focus:px-1"
           />
           <p className="truncate text-[13px] text-muted-foreground">
@@ -107,12 +107,12 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0"
-          title="删除工作空间"
+          title="删除工作区"
           disabled={wsState.workspaces.length <= 1}
           onClick={onDelete}
         >
           <Trash2 className="h-4 w-4" />
-          <span className="sr-only">删除工作空间</span>
+          <span className="sr-only">删除工作区</span>
         </Button>
       </header>
 

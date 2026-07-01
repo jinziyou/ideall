@@ -34,7 +34,7 @@ export interface BaseNode {
   createdAt: number
   /** 最后编辑时间戳, 毫秒 (LWW)。 */
   updatedAt: number
-  /** 软删除墓碑 (epoch ms); 缺省 = 活跃。删除靠墓碑跨端传播 (见 @protocol/sync)。 */
+  /** 软删除标记 (epoch ms); 缺省 = 活跃。删除靠删除标记跨端传播 (见 @protocol/sync)。 */
   deletedAt?: number
   /** kind 专属的额外元数据 (按需)。 */
   meta?: Record<string, unknown>
@@ -85,7 +85,7 @@ export type FsWritePatch = {
 /** 笔记节点 —— 折叠步 A 唯一物理入库的 kind。 */
 export type NoteNode = NodeOfKind<"note">
 
-/** 全部 NodeKind 的**单一真相源**。tools.ts 的 zod enum、nodes-store 的 ALL_NODE_KINDS 等一律从此派生, 杜绝多份手抄漂移。 */
+/** 全部 NodeKind 的**唯一数据来源**。tools.ts 的 zod enum、nodes-store 的 ALL_NODE_KINDS 等一律从此派生, 杜绝多份手抄漂移。 */
 export const NODE_KINDS: readonly NodeKind[] = [
   "folder",
   "note",

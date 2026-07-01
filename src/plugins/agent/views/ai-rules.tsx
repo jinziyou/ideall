@@ -1,6 +1,6 @@
 "use client"
 
-// 规则注册表标签 (kind:"ai-rules")。被动约束的唯一真源 —— 全局规则恒生效;
+// 规则注册表标签 (kind:"ai-rules")。被动约束的唯一数据来源 —— 全局规则恒生效;
 // 工作空间规则仅被工作空间引用时生效。主列表(全局/工作空间分组) + 选中项的详情编辑器。
 // 本地优先: 改动即写回 store (saveRule/setRuleEnabled), 无「保存」按钮。
 
@@ -87,7 +87,7 @@ export default function AiRules() {
     >
       <div className="space-y-8">
         <Panel title="全局规则">{renderList(globalRules)}</Panel>
-        <Panel title="工作空间规则">{renderList(workspaceRules)}</Panel>
+        <Panel title="工作区规则">{renderList(workspaceRules)}</Panel>
 
         {selected && (
           <Panel title="编辑规则">
@@ -157,7 +157,7 @@ export default function AiRules() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="global">全局</SelectItem>
-                    <SelectItem value="workspace">工作空间</SelectItem>
+                    <SelectItem value="workspace">工作区</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

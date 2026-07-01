@@ -1,5 +1,5 @@
 // 外部 / 跨用户来源的 URL 在渲染成 <a href> 或 window.open 前必须做协议白名单:
-// React 不会拦截 href 中的 javascript:/data: 等伪协议, 跨用户内容 (关注的他人 peer
+// React 不会拦截 href 中的 javascript:/data: 等伪协议, 跨用户内容 (关注的其他社区用户
 // 发布、被投毒的爬取链接、模型给的书签 URL) 一旦含此类 URL, 受害者点击即在本站
 // origin 执行脚本, 可窃取 localStorage 中的 auth token 与同步码 (存储型 XSS)。
 

@@ -49,7 +49,7 @@ export const infoEmbedManifest: Manifest = {
   ],
 }
 
-/** 社区嵌入应用: 含发布闭环 → 需 identity:read + identity.publish (token 由宿主持有)。 */
+/** 社区嵌入应用: 含完整发布流程 → 需 identity:read + identity.publish (token 由宿主持有)。 */
 export const communityEmbedManifest: Manifest = {
   id: "community",
   name: "Wonita 社区",

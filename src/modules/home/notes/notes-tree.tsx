@@ -17,7 +17,7 @@ import { buildNoteTree, type TreeNode } from "@/files/notes-tree-util"
 import { onTreeArrowNav, focusTreeSibling } from "@/workspace/tree/tree-keynav"
 import { EmptyState } from "@/ui/empty-state"
 
-/** 拖放落点的相对位置: 目标行上缘=插到其前; 下缘=插到其后; 中部=作其子页。 */
+/** 拖放落在的位置: 目标行上缘=插到其前; 下缘=插到其后; 中部=作其子页。 */
 type DropZone = "before" | "after" | "inside"
 /** 同级插入位置 (与 notes-store 的 InsertPos 对齐): 省略=末尾, null=开头, 字符串=该键之后。 */
 export type InsertPos = { afterSortKey?: string | null }
@@ -227,7 +227,7 @@ function PageTreeRow({
         }}
         onDrop={(e) => {
           if (!dragId) return
-          // 即便落点非法 (拖到自身/后代) 也要吃掉事件, 否则会冒泡到容器 onDrop 被当成「移到根」。
+          // 即便落在的位置非法 (拖到自身/后代) 也要吃掉事件, 否则会冒泡到容器 onDrop 被当成「移到根」。
           e.preventDefault()
           e.stopPropagation()
           if (invalidTarget) return

@@ -5,7 +5,7 @@ import { registerAll, bootClientEffects } from "./boot"
 import { installTauriExternalLinks } from "@/lib/safe-url"
 
 /**
- * 客户端启动闸 —— 在任何终端/插件 UI 渲染前, 把 app/plugin 能力注册进 protocol registry。
+ * 客户端启动前置步骤 —— 在任何终端/插件 UI 渲染前, 把 app/plugin 能力注册进 protocol registry。
  * useState 初始化器在本组件渲染时同步执行一次 (父组件先于子树渲染),
  * 故关注流 / 助手等使用 registry 时, 注册必已完成。registerAll 幂等。
  *

@@ -1,6 +1,6 @@
 "use client"
 
-// 「我的 · 概览」极简仪表盘: 5 个区段入口 (关注/收藏/资源/发布/笔记) + 最近动态。
+// 「我的 · 概览」极简仪表盘: 5 个区段入口 (关注/书签/资源/发布/笔记) + 最近动态。
 // 入口点击经 openTab 直接开/激活对应区段标签 (module:"home", 不切走「我的」侧栏)。
 // 全部本地优先: 计数与动态只读本机数据 (发布是远端/登录态, 不在此计数)。
 
@@ -30,7 +30,7 @@ function buildFlow(
 ): FlowItem[] {
   const items: FlowItem[] = []
   for (const n of notes) {
-    // 用 createdAt (收进「我的」的时间) 而非 updatedAt, 否则反复编辑同一篇会不断顶到最前。
+    // 用 createdAt (加入「我的」的时间) 而非 updatedAt, 否则反复编辑同一篇会不断顶到最前。
     items.push({
       id: `note:${n.id}`,
       ts: n.createdAt,
@@ -56,7 +56,7 @@ function buildFlow(
       id: `bm:${b.id}`,
       ts: b.createdAt,
       dotClass: "bg-pop",
-      label: "收藏",
+      label: "书签",
       title: b.title,
       href: "/home/bookmarks",
     })
@@ -90,7 +90,7 @@ export default function Overview() {
       if (!alive) return
       setData({
         counts: {
-          // 关注计数排除已钉工具 (tool), 与「关注」语义一致。
+          // 关注计数排除已固定工具 (tool), 与「关注」语义一致。
           subscriptions: subs.filter((s) => s.type !== "tool").length,
           bookmarks: bookmarks.length,
           resources: files.length,
@@ -115,7 +115,7 @@ export default function Overview() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-      {/* 区段入口: 关注 / 收藏 / 资源 / 发布 / 笔记 */}
+      {/* 区段入口: 关注 / 书签 / 资源 / 发布 / 笔记 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {HOME_SECTIONS.map((s) => {
           const Icon = s.icon

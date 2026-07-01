@@ -285,7 +285,7 @@ function TreeRow({
   }
 
   // 行点击语义 (VS Code 式): 单击 = 预览 (transient, 复用单一预览槽, 随手看不堆标签);
-  // 双击 / 键盘 Enter = 常驻 (钉住)。纯容器行 (无 descriptor) 则单击 = 双向展开/折叠。
+  // 双击 / 键盘 Enter = 常驻 (固定)。纯容器行 (无 descriptor) 则单击 = 双向展开/折叠。
   const openRow = (transient: boolean) => {
     if (node.nodeKind === "node" && node.nodeRef) {
       openNodeTab(node.nodeRef, node.label, "user", { transient })
@@ -319,7 +319,7 @@ function TreeRow({
   }
 
   const handleClick = () => openRow(true)
-  // 双击 → 把预览标签钉成常驻 (走非瞬态打开, 命中预览槽即提升; 纯容器行无视)。
+  // 双击 → 把预览标签固定成常驻 (走非瞬态打开, 命中预览槽即提升; 纯容器行无视)。
   const handleDoubleClick = () => {
     if ((node.nodeKind === "node" && node.nodeRef) || node.descriptor) openRow(false)
   }

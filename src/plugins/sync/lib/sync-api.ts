@@ -5,10 +5,10 @@ import { API_V1 } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
 import type { SyncBlob } from "@protocol/sync"
 
-/** v1 统一成功包络 `{ data, meta? }` (见 wonita infra/response.rs)。 */
+/** v1 统一成功响应封装 `{ data, meta? }` (见 wonita infra/response.rs)。 */
 type Enveloped<T> = { data: T; meta?: unknown }
 
-/** 取回某 id 的加密同步块; 404 (尚无数据) 归一化为 ok=true, data=null。 */
+/** 取回某 id 的加密同步块; 404 (尚无数据) 规范化为 ok=true, data=null。 */
 export async function getSyncBlob(id: string): Promise<ApiResult<SyncBlob | null>> {
   const res = await apiFetch<Enveloped<SyncBlob>>(`${API_V1}/sync/${encodeURIComponent(id)}`, {
     cache: "no-store",

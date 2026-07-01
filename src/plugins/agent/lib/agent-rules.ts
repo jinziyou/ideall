@@ -1,4 +1,4 @@
-// 规则注册表 (唯一真源) —— 把「规则」从每个工作区内嵌文本提升为顶层、可复用的条目。
+// 规则注册表 (唯一数据来源) —— 把「规则」从每个工作区内嵌文本提升为顶层、可复用的条目。
 // 工作空间按 id 引用全局/工作空间规则 (见 agent-workspace.ts ruleIds)。本地优先 localStorage。
 //
 // 激活模式 (与 Cursor/Windsurf 1:1): 始终 / 智能判断(按 description 路由) / 按文件(glob) / 手动@。
@@ -20,7 +20,7 @@ export const RULE_ACTIVATIONS: { value: RuleActivation; label: string; hint: str
 export interface AgentRule {
   id: string
   name: string
-  /** 承重: 既是副标题, 也是「智能判断」模式下模型路由的匹配键。 */
+  /** 这段描述很重要: 既是副标题, 也是「智能判断」模式下模型路由的匹配键。 */
   description: string
   activation: RuleActivation
   /** 仅 activation==="glob" 用 (逗号/换行分隔的路径模式)。 */

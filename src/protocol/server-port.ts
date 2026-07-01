@@ -1,11 +1,11 @@
-// ServerPort 契约 —— ideall 用自己的领域词汇定义「一个信息服务必须提供什么」。
+// ServerPort 接口约定 —— ideall 用自己的领域词汇定义「一个信息服务必须提供什么」。
 //
 // 这是「后端可换 / 可自建」定位的关键端口: 业务只依赖 ServerPort 领域类型, 任一实现 ServerPort 的后端都能服务 ideall, 不被任何单一后端绑死。
 // 任何实现了 `ServerPort` 的节点 (官方 wonita 服务、第三方、未来嵌入式/局域网 peer)
 // 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 src/lib/server/http-adapter)。
 //
 // 与 FilesPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
-// ServerPort 是**同构**的 (SSR 预渲染期也要取数 —— `pnpm dev` 与导出前预渲染, 此时客户端启动闸 BootGate 尚未运行),
+// ServerPort 是**同构**的 (SSR 预渲染期也要取数 —— `pnpm dev` 与导出前预渲染, 此时客户端启动前置步骤 BootGate 尚未运行),
 // 故 `getServerPort()` 默认回退到官方 HTTP 适配器; App 形态 / 测试 / 未来其它节点可经
 // `registerServerPort()` 覆盖。领域类型在此自有定义, **不依赖** wonita 服务的 wire DTO
 // (openapi 生成的 `lib/api/server.d.ts`); wire→domain 的映射与漂移门收敛在 HTTP 适配器内。
@@ -55,7 +55,7 @@ export type RelatedInfo = Info & {
   shared_entry: number
 }
 
-/** 实体摘要 (实体搜索结果项 / 详情共现实体项)。 */
+/** 实体摘要 (实体搜索结果项 / 详情相关实体项)。 */
 export interface EntityBrief {
   label: string
   name: string
@@ -81,7 +81,7 @@ export interface EntityDetail {
   last_seen: number
   has_entry: boolean
   wikipedia_url?: string | null
-  /** 共现实体 top N (按共同出现的信息条数倒序) */
+  /** 相关实体 top N (按共同出现的信息条数倒序) */
   co_entities: EntityBrief[]
   /** 按周 period 的提及分布 (升序) */
   weekly: EntityPeriodCount[]
@@ -154,7 +154,7 @@ export interface CurrentUser {
 // ── 端口 ────────────────────────────────────────────────────────────────────────
 
 /**
- * ServerPort 契约 —— ideall 期望「一个信息服务」提供的全部操作 (以 ideall 领域词汇表达)。
+ * ServerPort 接口约定 —— ideall 期望「一个信息服务」提供的全部操作 (以 ideall 领域词汇表达)。
  *
  * 返回约定沿用既有数据层口径以零成本对接 UI:
  *   - 列表/分页等可重试的取数返回 `ApiResult<T>` (调用方按 `ok` 分支 + toast);

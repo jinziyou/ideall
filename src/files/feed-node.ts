@@ -1,5 +1,5 @@
-// feed 节点 ↔ Subscription 的运行期投影助手 (单一真相: subscriptions-store 与 nodes-store 共用,
-// 防双处映射漂移)。feed 节点用确定性 id, 反投影时由 content.type:key 重建跨端同步 wire id。
+// feed 节点 ↔ Subscription 的运行期映射助手 (唯一数据来源: subscriptions-store 与 nodes-store 共用,
+// 防双处映射漂移)。feed 节点用确定性 id, 还原时由 content.type:key 重建跨端同步 wire id。
 import type { Subscription } from "@protocol/subscription"
 import type { NodeOfKind } from "@protocol/node"
 
@@ -10,7 +10,7 @@ export function feedNodeId(type: string, key: string): string {
   return `feed:${type}:${key}`
 }
 
-/** Subscription → feed 节点。sortKey 由调用方算 (追加键)。墓碑 deletedAt 原样带过。 */
+/** Subscription → feed 节点。sortKey 由调用方算 (追加键)。删除标记 deletedAt 原样带过。 */
 export function subToFeedNode(sub: Subscription, sortKey: string): FeedNode {
   const content: FeedNode["content"] = {
     type: sub.type,
@@ -36,7 +36,7 @@ export function subToFeedNode(sub: Subscription, sortKey: string): FeedNode {
   return node
 }
 
-/** feed 节点 → Subscription (反投影)。wire id 由 content.type:key 重建 = 确定性 id, 供跨端同步合并。 */
+/** feed 节点 → Subscription (还原)。wire id 由 content.type:key 重建 = 确定性 id, 供跨端同步合并。 */
 export function feedNodeToSub(n: FeedNode): Subscription {
   const c = n.content
   const sub: Subscription = {

@@ -19,7 +19,7 @@ import { EmptyState } from "@/ui/empty-state"
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover"
 
 /**
- * 标准分类的展示顺序。**手工同步契约**: 此列表必须与 src-tauri/src/installed_apps.rs 的 `category_label`
+ * 标准分类的展示顺序。**手工同步约定**: 此列表必须与 src-tauri/src/installed_apps.rs 的 `category_label`
  * 输出标签集一致 —— 那边新增/改名一类, 这里须同步增改, 否则未识别标签会落入「其他」分组。
  */
 const STANDARD_CATEGORY_ORDER = [
@@ -548,7 +548,7 @@ function CategoryBar({
                   <Input
                     value={moreQuery}
                     onChange={(e) => setMoreQuery(e.target.value)}
-                    placeholder="搜索扩展分类…"
+                    placeholder="搜索更多分类…"
                     className="h-8 border-border/60 bg-background pl-8 text-xs"
                   />
                 </div>
@@ -583,7 +583,7 @@ function CategoryBar({
       </div>
       {customActive && (
         <p className="text-xs text-muted-foreground">
-          已选扩展分类：<span className="font-medium text-foreground">{category}</span>
+          已选更多分类：<span className="font-medium text-foreground">{category}</span>
           <button
             type="button"
             className="ml-2 text-primary hover:underline"

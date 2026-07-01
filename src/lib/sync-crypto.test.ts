@@ -1,5 +1,5 @@
 // 跨端同步密码学纯函数测试 (Node 内建 WebCrypto, 零浏览器/jsdom)。
-// 钉死端到端加密的关键契约: 派生确定性 + 归一化 + 加解密往返。
+// 锁定端到端加密的关键接口约定: 派生确定性 + 规范化 + 加解密往返。
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
@@ -19,12 +19,12 @@ test("isValidSyncCode: 32 hex 合法, 短码非法, 生成码合法", () => {
   assert.equal(isValidSyncCode(generateSyncCode()), true) // 生成码含 - 也合法
 })
 
-test("deriveKeys: 同码(含分隔符/大小写归一)派生同 storageId, 长度 32 hex", async () => {
+test("deriveKeys: 同码(含分隔符/大小写规范化)派生同 storageId, 长度 32 hex", async () => {
   const a = await deriveKeys(CODE)
   const withDashes = await deriveKeys("12345678-90abcdef-12345678-90abcdef")
   const upper = await deriveKeys(CODE.toUpperCase())
   assert.equal(a.storageId.length, 32) // 128 bit → 32 hex
-  assert.equal(withDashes.storageId, a.storageId) // 归一化确定性
+  assert.equal(withDashes.storageId, a.storageId) // 规范化确定性
   assert.equal(upper.storageId, a.storageId)
   // 不同码派生不同 storageId
   const other = await deriveKeys("ffffffffffffffffffffffffffffffff")

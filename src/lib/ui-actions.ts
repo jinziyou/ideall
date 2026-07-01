@@ -1,4 +1,4 @@
-// UI 动作端口 (ui.*) —— 让消费方 (如 agent 插件经 MCP) 把节点物化为工作区标签, 而不直接依赖 app 层。
+// UI 动作端口 (ui.*) —— 让消费方 (如 agent 插件经 MCP) 把节点打开为工作区标签, 而不直接依赖 app 层。
 // app (workspace) 在启动时注册实现; 插件经 getUiActions() 调用 (与 FilesPort 同范式, 守 components↛app 边界)。
 import type { NodeKind } from "@protocol/node"
 
@@ -14,9 +14,9 @@ export interface UiActions {
   openAiSettings?: () => void
   /** 打开 AI 区段管理标签 (MCP / Skills / 规则)。 */
   openAiSection?: (kind: "ai-mcp" | "ai-skills" | "ai-rules") => void
-  /** 打开某工作空间的任务标签。 */
+  /** 打开某工作区的任务标签。 */
   openAiTasks?: (workspaceId: string, title: string) => void
-  /** 关闭某工作空间的任务标签。 */
+  /** 关闭某工作区的任务标签。 */
   closeAiTasks?: (workspaceId: string) => void
 }
 

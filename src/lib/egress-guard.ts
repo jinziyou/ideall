@@ -2,7 +2,7 @@
 // (assertEgressAllowed / isBlocked* / guardedFetch) 可被 egress-guard.test.ts 隔离覆盖。所有 agent 出站经此单一收口。
 //
 // ── 安全姿态 (见 .github/SECURITY.md) ───────────────────────────────────────────────────────────────
-// agent 的网络出站 = 真实攻击面: SSRF (环回/内网/云元数据)、经构造 URL 把本机元数据外泄、抓取的 HTML 回灌进
+// agent 的网络出站 = 真实攻击面: SSRF (环回/内网/云元数据)、经构造 URL 把本机元数据外泄、抓取的 HTML 回填进
 // 模型循环造成间接提示注入。所有出站经单一收口 guardedFetch + transportFetch 强制, 分两层:
 //   ① JS 层 (两态通用, assertEgressAllowed): 仅 https (连明文 http 都拒)、拒带 userinfo、端口仅 443; 解析 IP 字面量拦
 //      环回/私网/link-local(含 169.254.169.254 元数据)/ULA/CGNAT/广播 (IPv6 按字节解, 含 ::ffff: 映射); 名字面拦
@@ -117,7 +117,7 @@ export function isBlockedHostname(host: string): boolean {
   return false
 }
 
-/** 出站 URL 必过的策略闸; 通过则回规范化 URL, 否则抛 WebError(-32602)。 */
+/** 出站 URL 必过的安全校验; 通过则回规范化 URL, 否则抛 WebError(-32602)。 */
 export function assertEgressAllowed(rawUrl: string): URL {
   let u: URL
   try {

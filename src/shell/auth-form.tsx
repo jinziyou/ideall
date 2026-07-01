@@ -12,8 +12,8 @@ import { fetchMe, getServerPublicKey, login, register } from "@protocol/auth"
 import { setSession } from "@protocol/auth"
 
 /**
- * 登录 / 注册表单。密码在浏览器用 X25519 + XChaCha20-Poly1305 加密后才上送 (复刻 server orion 方案),
- * 上送的只有密文 (浏览器直连后端)。成功后存会话并回「我的」。
+ * 登录 / 注册表单。密码在浏览器用 X25519 + XChaCha20-Poly1305 加密后才上传 (复刻 server orion 方案),
+ * 上传的只有密文 (浏览器直连后端)。成功后存会话并回「我的」。
  */
 export default function AuthForm() {
   const router = useRouter()

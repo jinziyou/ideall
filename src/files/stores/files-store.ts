@@ -1,8 +1,8 @@
 // 文件本地存储仓库 —— 折叠步 B 后物理统一到 nodes 仓库 (kind:"file") + Blob 旁存独立 blobs 仓库。
-// 对外仍以 StoredFile / FileMeta 域类型呈现 (节点↔域类型投影在本仓库边界), 消费方零改:
+// 对外仍以 StoredFile / FileMeta 域类型呈现 (节点↔域类型映射在本仓库边界), 消费方零改:
 //   - 文件节点: name→title, type/size→blobRef, 二进制拆到 blobs (blobRef.key = 文件 id), 不进同步;
-//   - 删除走软删墓碑 (deletedAt) + 物理删 Blob (墓碑只留轻量节点, 大二进制不随墓碑常驻);
-//     撤销 = 节点复活 + 从快照重放 Blob (restoreFile 入参 StoredFile 含 blob)。
+//   - 删除走软删标记 (deletedAt) + 物理删 Blob (删除标记只留轻量节点, 大二进制不随删除标记常驻);
+//     撤销 = 节点恢复 + 从快照重放 Blob (restoreFile 入参 StoredFile 含 blob)。
 // 本切片不开同步; sortKey/updatedAt 已补齐。Blob 大文件 E2E 同步属远期独立通道。
 import { FileMeta, StoredFile } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
@@ -23,7 +23,7 @@ import { notifyFilesUpdated } from "@/files/flowback"
 type FileNode = NodeOfKind<"file">
 type BlobRecord = { key: string; blob: Blob }
 
-// ---- 节点 ↔ 域类型投影 ----
+// ---- 节点 ↔ 域类型映射 ----
 
 function nodeToMeta(n: FileNode): FileMeta {
   return {
@@ -43,7 +43,7 @@ async function allFileNodes(): Promise<FileNode[]> {
   return all.filter((n): n is FileNode => n.kind === "file")
 }
 
-/** 同级最大 sortKey (含墓碑)。 */
+/** 同级最大 sortKey (含删除标记)。 */
 function maxKey(nodes: { sortKey: string }[]): string | null {
   const keys = nodes
     .map((n) => n.sortKey)
@@ -69,12 +69,12 @@ export async function listFiles(): Promise<FileMeta[]> {
   return files.sort((a, b) => b.createdAt - a.createdAt)
 }
 
-/** 活跃文件数 (过滤墓碑) —— 数量徽标用。 */
+/** 活跃文件数 (过滤删除标记) —— 数量徽标用。 */
 export async function countFiles(): Promise<number> {
   return (await allFileNodes()).filter(isLive).length
 }
 
-/** 读取单个完整文件 (含 Blob); 墓碑 / 非文件 kind / Blob 缺失视为不存在。 */
+/** 读取单个完整文件 (含 Blob); 删除标记 / 非文件 kind / Blob 缺失视为不存在。 */
 export async function getFile(id: string): Promise<StoredFile | undefined> {
   const node = await idbGet<FileNode>(STORE_NODES, id)
   if (!node || node.kind !== "file" || !isLive(node)) return undefined
@@ -124,7 +124,7 @@ export async function updateFileMeta(
   id: string,
   patch: Partial<Pick<StoredFile, "name" | "tags">>,
 ): Promise<void> {
-  // 单事务读-改-写; kind 守卫防误改其它 kind 节点。name→title 投影。
+  // 单事务读-改-写; kind 守卫防误改其它 kind 节点。name→title 映射。
   await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) => {
     if (!current || current.kind !== "file") return undefined
     const next: FileNode = { ...current, updatedAt: Date.now() }
@@ -136,10 +136,10 @@ export async function updateFileMeta(
   notifyFilesUpdated()
 }
 
-/** 删除文件 (软删墓碑 + 物理删 Blob; 撤销靠 restoreFile 从快照重放)。 */
+/** 删除文件 (软删标记 + 物理删 Blob; 撤销靠 restoreFile 从快照重放)。 */
 export async function deleteFile(id: string): Promise<void> {
   const now = Date.now()
-  // 先墓碑节点 (隐藏该文件), 再删大 Blob (墓碑只留轻量节点)。
+  // 先给节点打删除标记 (隐藏该文件), 再删大 Blob (删除标记只留轻量节点)。
   const tomb = await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) =>
     current && current.kind === "file" ? { ...current, deletedAt: now, updatedAt: now } : undefined,
   )
@@ -147,11 +147,11 @@ export async function deleteFile(id: string): Promise<void> {
   notifyFilesUpdated()
 }
 
-/** 撤销删除: 把刚删除的文件 (含 Blob) 复活 (重放 Blob + 节点清墓碑, 保留 id/createdAt)。 */
+/** 撤销删除: 把刚删除的文件 (含 Blob) 恢复 (重放 Blob + 节点清删除标记, 保留 id/createdAt)。 */
 export async function restoreFile(file: StoredFile): Promise<void> {
   const now = Date.now()
   const existing = await allFileNodes()
-  // 软删后墓碑节点仍在 → 复用其 sortKey/parentId 复活; 极端兜底 (节点不存在) 用追加键重建。
+  // 软删后删除标记节点仍在 → 复用其 sortKey/parentId 恢复; 极端兜底 (节点不存在) 用追加键重建。
   const tomb = existing.find((n) => n.id === file.id)
   const revived: FileNode = {
     id: file.id,

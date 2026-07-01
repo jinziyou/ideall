@@ -106,7 +106,7 @@ export function LocalDeviceStatus({ inPopover = false }: { inPopover?: boolean }
 }
 
 /**
- * 本地·此设备 所有权药丸 + 系统状态面板 (点开)。
+ * 本地·此设备 归属标签 + 系统状态面板 (点开)。
  */
 export default function LocalDeviceChip({ compact = false }: { compact?: boolean }) {
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, getServerSnapshot)

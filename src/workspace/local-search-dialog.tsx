@@ -2,7 +2,7 @@
 
 // 顶栏「本地搜索」: 在本机数据 (笔记 / 关注 / 书签 / 资源) 中按标题检索。
 // 选中: 笔记/资源/关注 → 打开对应模块标签; 书签 → 直接打开其网址。
-// 条目加载/构建复用 local-search-items (与 ⌘K 命令台同一真相源)。
+// 条目加载/构建复用 local-search-items (与 ⌘K 命令面板同一数据来源)。
 
 import * as React from "react"
 import {

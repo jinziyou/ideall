@@ -116,7 +116,7 @@ export default function NotesSidebarTree({ depth = 1 }: { depth?: number }) {
   }, [])
 
   // 选中 = 预览 (transient, 与其它侧栏行一致: 浏览多篇笔记复用单一预览槽, 不堆常驻标签);
-  // 钉为常驻经标签条双击 (PageTree 行暂无双击钩子)。新建子页则常驻打开 (创建即「我要留下它」)。
+  // 固定为常驻经标签条双击 (PageTree 行暂无双击钩子)。新建子页则常驻打开 (创建即「我要留下它」)。
   const handleSelect = React.useCallback(
     (id: string) => {
       const note = notes.find((n) => n.id === id)

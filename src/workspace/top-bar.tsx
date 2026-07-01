@@ -1,7 +1,7 @@
 "use client"
 
 // 桌面顶边栏 (现代面板式标签工作区, Tauri 下兼作标题栏): 左 = logo + 本地/连接模式切换; 中 = 本地搜索;
-// 右 = 命令台 + 布局开关 + 设置 + 账户 + (Tauri) 窗控。data-tauri-drag-region 让空白处可拖动窗口
+// 右 = 命令面板 + 布局开关 + 设置 + 账户 + (Tauri) 窗控。data-tauri-drag-region 让空白处可拖动窗口
 // (交互子元素不触发拖动); 窗控并入此栏后删去了独立的满宽标题栏。
 import Link from "next/link"
 import { Command } from "lucide-react"
@@ -32,8 +32,8 @@ export default function TopBar() {
       {/* self-stretch: 撑满 header 全高 (44px), 使窗控贴到右上角 (甩到角落即可关闭) 而非缩成内容高。 */}
       <div className="flex shrink-0 items-stretch gap-1 self-stretch">
         <div className="flex items-center gap-1">
-          {/* 命令台可见入口 (⌘K 全局可用; 此处补回从状态栏移除的可见分区)。 */}
-          <IconButton aria-label="命令台 ⌘K" title="命令台 ⌘K" onClick={openCommandPalette}>
+          {/* 命令面板可见入口 (⌘K 全局可用; 此处补回从状态栏移除的可见分区)。 */}
+          <IconButton aria-label="命令面板 ⌘K" title="命令面板 ⌘K" onClick={openCommandPalette}>
             <Command className="h-[1.05rem] w-[1.05rem]" />
           </IconButton>
           <LayoutToggles />

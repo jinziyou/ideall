@@ -40,7 +40,7 @@ export function ConnectedApps() {
                   onClick={() => revokeConnection(c.id)}
                 >
                   <Unplug className="mr-1 h-3.5 w-3.5" />
-                  断开
+                  撤销授权
                 </Button>
               </div>
               {c.permissions.length > 0 && (

@@ -1,8 +1,8 @@
 // 「发现」关注本地存储仓库 —— 折叠步 C 后物理统一到 nodes 仓库 (kind:"feed", 确定性 id feed:type:key)。
-// 对外仍以 Subscription 域类型呈现 (节点↔Subscription 投影在本仓库边界), 消费方零改;
+// 对外仍以 Subscription 域类型呈现 (节点↔Subscription 映射在本仓库边界), 消费方零改;
 // **同步零改**: subscription-sync 仍走 "subs" scope, 经 listAllSubscriptions/bulkPutSubscriptions 读写,
-// 本仓库把 feed 节点投影回旧 Subscription wire (id 由 content.type:key 重建 = 旧确定性 id, 跨端 LWW 一致)。
-// 删除走软删墓碑 (deletedAt), 含墓碑全量参与同步合并 (漏带 = 已删关注被对端复活)。
+// 本仓库把 feed 节点映射回旧 Subscription wire (id 由 content.type:key 重建 = 旧确定性 id, 跨端 LWW 一致)。
+// 删除走软删标记 (deletedAt), 含删除标记全量参与同步合并 (漏带 = 已删关注被对端恢复)。
 import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
@@ -36,7 +36,7 @@ async function allFeedNodes(): Promise<FeedNode[]> {
   return all.filter((n): n is FeedNode => n.kind === "feed")
 }
 
-/** 同级最大 sortKey (含墓碑)。 */
+/** 同级最大 sortKey (含删除标记)。 */
 function maxKey(nodes: { sortKey: string }[]): string | null {
   const keys = nodes
     .map((n) => n.sortKey)
@@ -54,9 +54,9 @@ function nextKey(after: string | null): string {
   }
 }
 
-// ---- 读 (投影 feed 节点 → Subscription) ----
+// ---- 读 (映射 feed 节点 → Subscription) ----
 
-/** 列出活跃关注 (过滤墓碑)。UI / 插件 / 嵌入桥读路径。 */
+/** 列出活跃关注 (过滤删除标记)。UI / 插件 / 嵌入桥读路径。 */
 export async function listSubscriptions(): Promise<Subscription[]> {
   return (await allFeedNodes())
     .filter(isLive)
@@ -71,17 +71,17 @@ export async function listSubscriptionsByTypes(types: SubscriptionType[]): Promi
   return (await listSubscriptions()).filter((s) => want.has(s.type))
 }
 
-/** 列出全部关注含墓碑 —— 仅跨端同步合并用 (墓碑需进合并/上传才能传播删除)。 */
+/** 列出全部关注含删除标记 —— 仅跨端同步合并用 (删除标记需进合并/上传才能传播删除)。 */
 export async function listAllSubscriptions(): Promise<Subscription[]> {
   return (await allFeedNodes()).map(feedNodeToSub)
 }
 
 export async function isSubscribed(type: SubscriptionType, key: string): Promise<boolean> {
   const n = await idbGet<FeedNode>(STORE_NODES, feedNodeId(type, key.trim()))
-  return Boolean(n && n.kind === "feed" && isLive(n)) // 墓碑 / 非 feed 视为未关注
+  return Boolean(n && n.kind === "feed" && isLive(n)) // 删除标记 / 非 feed 视为未关注
 }
 
-/** 读取单条关注 (投影); 墓碑 / 非 feed kind 视为不存在。供关注查看器自取数 (按 feed 节点 id)。 */
+/** 读取单条关注 (映射); 删除标记 / 非 feed kind 视为不存在。供关注查看器自取数 (按 feed 节点 id)。 */
 export async function getSubscription(id: string): Promise<Subscription | undefined> {
   const n = await idbGet<FeedNode>(STORE_NODES, id)
   if (!n || n.kind !== "feed" || !isLive(n)) return undefined
@@ -90,13 +90,13 @@ export async function getSubscription(id: string): Promise<Subscription | undefi
 
 // ---- 写 ----
 
-/** 关注; 活跃项已存在则原样返回 (幂等); 命中墓碑则复活 (清除 deletedAt + 新 updatedAt, 保留原 createdAt)。 */
+/** 关注; 活跃项已存在则原样返回 (幂等); 命中删除标记则恢复 (清除 deletedAt + 新 updatedAt, 保留原 createdAt)。 */
 export async function addSubscription(input: NewSubscription): Promise<Subscription> {
   const key = input.key.trim()
   const id = feedNodeId(input.type, key)
   const existing = await idbGet<FeedNode>(STORE_NODES, id)
   if (existing && existing.kind === "feed" && isLive(existing)) return feedNodeToSub(existing) // 活跃 → 幂等
-  // tool 关注的 key 即启动 URL, 会渲染成 <a href>; 全写入路径 (嵌入桥 / agent / 手动) 的最后一道闸:
+  // tool 关注的 key 即启动 URL, 会渲染成 <a href>; 全写入路径 (嵌入桥 / agent / 手动) 的最后一道安全校验:
   // 拒非 http(s) 协议, 防伪协议 (javascript:/data:) 入库后被点击触发存储型 XSS。
   if (input.type === "tool" && !safeHref(key)) {
     throw new Error("工具链接必须是 http(s) 地址")
@@ -119,11 +119,11 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
     ...(input.type === "search"
       ? { searchKeyword: input.searchKeyword, searchDomain: input.searchDomain }
       : {}),
-    // 复活墓碑时保留原 createdAt (概念上同一关注又回来了); 全新关注则取 now。
+    // 恢复被软删的记录时保留原 createdAt (概念上同一关注又回来了); 全新关注则取 now。
     createdAt: existing?.createdAt ?? Date.now(),
-    updatedAt: Date.now(), // 新 updatedAt 保证 LWW 胜过墓碑 (复活) / 旧远端项
+    updatedAt: Date.now(), // 新 updatedAt 保证 LWW 胜过删除标记 (恢复) / 旧远端项
   }
-  // sub 无 deletedAt → subToFeedNode 不写墓碑位 = 复活; 复用墓碑 sortKey, 全新则追加。
+  // sub 无 deletedAt → subToFeedNode 不写删除标记位 = 恢复; 复用删除标记 sortKey, 全新则追加。
   const node = subToFeedNode(sub, existing?.sortKey || nextKey(maxKey(await allFeedNodes())))
   await idbPut(STORE_NODES, node)
   notifyFilesUpdated()
@@ -131,24 +131,24 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
 }
 
 /**
- * 取消关注 —— 软删除: 写墓碑 (deletedAt) 而非物理删, 并 bump updatedAt 使其按 LWW 胜过对端旧副本,
- * 从而让删除跨端收敛。未关注 / 已是墓碑则幂等无操作。
+ * 取消关注 —— 软删除: 写删除标记 (deletedAt) 而非物理删, 并 bump updatedAt 使其按 LWW 胜过对端旧副本,
+ * 从而让删除跨端收敛。未关注 / 已是删除标记则幂等无操作。
  */
 export async function removeSubscription(type: SubscriptionType, key: string): Promise<void> {
   const id = feedNodeId(type, key.trim())
   const existing = await idbGet<FeedNode>(STORE_NODES, id)
-  if (!existing || existing.kind !== "feed" || !isLive(existing)) return // 未关注 / 已墓碑 → 幂等
+  if (!existing || existing.kind !== "feed" || !isLive(existing)) return // 未关注 / 已删除标记 → 幂等
   const now = Date.now()
   await idbPut(STORE_NODES, { ...existing, deletedAt: now, updatedAt: now })
   notifyFilesUpdated()
 }
 
 /**
- * 跨端同步落地 (sync 插件经 FilesPort 调用): subs 是合并 + GC 后的权威全集 (含未过期墓碑, wire id=type:key)。
- * 投影回 feed 节点整批 put; 并物理删除「落地时刻 nodes 库中仍残留的过期 feed 墓碑」(据当前真实库, 仅限 feed kind)。
+ * 跨端同步落地 (sync 插件经 FilesPort 调用): subs 是合并 + GC 后的完整数据 (含未过期删除标记, wire id=type:key)。
+ * 映射回 feed 节点整批 put; 并物理删除「落地时刻 nodes 库中仍残留的过期 feed 删除标记」(据当前真实库, 仅限 feed kind)。
  */
 export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> {
-  const existing = await allFeedNodes() // feed 作用域: 过期墓碑 GC 绝不波及其它 kind 节点
+  const existing = await allFeedNodes() // feed 作用域: 过期删除标记 GC 绝不波及其它 kind 节点
   const keyById = new Map(existing.map((n) => [n.id, n.sortKey]))
   let lastKey = maxKey(existing)
   const nodes = subs.map((sub) => {
@@ -162,7 +162,7 @@ export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> 
   })
   const expired = expiredTombstoneIdsToDelete(existing, new Set(nodes.map((n) => n.id)), Date.now())
   if (nodes.length || expired.length) {
-    // 写回合并全集 + 物理删过期墓碑同事务原子 (避免「已写回但墓碑未清」中间态)。
+    // 写回合并后的完整数据 + 物理删过期删除标记同事务原子 (避免「已写回但删除标记未清」中间态)。
     await idbBulkPutDelete(STORE_NODES, nodes, expired)
     notifyFilesUpdated()
   }

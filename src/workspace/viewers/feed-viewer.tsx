@@ -112,7 +112,7 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
         <ul className="flex flex-col gap-3">
           {items.map((it) => (
             <li key={it.key} className="flex flex-col gap-0.5 border-b pb-3 last:border-0">
-              {/* it.url 来自他人 peer 发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
+              {/* it.url 来自其他社区用户发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
               {safeHref(it.url) ? (
                 <a
                   href={safeHref(it.url)}

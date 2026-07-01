@@ -1,5 +1,5 @@
 // 节点逻辑寻址层 (一切皆文件): 定义「如何指向一个节点」, 不涉存储。
-// 类型与运行期守卫归一到 @protocol/node (单一真相, 与数据层/AI 层共用); 此处只补 UI 深链编解码。
+// 类型与运行期守卫统一到 @protocol/node (唯一数据来源, 与数据层/AI 层共用); 此处只补 UI 深链编解码。
 // 深链查询编解码 (refToQuery/parseNodeQuery) 随 workspace-shell 的 pathname+search 守护一起用。
 import { isNodeKind, type NodeKind, type NodeRef } from "@protocol/node"
 

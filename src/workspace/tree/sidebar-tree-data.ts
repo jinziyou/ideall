@@ -116,7 +116,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
       },
       {
         id: "section:workspaces",
-        label: "工作空间",
+        label: "工作区",
         icon: Boxes,
         nodeKind: "section",
         hasChildren: true,
@@ -173,7 +173,7 @@ export function browserTreeRoots(): SidebarTreeNode[] {
   return [
     {
       id: "section:bookmarks",
-      label: "收藏",
+      label: "书签",
       icon: Bookmark,
       nodeKind: "section",
       childKinds: ["folder", "bookmark"],

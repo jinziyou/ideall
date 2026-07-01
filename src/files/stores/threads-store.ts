@@ -1,7 +1,7 @@
 // 对话线程本地存储仓库 (core 拥有) —— 折叠步 D 后物理统一到 nodes 仓库 (kind:"thread")。
 // 经 FilesPort 暴露给 agent 插件 (修依赖反转破例: 线程数据归 core, 插件作消费方, 不直接碰存储)。
 // 消息语义属 agent 插件域, 本仓库以 unknown[] 透传 (同 NoteContent 不依赖编辑器实现)。
-// 本地独占: 默认不跨端同步 (无 thread sync scope), 删除走硬删 (无需墓碑传播)。
+// 本地独占: 默认不跨端同步 (无 thread sync scope), 删除走硬删 (无需删除标记传播)。
 import type { Thread } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
@@ -11,7 +11,7 @@ import { idbDelete, idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES }
 
 type ThreadNode = NodeOfKind<"thread">
 
-// ---- 节点 ↔ 域类型投影 ----
+// ---- 节点 ↔ 域类型映射 ----
 
 function nodeToThread(n: ThreadNode): Thread {
   return {
@@ -108,7 +108,7 @@ export async function saveThread(thread: Thread): Promise<void> {
   await idbPut(STORE_NODES, threadToNode({ ...thread, updatedAt: Date.now() }, sortKey))
 }
 
-/** 物理删除 (线程本地独占, 无需墓碑传播); kind 守卫确保只删 thread 节点 (与其它 kind 作用域操作一致)。 */
+/** 物理删除 (线程本地独占, 无需删除标记传播); kind 守卫确保只删 thread 节点 (与其它 kind 作用域操作一致)。 */
 export async function deleteThread(id: string): Promise<void> {
   const n = await idbGet<ThreadNode>(STORE_NODES, id)
   if (n && n.kind === "thread") await idbDelete(STORE_NODES, id)

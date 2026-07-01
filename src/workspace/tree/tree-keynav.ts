@@ -1,5 +1,5 @@
 // 文件树 (role=tree) 的方向键导航 —— 跨所有行组件 (TreeRow / NodeTreeBranch / PageTreeRow /
-// SubscriptionRow / 工作空间行) 共用。DOM 顺序即可视树顺序 (折叠的子项不渲染), 故按 DOM 顺序移动焦点。
+// SubscriptionRow / 工作区行) 共用。DOM 顺序即可视树顺序 (折叠的子项不渲染), 故按 DOM 顺序移动焦点。
 // 展开/折叠 (←/→ 命中容器时) 由各行自管 (它知道自己的 onToggle/isOpen); 此处只管「纯焦点移动」。
 import type * as React from "react"
 

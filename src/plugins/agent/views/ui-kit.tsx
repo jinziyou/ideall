@@ -1,7 +1,7 @@
 "use client"
 
-// AI 重设计共享视觉套件 (现代 · 面板 · 留白) —— MCP / Skills / 规则 / 工作空间 / 全局设置 复用同一套原语,
-// 使异质概念读作同一系统。视觉契约 (源于 Geist/Linear/Stripe/shadcn 调研):
+// AI 重设计共享视觉套件 (现代 · 面板 · 留白) —— MCP / Skills / 规则 / 工作空间 / 全局设置 复用同一套基础组件,
+// 使异质概念读作同一系统。视觉约定 (源于 Geist/Linear/Stripe/shadcn 调研):
 //   间距 3 档: gap-2(组内) / gap-4(行间) / space-y-8(区段间);
 //   border-first 几无阴影 (卡片 rounded-lg border bg-card; shadow 仅留弹层);
 //   内容列 max-w-2xl/3xl mx-auto (留白=现代感); 半径阶梯 controls=rounded-md / cards=rounded-lg (便当 --radius, 全站统一);

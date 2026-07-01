@@ -66,7 +66,7 @@ export default function SyncPanel() {
   function disable() {
     clearSyncCode()
     setReveal(false)
-    toast.success("已关闭同步，服务器密文仍保留")
+    toast.success("已关闭同步，云端加密备份仍保留")
   }
 
   function copyCode() {

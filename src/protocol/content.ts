@@ -1,14 +1,14 @@
-// 关注内容解析契约 —— 「我的」关注流要为「任意关注类型」渲染最新条目, 但不应直接依赖某个 app。
+// 关注内容解析接口约定 —— 「我的」关注流要为「任意关注类型」渲染最新条目, 但不应直接依赖某个 app。
 // 各 app 为自己拥有的关注类型注册一个 resolver; 「我的」按 sub.type 派发 (依赖反转)。
 import type { Subscription, SubscriptionType } from "./subscription"
 
-/** 归一化的关注流条目 (info 文章 / peer 发布共用一种渲染)。 */
+/** 规范化的关注流条目 (info 文章 / peer 发布共用一种渲染)。 */
 export type FeedItem = { key: string; title: string; url?: string; body?: string; time: number }
 
 /** 解析时的口径参数 (每源条数 / 搜索本地过滤窗口)。 */
 export type ResolveCtx = { perSource: number; searchWindow: number }
 
-/** 某关注类型的内容解析器: 给一条关注, 返回归一化条目 (失败置 error)。 */
+/** 某关注类型的内容解析器: 给一条关注, 返回规范化条目 (失败置 error)。 */
 export type ContentResolver = (
   sub: Subscription,
   ctx: ResolveCtx,

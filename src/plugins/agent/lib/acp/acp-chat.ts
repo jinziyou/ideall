@@ -51,7 +51,7 @@ const STATUS_LABEL: Record<ToolCallStatus, string> = {
   failed: "失败",
 }
 
-/** 把一轮累积的工具调用投影为 ChatMessage 可渲染的工具事件。 */
+/** 把一轮累积的工具调用映射为 ChatMessage 可渲染的工具事件。 */
 export function turnToolEvents(turn: AcpTurnState): AgentToolEvent[] {
   return turn.tools.map((t) => ({
     name: t.title,

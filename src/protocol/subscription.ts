@@ -1,4 +1,4 @@
-// 关注契约 —— 跨 app/core/plugin 的「发现来源关注」类型与去重键约定。
+// 关注接口约定 —— 跨 app/core/plugin 的「发现来源关注」类型与去重键约定。
 // app 产生关注 (NewSubscription)，core 落地存储，plugin/core 读取。
 
 export type SubscriptionType = "publisher" | "entity" | "tool" | "search" | "peer"
@@ -26,9 +26,9 @@ export interface Subscription {
   /** 最后更新时间 (跨端 LWW 合并用)。 */
   updatedAt: number
   /**
-   * 软删除墓碑 (tombstone) 时间戳 epoch 毫秒; 缺省 = 活跃关注。
-   * 跨端同步用: 删除写墓碑而非物理删, 让「删除」按 LWW 跨端收敛 (否则另一端会把已删项带回 = 复活)。
-   * 读路径 (listSubscriptions/isSubscribed) 过滤墓碑; 过保留期后 GC 物理清除 (见 @protocol/sync)。
+   * 软删除标记 (tombstone) 时间戳 epoch 毫秒; 缺省 = 活跃关注。
+   * 跨端同步用: 删除写删除标记而非物理删, 让「删除」按 LWW 跨端收敛 (否则另一端会把已删项带回 = 恢复)。
+   * 读路径 (listSubscriptions/isSubscribed) 过滤删除标记; 过保留期后 GC 物理清除 (见 @protocol/sync)。
    */
   deletedAt?: number
 }

@@ -1,4 +1,4 @@
-// 「我的」写入事件契约已上移到 @protocol/flowback。
+// 「我的」写入事件的接口约定已上移到 @protocol/flowback。
 // 此处再导出以兼容现有 `./flowback` (lib 内 store) / `./lib/flowback` (home 页面) 引用。
 export {
   FILES_UPDATED,
