@@ -68,7 +68,7 @@ test("apiFetch: ok 但响应非 JSON → ok:false + 解析错误消息", async (
   setFetch(() => resp(200, "not json {"))
   const r = await apiFetch("/x")
   assert.equal(r.ok, false)
-  if (!r.ok) assert.match(r.message, /响应格式错误/)
+  if (!r.ok) assert.match(r.message, /数据加载失败/)
 })
 
 test("apiFetch: 成功 JSON → ok:true + data", async () => {
