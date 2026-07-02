@@ -139,11 +139,11 @@ export class MessagePortTransport implements Transport {
 }
 ```
 
-**Tauri 配套**（`src-tauri/tauri.conf.json`，CSP 已收紧到嵌入源）：
+**Tauri 配套**（`src-tauri/tauri.conf.json`，CSP 已收紧到嵌入源；下段为示意，**以 `tauri.conf.json` 现值为准**——2026-06 加固后已补 `script-src` / `font-src` / `connect-src 'self' tauri:` / `worker-src`，见 [SECURITY.md](../.github/SECURITY.md)）：
 
 ```jsonc
 "app": { "security": {
-  "csp": "default-src 'self' tauri: ; frame-src https://www.wonita.link https://wonita.link ; img-src * data: ; style-src 'self' 'unsafe-inline'"
+  "csp": "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri:; frame-src 'self' https://www.wonita.link https://wonita.link; worker-src 'self' blob:"
 }}
 ```
 

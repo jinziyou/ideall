@@ -4,6 +4,8 @@
 > 设计原则：**最大复用既有原语**（MCP 总线 / NodeKind+REGISTRY / Grant），**最小解冻**，**信任优先**。
 >
 > **本稿经三视角对抗式红队审查（安全/信任 · 同步/迁移/类型安全 · 可行性/自洽）修正。** 方向（复用既有原语、最小解冻、分期）经审查成立；但初稿把多处**尚未实现的净新机制**误述为「已有不变量」，并有数处对代码的事实性误判。下文已纠正，并在 §0 汇总红队结论，让「已成立 / 须新建 / 事实纠错」一目了然。
+>
+> **状态更新（2026-07）：两项「须新建」已落地** —— ① tier 门：`grant.ts` 已有 `TIER_RANK`/`tierAtLeast`/`PERMISSION_MIN_TIER`/`effectivePermissions`，`grant.tier` 已被强制读取执行（`local-mcp-server` 走 `effectivePermissions`，并有「低信任档剥 `web:*`」的测试锁定）；② kind 单源：`node.ts` 的 `NODE_KINDS` 已是唯一真相源，`tools.ts` zod enum 与 `nodes-store` 均从其派生。文中 `文件:行号` 锚点是红队审查时的快照、可能已漂移，以符号名为准。
 
 ## 0. 红队结论速览（先看这条）
 
@@ -12,12 +14,12 @@
 | 初稿断言 | 红队实证 | 纠正 |
 | --- | --- | --- |
 | ext 节点免费搭车现有 LWW，跨端不丢 | **不存在通用 Node 同步层**：`SyncScope = "subs"\|"notes"`（`sync-crypto.ts:13`），`sync/manifest.ts:14` 只同步 subs/notes；bookmark/file/folder/thread **今天就完全不同步** | ext 跨端是**净新工作量**，或显式声明 ext 本地-only（§4） |
-| `grant.tier ≥ spec.minTier` 按信任层挂载 | `GrantTier` 是无序字符串联合，全仓 `grant.tier` **从不被读取**；能力层只看 `permissions.includes` | minTier 是**净新门**，须建 `TIER_RANK` 偏序（§2.1） |
+| `grant.tier ≥ spec.minTier` 按信任层挂载 | `GrantTier` 是无序字符串联合，全仓 `grant.tier` **从不被读取**；能力层只看 `permissions.includes` | minTier 是**净新门**，须建 `TIER_RANK` 偏序（§2.1）**（✅ 已落地，见顶部状态更新）** |
 | 未知 extKind「默认剥离」 | `stripNode`（`node.ts:100`）是闭合 switch，ext 走 `return n` = **默认泄漏**；且**永不剥 meta/title/tags** | stripNode 对 ext **fail-closed** 剥 content+meta（§2.3） |
 | `ext:` 命名空间把三方爆炸面关进 ext | **进程内 handler 有 ambient authority**：可 `import getSession/getFilesPort` 单例直接取 token/全量节点，命名空间对进程内代码无隔离 | 三方代码**仅限进程外** external MCP；进程内能力仅一方（§2.1） |
 | 撤销/过期即时断 | `isGrantActive` 只在建 server 时判**一次**（`local-mcp-server.ts:25`），长连接撤销后工具仍可调 | 撤销须**主动 teardown** + 调用期 recheck（§3） |
 | 平面2a「只差 registerTab + 持久化」 | Tauri CSP `frame-src` 写死仅 wonita 四源、**烘焙进二进制**（`tauri.conf.json:26`），静态导出无运行时 CSP 下发 | 还需 CSP 运行时可注入/原生 webview 路径 + Manifest 信任链（§2.2） |
-| 闭合联合「只解冻一次加 ext」 | kind 真相源**不止一处**：`tools.ts:29` 另有 zod enum、`nodes-store.ts:42` 另有 ALL_NODE_KINDS、createNode switch 需 ext 臂 | 列「加 ext 联动清单」+ 从单一 `NODE_KINDS` 派生（§2.3） |
+| 闭合联合「只解冻一次加 ext」 | kind 真相源**不止一处**：`tools.ts:29` 另有 zod enum、`nodes-store.ts:42` 另有 ALL_NODE_KINDS、createNode switch 需 ext 臂 | 列「加 ext 联动清单」+ 从单一 `NODE_KINDS` 派生（§2.3）**（✅ 单源派生已落地）** |
 
 **经审查仍成立（design holds）**：① core `PERMISSIONS` 闭合联合对一方仍「拼错即编译失败」（只要类型层分叉 core/ext）；② 「越权=工具不存在」最小权限默认；③ 每消费方独立 server+Grant 互不可见（隔离基座，`local-mcp-server.ts`）；④ `agentGrant` 不含 `fs.notes:read` 是真实最小权限默认（被破坏的是下游 stripNode/端口闸，非该集合）；⑤ `REGISTRY` 字符串键 + 优雅兜底；⑥ 平面3 端口后端已是 register/get；⑦ ext 作单一逃生舱 kind 方向合理（须认其真实联动成本）；⑧ 分期 P0→P3 排序合理。
 
@@ -58,7 +60,7 @@ type CapabilitySpec = {
 ```
 
 落地要点 / 红队修正：
-- **`createLocalMcpServer` 注册门 = 两条都过**：`permission ∈ grant.permissions` **且** `TIER_RANK[grant.tier] ≥ TIER_RANK[spec.minTier]`。`TIER_RANK = {first-party:2, verified:1, any-origin:0}` 是**净新偏序**（当前 `grant.tier` 全仓不被读取）。敏感 core 位 `fs.notes:read`/`identity.publish`/`fs:write` 的 `minTier` **钉死 first-party**，T2 即便在 `grant.permissions` 里携带也不挂载。
+- **`createLocalMcpServer` 注册门 = 两条都过**：`permission ∈ grant.permissions` **且** `TIER_RANK[grant.tier] ≥ TIER_RANK[spec.minTier]`。`TIER_RANK = {first-party:2, verified:1, any-origin:0}` 是**净新偏序**（红队审查时 `grant.tier` 全仓不被读取；✅ 现已落地于 `grant.ts`）。敏感 core 位 `fs.notes:read`/`identity.publish`/`fs:write` 的 `minTier` **钉死 first-party**，T2 即便在 `grant.permissions` 里携带也不挂载。
 - **句柄注入而非单例**：`handler(ctx)` 的 `ctx` 是按 Grant 收窄过的 `ScopedHostCtx`（如只读、已 stripNode 的 FilesPort 视图），杜绝 handler 经 ambient 单例越过 `fs.notes:read` 闸门拿正文（红队证实 `getFilesPort().getNodeRaw` 返回完整 content，绕过 `tools.ts:174` 唯一的手写闸）。**正文净化须下沉到端口**：FilesPort 暴露 `getNodePublic`（已 stripNode）与 `getNodeRaw`（须显式 notes 能力），raw 不再是 ambient 依赖。
 - **`fs.*` 家族保持手写 handler**：红队证实「一 spec 一 permission」装不下 `fs.read` 按 kind 二次 gate notes、`fs:write` 按 kind 分流、ui.* 依赖 `ctx.openTab`(非 permission)、`host.toast` 无授权位。`CAP_REGISTRY` 主吃**纯 handler / 外部**能力；`fs.*`/ui.*/host.* 内置面继续手写，只是改用同一注册 API 录入。
 - **`mcp`（外部 server）** = 进程外 MCP **client** 出站连接（stdio/ws，**净新 transport**），把对端 `tools/list` 适配成命名空间化 `ExtCapability`（`ext.<serverId>.<tool>`），挂在一个**专属消费方身份 `ext:<serverId>` + 专属持久 T2 Grant** 下，`CAP_REGISTRY` 按命名空间过滤——确保 ext 能力**只对该 server 的 server 实例可见，不污染 agentGrant / iframe Grant**（守不变量3）。
@@ -97,7 +99,7 @@ type Permission     = CorePermission | ExtPermission
 3. `nodes-store.ts:42` `ALL_NODE_KINDS` + `createNode/updateNode/moveNode/deleteNode` 的 switch（`:185` default 抛「未知 kind」需 ext 臂）；
 4. `stripNode`（见下）；
 5. `KIND_VIEWER` / `resolveViewer`（见下）。
-→ **消除多源**：让 `tools.ts` 的 zod enum 与 `nodes-store` 的 ALL_NODE_KINDS **从单一 `NODE_KINDS` 派生**（`z.enum(NODE_KINDS as [...])`），加 exhaustiveness 守卫 + 漂移锁定测试。
+→ **消除多源**：让 `tools.ts` 的 zod enum 与 `nodes-store` 的 ALL_NODE_KINDS **从单一 `NODE_KINDS` 派生**（`z.enum(NODE_KINDS as [...])`），加 exhaustiveness 守卫 + 漂移锁定测试。**（✅ 已落地：`node.ts` `NODE_KINDS` 为唯一真相源，两处均已派生）**
 
 **`stripNode` 必须 fail-closed（红队 high）**：现状 `node.ts:100-104` 闭合 switch 仅剥 note/thread 的 content，ext 走 `return n` = **泄漏**；且**永远透传 `meta`**（连 note 也只剥 content 不剥 meta）。修正：
 - ext 节点一律剥 **content + meta**，除非其 `extKind` 在**已加载注册表**中显式 `sensitive:false`；
