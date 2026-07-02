@@ -68,7 +68,7 @@ home（即「我的」）是本机数据区，apps（应用）是本机已安装
 | 模块 | 路由 | 角色 | 是否需后端 |
 | --- | --- | --- | --- |
 | **home（「我的」）** | `/home`（笔记 / 书签 / 资源 / 关注 / 对话；工作区标签页 + places 侧栏） | 「我的」：本机数据区，本地内容工作区，统一 Node 库 + 一切皆标签页 | 否（本地优先） |
-| **apps（应用）** | `/apps` | 本机已安装应用启动器：列举本机已装应用并一键启动（`src-tauri/src/installed_apps.rs` + `src/modules/apps/page.tsx` + `src/lib/installed-apps.ts`） | 否（**Tauri 桌面专属 / 本地模式**，零后端） |
+| **apps（应用）** | `/apps` | 本机已安装应用启动器：列举本机已装应用并一键启动（`src-tauri/src/installed_apps.rs` + `src/modules/apps/apps-page.tsx` + `src/lib/installed-apps.ts`） | 否（**Tauri 桌面专属 / 本地模式**，零后端） |
 | **info** | `/info`（含 search / entity / publisher / analysis） | 资讯聚合展示：信息流、实体与发布者、关联分析 | 是 |
 | **community** | `/community` | 发布者地图、关注与发布（peer 发布层） | 是 |
 | **tool** | `/tool`（含 search / ai / navigation） | 工具聚合（搜索 / AI / 导航） | 否（本地外链启动器，历史仅存本机） |
