@@ -60,7 +60,7 @@ jobs:
         run: BASE=http://localhost:5030 pnpm smoke:notes
       - name: 上传截图 (失败排查用)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: notes-smoke-screenshots
           path: /tmp/notes-smoke
