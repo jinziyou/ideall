@@ -35,6 +35,42 @@ jobs:
       - name: Build (static export)
         run: pnpm build
 
+  # 冒烟门: 真浏览器驱动笔记链路 (新建→输入→slash 菜单→自动保存→刷新持久化)。
+  # 挡「构建通过但页面白屏/水合失败」这类静态门看不见的回归。dev 服起在后台, 步骤间进程存活。
+  smoke:
+    name: smoke (notes e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+      - name: Start dev server
+        run: |
+          pnpm dev > /tmp/dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf --max-time 10 http://localhost:5020/home/notes > /dev/null && exit 0
+            sleep 2
+          done
+          echo "dev 服 120s 未就绪"; tail -50 /tmp/dev.log; exit 1
+      - name: Smoke (notes e2e)
+        run: pnpm smoke:notes
+      - name: 上传截图 (失败排查用)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notes-smoke-screenshots
+          path: /tmp/notes-smoke
+          if-no-files-found: ignore
+
   # Rust 门 (src-tauri): clippy 零警告 + 单元测试。此前 CI 不跑 Rust,
   # clippy 警告与挂掉的测试长期无人知晓 —— 此 job 锁住清零状态。
   rust:

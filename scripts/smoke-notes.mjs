@@ -30,14 +30,17 @@ page.on("console", (m) => {
 try {
   console.log(`\n▶ 冒烟目标: ${URL}\n`)
 
-  // 1. 加载页面 (客户端水合)
-  await page.goto(URL, { waitUntil: "networkidle", timeout: 30000 })
+  // 1. 加载页面并等水合完成。不用 networkidle —— dev 模式 HMR 长连接会让它永不 settle
+  //    而超时 (本地与 CI 同坑); 改等「新建」钮可见 = 客户端真正水合完。
+  await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 30000 })
+  const newBtn = page.getByRole("button", { name: "新建", exact: true }).first()
+  await newBtn.waitFor({ state: "visible", timeout: 60000 })
   await page.screenshot({ path: `${SHOT_DIR}/1-empty.png` })
   record("页面加载并水合 (无白屏)", true)
 
   // 2. 新建页面 → 编辑器挂载 (首次点击会触发 dev 下 Plate 懒加载块的按需编译, 故给足超时)
   //   exact:true 关键 —— 否则「新建」会子串命中空态的「新建页面」按钮。
-  await page.getByRole("button", { name: "新建", exact: true }).first().click({ timeout: 15000 })
+  await newBtn.click({ timeout: 15000 })
   const titleInput = page.getByPlaceholder("无标题")
   await titleInput.waitFor({ state: "visible", timeout: 60000 })
   record("点「新建」→ 编辑器挂载 (标题框出现)", true)
@@ -65,11 +68,15 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/2-editor-slash.png` })
   await page.keyboard.press("Escape")
 
-  // 6. 等自动保存落库 (去抖 600ms), 再刷新验证持久化
+  // 6. 等自动保存落库 (去抖 600ms), 再刷新验证持久化 (同上不用 networkidle, 显式等元素回显)
   await page.waitForTimeout(1200)
-  await page.reload({ waitUntil: "networkidle", timeout: 30000 })
-  await page.waitForTimeout(800)
-  const titlePersisted = (await page.getByText(TITLE, { exact: false }).count()) > 0
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 })
+  const titlePersisted = await page
+    .getByText(TITLE, { exact: false })
+    .first()
+    .waitFor({ state: "visible", timeout: 30000 })
+    .then(() => true)
+    .catch(() => false)
   record("刷新后标题持久化 (列表卡片可见)", titlePersisted)
   const bodyPersisted = (await page.getByText("Plate 块编辑器", { exact: false }).count()) > 0
   record("刷新后正文摘要持久化", bodyPersisted)
