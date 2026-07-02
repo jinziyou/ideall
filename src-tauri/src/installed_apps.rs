@@ -210,7 +210,7 @@ fn list_linux_apps() -> Result<Vec<InstalledApp>, String> {
         }
     }
     let mut apps: Vec<_> = by_id.into_values().collect();
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_by_key(|a| a.name.to_lowercase());
     Ok(apps)
 }
 
@@ -287,13 +287,14 @@ fn parse_desktop_file(path: &Path) -> Option<DesktopParsed> {
         return None;
     }
     let display_name = name_zh.or(name).or(generic_name)?;
-    if exec.as_ref().is_none_or(|e| e.trim().is_empty()) {
+    // map_or 而非 is_none_or: 后者 1.82 才稳定, 超出 Cargo.toml 声明的 MSRV 1.77.2。
+    if exec.as_ref().map_or(true, |e| e.trim().is_empty()) {
         return None;
     }
     let cats: Vec<String> = categories
         .split(';')
         .filter(|s| !s.is_empty())
-        .map(|s| category_label(s))
+        .map(category_label)
         .collect();
 
     Some(DesktopParsed {
@@ -692,8 +693,13 @@ mod icon_tests {
     use super::*;
 
     #[test]
-    fn resolves_kali_icon_and_reads_data_url() {
-        let path = resolve_linux_icon("kali-ssldump", None).expect("icon path");
+    fn resolves_icon_and_reads_data_url() {
+        // 环境探测型: 依赖本机图标主题, 逐个候选找一个真实存在的图标; 全都没有则跳过 (不算失败)。
+        let candidates = ["kali-ssldump", "firefox", "utilities-terminal", "folder"];
+        let Some(path) = candidates.iter().find_map(|id| resolve_linux_icon(id, None)) else {
+            eprintln!("skip: 本机无候选图标, 跳过图标读取链路测试");
+            return;
+        };
         assert!(path.exists());
         assert!(is_allowed_icon_path(&path));
         let url = read_app_icon_data_url(path.to_string_lossy().into_owned())

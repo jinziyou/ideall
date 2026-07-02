@@ -8,6 +8,7 @@ use wry::{PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtUnix};
 
 use crate::Bounds;
 
+#[derive(Default)]
 struct Inner {
     window_overlay: Option<gtk::Overlay>,
     overlay_fixed: Option<gtk::Fixed>,
@@ -15,25 +16,15 @@ struct Inner {
     overlay_ready: bool,
 }
 
-impl Default for Inner {
-    fn default() -> Self {
-        Self {
-            window_overlay: None,
-            overlay_fixed: None,
-            webview: None,
-            overlay_ready: false,
-        }
-    }
-}
 
 thread_local! {
     static BROWSER: RefCell<Inner> = RefCell::new(Inner::default());
-    static LAST_CONTENT: RefCell<Bounds> = RefCell::new(Bounds {
+    static LAST_CONTENT: RefCell<Bounds> = const { RefCell::new(Bounds {
         x: 0.0,
         y: 0.0,
         w: 0.0,
         h: 0.0,
-    });
+    }) };
 }
 
 fn with_browser<F, R>(f: F) -> R

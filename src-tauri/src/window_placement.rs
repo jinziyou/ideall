@@ -47,7 +47,7 @@ pub fn schedule_initial_placement(window: &WebviewWindow, conf: WindowConfig) {
             tauri::WindowEvent::Resized(size) => {
                 if target_monitor(&target)
                     .ok()
-                    .is_some_and(|m| resize_ready(&size, &event_conf, &m))
+                    .is_some_and(|m| resize_ready(size, &event_conf, &m))
                 {
                     try_place_window(&target, &event_conf, Some(&attempts));
                 }

@@ -93,7 +93,7 @@ async fn handle_callback_conn<S: AsyncReadExt + AsyncWriteExt + Unpin>(
     };
     let target = line.split_whitespace().nth(1).unwrap_or("");
     if target.starts_with("/callback") {
-        let query = target.splitn(2, '?').nth(1).unwrap_or("");
+        let query = target.split_once('?').map(|x| x.1).unwrap_or("");
         let code = query_param(query, "code");
         let state = query_param(query, "state");
         let _ = write_ok(stream).await;
@@ -133,7 +133,7 @@ async fn write_ok<S: AsyncWriteExt + Unpin>(stream: &mut S) -> std::io::Result<(
     let body = "<!doctype html><html><body style=\"font-family:sans-serif;padding:2rem\">授权成功，可关闭本页返回 ideall。</body></html>";
     let resp = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.as_bytes().len(),
+        body.len(),
         body
     );
     stream.write_all(resp.as_bytes()).await?;
