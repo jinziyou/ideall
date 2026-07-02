@@ -78,20 +78,28 @@ try {
     .waitFor({ state: "visible", timeout: 30000 })
     .then(() => true)
     .catch(() => false)
-  record("刷新后标题持久化 (列表卡片可见)", titlePersisted)
-  const bodyPersisted = (await page.getByText("Plate 块编辑器", { exact: false }).count()) > 0
-  record("刷新后正文摘要持久化", bodyPersisted)
+  record("刷新后标题持久化 (页树可见)", titlePersisted)
   await page.screenshot({ path: `${SHOT_DIR}/3-after-reload.png` })
 
-  // 7. 重新打开该笔记, 确认正文回显
+  // 7. 重新打开该笔记, 确认正文回显 —— 这是正文持久化的真正断言
+  // (页树只显示标题、无列表摘要, 正文只能在重开的编辑器里验; 渲染异步, 轮询等文本出现)。
   await page
     .getByText(TITLE, { exact: false })
     .first()
     .click({ timeout: 8000 })
     .catch(() => {})
-  await page.waitForTimeout(1000)
-  const reopened = (await page.locator('[data-slate-editor="true"]').count()) > 0
+  const editorBack = page.locator('[data-slate-editor="true"]').first()
+  const reopened = await editorBack
+    .waitFor({ state: "visible", timeout: 15000 })
+    .then(() => true)
+    .catch(() => false)
   record("重新打开笔记 → 编辑器回显", reopened)
+  let bodyPersisted = false
+  for (let i = 0; reopened && !bodyPersisted && i < 20; i++) {
+    bodyPersisted = (await editorBack.innerText()).includes("Plate 块编辑器")
+    if (!bodyPersisted) await page.waitForTimeout(250)
+  }
+  record("重开后正文持久化回显", bodyPersisted)
   await page.screenshot({ path: `${SHOT_DIR}/4-reopened.png` })
 
   record(
