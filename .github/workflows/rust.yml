@@ -18,7 +18,7 @@ jobs:
     name: clippy + cargo test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Linux WebKit deps
         run: |
           sudo apt-get update

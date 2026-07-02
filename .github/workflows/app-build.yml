@@ -36,7 +36,7 @@ jobs:
     outputs:
       build: ${{ steps.decide.outputs.build }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2
       # 发版前置卡点: app-v* tag 必须与三处版本号一致 —— tauri-action 按 tauri.conf.json 的 version
@@ -132,7 +132,7 @@ jobs:
           - { platform: windows-latest, label: windows-x64, args: "" }
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux WebKit deps
         if: matrix.platform == 'ubuntu-22.04'
@@ -177,7 +177,7 @@ jobs:
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.9
