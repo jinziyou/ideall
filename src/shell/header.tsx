@@ -2,13 +2,13 @@ import Link from "next/link"
 import { WonitaMark } from "@/shared/wonita-mark"
 import CommandTrigger from "@/shared/command-trigger"
 import MobileNav from "./mobile-nav"
-import TabsSheet from "./tabs-sheet"
 import WindowControls from "./window-controls"
 
 /**
- * 移动端顶栏 (md:hidden) —— 桌面端由左侧图标轨取代。已瘦身为 4+1 项:
- * 浏览抽屉 (汉堡 = 文件树 + 发现/系统 + 主题/账户, 见 mobile-nav) / logo / 搜索 (⌘K 统一面板) /
- * 标签切换 (TabsSheet) + (Tauri 窄窗) 窗控。移动端主导航走底部标签栏 (bottom-tab-bar.tsx)。
+ * 移动端顶栏 (md:hidden) —— 桌面端由左侧图标轨取代。已瘦身为 3+1 项:
+ * 浏览抽屉 (汉堡 = 文件树 + 发现/系统 + 主题/账户, 见 mobile-nav) / logo / 搜索 (⌘K 统一面板)
+ * + (Tauri 窄窗) 窗控。多标签切换器已移入底栏最右 (拇指区, 见 bottom-tab-bar);
+ * 移动端主导航走底部标签栏 (bottom-tab-bar.tsx)。
  * data-tauri-drag-region + WindowControls: 当 Tauri 窗口被收窄到 <md (此时本栏取代顶边栏) 仍保有窗口拖拽与窗控。
  */
 export function Header() {
@@ -23,7 +23,6 @@ export function Header() {
           <WonitaMark className="h-6 w-auto text-foreground" />
         </Link>
         <CommandTrigger className="ml-1 h-8 min-w-0 flex-1" />
-        <TabsSheet />
       </div>
       {/* Tauri 窄窗才显示 (非 Tauri 返回 null), 保证收窄时仍能最小化/关闭窗口。 */}
       <WindowControls />
