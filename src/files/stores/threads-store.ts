@@ -78,11 +78,6 @@ export async function getThread(id: string): Promise<Thread | undefined> {
   return nodeToThread(n)
 }
 
-/** 活跃线程数 —— 数量徽标用。 */
-export async function countThreads(): Promise<number> {
-  return (await allThreadNodes()).filter(isLive).length
-}
-
 // ---- 写 ----
 
 /** 新建空线程并落库。 */

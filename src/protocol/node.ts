@@ -82,9 +82,6 @@ export type FsWritePatch = {
   parentId?: string | null
 }
 
-/** 笔记节点 —— 折叠步 A 唯一物理入库的 kind。 */
-export type NoteNode = NodeOfKind<"note">
-
 /** 全部 NodeKind 的**唯一数据来源**。tools.ts 的 zod enum、nodes-store 的 ALL_NODE_KINDS 等一律从此派生, 杜绝多份手抄漂移。 */
 export const NODE_KINDS: readonly NodeKind[] = [
   "folder",

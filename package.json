@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.0.0",
-    "@antv/g6": "^5.1.1",
     "@ariakit/react": "^0.4.29",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@noble/ciphers": "^2.2.0",
@@ -53,7 +52,6 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toolbar": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.10",
-    "@tanstack/react-table": "^8.21.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-http": "^2",
     "@tauri-apps/plugin-opener": "^2",

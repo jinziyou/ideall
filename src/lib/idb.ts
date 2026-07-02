@@ -101,19 +101,6 @@ export async function idbDelete(storeName: string, key: IDBValidKey): Promise<vo
   await withStore(storeName, "readwrite", (store) => store.delete(key))
 }
 
-export async function idbBulkDelete(storeName: string, keys: IDBValidKey[]): Promise<void> {
-  if (!keys.length) return
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, "readwrite")
-    const store = tx.objectStore(storeName)
-    for (const k of keys) store.delete(k)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-    tx.onabort = () => reject(tx.error)
-  })
-}
-
 /**
  * 单事务读-改-写: 在同一个 readwrite 事务内 get(key) → mutate → put。
  * 取代「先 idbGet 读、再 idbPut 写」分处两个独立事务的写法 —— 后者在并发写 (如笔记正文自动保存

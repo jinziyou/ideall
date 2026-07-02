@@ -340,7 +340,7 @@ pub(crate) async fn acp_server_close(
 }
 
 // ── 外部智能体检测 (设置里"点选即用") ───────────────────────────────────────────────────────────
-// 无 dep, 纯文件系统: acp_which 在 PATH 上解析可执行文件; acp_echo_script_path 找内置 echo 测试脚本。
+// 无 dep, 纯文件系统: acp_which 在 PATH 上解析可执行文件; acp_script_path 定位仓库内置脚本 (如 echo 测试智能体)。
 
 fn is_executable(p: &std::path::Path) -> bool {
     if !p.is_file() {
