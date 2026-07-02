@@ -46,9 +46,9 @@ export function PinToolButton({
     if (pinned === null || busy) return
     setBusy(true)
     try {
-      const hub = getFilesPort()
+      const filesPort = getFilesPort()
       if (pinned) {
-        await hub.removeSubscription("tool", url)
+        await filesPort.removeSubscription("tool", url)
         setPinned(false)
         // 误点取消可一键撤销 (addSubscription 恢复被软删的记录: 清 deletedAt, 保留 createdAt)
         undoableToast(`已取消固定 ${name}`, () =>
@@ -57,7 +57,7 @@ export function PinToolButton({
             .then(() => setPinned(true)),
         )
       } else {
-        await hub.addSubscription({ type: "tool", key: url, title: name })
+        await filesPort.addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
         flowbackToast(`已固定 ${name}`, () => router.push("/home/subscriptions"))
         setPulse(true)

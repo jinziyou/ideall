@@ -47,9 +47,9 @@ export function SubscribeButton({
     if (subscribed === null || busy) return
     setBusy(true)
     try {
-      const hub = getFilesPort()
+      const filesPort = getFilesPort()
       if (subscribed) {
-        await hub.removeSubscription(type, key)
+        await filesPort.removeSubscription(type, key)
         setSubscribed(false)
         // 关注是长期积累的资产, 误点取消可一键撤销 (触屏无 hover, 故用可撤销 toast 而非悬停态)
         undoableToast(`已取消关注 ${title}`, () =>
@@ -58,7 +58,7 @@ export function SubscribeButton({
             .then(() => setSubscribed(true)),
         )
       } else {
-        await hub.addSubscription(sub)
+        await filesPort.addSubscription(sub)
         setSubscribed(true)
         flowbackToast(`已关注 ${title}`, () => router.push("/home/subscriptions"))
         setPulse(true)

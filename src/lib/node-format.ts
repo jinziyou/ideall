@@ -1,4 +1,4 @@
-// Home 模块通用展示格式化工具。
+// 跨模块通用展示格式化工具 (时间 / 字节 / 文件类别) —— home、agent、shell、workspace 共用。
 
 /** 人类可读的字节大小 */
 export function formatBytes(bytes: number): string {

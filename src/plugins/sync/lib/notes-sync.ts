@@ -112,11 +112,11 @@ const SYNC_MAX_ATTEMPTS = 4
 export async function syncNotes(code: string): Promise<SyncResult> {
   if (!isValidSyncCode(code)) throw new Error("同步码格式不正确")
   const { storageId, key } = await deriveKeys(code, "notes")
-  const hub = getFilesPort()
+  const filesPort = getFilesPort()
   const now = Date.now() // 入站时间戳上界基准 (整次同步用同一基准即可, 窗口远大于同步耗时)
 
   // 含删除标记 + 完整正文读: 删除靠删除标记进合并/上传才能传播; 读路径 (UI) 另有 listNotes 过滤删除标记。
-  const localAll = await hub.listAllNotes()
+  const localAll = await filesPort.listAllNotes()
   let merged = localAll
   let kept = localAll
 
@@ -138,7 +138,7 @@ export async function syncNotes(code: string): Promise<SyncResult> {
     merged = mergeNotes(merged, remote)
     kept = gcNotes(merged, Date.now())
     if (!recordsEqual(kept, localAll)) {
-      await hub.bulkPutNotes(kept)
+      await filesPort.bulkPutNotes(kept)
     }
 
     const enc = await encryptJson(key, kept)

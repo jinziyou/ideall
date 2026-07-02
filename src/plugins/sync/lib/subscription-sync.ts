@@ -43,11 +43,11 @@ const SYNC_MAX_ATTEMPTS = 4
 export async function syncNow(code: string): Promise<SyncResult> {
   if (!isValidSyncCode(code)) throw new Error("同步码格式不正确")
   const { storageId, key } = await deriveKeys(code)
-  const hub = getFilesPort()
+  const filesPort = getFilesPort()
   const now = Date.now() // 入站时间戳上界基准 (整次同步用同一基准即可, 窗口远大于同步耗时)
 
   // 含删除标记读: 删除靠删除标记进合并/上传才能传播; 读路径 (UI) 另有 listSubscriptions 过滤删除标记。
-  const localAll = await hub.listAllSubscriptions()
+  const localAll = await filesPort.listAllSubscriptions()
   // merged 跨重试累积: unionMerge 是按 id 的 LWW 并集 (幂等可结合), 故每轮并入新拉到的远端即可。
   let merged = localAll
   // kept = merged GC 掉过期删除标记后的完整数据 (落地 + 上传的就是它); 成功后用于统计。
@@ -75,7 +75,7 @@ export async function syncNow(code: string): Promise<SyncResult> {
     kept = pruneExpiredTombstones(merged, Date.now())
     // LWW 下即使长度不变也可能有字段更新 (含删除标记), 故按"非等价就写回"判定; 写回会物理清除过期删除标记。
     if (!subsEqual(kept, localAll)) {
-      await hub.bulkPutSubscriptions(kept)
+      await filesPort.bulkPutSubscriptions(kept)
     }
 
     const enc = await encryptJson(key, kept)

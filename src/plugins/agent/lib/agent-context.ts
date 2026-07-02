@@ -44,13 +44,13 @@ const ALL_HOME: Required<HomeSelection> = {
 /** 汇集 home 快照文本; 全空时返回空串。sel 选择进上下文的类目 (默认全选), 未选的类目不列出。 */
 export async function gatherHomeContext(sel?: HomeSelection): Promise<string> {
   const s = { ...ALL_HOME, ...(sel ?? {}) }
-  const hub = getFilesPort()
+  const filesPort = getFilesPort()
   const [subs, bookmarks, folders, files, notes] = await Promise.all([
-    hub.listSubscriptions().catch(() => []),
-    hub.listBookmarks().catch(() => []),
-    hub.listFolders().catch(() => []),
-    hub.listFiles().catch(() => []),
-    hub.listNotes().catch(() => []),
+    filesPort.listSubscriptions().catch(() => []),
+    filesPort.listBookmarks().catch(() => []),
+    filesPort.listFolders().catch(() => []),
+    filesPort.listFiles().catch(() => []),
+    filesPort.listNotes().catch(() => []),
   ])
 
   const blocks: string[] = []

@@ -4,10 +4,9 @@
 // (Plate 每实例独立 editor 链; iframe 进程不暂停), 故按 LRU 保持后台运行最近若干个、卸载更久未用者。
 // 非激活态用 display:none (切标签不重载、iframe 不重新与 MCP 建立连接)。
 //
-// 逐出安全性 (对设计稿 §5.3 的简化, 已 live 验证): 设计稿用 evicting-as-state + 逐出前 flushNode
-// 的「保持后台运行到落库完成」舞蹈, 那是为修已废弃的 flushRef+await 方案。但 P1a 写队列已让卸载本身安全 ——
-// NoteEditor 卸载 cleanup 同步 enqueueNoteDraft, worker 独立于组件继续落库; 且只逐出**非激活**标签
-// (激活项恒保持后台运行), 用户无感。故此处用朴素 LRU (直接卸载 overflow 非激活标签), 无 evicting 舞蹈,
+// 逐出安全性 (已 live 验证): 卸载本身是安全的 —— NoteEditor 卸载 cleanup 同步 enqueueNoteDraft,
+// 写队列 worker 独立于组件继续落库; 且只逐出**非激活**标签 (激活项恒保持后台运行), 用户无感。
+// 故用朴素 LRU (直接卸载 overflow 非激活标签), 不做「逐出前等落库完成」的舞蹈,
 // 既简单又避免「每次切标签 overflow 标签反复 mount/flush/unmount」的抖动。
 import * as React from "react"
 import { cn } from "@/lib/utils"

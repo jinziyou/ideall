@@ -47,14 +47,14 @@ export function SaveToMine({
   async function doBookmark() {
     if (!bookmark) return
     try {
-      const hub = getFilesPort()
+      const filesPort = getFilesPort()
       // 去重: addBookmark 非幂等 (每次新 id), 同一 url 重复点会产生重复书签
-      const existing = await hub.listBookmarks()
+      const existing = await filesPort.listBookmarks()
       if (existing.some((b) => b.url === bookmark.url)) {
         toast.info("已在书签中")
         return
       }
-      await hub.addBookmark({ title: bookmark.title, url: bookmark.url })
+      await filesPort.addBookmark({ title: bookmark.title, url: bookmark.url })
       pop()
       flowbackToast("已收藏到书签", () => router.push("/home/bookmarks"))
     } catch {
@@ -65,13 +65,13 @@ export function SaveToMine({
   async function doSubscribe() {
     if (!publisher?.domain) return
     try {
-      const hub = getFilesPort()
+      const filesPort = getFilesPort()
       // 去重: 与 doBookmark 一致, 已关注则提示而非重复弹「已关注」成功 toast (把重复当新增)
-      if (await hub.isSubscribed("publisher", publisher.domain)) {
+      if (await filesPort.isSubscribed("publisher", publisher.domain)) {
         toast.info("已关注该发布者")
         return
       }
-      await hub.addSubscription({
+      await filesPort.addSubscription({
         type: "publisher",
         key: publisher.domain,
         title: publisher.name || publisher.domain,

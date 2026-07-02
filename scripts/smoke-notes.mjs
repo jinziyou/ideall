@@ -1,6 +1,6 @@
 // 笔记功能端到端冒烟 (Playwright) —— 真浏览器驱动 /home/notes:
 //   新建 → 标题/正文输入 → slash「/」菜单 → 自动保存 → 刷新后持久化校验。
-// 用法: pnpm smoke:notes   (或 BASE=http://localhost:5025 pnpm smoke:notes 指定端口)
+// 用法: pnpm smoke:notes   (或 BASE=http://localhost:<端口> pnpm smoke:notes 指向其他端口的开发服)
 // 前提: 先 pnpm dev 起开发服。截图落 /tmp/notes-smoke/*.png; 退出码 0=全过, 1=有失败。
 import { chromium } from "playwright"
 import { mkdir } from "node:fs/promises"
