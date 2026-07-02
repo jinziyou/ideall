@@ -1,7 +1,7 @@
 [package]
 name = "ideall"
 version = "0.1.0"
-description = "ideall — 本地优先的个人信息工作台 (Tauri 外壳)"
+description = "ideall — 本地优先的个人信息终端 (Tauri 外壳)"
 authors = ["ideall contributors"]
 edition = "2021"
 rust-version = "1.77.2"
@@ -41,3 +41,13 @@ tauri-plugin-updater = "2"
 [features]
 # 默认生产关闭开发者工具; `cargo tauri dev` 自动开。
 custom-protocol = ["tauri/custom-protocol"]
+
+# 发布构建体积优化 (Tauri 官方 app-size 指南): LTO + 单 codegen 单元 + 剥符号 + 按体积优化,
+# 装包典型可缩三成以上; 代价是发布构建更慢 (CI 才跑, 可接受)。
+# panic=abort 亦随官方推荐: 崩溃直接终止、不做栈回卷, 换更小二进制 (本 crate 不依赖 catch_unwind)。
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
