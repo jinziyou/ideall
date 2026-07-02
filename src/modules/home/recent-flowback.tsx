@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { ChevronRight, CornerDownLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { formatTime } from "@/lib/node-format"
+import { formatTime } from "@/lib/format"
 
 /** 一条「关注」记录: 把发现模块的对象 / 资源加入「我的」的一次动作。 */
 export type FlowItem = {

@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoredFile } from "@protocol/files"
 import { getFile } from "@/files/stores/files-store"
-import { fileKind } from "@/lib/node-format"
+import { fileKind } from "@/lib/format"
 
 export const TEXT_PREVIEW_LIMIT = 200 * 1024
 

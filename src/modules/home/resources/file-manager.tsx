@@ -40,7 +40,7 @@ import {
   updateFileMeta,
 } from "@/files/stores/files-store"
 import { undoableDeleteToast } from "@/lib/undo-toast"
-import { fileKind, FileKind, formatBytes, formatTime } from "@/lib/node-format"
+import { fileKind, FileKind, formatBytes, formatTime } from "@/lib/format"
 import FilePreviewDialog from "./file-preview-dialog"
 import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"

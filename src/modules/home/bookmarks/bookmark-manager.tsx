@@ -44,7 +44,7 @@ import {
   restoreBookmark,
   updateBookmark,
 } from "@/files/stores/bookmarks-store"
-import { formatTime } from "@/lib/node-format"
+import { formatTime } from "@/lib/format"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import BookmarkDialog from "./bookmark-dialog"
 import ImportDialog from "./import-dialog"

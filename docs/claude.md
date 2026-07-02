@@ -50,7 +50,7 @@ src/ 已按终端分层重组: 路由薄标记 / 终端外壳 / 一切皆标签 
 | **protocol** | `@protocol/*` | 契约 / 端口 (纯类型 / 纯函数, 不含 UI): node (统一 Node 联合) / files (FilesPort + 投影域类型 Note/Bookmark/StoredFile/Subscription/Thread) / note-merge / subscription / content / flowback / sync (SyncPort) / server-port (ServerPort) / peer / auth |
 | **ui** | `@/ui/*` | shadcn 原语 + 块编辑器 (`editor/`) |
 | **shared** | `@/shared/*` | 跨层共享 UI + 关注反馈 (`feeders/`: save-to-mine / subscribe-button / pin-tool-button) |
-| **lib** | `@/lib/*` | 纯工具 —— utils/format/node-format/idb/id/sync-crypto/auth/api (wire DTO 生成物)/server (HTTP 适配器)/ui-actions/active-node/safe-url/theme/env/tauri/updater... |
+| **lib** | `@/lib/*` | 纯工具 —— utils/format/idb/id/sync-crypto/auth/api (wire DTO 生成物)/server (HTTP 适配器)/ui-actions/active-node/safe-url/theme/env/tauri/updater... |
 
 **别名**: `@/*` → `src/*`; `@protocol/*` → `src/protocol/*` (其余层一律 `@/<layer>/...`; app 路由用 `@/app/*`、`@/app/globals.css`)。
 

@@ -2,7 +2,7 @@
 // 只读、只取元数据 (文件不含内容 Blob), 全部来自本机 IndexedDB; 发送时随系统提示一并给模型。
 import { getFilesPort } from "@protocol/files"
 import { getActiveNodeRef } from "@/lib/active-node"
-import { formatBytes } from "@/lib/node-format"
+import { formatBytes } from "@/lib/format"
 
 // 各类目最多列出的条数 (控制 token; 超出只给计数)
 const CAP = 50

@@ -6,7 +6,7 @@ import { Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/ui/popover"
 import { getSyncCode, subscribeSyncCode } from "@/lib/sync-code"
-import { formatBytes } from "@/lib/node-format"
+import { formatBytes } from "@/lib/format"
 import { getSession, subscribeSession } from "@protocol/auth"
 
 function getServerSnapshot(): string | null {

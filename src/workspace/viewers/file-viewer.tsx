@@ -5,7 +5,7 @@
 import * as React from "react"
 import { Download } from "lucide-react"
 import { Button } from "@/ui/button"
-import { formatBytes } from "@/lib/node-format"
+import { formatBytes } from "@/lib/format"
 import {
   useFilePreview,
   FilePreviewBox,
