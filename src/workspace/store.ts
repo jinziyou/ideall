@@ -372,18 +372,10 @@ function openAgentTab(d: TabDescriptor, opts?: OpenTabOpts) {
   })
 }
 
-/** 默认 AI 标签 = 全局 AI 设置 (右栏齿轮 / /ai 路由用常驻; 活动栏 AI 钮经 toggleAiSidebar 传 transient)。 */
+/** AI 管理标签 = 全局 AI 设置 (次级入口: 右栏齿轮 / /ai 深链 / ui-actions 端口)。
+ *  AI 主入口是对话: 活动栏 Bot 钮与移动中央 AI 钮均呼出右侧对话栏 (toggleRightPanel / setRightPanel)。 */
 export function openAiSettings(opts?: OpenTabOpts) {
   openAgentTab(AI_SETTINGS_TAB, opts)
-}
-
-/** 点活动栏「AI」: 同 agent 模块且侧栏已展开 → 收起侧栏 (与 toggleModule 一致); 否则开/激活 AI 设置预览并展开。 */
-export function toggleAiSidebar() {
-  if (state.activeModule === "agent" && !state.sidebarCollapsed) {
-    setState({ sidebarCollapsed: true })
-    return
-  }
-  openAiSettings({ transient: true })
 }
 
 const AI_SECTION_TITLE: Record<"ai-mcp" | "ai-skills" | "ai-rules", string> = {

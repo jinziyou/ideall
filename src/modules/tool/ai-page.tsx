@@ -72,5 +72,5 @@ const assistants: Provider[] = [
 ]
 
 export default function ToolAiPage() {
-  return <QuickJump title="AI" placeholder="输入要提问的内容…" providers={assistants} />
+  return <QuickJump title="AI 网站" placeholder="输入要提问的内容…" providers={assistants} />
 }

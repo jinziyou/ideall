@@ -165,9 +165,10 @@ export const MODULES: ModuleConfig[] = [
         descriptor: { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" },
       },
       {
-        label: "AI",
+        // 「AI 网站」= 外部 AI 站点启动器 (ChatGPT/Claude/…), 与内置 AI 对话 (活动栏 Bot 钮) 区分。
+        label: "AI 网站",
         icon: Bot,
-        descriptor: { kind: "tool-ai", module: "tool", title: "AI", path: "/tool/ai" },
+        descriptor: { kind: "tool-ai", module: "tool", title: "AI 网站", path: "/tool/ai" },
       },
       {
         label: "导航",

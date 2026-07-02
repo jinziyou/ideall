@@ -3,7 +3,9 @@
 // 活动栏 (IDE 式标签工作区侧栏的图标轨): 按当前「本地/连接」模式视图过滤展示模块图标 (+ crossMode 跨模式模块);
 // 顶栏 ModeSwitch 切换视图。点模块图标 = 切到该模块并展开二级侧栏 (再点已激活模块 = 收起侧栏);
 // 落地面板以「预览」(transient) 方式开, 点遍多个模块只复用单一预览槽, 不堆常驻标签 (详见 store)。
-// 「AI」钮: mode-中性, 两模式都可呼出 —— 本地模式紧随「我的」(home) 下方, 连接模式落在轨末。
+// 「AI」钮 = 对话开关 (与移动底栏中央 AI 钮语义一致, 均首呼对话): 开/关右侧对话栏, 高亮随栏开合;
+//   AI 管理面 (设置/MCP/Skills/规则) 是次级入口 —— 对话栏齿轮 / /ai 深链。
+//   mode-中性, 两模式都可呼出 —— 本地模式紧随「我的」(home) 下方, 连接模式落在轨末。
 
 import { Fragment } from "react"
 import { Bot } from "lucide-react"
@@ -13,17 +15,18 @@ import { modulesForMode } from "./modules"
 import {
   useActiveModule,
   useMode,
+  useRightPanelOpen,
   useSidebarCollapsed,
   toggleModule,
-  toggleAiSidebar,
+  toggleRightPanel,
 } from "./store"
 
 export default function ActivityBar() {
   const activeModule = useActiveModule()
   const mode = useMode()
   const sidebarCollapsed = useSidebarCollapsed()
-  // AI 钮高亮 = 任一 AI 区段标签激活 (activeModule==="agent")。
-  const aiActive = activeModule === "agent"
+  // AI 钮 = 对话栏开关, 高亮随右栏开合 (与 activeModule 解耦; 管理标签的高亮归各自标签)。
+  const aiActive = useRightPanelOpen()
   const { count, flash } = useNodeCount()
   const modules = modulesForMode(mode)
   const hasHome = modules.some((m) => m.id === "home")
@@ -32,9 +35,8 @@ export default function ActivityBar() {
     <button
       key="ai"
       type="button"
-      onClick={toggleAiSidebar}
-      aria-current={aiActive ? "true" : undefined}
-      aria-expanded={aiActive && !sidebarCollapsed}
+      onClick={toggleRightPanel}
+      aria-pressed={aiActive}
       className={cn(
         "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[11px] font-medium transition-colors",
         aiActive
