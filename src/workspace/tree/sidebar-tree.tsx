@@ -42,7 +42,7 @@ import {
 import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
 import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
-import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
+import { onTreeArrowNav, focusTreeSibling, forwardTreeFocus } from "./tree-keynav"
 import type { ModuleId } from "../types"
 
 const NotesSidebarTree = React.lazy(() => import("@/modules/home/notes/notes-sidebar-tree"))
@@ -216,8 +216,15 @@ export default function SidebarTree() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
-      {/* WAI-ARIA 树: 容器 role=tree, 每行 role=treeitem + aria-level; 方向键导航见 tree-keynav。 */}
-      <nav role="tree" aria-label="文件树" className="flex flex-col gap-0.5">
+      {/* WAI-ARIA 树: 容器 role=tree, 每行 role=treeitem + aria-level; 方向键导航见 tree-keynav。
+          roving 单停靠点: 容器是整棵树唯一的 Tab 停靠 (行均 tabIndex=-1), 聚焦转发见 forwardTreeFocus。 */}
+      <nav
+        role="tree"
+        aria-label="文件树"
+        tabIndex={0}
+        onFocus={forwardTreeFocus}
+        className="flex flex-col gap-0.5 outline-none"
+      >
         {roots.map((node) => (
           <TreeRow
             key={node.id}
@@ -348,7 +355,7 @@ function TreeRow({
     <div>
       <div
         role="treeitem"
-        tabIndex={0}
+        tabIndex={-1}
         aria-level={depth + 1}
         aria-selected={active || undefined}
         aria-expanded={node.hasChildren ? isOpen : undefined}
@@ -409,7 +416,7 @@ function TreeRow({
             <div
               key={ws.id}
               role="treeitem"
-              tabIndex={0}
+              tabIndex={-1}
               aria-level={depth + 2}
               aria-selected={wsActive || undefined}
               onClick={() => openAiTasks(ws.id, ws.name, { transient: true })}
@@ -510,7 +517,7 @@ function SubscriptionRow({
   return (
     <div
       role="treeitem"
-      tabIndex={0}
+      tabIndex={-1}
       aria-level={depth + 1}
       // 订阅行从不可选: 与其它行一致地「未选中即省略」(undefined → 不渲染属性), 而非显式 false。
       aria-selected={undefined}

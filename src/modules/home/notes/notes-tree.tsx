@@ -204,7 +204,7 @@ function PageTreeRow({
     <div>
       <div
         role="treeitem"
-        tabIndex={0}
+        tabIndex={-1}
         aria-level={depth + 2}
         aria-selected={active || undefined}
         aria-expanded={hasKids ? isOpen : undefined}

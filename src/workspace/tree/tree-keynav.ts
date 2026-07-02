@@ -44,3 +44,19 @@ export function onTreeArrowNav<T extends HTMLElement>(e: React.KeyboardEvent<T>)
   e.preventDefault()
   return true
 }
+
+/**
+ * 树容器 (role=tree) 的 roving 单停靠点: 容器自身 tabIndex=0、全部行 tabIndex=-1 ——
+ * 整棵树对 Tab 序只占一个停靠点 (WAI-ARIA APG 树模式), 树内移动交给方向键 (onTreeArrowNav)。
+ * Tab 进树聚焦到容器时, 把焦点转发给激活行 (aria-selected) 或首行;
+ * 焦点从树内行折返容器 (Shift+Tab) 时不转发, 放行离开。行 tabIndex=-1 不影响鼠标点击聚焦。
+ */
+export function forwardTreeFocus(e: React.FocusEvent<HTMLElement>) {
+  const nav = e.currentTarget
+  if (e.target !== nav) return // 行内聚焦冒泡上来的, 不处理
+  if (e.relatedTarget instanceof Node && nav.contains(e.relatedTarget)) return // 树内折返 → 放行
+  const row =
+    nav.querySelector<HTMLElement>('[role="treeitem"][aria-selected="true"]') ??
+    nav.querySelector<HTMLElement>('[role="treeitem"]')
+  row?.focus()
+}
