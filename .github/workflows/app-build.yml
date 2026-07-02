@@ -162,7 +162,7 @@ jobs:
       # (.dmg/.app, .deb/.rpm/.AppImage, .msi/.exe) + 自动更新产物 (.sig, latest.json) 上传到 Release。
       # TAURI_SIGNING_*: updater 的 minisign 私钥+密码 (来自 secret) → 签名更新产物; 缺失则不出 .sig。
       # 仍不注入 APPLE_*/Windows 证书 → OS 代码签名未启用 (出未签名安装包; 见 ① / docs/app.md)。
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
