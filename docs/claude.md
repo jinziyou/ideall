@@ -84,7 +84,7 @@ pnpm install
 pnpm dev          # 开发服 (SSR) http://localhost:5020 —— 同时是 Tauri 开发壳的加载源
 pnpm build        # 静态导出 → out/ (output: export; 等同 pnpm app:export)
 pnpm lint         # 含 protocol 纯度强制 (no-restricted-imports)
-pnpm test         # tsx + node --test：运行全部 src/**/*.test.ts —— protocol/node·sync·server-port、plugins/sync 合并、lib/sync-crypto·egress-guard·safe-url、agent (含 acp/*、agent-mcp*、oauth)、embed grant、files 原语 (note-blocks·sort-key·notes-tree-util) 等
+pnpm test         # tsx + node:test (经 scripts/run-tests.mjs; 可加子串过滤, 如 pnpm test sort-key)：运行全部 src/**/*.test.ts —— protocol/node·sync·server-port、plugins/sync 合并、lib/sync-crypto·egress-guard·safe-url、agent (含 acp/*、agent-mcp*、oauth)、embed grant、files 原语 (note-blocks·sort-key·notes-tree-util) 等
 
 # App (Tauri 跨平台桌面/移动; 工程在 src-tauri/, 见 docs/app.md)
 pnpm app:dev      # 桌面开发壳 (加载 pnpm dev 的 localhost:5020)
