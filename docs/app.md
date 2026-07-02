@@ -142,7 +142,7 @@ pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026","beforeDevComm
   - ⚠ **私钥务必长期保管**：公钥编译进 App，装机端只认配对私钥签的更新；**私钥丢失无法对已装机端轮换**（只能让用户手动重装新公钥版本）。GitHub secret 只写、取不回，**不算备份**——权威备份放密码管理器。
 - **endpoint**：`tauri.conf.json` 配 `https://github.com/jinziyou/ideall/releases/latest/download/latest.json`，即 GitHub「最新正式 Release」（排除草稿与预发布）。
 - **产物**：`bundle.createUpdaterArtifacts: true` + CI 注入 `TAURI_SIGNING_*` → tauri-action 给每个包出 `.sig` 并生成 `latest.json` 挂上 Release。
-- **激活条件**：自动更新只认**已发布的「非草稿、非预发布」tag 版**。流程：push `app-v*` tag → 出**草稿** Release（已签名）→ 人工 **publish（去草稿）** → 它成为 `releases/latest` → 装机端「检查更新」即拉到。`app-edge` 预发布也带 `.sig`/`latest.json`，但被 `releases/latest` 排除、不用于自动更新（仅供手动下载试用）。
+- **激活条件**：自动更新只认**已发布的「非草稿、非预发布」tag 版**。流程：**先把 `src-tauri/tauri.conf.json` / `package.json` / `src-tauri/Cargo.toml` 三处版本号 bump 到目标版本并提交**（tauri-action 按 `tauri.conf.json` 的 version 生成 `latest.json`，忘 bump 会让自动更新判定「无更新」；CI 的 gate 已加一致性卡点，不一致直接失败）→ push `app-v*` tag → 出**草稿** Release（已签名）→ 人工 **publish（去草稿）** → 它成为 `releases/latest` → 装机端「检查更新」即拉到。`app-edge` 预发布也带 `.sig`/`latest.json`，但被 `releases/latest` 排除、不用于自动更新（仅供手动下载试用）。
 
 **OS 代码签名 / 公证（待证书，当前出未签名包）**：未签名时 macOS 被 Gatekeeper 拦（需右键→打开）、Windows 触发 SmartScreen「未知发布者」。各项所需：
 
