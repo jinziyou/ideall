@@ -14,6 +14,7 @@ import TopBar from "./top-bar"
 import ActivityBar from "./activity-bar"
 import RightAiPanel from "./right-ai-panel"
 import SecondarySidebar from "./secondary-sidebar"
+import MobileDrillBar from "./mobile-drill-bar"
 import TabBar from "./tab-bar"
 import TabHost from "./tab-host"
 import {
@@ -113,6 +114,8 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
           <SecondarySidebar collapsed={sidebarCollapsed} />
           <div className="flex min-w-0 flex-1 flex-col">
             <TabBar />
+            {/* 移动端下钻返回条 (md:hidden; 桌面有标签条无需它): 节点标签激活时给显式返回。 */}
+            <MobileDrillBar />
             {/* 移动端底栏含安全区(刘海/Home 指示条), 预留 4rem + 底栏内边距下限(0.35rem)/safe-area 取大 ——
                 与 bottom-tab-bar 的 pb-[max(env(safe-area-inset-bottom),0.35rem)] 对齐, 防 safe-area≈0 时底部内容被遮 */}
             <div className="min-h-0 flex-1 pb-[calc(4rem+max(env(safe-area-inset-bottom),0.35rem))] md:pb-0">
