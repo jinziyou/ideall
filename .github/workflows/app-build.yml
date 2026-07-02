@@ -189,7 +189,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: Install Android NDK
         run: sdkmanager "ndk;26.1.10909125"
       - uses: dtolnay/rust-toolchain@stable
