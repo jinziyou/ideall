@@ -34,3 +34,30 @@ jobs:
       # 静态导出守门 (App-only 唯一生产构建; 导出回归会在此失败)
       - name: Build (static export)
         run: pnpm build
+
+  # Rust 门 (src-tauri): clippy 零警告 + 单元测试。此前 CI 不跑 Rust,
+  # clippy 警告与挂掉的测试长期无人知晓 —— 此 job 锁住清零状态。
+  rust:
+    name: clippy + cargo test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux WebKit deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+      # tauri::generate_context! 编译期嵌入 frontendDist(../out) 资产; 此 job 不构建前端, 给空目录即可编译。
+      - name: Stub frontend dist
+        run: mkdir -p out
+      - name: Clippy (警告即失败)
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+      - name: Test
+        run: cargo test
+        working-directory: src-tauri
