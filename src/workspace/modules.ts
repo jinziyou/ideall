@@ -3,7 +3,7 @@
 //   本机/我的(local): 我的(home) · 关注(subscriptions) · 应用(apps)  ← + 活动栏 AI 钮
 //   连接/发现(connected): 资讯(info) · 社区(community) · 工具(tool) · 浏览器(browser)
 //   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (与 AI 区段同类, 见 store isModeNeutralModule)。
-// 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏的「本地搜索」搜本机内容, 两者职责分离。
+// 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏搜索框/⌘K 统一面板搜本机内容, 两者职责分离。
 //
 // 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
 //   · 本文件 (modules.ts): 桌面 IDE 式工作区 (活动栏/侧栏/标签) + descriptorForPath 路由解析。
@@ -159,7 +159,7 @@ export const MODULES: ModuleConfig[] = [
     sidebarTitle: "工具",
     entries: [
       {
-        // 聚合搜索 (选引擎输词跳转外部搜索引擎); 与顶栏「本地搜索」职责分离: 前者跳外部引擎, 后者搜本机内容。
+        // 聚合搜索 (选引擎输词跳转外部搜索引擎); 与顶栏搜索框/⌘K 统一面板职责分离: 前者跳外部引擎, 后者搜本机内容。
         label: "搜索",
         icon: Search,
         descriptor: { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" },

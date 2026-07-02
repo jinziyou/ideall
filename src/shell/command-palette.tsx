@@ -43,9 +43,11 @@ import {
 export { openCommandPalette }
 
 /**
- * ⌘K 命令面板 —— 全局唯一实例 (挂根布局)。浮层引擎: 跳发现模块 (资讯/社区/工具) 或我的各子区,
- * 并可直接执行系统命令 (切深浅色 / 立即同步 / 复制同步码)。
- * 由 ⌘K / Ctrl+K 或任意 openCommandPalette() 触发器 (图标轨 / 移动顶栏 / 各页页头) 唤起。
+ * ⌘K 统一面板 —— 全局唯一实例 (挂根布局), 本地搜索与命令的单一入口 (顶栏搜索框同样唤起它)。
+ * 直接输入 = 搜本机内容 (笔记/关注/书签/资源) + 匹配命令; 输入 `>` 前缀 = 只看命令 (VS Code 惯例)。
+ * 实现: 全部命令项的 value 以 "> " 开头 —— cmdk 模糊匹配天然让 ">xxx" 只命中命令 (内容项 value 无 ">"),
+ * 内容分组在命令模式下额外整组不渲染。命令: 跳发现模块 / 我的各子区 / 系统服务 (主题/同步/更新)。
+ * 由 ⌘K / Ctrl+K 或任意 openCommandPalette() 触发器 (顶栏搜索框 / 移动顶栏 / 各页页头) 唤起。
  */
 export default function CommandPalette() {
   const router = useRouter()
@@ -53,6 +55,8 @@ export default function CommandPalette() {
   // 受控输入: 内容项 (笔记/书签/资源/关注) 仅在用户输入时才展示, 避免一打开就糊一屏本机内容
   // (⌘K 主要是命令/跳转入口; 内容搜索是兑现占位文案「跳到书签」的补充)。
   const [query, setQuery] = React.useState("")
+  // `>` 前缀 = 命令模式 (只看命令): 内容分组整组不渲染; 匹配面靠命令 value 的 "> " 前缀天然收窄。
+  const commandMode = query.trimStart().startsWith(">")
   const [content, setContent] = React.useState<LocalSearchItem[]>([])
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, () => null)
   // updater 仅桌面 (Tauri) 生效; 取常量快照 (SSR / web = false), 避免 effect 内同步 setState 的级联渲染 lint。
@@ -148,13 +152,13 @@ export default function CommandPalette() {
       <CommandInput
         value={query}
         onValueChange={setQuery}
-        placeholder="跳到书签 / 笔记 / 资源、切换主题、同步数据…"
+        placeholder="搜索本地内容、跳转或执行命令; 输入 > 只看命令…"
       />
       <CommandList>
-        <CommandEmpty>没有匹配的命令或位置</CommandEmpty>
+        <CommandEmpty>没有匹配的内容或命令</CommandEmpty>
         <CommandGroup heading="发现">
           {SPOKES.map((s) => (
-            <CommandItem key={s.href} value={`发现 ${s.label}`} onSelect={() => go(s.href)}>
+            <CommandItem key={s.href} value={`> 发现 ${s.label}`} onSelect={() => go(s.href)}>
               <span className={`h-2 w-2 rounded-full ${s.dot}`} />
               {s.label}
               <CommandShortcut className="font-mono">{s.href}</CommandShortcut>
@@ -162,14 +166,14 @@ export default function CommandPalette() {
           ))}
           {/* 浏览器 (内嵌 webview) 与 应用 (本机已装应用) 均仅桌面 App 可用; 移动端不放 (无法工作)。 */}
           {isDesktop && (
-            <CommandItem value="发现 浏览器 browser web 网页" onSelect={() => go("/browser")}>
+            <CommandItem value="> 发现 浏览器 browser web 网页" onSelect={() => go("/browser")}>
               <Globe className="h-4 w-4" />
               浏览器
               <CommandShortcut className="font-mono">/browser</CommandShortcut>
             </CommandItem>
           )}
           {isDesktop && (
-            <CommandItem value="应用 apps 本机应用 installed 启动" onSelect={() => go("/apps")}>
+            <CommandItem value="> 应用 apps 本机应用 installed 启动" onSelect={() => go("/apps")}>
               <LayoutGrid className="h-4 w-4" />
               应用
               <CommandShortcut className="font-mono">/apps</CommandShortcut>
@@ -179,7 +183,7 @@ export default function CommandPalette() {
         <CommandSeparator />
         <CommandGroup heading="我的">
           {HOME_SUBPAGES.map((p) => (
-            <CommandItem key={p.href} value={`我的 ${p.label}`} onSelect={() => go(p.href)}>
+            <CommandItem key={p.href} value={`> 我的 ${p.label}`} onSelect={() => go(p.href)}>
               <p.icon className="h-4 w-4" />
               {p.label}
               <CommandShortcut className="font-mono">{p.href}</CommandShortcut>
@@ -188,7 +192,7 @@ export default function CommandPalette() {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="系统服务">
-          <CommandItem value="切换深浅色 主题 theme dark" onSelect={toggleTheme}>
+          <CommandItem value="> 切换深浅色 主题 theme dark" onSelect={toggleTheme}>
             <SunMoon className="h-4 w-4" />
             切换深浅色
           </CommandItem>
@@ -196,41 +200,41 @@ export default function CommandPalette() {
               避免新用户在唯一命令面板里搜不到同步而误以为没有该功能。 */}
           {code ? (
             <>
-              <CommandItem value="立即同步 跨端 sync" onSelect={() => syncNow(code)}>
+              <CommandItem value="> 立即同步 跨端 sync" onSelect={() => syncNow(code)}>
                 <RefreshCw className="h-4 w-4" />
                 立即同步
               </CommandItem>
-              <CommandItem value="复制同步码 跨端 sync copy" onSelect={() => copySyncCode(code)}>
+              <CommandItem value="> 复制同步码 跨端 sync copy" onSelect={() => copySyncCode(code)}>
                 <Copy className="h-4 w-4" />
                 复制同步码
               </CommandItem>
             </>
           ) : (
             <CommandItem
-              value="开启跨端同步 setup sync 同步码"
+              value="> 开启跨端同步 setup sync 同步码"
               onSelect={() => go("/home/subscriptions")}
             >
               <RefreshCw className="h-4 w-4" />
               开启跨端同步…
             </CommandItem>
           )}
-          <CommandItem value="去新建书签 收藏" onSelect={() => go("/home/bookmarks")}>
+          <CommandItem value="> 去新建书签 收藏" onSelect={() => go("/home/bookmarks")}>
             <Bookmark className="h-4 w-4" />
             去新建书签
           </CommandItem>
-          <CommandItem value="回到「我的」 home 概览 dashboard" onSelect={() => go("/home")}>
+          <CommandItem value="> 回到「我的」 home 概览 dashboard" onSelect={() => go("/home")}>
             <Hexagon className="h-4 w-4" />
             回到「我的」
           </CommandItem>
           {isDesktop && (
-            <CommandItem value="检查更新 update 升级 upgrade" onSelect={checkUpdate}>
+            <CommandItem value="> 检查更新 update 升级 upgrade" onSelect={checkUpdate}>
               <DownloadCloud className="h-4 w-4" />
               检查更新
             </CommandItem>
           )}
         </CommandGroup>
-        {/* 本机内容 (笔记/关注/书签/资源): 仅在输入时展示, 按标题模糊匹配 (cmdk 据 keywords 过滤)。 */}
-        {query.trim() && content.length > 0
+        {/* 本机内容 (笔记/关注/书签/资源): 仅在输入且非命令模式时展示, 按标题模糊匹配 (cmdk 据 keywords 过滤)。 */}
+        {!commandMode && query.trim() && content.length > 0
           ? LOCAL_SEARCH_ORDER.map((g) => {
               const gi = content.filter((i) => i.group === g)
               if (gi.length === 0) return null
