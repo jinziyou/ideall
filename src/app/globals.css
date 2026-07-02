@@ -45,6 +45,12 @@
      仍保留 solo 模式的柔感。内容卡片继续用 --radius-* 便当圆角。 */
   --radius-shell: 0.5rem;
 
+  /* 阴影口径 (border-first, 全站唯一裁决, 详见 docs/design/ui-style.md):
+     内容卡片/面板零阴影 (描边分层); 阴影只留给「浮层」(菜单/对话框/悬浮卡/toast), 统一走本令牌
+     (亮/暗各有值, 见 :root/.dark 的 --shadow-overlay-color); 控件微阴影 (分段滑块/开关钮) 允许 shadow-sm。 */
+  --shadow-overlay:
+    0 4px 16px -4px hsl(var(--shadow-overlay-color)), 0 1px 3px hsl(var(--shadow-overlay-color));
+
   --font-sans:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
@@ -93,8 +99,9 @@
 }
 
 /*
- * 设计系统: D 皮肤 (亮色软圆角便当) + A 布局 (图标轨 + 上下文栏 + ⌘K)
- * - 亮色底 + 白卡 + 柔阴影; 友好靛蓝 (--primary / --pop) 作唯一强调色, 每屏只给一个主操作。
+ * 设计系统: D 皮肤 (亮色软圆角便当) + A 布局 (图标轨 + 上下文栏 + ⌘K)。成文规范见 docs/design/ui-style.md。
+ * - 亮色底 + 白卡, border-first (卡片零阴影, 描边分层; 阴影仅浮层, 走 --shadow-overlay);
+ *   友好靛蓝 (--primary / --pop) 作唯一强调色, 每屏只给一个主操作。
  * - --spoke-* 三色 (资讯蓝 / 社区绿 / 工具紫) 仅用于小圆点 / tint / 标签, 绝不大面积 fill。
  * - --pop == --flowback == 关键动作 / 加入「我的」的语义色 (= 靛蓝)。
  * - 默认跟随系统 (见 src/lib/theme), 暗色见 .dark。
@@ -134,6 +141,8 @@
   --warning: 33 90% 42%;
   --info: 217 80% 50%;
   --highlight: oklch(0.852 0.199 91.936);
+  /* 浮层阴影色 (含透明度; 暗色下需更深更实, 见 .dark) */
+  --shadow-overlay-color: 222 22% 15% / 0.12;
 }
 
 .dark {
@@ -166,6 +175,8 @@
   --warning: 38 90% 60%;
   --info: 217 85% 68%;
   --highlight: oklch(0.852 0.199 91.936);
+  /* 浮层阴影色: 暗色底上浅色阴影不可见, 用纯黑加深 (防浮层阴影发脏) */
+  --shadow-overlay-color: 0 0% 0% / 0.45;
 }
 
 @layer base {

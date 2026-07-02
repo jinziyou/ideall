@@ -12,14 +12,14 @@ import { closeTab, getTabs, openTab, useActiveId, useTabs } from "./store"
 import { HOME_SECTIONS } from "./tree/home-sections"
 import type { TabDescriptor } from "./types"
 
-/** 节点 kind → 所属侧栏分区 id (返回兜底与面包屑用); thread 无分区 → 兜底概览。 */
+/** 节点 kind → 所属侧栏分区 id (返回兜底与面包屑用)。 */
 const SECTION_OF_KIND: Record<NodeKind, string> = {
   note: "notes",
   bookmark: "bookmarks",
   folder: "bookmarks",
   file: "resources",
   feed: "subscriptions",
-  thread: "",
+  thread: "threads",
 }
 
 const OVERVIEW: TabDescriptor = {

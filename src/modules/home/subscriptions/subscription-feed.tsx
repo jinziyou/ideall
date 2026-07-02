@@ -174,7 +174,7 @@ export default function SubscriptionFeed({
             {tools.map((t) => (
               <span
                 key={t.id}
-                className="group inline-flex items-center gap-1.5 rounded-full border bg-card py-1 pl-2.5 pr-1.5 text-sm text-card-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-accent"
+                className="group inline-flex items-center gap-1.5 rounded-full border bg-card py-1 pl-2.5 pr-1.5 text-sm text-card-foreground transition-colors hover:border-primary/40 hover:bg-accent"
               >
                 <a
                   href={safeHref(t.key)}

@@ -23,6 +23,7 @@ import {
   titleFromMessage,
 } from "../lib/agent-store"
 import { getAgentSettings, isConfigured, subscribeAgentSettings } from "../lib/agent-settings"
+import { consumePendingOpenThread, onOpenThreadRequest } from "../lib/agent-panel-bus"
 import { buildSystemPrompt, gatherHomeContext, gatherReferencedContext } from "../lib/agent-context"
 import { streamChat } from "../lib/agent-chat"
 import { runAgent } from "../lib/agent-run"
@@ -121,6 +122,17 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
         const list = await listThreads()
         if (!alive) return
         setThreads(list)
+        // compact 右栏: 挂载前经 bus 请求的线程优先于 list[0], 避免与 pending 消费竞态。
+        const pending = compact ? consumePendingOpenThread() : null
+        if (pending) {
+          const hit = list.find((t) => t.id === pending)
+          const t = hit ?? (await getThread(pending))
+          if (t && alive) {
+            setActiveId(pending)
+            setMessages(t.messages)
+            return
+          }
+        }
         if (list.length > 0) {
           setActiveId(list[0].id)
           setMessages(list[0].messages)
@@ -132,7 +144,7 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
     return () => {
       alive = false
     }
-  }, [])
+  }, [compact])
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
@@ -148,8 +160,8 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
 
   React.useImperativeHandle(ref, () => ({ newChat }), [])
 
-  async function selectThread(id: string) {
-    if (sendingRef.current || id === activeId) return
+  async function selectThread(id: string, opts?: { force?: boolean }) {
+    if ((!opts?.force && sendingRef.current) || id === activeId) return
     try {
       const t = await getThread(id)
       if (t) {
@@ -160,6 +172,18 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
       /* 忽略 */
     }
   }
+  const selectThreadRef = React.useRef(selectThread)
+  selectThreadRef.current = selectThread
+
+  // 外部「继续此对话」请求 (thread-viewer 等经 agent-panel-bus): 仅右栏 compact 实例响应,
+  // 避免 ai-tasks 等其他实例同时抢切。pending 在上方 listThreads 挂载 effect 中消费。
+  React.useEffect(() => {
+    if (!compact) return
+    return onOpenThreadRequest((id) => {
+      void selectThreadRef.current(id, { force: true })
+      void refreshThreads()
+    })
+  }, [compact, refreshThreads])
 
   async function removeThread(id: string) {
     if (sendingRef.current) return

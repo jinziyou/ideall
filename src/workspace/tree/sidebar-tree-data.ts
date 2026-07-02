@@ -61,6 +61,8 @@ const HOME_SECTION_KINDS: Record<string, NodeKind[]> = {
   resources: ["file"],
   publications: [],
   notes: ["note"],
+  // 对话即文件 (§6.5): thread 与笔记/书签一样可从树寻址。
+  threads: ["thread"],
 }
 
 function entryNode(e: SidebarEntry): SidebarTreeNode {

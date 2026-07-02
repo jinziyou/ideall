@@ -16,6 +16,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // 软键盘弹出时缩布局视口 (而非仅视觉视口): 保证 AI 栏 / 命令面板等 fixed 布局里的
+  // 底部输入框不被键盘遮挡 (Android Chrome 默认只缩视觉视口)。
+  interactiveWidget: "resizes-content",
 }
 
 export default function RootLayout({

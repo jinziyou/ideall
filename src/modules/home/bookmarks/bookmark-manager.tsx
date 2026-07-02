@@ -432,7 +432,7 @@ function BookmarkCard({
   }
 
   return (
-    <div className="group flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground transition-shadow hover:shadow-md">
+    <div className="group flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-foreground/20">
       <div className="flex items-start gap-2">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
           {b.favicon && !iconError ? (

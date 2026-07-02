@@ -11,7 +11,7 @@ import { Fragment } from "react"
 import { Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNodeCount } from "@/shell/use-node-count"
-import { modulesForMode } from "./modules"
+import { moduleById, modulesForMode } from "./modules"
 import {
   useActiveModule,
   useMode,
@@ -28,7 +28,14 @@ export default function ActivityBar() {
   // AI 钮 = 对话栏开关, 高亮随右栏开合 (与 activeModule 解耦; 管理标签的高亮归各自标签)。
   const aiActive = useRightPanelOpen()
   const { count, flash } = useNodeCount()
-  const modules = modulesForMode(mode)
+  const listed = modulesForMode(mode)
+  // 激活/打开标签不再翻 mode (见 store): 激活模块可能属于另一模式视图 ——
+  // 把它附加到轨末 (分隔线之后), 保证「我在哪」的高亮永不消失; 点击它 (toggleModule) 才显式切视图。
+  const stray =
+    activeModule !== "agent" && !listed.some((m) => m.id === activeModule)
+      ? moduleById(activeModule)
+      : null
+  const modules = listed
   const hasHome = modules.some((m) => m.id === "home")
 
   const aiButton = (
@@ -52,53 +59,62 @@ export default function ActivityBar() {
     </button>
   )
 
-  return (
-    <aside className="hidden h-full w-14 shrink-0 flex-col items-center gap-1 border-r bg-card px-2 py-2.5 md:flex">
-      {modules.map((m) => {
-        const Icon = m.icon
-        const active = activeModule === m.id
-        const badge = m.id === "home" ? count : undefined
-        return (
-          <Fragment key={m.id}>
-            <button
-              type="button"
-              onClick={() => toggleModule(m.id)}
-              aria-current={active ? "true" : undefined}
-              aria-expanded={active && !sidebarCollapsed}
+  const moduleButton = (m: ReturnType<typeof moduleById>) => {
+    const Icon = m.icon
+    const active = activeModule === m.id
+    const badge = m.id === "home" ? count : undefined
+    return (
+      <button
+        type="button"
+        onClick={() => toggleModule(m.id)}
+        aria-current={active ? "true" : undefined}
+        aria-expanded={active && !sidebarCollapsed}
+        className={cn(
+          "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[11px] font-medium transition-colors",
+          active
+            ? "bg-accent text-foreground"
+            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+        )}
+      >
+        {active && (
+          <span className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+        )}
+        <span className="relative">
+          <Icon className={cn("h-[1.2rem] w-[1.2rem]", active ? "text-primary" : m.colorClass)} />
+          {typeof badge === "number" && badge > 0 && (
+            <span
               className={cn(
-                "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[11px] font-medium transition-colors",
-                active
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                "absolute -right-2 -top-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-pop px-1 text-[9px] font-bold tabular-nums text-pop-foreground",
+                flash && "animate-flowback motion-reduce:animate-none",
               )}
             >
-              {active && (
-                <span className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-              )}
-              <span className="relative">
-                <Icon
-                  className={cn("h-[1.2rem] w-[1.2rem]", active ? "text-primary" : m.colorClass)}
-                />
-                {typeof badge === "number" && badge > 0 && (
-                  <span
-                    className={cn(
-                      "absolute -right-2 -top-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-pop px-1 text-[9px] font-bold tabular-nums text-pop-foreground",
-                      flash && "animate-flowback motion-reduce:animate-none",
-                    )}
-                  >
-                    {badge > 99 ? "99+" : badge}
-                  </span>
-                )}
-              </span>
-              <span className="leading-none">{m.label}</span>
-            </button>
-            {/* AI 紧随「我的」(home) 下方 (本地模式) */}
-            {m.id === "home" && aiButton}
-          </Fragment>
-        )
-      })}
+              {badge > 99 ? "99+" : badge}
+            </span>
+          )}
+        </span>
+        <span className="leading-none">{m.label}</span>
+      </button>
+    )
+  }
+
+  return (
+    <aside className="hidden h-full w-14 shrink-0 flex-col items-center gap-1 border-r bg-card px-2 py-2.5 md:flex">
+      {modules.map((m) => (
+        <Fragment key={m.id}>
+          {moduleButton(m)}
+          {/* AI 紧随「我的」(home) 下方 (本地模式) */}
+          {m.id === "home" && aiButton}
+        </Fragment>
+      ))}
       {/* 连接模式无「我的」锚点 → AI 钮落在轨末, 保证两模式都能呼出 */}
       {!hasHome && aiButton}
+      {/* 激活模块属于另一模式视图: 附加到分隔线下, 保证高亮不消失; 点击才显式切视图 */}
+      {stray && (
+        <>
+          <div aria-hidden className="my-0.5 h-px w-8 shrink-0 bg-border" />
+          {moduleButton(stray)}
+        </>
+      )}
     </aside>
   )
 }

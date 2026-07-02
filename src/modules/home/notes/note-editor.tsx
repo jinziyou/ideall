@@ -15,7 +15,8 @@ import { ListKit } from "@/ui/editor/plugins/list-kit"
 import { CodeBlockKit } from "@/ui/editor/plugins/code-block-kit"
 import { SlashKit } from "@/ui/editor/plugins/slash-kit"
 import { NoteContent } from "@protocol/files"
-import { enqueueNoteDraft } from "@/files/note-write-queue"
+import { enqueueNoteDraft, markNoteDirty } from "@/files/note-write-queue"
+import NoteSaveIndicator from "./note-save-indicator"
 // 保存回传元数据类型下沉到数据层 (写队列是其产出方); 此处再导出以兼容现有 ./note-editor 引用。
 import type { NoteEditorSaved } from "@/files/note-write-queue"
 export type { NoteEditorSaved }
@@ -95,9 +96,10 @@ export default function NoteEditor({
       dirtyRef.current = true
       onDirtyRef.current?.() // 首次用户编辑 → 通知外层 (编辑即固定)
     }
+    markNoteDirty(noteId) // 立即呈现「保存中」(不等去抖后的真实入队)
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(flush, AUTOSAVE_DELAY)
-  }, [flush])
+  }, [flush, noteId])
 
   // 卸载 (切换笔记 / 离开页面) 时, 若有未落库的改动同步入队 (worker 在卸载后继续消费)。
   React.useEffect(() => {
@@ -125,17 +127,21 @@ export default function NoteEditor({
           aria-label="笔记标题"
           className="w-full border-0 bg-transparent px-4 pt-2 text-2xl font-semibold leading-tight outline-none placeholder:text-muted-foreground/40 sm:px-[max(1.5rem,calc(50%-22rem))]"
         />
-        <input
-          value={tags}
-          onChange={(e) => {
-            setTags(e.target.value)
-            tagsRef.current = parseTags(e.target.value)
-            schedule()
-          }}
-          placeholder="添加标签（逗号分隔）"
-          aria-label="笔记标签"
-          className="w-full border-0 bg-transparent px-4 pb-3 pt-1.5 text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/40 sm:px-[max(1.5rem,calc(50%-22rem))]"
-        />
+        <div className="flex items-center gap-3 px-4 pb-3 pt-1.5 sm:px-[max(1.5rem,calc(50%-22rem))]">
+          <input
+            value={tags}
+            onChange={(e) => {
+              setTags(e.target.value)
+              tagsRef.current = parseTags(e.target.value)
+              schedule()
+            }}
+            placeholder="添加标签（逗号分隔）"
+            aria-label="笔记标签"
+            className="min-w-0 flex-1 border-0 bg-transparent text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/40"
+          />
+          {/* 保存状态 (本地优先的信任面): 保存中 / 已保存 / 保存失败+重试 */}
+          <NoteSaveIndicator noteId={noteId} />
+        </div>
       </div>
       <Plate
         editor={editor}

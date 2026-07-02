@@ -8,9 +8,12 @@ import {
   DownloadCloud,
   Globe,
   Hexagon,
+  Layers,
   LayoutGrid,
+  NotebookPen,
   RefreshCw,
   SunMoon,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -37,6 +40,19 @@ import {
   LOCAL_SEARCH_ORDER,
   type LocalSearchItem,
 } from "@/workspace/local-search-items"
+import {
+  closeActiveTab,
+  closeOtherTabs,
+  getActiveId,
+  openNodeTab,
+  setActiveTab,
+  useActiveId,
+  useLru,
+  useTabs,
+} from "@/workspace/store"
+import { refreshSidebarTree } from "@/workspace/tree/sidebar-tree-bus"
+import { addNote } from "@/files/stores/notes-store"
+import { useShortcutLabel } from "@/lib/shortcuts"
 
 // openCommandPalette / CMDK_OPEN 已抽到 @/lib/command-palette-bus (纯事件总线),
 // 使 components 的触发器无需反向 import app/shell; 此处 re-export 维持既有 ./command-palette 导入点。
@@ -58,6 +74,18 @@ export default function CommandPalette() {
   // `>` 前缀 = 命令模式 (只看命令): 内容分组整组不渲染; 匹配面靠命令 value 的 "> " 前缀天然收窄。
   const commandMode = query.trimStart().startsWith(">")
   const [content, setContent] = React.useState<LocalSearchItem[]>([])
+  // 打开的标签 (LRU 最近优先, 排除当前激活项): ⌘K 是键盘用户定位已打开标签的唯一入口
+  // (标签条截断后肉眼难扫; 桌面下拉与移动抽屉都是指点路径)。
+  const tabs = useTabs()
+  const activeTabId = useActiveId()
+  const lru = useLru()
+  const closeKbd = useShortcutLabel("mod+w")
+  const openTabItems = React.useMemo(() => {
+    const rank = new Map(lru.map((id, i) => [id, i]))
+    return tabs
+      .filter((t) => t.id !== activeTabId)
+      .sort((a, b) => (rank.get(b.id) ?? -1) - (rank.get(a.id) ?? -1))
+  }, [tabs, activeTabId, lru])
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, () => null)
   // updater 仅桌面 (Tauri) 生效; 取常量快照 (SSR / web = false), 避免 effect 内同步 setState 的级联渲染 lint。
   const isDesktop = React.useSyncExternalStore(
@@ -135,6 +163,20 @@ export default function CommandPalette() {
     )
   }
 
+  // 最高频捕获动作的 1 步入口: 直接建一篇并打开为节点标签 (与 notes-manager.handleNewRoot 同路径)。
+  function newNote() {
+    setOpen(false)
+    void (async () => {
+      try {
+        const note = await addNote({ parentId: null })
+        refreshSidebarTree()
+        openNodeTab({ kind: "note", id: note.id }, note.title || "无标题")
+      } catch (e) {
+        toast.error("新建笔记失败", { description: String(e) })
+      }
+    })()
+  }
+
   function checkUpdate() {
     setOpen(false)
     void (async () => {
@@ -156,6 +198,31 @@ export default function CommandPalette() {
       />
       <CommandList>
         <CommandEmpty>没有匹配的内容或命令</CommandEmpty>
+        {/* 打开的标签 (LRU 最近优先): 键盘定位已打开标签的第一入口, 空输入即展示 (VS Code Ctrl+P 惯例)。 */}
+        {!commandMode && openTabItems.length > 0 && (
+          <>
+            <CommandGroup heading="打开的标签">
+              {openTabItems.map((t) => (
+                <CommandItem
+                  key={t.id}
+                  value={`tab ${t.id}`}
+                  keywords={[t.title]}
+                  onSelect={() => {
+                    setActiveTab(t.id)
+                    setOpen(false)
+                  }}
+                >
+                  <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{t.title}</span>
+                  {t.path ? (
+                    <CommandShortcut className="font-mono">{t.path}</CommandShortcut>
+                  ) : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        )}
         <CommandGroup heading="发现">
           {SPOKES.map((s) => (
             <CommandItem key={s.href} value={`> 发现 ${s.label}`} onSelect={() => go(s.href)}>
@@ -182,6 +249,11 @@ export default function CommandPalette() {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="我的">
+          {/* 最高频捕获动作 (记一条笔记) 的 1 步入口, 置组首。 */}
+          <CommandItem value="> 新建笔记 new note 记录 写作" onSelect={newNote}>
+            <NotebookPen className="h-4 w-4" />
+            新建笔记
+          </CommandItem>
           {HOME_SUBPAGES.map((p) => (
             <CommandItem key={p.href} value={`> 我的 ${p.label}`} onSelect={() => go(p.href)}>
               <p.icon className="h-4 w-4" />
@@ -189,6 +261,31 @@ export default function CommandPalette() {
               <CommandShortcut className="font-mono">{p.href}</CommandShortcut>
             </CommandItem>
           ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="标签">
+          <CommandItem
+            value="> 关闭当前标签 close tab"
+            onSelect={() => {
+              setOpen(false)
+              closeActiveTab()
+            }}
+          >
+            <X className="h-4 w-4" />
+            关闭当前标签
+            <CommandShortcut>{closeKbd}</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="> 关闭其他标签 close other tabs"
+            onSelect={() => {
+              setOpen(false)
+              const id = getActiveId()
+              if (id) closeOtherTabs(id)
+            }}
+          >
+            <Layers className="h-4 w-4" />
+            关闭其他标签
+          </CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="系统服务">

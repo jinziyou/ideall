@@ -541,7 +541,7 @@ function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
   const kind = fileKind(file.name, file.type)
   const Icon = KIND_ICON[kind]
   return (
-    <div className="group flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground transition-shadow hover:shadow-md">
+    <div className="group flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground transition-colors hover:border-foreground/20">
       <button
         type="button"
         onClick={actions.onPreview}

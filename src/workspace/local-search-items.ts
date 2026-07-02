@@ -1,18 +1,20 @@
-// 本机内容 (笔记 / 关注 / 书签 / 资源) 的可搜索条目: 唯一数据来源, 供 ⌘K 统一面板消费
+// 本机内容 (笔记 / 关注 / 书签 / 资源 / 对话) 的可搜索条目: 唯一数据来源, 供 ⌘K 统一面板消费
 // (顶栏搜索框唤起同一面板; 旧的独立本地搜索对话框已并入)。每项含 run() 执行:
-// 笔记/资源 → 打开实体节点标签; 书签 → 打开网址 (协议白名单); 关注 → 打开关注模块。
+// 笔记/资源/对话 → 打开实体节点标签; 书签 → 打开网址 (协议白名单); 关注 → 打开关注模块。
 
 import type { ComponentType } from "react"
+import { MessagesSquare } from "lucide-react"
 import { safeHref } from "@/lib/safe-url"
 import { listNotes } from "@/files/stores/notes-store"
 import { listBookmarks } from "@/files/stores/bookmarks-store"
 import { listFiles } from "@/files/stores/files-store"
 import { listSubscriptions } from "@/files/stores/subscriptions-store"
+import { listThreads } from "@/files/stores/threads-store"
 import { MODULE_META } from "./module-meta"
 import { openTab, openNodeTab } from "./store"
 import type { TabDescriptor } from "./types"
 
-export type LocalSearchGroup = "笔记" | "关注" | "书签" | "资源"
+export type LocalSearchGroup = "笔记" | "关注" | "书签" | "资源" | "对话"
 export type LocalSearchItem = {
   id: string
   label: string
@@ -20,7 +22,7 @@ export type LocalSearchItem = {
   run: () => void
 }
 
-export const LOCAL_SEARCH_ORDER: LocalSearchGroup[] = ["笔记", "关注", "书签", "资源"]
+export const LOCAL_SEARCH_ORDER: LocalSearchGroup[] = ["笔记", "关注", "书签", "资源", "对话"]
 
 // 图标从 MODULE_META 派生 (分组名是本文件的展示口径, 与模块 label 恰好一致但语义独立)。
 export const LOCAL_SEARCH_ICON: Record<LocalSearchGroup, ComponentType<{ className?: string }>> = {
@@ -28,6 +30,7 @@ export const LOCAL_SEARCH_ICON: Record<LocalSearchGroup, ComponentType<{ classNa
   关注: MODULE_META.subscriptions.icon,
   书签: MODULE_META.bookmarks.icon,
   资源: MODULE_META.resources.icon,
+  对话: MessagesSquare,
 }
 
 const SUBSCRIPTIONS_TAB: TabDescriptor = {
@@ -43,13 +46,15 @@ const BOOKMARKS_TAB: TabDescriptor = {
   path: "/home/bookmarks",
 }
 
-/** 并行加载本机内容并构建可搜索/可执行条目 (按 笔记→关注→书签→资源 顺序)。 */
+/** 并行加载本机内容并构建可搜索/可执行条目 (按 笔记→关注→书签→资源→对话 顺序)。 */
 export async function loadLocalSearchItems(): Promise<LocalSearchItem[]> {
-  const [notes, bms, files, subs] = await Promise.all([
+  const [notes, bms, files, subs, threads] = await Promise.all([
     listNotes(),
     listBookmarks(),
     listFiles(),
     listSubscriptions(),
+    // 对话即文件 (§6.5): thread 与笔记平级可搜。单仓失败不拖垮整个搜索面。
+    listThreads().catch(() => []),
   ])
   const items: LocalSearchItem[] = []
   // 笔记: 打开「该篇」为独立节点标签 (一切皆标签), 而非笼统跳到笔记列表。
@@ -85,6 +90,14 @@ export async function loadLocalSearchItems(): Promise<LocalSearchItem[]> {
       label: f.name,
       group: "资源",
       run: () => openNodeTab({ kind: "file", id: f.id }, f.name),
+    })
+  // 对话 → 打开该 thread 的只读查看器标签 (thread-viewer 内可一键回 AI 栏继续)。
+  for (const t of threads)
+    items.push({
+      id: "t" + t.id,
+      label: t.title || "未命名对话",
+      group: "对话",
+      run: () => openNodeTab({ kind: "thread", id: t.id }, t.title || "未命名对话"),
     })
   return items
 }

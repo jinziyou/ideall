@@ -17,6 +17,7 @@ import SecondarySidebar from "./secondary-sidebar"
 import MobileDrillBar from "./mobile-drill-bar"
 import TabBar from "./tab-bar"
 import TabHost from "./tab-host"
+import GlobalShortcuts from "./global-shortcuts"
 import {
   getActiveId,
   getTabs,
@@ -24,9 +25,11 @@ import {
   tabKey,
   useActiveId,
   useHydrated,
+  useRightPanelOpen,
   useSidebarCollapsed,
   useTabs,
 } from "./store"
+import { useMediaQuery } from "@/lib/use-media-query"
 import { descriptorForNode, descriptorForPath } from "./modules"
 
 // URL 同步抽成独立子组件: 它用 useSearchParams (output:export 下必须包 <Suspense>)。
@@ -47,6 +50,9 @@ function UrlSync() {
   const activeId = useActiveId()
   const tabs = useTabs()
   const search = searchParams.toString()
+  const isMdUp = useMediaQuery("(min-width: 768px)")
+  // 首次同步 (恢复会话 / 深链归一) 用 replace, 不该堆历史; 之后移动端的标签导航才 push。
+  const syncedOnceRef = React.useRef(false)
 
   React.useEffect(() => {
     if (pathname?.startsWith("/auth")) return
@@ -73,10 +79,21 @@ function UrlSync() {
     if (!t?.path) return
     // 先认 node (含 query), 再认普通路径; URL 已归属激活标签 (含嵌入应用经 host.nav 改写的子路径) → 保留。
     const cur = descriptorForNode(search) ?? descriptorForPath(pathname || "/")
-    if (cur && tabKey(cur) === t.id) return
+    if (cur && tabKey(cur) === t.id) {
+      syncedOnceRef.current = true
+      return
+    }
     const curUrl = (pathname || "") + (search ? `?${search}` : "")
-    if (t.path !== curUrl) router.replace(t.path)
-  }, [hydrated, activeId, tabs, pathname, search, router])
+    if (t.path !== curUrl) {
+      // 移动端 (<md) 没有可见标签条, 系统返回 (Android 返回键 / iOS 边缘滑动) 是最高频导航原语:
+      // 用 push 让「下钻/切标签」进 history, 回退落到上一个路由后由 OpenWorkspaceTab 标记
+      // 重开对应标签 (预览方式) —— 返回手势从此可撤销下钻, 不再直接退出 App。
+      // 桌面标签条自带完整导航, 保持 replace (地址栏只是激活标签的镜像, 不堆历史)。
+      if (!isMdUp && syncedOnceRef.current) router.push(t.path)
+      else router.replace(t.path)
+    }
+    syncedOnceRef.current = true
+  }, [hydrated, activeId, tabs, pathname, search, router, isMdUp])
 
   return null
 }
@@ -84,6 +101,10 @@ function UrlSync() {
 export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const sidebarCollapsed = useSidebarCollapsed()
+  const rightPanelOpen = useRightPanelOpen()
+  const isLg = useMediaQuery("(min-width: 1024px)")
+  // <lg 时 AI 栏是全屏覆盖层 (dialog): 被遮住的工作区必须 inert, 防 Tab/读屏器穿透到覆盖层背后。
+  const aiOverlayActive = rightPanelOpen && !isLg
 
   // 客户端挂载后恢复上次的标签。
   React.useEffect(() => {
@@ -102,6 +123,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
       <React.Suspense fallback={null}>
         <UrlSync />
       </React.Suspense>
+      <GlobalShortcuts />
 
       <div className="flex h-dvh flex-col">
         {/* 移动顶栏 (md:hidden 由组件内部控制; Tauri 窄窗兼作标题栏) */}
@@ -110,19 +132,22 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
         <TopBar />
 
         <div className="flex min-h-0 flex-1">
-          <ActivityBar />
-          <SecondarySidebar collapsed={sidebarCollapsed} />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <TabBar />
-            {/* 移动端下钻返回条 (md:hidden; 桌面有标签条无需它): 节点标签激活时给显式返回。 */}
-            <MobileDrillBar />
-            {/* 移动端底栏含安全区(刘海/Home 指示条), 预留 4rem + 底栏内边距下限(0.35rem)/safe-area 取大 ——
-                与 bottom-tab-bar 的 pb-[max(env(safe-area-inset-bottom),0.35rem)] 对齐, 防 safe-area≈0 时底部内容被遮 */}
-            <div className="min-h-0 flex-1 pb-[calc(4rem+max(env(safe-area-inset-bottom),0.35rem))] md:pb-0">
-              <TabHost />
+          {/* AI 覆盖层 (<lg) 打开时对被遮内容 inert (WCAG: 覆盖层背后不可聚焦/不可读) */}
+          <div inert={aiOverlayActive} className="flex min-w-0 flex-1">
+            <ActivityBar />
+            <SecondarySidebar collapsed={sidebarCollapsed} />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <TabBar />
+              {/* 移动端下钻返回条 (md:hidden; 桌面有标签条无需它): 节点标签激活时给显式返回。 */}
+              <MobileDrillBar />
+              {/* 移动端底栏含安全区(刘海/Home 指示条), 预留 4rem + 底栏内边距下限(0.35rem)/safe-area 取大 ——
+                  与 bottom-tab-bar 的 pb-[max(env(safe-area-inset-bottom),0.35rem)] 对齐, 防 safe-area≈0 时底部内容被遮 */}
+              <div className="min-h-0 flex-1 pb-[calc(4rem+max(env(safe-area-inset-bottom),0.35rem))] md:pb-0">
+                <TabHost />
+              </div>
             </div>
           </div>
-          {/* 右侧 AI 对话栏 (桌面停靠 / 移动全屏覆盖; 关闭态不渲染) */}
+          {/* 右侧 AI 对话栏 (桌面停靠 / 移动全屏覆盖; 首次打开后 keep-alive, 关闭仅隐藏) */}
           <RightAiPanel />
         </div>
 

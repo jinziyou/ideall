@@ -214,7 +214,7 @@ export default function QuickJump({ title, placeholder, providers, historyKey }:
             {history.map((item) => (
               <span
                 key={item}
-                className="group inline-flex items-center gap-1 rounded-full border bg-card py-1 pl-3 pr-1.5 text-sm text-card-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-accent"
+                className="group inline-flex items-center gap-1 rounded-full border bg-card py-1 pl-3 pr-1.5 text-sm text-card-foreground transition-colors hover:border-primary/40 hover:bg-accent"
               >
                 <button
                   type="button"
@@ -245,7 +245,7 @@ export default function QuickJump({ title, placeholder, providers, historyKey }:
             <button
               type="button"
               onClick={() => jump(provider)}
-              className="group flex w-full items-start gap-3 rounded-lg border bg-card p-3 pr-8 text-left text-card-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-accent"
+              className="group flex w-full items-start gap-3 rounded-lg border bg-card p-3 pr-8 text-left text-card-foreground transition-colors hover:border-primary/40 hover:bg-accent"
             >
               {/* 单色: 提供方首字母用中性方块, 不再用彩色 (尊重纯墨灰主题) */}
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold text-foreground">

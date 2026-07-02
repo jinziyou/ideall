@@ -14,7 +14,9 @@ import { isTauri, browserHide } from "@/lib/tauri"
 
 const STORAGE_KEY = "ideall:workspace:v1"
 
-/** 模块 → 工作区模式视图 (本地 / 连接)。打开/激活标签时据此自动同步视图 (mode-中性模块例外, 见 isModeNeutralModule)。 */
+/** 模块 → 工作区模式视图 (本地 / 连接)。仅在「显式模块导航」(活动栏 toggleModule) 时据此同步视图;
+ *  打开/激活/关闭标签一律不翻 mode —— 否则点一个另一模式的标签会整排重构活动栏, 摧毁空间锚点
+ *  (视图切换只归 ModeSwitch 与活动栏图标两个显式入口)。 */
 const MODE_OF: Record<ModuleId, WsMode> = {
   home: "local",
   subscriptions: "local",
@@ -63,7 +65,7 @@ type State = {
   rightPanelOpen: boolean
   /** 标签访问序 (LRU, 最近激活在末尾): 软上限回收时据此挑「最久未用」的冷标签。不持久化, 随激活重建。 */
   lru: string[]
-  /** 是否已从 sessionStorage 水合 (SSR/首帧前为 false, 保证与服务端快照一致)。 */
+  /** 是否已从本地存储水合 (SSR/首帧前为 false, 保证与服务端快照一致)。 */
   hydrated: boolean
 }
 
@@ -122,23 +124,28 @@ export function tabKey(d: TabDescriptor): string {
 function persist() {
   if (typeof window === "undefined" || !state.hydrated) return
   try {
-    sessionStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        tabs: state.tabs,
-        activeId: state.activeId,
-        transientId: state.transientId,
-        activeModule: state.activeModule,
-        mode: state.mode,
-        rightPanelOpen: state.rightPanelOpen,
-      }),
-    )
+    const snapshot = JSON.stringify({
+      tabs: state.tabs,
+      activeId: state.activeId,
+      transientId: state.transientId,
+      activeModule: state.activeModule,
+      mode: state.mode,
+      sidebarCollapsed: state.sidebarCollapsed,
+      rightPanelOpen: state.rightPanelOpen,
+    })
+    // 双写: sessionStorage 保 Web 多浏览器标签互不互踩 (各会话独立);
+    // localStorage 保跨重启恢复 (Tauri 桌面每次启动是全新 webview 会话,
+    // 只写 sessionStorage 会导致 App 重启即丢全部标签工作现场)。
+    sessionStorage.setItem(STORAGE_KEY, snapshot)
+    localStorage.setItem(STORAGE_KEY, snapshot)
   } catch {
     /* 隐私模式 / 配额满 → 放弃持久化 */
   }
 }
 
-/** 客户端挂载后调用一次: 从 sessionStorage 恢复上次的标签。
+/** 客户端挂载后调用一次: 从本地存储恢复上次的标签 (sessionStorage 优先 = 本浏览器标签的会话现场;
+ *  兜底 localStorage = 跨重启的最近一次快照, 桌面 App 重启 / 浏览器重开靠它恢复工作现场;
+ *  新浏览器标签无 session 时会继承 localStorage 快照 —— 有意为之, 非 per-tab 隔离)。
  *  与路由标记的 openTab 顺序无关 (React 不保证父子 effect 顺序): 采用合并而非覆盖 ——
  *  历史标签在前, 本次会话已开的标签去重并入; 当前路由已设的激活标签优先。 */
 export function hydrateWorkspace() {
@@ -149,10 +156,11 @@ export function hydrateWorkspace() {
     transientId: string | null
     activeModule: ModuleId
     mode: WsMode
+    sidebarCollapsed: boolean
     rightPanelOpen: boolean
   } | null = null
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
+    const raw = sessionStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const p = JSON.parse(raw) as {
         tabs?: Tab[]
@@ -160,6 +168,7 @@ export function hydrateWorkspace() {
         transientId?: string | null
         activeModule?: ModuleId
         mode?: WsMode
+        sidebarCollapsed?: boolean
         rightPanelOpen?: boolean
       }
       if (Array.isArray(p.tabs)) {
@@ -169,6 +178,7 @@ export function hydrateWorkspace() {
           transientId: p.transientId ?? null,
           activeModule: p.activeModule ?? "home",
           mode: p.mode ?? "local",
+          sidebarCollapsed: p.sidebarCollapsed ?? false,
           rightPanelOpen: p.rightPanelOpen ?? false,
         }
       }
@@ -188,8 +198,6 @@ export function hydrateWorkspace() {
     // 激活标签: marker 先跑设置的当前路由优先, 否则历史; 且必须确实存在于 merged。
     const wantId = state.activeId ?? saved.activeId
     const activeTab = wantId ? (merged.find((x) => x.id === wantId) ?? null) : null
-    // mode-中性模块 (agent / 跨模式 tool): 不由 module 反推 mode, 沿用持久化视图。
-    const modeNeutralActive = activeTab != null && isModeNeutralModule(activeTab.module)
     const aiActive = activeTab?.module === "agent"
     state = {
       ...state,
@@ -214,14 +222,10 @@ export function hydrateWorkspace() {
           : state.activeId
             ? state.activeModule
             : "home",
-      // 模式视图由激活标签派生 (保证活动栏与标签自洽); mode-中性模块沿用持久化视图。
-      mode: modeNeutralActive
-        ? saved.mode
-        : activeTab
-          ? MODE_OF[activeTab.module]
-          : state.activeId
-            ? state.mode
-            : saved.mode,
+      // 模式视图是独立的显式偏好 (不由激活标签反推): 沿用持久化值。
+      // 激活标签属于另一模式时, 活动栏会把它附加显示 (见 activity-bar), 不整排换血。
+      mode: saved.mode,
+      sidebarCollapsed: saved.sidebarCollapsed,
       rightPanelOpen: saved.rightPanelOpen,
       hydrated: true,
     }
@@ -284,19 +288,17 @@ function evictColdTabs(tabs: Tab[], protect: Set<string>): Tab[] {
 }
 
 /** 打开 (或激活已存在的) 标签, 并把活动模块同步到该标签所属模块 (驱动活动栏高亮 / 侧栏)。
+ *  不翻 mode 视图 (打开标签是内容导航, 不是视图切换; 见 MODE_OF 注释)。
  *  source 默认 user (UI/路由触发); agent 经 ui.openTab 打开时传 "agent" —— 仅影响隐式同意, 不改打开行为。
  *  opts.transient=true → VS Code 式预览标签 (复用单一预览槽, 斜体显示); 缺省 = 常驻打开
  *  (若命中当前预览槽则提升为常驻)。新增常驻标签超过软上限时自动回收最久未用的冷标签。 */
 export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: OpenTabOpts) {
   hideBrowserWebviewUnlessBrowserTab(d.kind)
   const id = tabKey(d)
-  // mode-中性模块 (agent / 跨模式 tool): 打开不翻 mode 视图; 否则同步到该模块所属模式。
-  const mode = isModeNeutralModule(d.module) ? state.mode : MODE_OF[d.module]
   if (opts?.transient) {
     setState({
       ...transientOpenPatch(d),
       activeModule: d.module,
-      mode,
       activeSource: source,
     })
     return
@@ -309,7 +311,6 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: 
     transientId: state.transientId === id ? null : state.transientId,
     activeId: id,
     activeModule: d.module,
-    mode,
     activeSource: source,
   })
 }
@@ -419,23 +420,19 @@ export function closeTab(id: string) {
   const tabs = state.tabs.filter((t) => t.id !== id)
   let activeId = state.activeId
   let activeModule = state.activeModule
-  let mode = state.mode
   if (state.activeId === id) {
     const next = tabs[idx] ?? tabs[idx - 1] ?? null
     activeId = next ? next.id : null
-    // 焦点转移到相邻标签时同步活动模块与模式视图 (否则活动栏/侧栏会停在旧模块)。
-    // mode-中性模块: 焦点落到它时保留关闭前的视图。
+    // 焦点转移到相邻标签时同步活动模块 (否则活动栏/侧栏会停在旧模块); mode 不随标签翻转。
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next.kind)
       activeModule = next.module
-      if (!isModeNeutralModule(next.module)) mode = MODE_OF[next.module]
     }
   }
   setState({
     tabs,
     activeId,
     activeModule,
-    mode,
     transientId: state.transientId === id ? null : state.transientId,
     activeSource: "user",
   })
@@ -462,7 +459,6 @@ export function closeOtherTabs(keepId: string) {
     tabs: [keep],
     activeId: keepId,
     activeModule: keep.module,
-    mode: isModeNeutralModule(keep.module) ? state.mode : MODE_OF[keep.module],
     transientId: state.transientId === keepId ? keepId : null,
     activeSource: "user",
   })
@@ -472,13 +468,9 @@ export function setActiveTab(id: string) {
   const t = state.tabs.find((x) => x.id === id)
   if (!t) return
   hideBrowserWebviewUnlessBrowserTab(t.kind)
-  // mode-中性模块 (agent / 跨模式 tool): 激活时不翻视图 (否则点工具/AI 标签会翻视图)。
-  if (isModeNeutralModule(t.module)) {
-    setState({ activeId: id, activeModule: t.module, activeSource: "user" })
-    return
-  }
+  // 激活标签不翻 mode 视图 (原先非中性模块会整排重构活动栏, 摧毁空间锚点)。
   // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
-  setState({ activeId: id, activeModule: t.module, mode: MODE_OF[t.module], activeSource: "user" })
+  setState({ activeId: id, activeModule: t.module, activeSource: "user" })
 }
 
 /** 点活动栏图标: 同模块且侧栏展开 → 收起侧栏; 否则切到该模块、展开侧栏, 并以「预览」方式开其首个面板。 */
@@ -553,6 +545,30 @@ export function reorderTabs(fromId: string, toId: string) {
   const [moved] = tabs.splice(from, 1)
   tabs.splice(to, 0, moved)
   setState({ tabs })
+}
+
+// —— 键盘导航动作 (全局快捷键 / 命令面板共用) ——
+
+/** 关闭当前激活标签 (mod+W)。无激活标签时无操作。 */
+export function closeActiveTab() {
+  if (state.activeId) closeTab(state.activeId)
+}
+
+/** 按标签条顺序激活相邻标签 (Ctrl+Tab / Ctrl+PgUp/PgDn), 首尾循环。 */
+export function activateAdjacentTab(delta: 1 | -1) {
+  const n = state.tabs.length
+  if (n === 0) return
+  const cur = state.tabs.findIndex((t) => t.id === state.activeId)
+  const next = state.tabs[(cur === -1 ? 0 : cur + delta + n) % n]
+  setActiveTab(next.id)
+}
+
+/** 激活第 N 个标签 (mod+1..9; 浏览器惯例: 9 = 最后一个)。 */
+export function activateTabAt(index: number) {
+  const n = state.tabs.length
+  if (n === 0 || index < 1) return
+  const t = index >= 9 ? state.tabs[n - 1] : state.tabs[index - 1]
+  if (t) setActiveTab(t.id)
 }
 
 // —— hooks (各返回稳定快照, 避免 useSyncExternalStore 抖动) ——
@@ -634,6 +650,15 @@ export function useHydrated() {
     subscribe,
     () => state.hydrated,
     () => DEFAULT.hydrated,
+  )
+}
+
+/** 标签访问序 (LRU, 最近激活在末尾)。⌘K「打开的标签」按最近优先排序用。 */
+export function useLru() {
+  return React.useSyncExternalStore(
+    subscribe,
+    () => state.lru,
+    () => DEFAULT.lru,
   )
 }
 

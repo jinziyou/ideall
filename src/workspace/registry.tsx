@@ -6,6 +6,7 @@
 
 import * as React from "react"
 import { Loader2 } from "lucide-react"
+import { ErrorBoundary } from "@/ui/error-boundary"
 import { EmbedHost } from "@/plugins/embed/host"
 import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manifest"
 import type { SubscriptionType } from "@protocol/subscription"
@@ -88,7 +89,7 @@ export function tabLayout(tab: Tab): TabLayout {
   return REGISTRY[tab.kind]?.layout ?? "padded"
 }
 
-export function TabContent({ tab }: { tab: Tab }) {
+function renderTabBody(tab: Tab): React.ReactNode {
   // 节点级标签 (一切皆标签): params={kind,id} → 解析 NodeRef → 查节点查看器 → <Comp nodeId/>。
   if (tab.kind === "node") {
     const ref = parseNodeParams(tab.params)
@@ -113,4 +114,10 @@ export function TabContent({ tab }: { tab: Tab }) {
     return <div className="p-6 text-sm text-muted-foreground">未知的标签类型：{tab.kind}</div>
   }
   return <React.Suspense fallback={Spinner}>{entry.render(tab)}</React.Suspense>
+}
+
+export function TabContent({ tab }: { tab: Tab }) {
+  // 标签级错误边界: 单标签渲染崩溃 / chunk 加载失败只炸掉本面板 (错误卡 + 重试),
+  // 标签条、侧栏与其他标签全部存活 —— 不再击穿 layout 落到 global-error 替换整个外壳。
+  return <ErrorBoundary label="此标签">{renderTabBody(tab)}</ErrorBoundary>
 }

@@ -10,8 +10,9 @@ import { listSubscriptions } from "@/files/stores/subscriptions-store"
 import { listBookmarks } from "@/files/stores/bookmarks-store"
 import { listFiles } from "@/files/stores/files-store"
 import { listNotes } from "@/files/stores/notes-store"
+import { listThreads } from "@/files/stores/threads-store"
 import { onFilesUpdated } from "@protocol/flowback"
-import { openTab } from "@/workspace/store"
+import { openTab, setRightPanel } from "@/workspace/store"
 import { HOME_SECTIONS } from "@/workspace/tree/home-sections"
 import { SUB_SPOKE_META } from "@/files/spoke-meta"
 import type { Subscription } from "@protocol/subscription"
@@ -81,11 +82,12 @@ export default function Overview() {
     let alive = true
     async function load() {
       // 每个 store 各自兜底: 单仓库失败不应把整个概览清空。
-      const [subs, bookmarks, files, notes] = await Promise.all([
+      const [subs, bookmarks, files, notes, threads] = await Promise.all([
         listSubscriptions().catch(() => [] as Subscription[]),
         listBookmarks().catch(() => []),
         listFiles().catch(() => []),
         listNotes({ text: false }).catch(() => []),
+        listThreads().catch(() => []),
       ])
       if (!alive) return
       setData({
@@ -95,6 +97,7 @@ export default function Overview() {
           bookmarks: bookmarks.length,
           resources: files.length,
           notes: notes.length,
+          threads: threads.length,
         },
         flow: buildFlow(subs, bookmarks, files, notes),
       })
@@ -115,8 +118,8 @@ export default function Overview() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-      {/* 区段入口: 关注 / 书签 / 资源 / 发布 / 笔记 */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* 区段入口: 关注 / 书签 / 资源 / 发布 / 笔记 / 对话 */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {HOME_SECTIONS.map((s) => {
           const Icon = s.icon
           const count = data?.counts[s.id]
@@ -124,8 +127,9 @@ export default function Overview() {
             <button
               key={s.id}
               type="button"
-              onClick={() => openTab(s.descriptor)}
-              className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-left shadow-sm transition-colors hover:border-foreground/20 hover:bg-accent"
+              // 无面板区段 (对话): 点击呼出右侧 AI 栏 (对话的交互主场)。
+              onClick={() => (s.descriptor ? openTab(s.descriptor) : setRightPanel(true))}
+              className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-left transition-colors hover:border-foreground/20 hover:bg-accent"
             >
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Icon className="h-3.5 w-3.5" />
@@ -145,7 +149,7 @@ export default function Overview() {
       </div>
 
       {/* 最近动态 (本机) */}
-      <div className="rounded-lg border bg-card p-5 shadow-sm">
+      <div className="rounded-lg border bg-card p-5">
         <div className="mb-4 flex items-center gap-2">
           <h2 className="text-sm font-semibold">最近</h2>
         </div>

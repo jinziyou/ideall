@@ -99,7 +99,7 @@ function AppIcon({ app, size = "md" }: { app: InstalledApp; size?: "md" | "lg" }
         src={src}
         alt=""
         onError={() => setFailed(true)}
-        className={cn(dim, "shrink-0 rounded-md object-contain shadow-sm ring-1 ring-border/30")}
+        className={cn(dim, "shrink-0 rounded-md object-contain ring-1 ring-border/30")}
       />
     )
   }
@@ -144,7 +144,7 @@ function AppsSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       {Array.from({ length: 2 }).map((_, i) => (
-        <Card key={i} className="border-border/60 shadow-sm">
+        <Card key={i} className="border-border/60">
           <CardHeader className="pb-3">
             <div className="h-4 w-24 animate-pulse rounded bg-muted/60" />
           </CardHeader>
@@ -185,7 +185,7 @@ function AppTile({
       className={cn(
         "group flex flex-col items-center gap-3 rounded-lg p-5 text-center transition-[background-color,box-shadow,transform]",
         "bg-background/50 ring-1 ring-border/40",
-        "hover:bg-background hover:shadow-sm hover:ring-spoke-tool/25",
+        "hover:bg-background hover:ring-spoke-tool/25",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "active:scale-[0.98]",
         launching && "pointer-events-none opacity-50",
@@ -295,7 +295,7 @@ export default function AppsPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
       <PageHeader total={apps.length} filtered={filtered.length} loading={loading} />
 
-      <div className="rounded-lg border border-border/60 bg-card p-5 shadow-sm">
+      <div className="rounded-lg border border-border/60 bg-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -366,7 +366,7 @@ export default function AppsPage() {
       ) : showGrouped ? (
         <div className="flex flex-col gap-6">
           {[...grouped.entries()].map(([cat, items]) => (
-            <Card key={cat} className="border-border/60 shadow-sm">
+            <Card key={cat} className="border-border/60">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-baseline gap-2 text-base font-semibold">
                   {cat}
@@ -391,7 +391,7 @@ export default function AppsPage() {
           ))}
         </div>
       ) : (
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-baseline gap-2 text-base font-semibold">
               搜索结果

@@ -108,7 +108,7 @@ ideall 仅以 App 形态分发 (见 [app.md](app.md)):
 ## Conventions
 
 - 默认 Server Component, 仅交互组件加 `"use client"`
-- UI 复用 `src/ui` 的 shadcn 原语, 禁止引入并行 UI 库
+- UI 复用 `src/ui` 的 shadcn 原语, 禁止引入并行 UI 库; 视觉决策 (阴影/颜色/圆角/间距/公共件) 以 [docs/design/ui-style.md](design/ui-style.md) 为准
 - TypeScript strict, 后端取数与 DTO 一律经 `@protocol/server-port` (ServerPort + ideall 自有领域类型);
   **业务/protocol 代码禁止 import wire DTO** (`@/lib/api/server`), 它仅供 `@/lib/server` 适配器消费
 - 所有 fetch / 数据访问函数必须 `try-catch` + `res.ok` 检查

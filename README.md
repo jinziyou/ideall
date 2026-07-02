@@ -168,6 +168,7 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | 架构权威说明：领域模型、模块与边界、数据流图、技术选型、关键不变量 |
 | [docs/app.md](docs/app.md) | App（桌面 / 移动）方案、平台矩阵、CI、签名与分阶段路线图 |
+| [docs/design/ui-style.md](docs/design/ui-style.md) | UI 视觉规范（现代 · 面板 · 留白）：阴影 / 颜色 / 圆角 / 间距 / 公共组件的统一口径 |
 | [docs/claude.md](docs/claude.md) | 仓库结构与开发约定（贡献者速查） |
 | [.github/SECURITY.md](.github/SECURITY.md) | 安全策略与漏洞报告（含跨端同步加密关注点） |
 
