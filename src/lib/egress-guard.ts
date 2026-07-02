@@ -58,7 +58,7 @@ export function isBlockedIpv4(host: string): boolean {
  * 关键: 按**字节**判而非文本前缀 —— `new URL` 会把内嵌 IPv4 序列化成 16 进制 (`::ffff:127.0.0.1` → `::ffff:7f00:1`),
  * 文本正则匹配会漏 (红队确认的 SSRF 绕过); 字节判则与文本形态无关。同时解内嵌 IPv4 文本形与 16 进制形。
  */
-export function ipv6Bytes(host: string): number[] | null {
+function ipv6Bytes(host: string): number[] | null {
   let h = host.toLowerCase()
   // 内嵌 IPv4 (如 ::ffff:127.0.0.1) → 折成两个 16 进制段, 统一走下面的展开。
   const lastColon = h.lastIndexOf(":")

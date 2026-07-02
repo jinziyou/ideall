@@ -328,7 +328,7 @@ export function promoteActiveTab() {
 }
 
 /** 打开全局设置标签 (外观 / 本机 / 已连接应用)。 */
-export const SETTINGS_TAB: TabDescriptor = {
+const SETTINGS_TAB: TabDescriptor = {
   kind: "home-settings",
   module: "home",
   title: "设置",
@@ -340,7 +340,7 @@ export function openSettings() {
 }
 
 /** AI 全局设置标签 (默认 AI 标签; module:"agent")。 */
-export const AI_SETTINGS_TAB: TabDescriptor = {
+const AI_SETTINGS_TAB: TabDescriptor = {
   kind: "ai-settings",
   module: "agent",
   title: "AI 设置",

@@ -70,7 +70,7 @@ function ensureBlocks(note: NoteRow): { content: NoteContent; blockMeta: BlockMe
 }
 
 /** 空文档: 单个空段落 (Plate 段落块 type "p")。 */
-export function emptyNoteContent(): NoteContent {
+function emptyNoteContent(): NoteContent {
   return [{ type: "p", children: [{ text: "" }] }]
 }
 

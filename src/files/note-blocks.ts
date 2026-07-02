@@ -33,7 +33,7 @@ export function blockMapById(blocks: Block[]): Map<BlockId, Block> {
 }
 
 /** 顶层块 id 列表 (按当前顺序; 仅有 id 者)。 */
-export function blockIds(blocks: Block[]): BlockId[] {
+function blockIds(blocks: Block[]): BlockId[] {
   return blocks.map((b) => b.id).filter((x): x is string => typeof x === "string" && x.length > 0)
 }
 
