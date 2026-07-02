@@ -1,0 +1,67 @@
+name: smoke
+
+# 冒烟门: 真浏览器驱动笔记链路 (新建→输入→slash 菜单→自动保存→刷新持久化)。
+# 测的是**生产形态** —— 静态导出 (out/) 经 scripts/serve-out.mjs 提供,
+# 与 App 实际分发一致 (deep-link/.html 解析回归也在覆盖内), 不再依赖 dev 服。
+# paths 过滤: 仅应用面改动才跑 (纯文档/CI 改动不烧浏览器分钟数)。
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "next.config.ts"
+      - "tsconfig.json"
+      - "scripts/smoke-notes.mjs"
+      - "scripts/serve-out.mjs"
+      - ".github/workflows/smoke.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "next.config.ts"
+      - "tsconfig.json"
+      - "scripts/smoke-notes.mjs"
+      - "scripts/serve-out.mjs"
+      - ".github/workflows/smoke.yml"
+
+jobs:
+  smoke:
+    name: notes e2e (静态导出)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+      - name: Build (static export)
+        run: pnpm build
+      - name: Serve out/
+        run: |
+          node scripts/serve-out.mjs > /tmp/serve.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf --max-time 5 http://localhost:5030/home/notes > /dev/null && exit 0
+            sleep 1
+          done
+          echo "静态服 30s 未就绪"; cat /tmp/serve.log; exit 1
+      - name: Smoke (notes e2e)
+        run: BASE=http://localhost:5030 pnpm smoke:notes
+      - name: 上传截图 (失败排查用)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notes-smoke-screenshots
+          path: /tmp/notes-smoke
+          if-no-files-found: ignore
