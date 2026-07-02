@@ -31,9 +31,9 @@ function sub(id: string, ts: number, extra: Partial<Subscription> = {}): Subscri
   }
 }
 
-/** 内存「服务端」: 单个同步块 + 乐观并发 (expected 不符→409); 可强制首次 PUT 409 测重试。 */
+/** 内存「服务端」: 单个同步块 + 乐观并发 (expected 不符→409); 可强制首次 PUT 409 测重试; putCount 计收到的 PUT 数。 */
 function makeServer(initial: SyncBlob | null = null) {
-  const state = { blob: initial, force409Once: false }
+  const state = { blob: initial, force409Once: false, putCount: 0 }
   const text = (s: number, b: string) => ({
     ok: s >= 200 && s < 300,
     status: s,
@@ -47,6 +47,7 @@ function makeServer(initial: SyncBlob | null = null) {
       return state.blob ? text(200, JSON.stringify({ data: state.blob })) : text(404, "")
     }
     // PUT: 乐观并发
+    state.putCount++
     if (state.force409Once) {
       state.force409Once = false
       return text(409, "conflict")
@@ -141,5 +142,34 @@ test("syncNow: 过滤远端非法项 (缺 id 不污染 unionMerge)", async () =>
   assert.deepEqual(
     b.store.map((s) => s.id),
     ["publisher:good"],
+  )
+})
+
+// ── 无变更跳过上传 (远端是单一加密 blob, 等价时不重新加密/PUT —— 周期同步只下载) ──
+
+test("syncNow: 合并结果与远端等价 → 跳过重新加密上传", async () => {
+  const { key } = await deriveKeys(CODE)
+  const subs = [sub("publisher:a", 1000)]
+  const enc = await encryptJson(key, subs)
+  const server = makeServer({ iv: enc.iv, ciphertext: enc.ciphertext, updated_at: 111 })
+  makeHub(subs)
+  const res = await syncNow(CODE)
+  assert.equal(server.putCount, 0, "无变更 → 不应 PUT")
+  assert.equal(server.blob!.updated_at, 111, "远端 blob 保持原样")
+  assert.equal(res.total, 1)
+})
+
+test("syncNow: 远端含非法项 → 即使有效集等价也重传清洗", async () => {
+  const { key } = await deriveKeys(CODE)
+  const subs = [sub("publisher:a", 1000)]
+  const enc = await encryptJson(key, [...subs, { type: "publisher", key: "x", title: "脏" }])
+  const server = makeServer({ iv: enc.iv, ciphertext: enc.ciphertext, updated_at: 1 })
+  makeHub(subs)
+  await syncNow(CODE)
+  assert.equal(server.putCount, 1, "含脏项 → 重传以清洗远端")
+  const decoded = await decryptJson<Subscription[]>(key, server.blob!.iv, server.blob!.ciphertext)
+  assert.deepEqual(
+    decoded.map((s) => s.id),
+    ["publisher:a"],
   )
 })

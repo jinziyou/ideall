@@ -4,7 +4,7 @@ import assert from "node:assert/strict"
 
 import {
   unionMerge,
-  subsEqual,
+  recordsEqual,
   isLive,
   isTombstone,
   isExpiredTombstone,
@@ -56,11 +56,11 @@ test("unionMerge: 并集保留各自独有 id", () => {
   assert.deepEqual(ids, ["a", "b"])
 })
 
-test("subsEqual: 顺序无关相等 / 字段变 / 长度变", () => {
+test("recordsEqual: 顺序无关相等 / 字段变 / 长度变", () => {
   const a = [sub("1", "X", 1), sub("2", "Y", 1)]
-  assert.equal(subsEqual(a, [sub("2", "Y", 1), sub("1", "X", 1)]), true)
-  assert.equal(subsEqual(a, [sub("1", "X2", 1), sub("2", "Y", 1)]), false)
-  assert.equal(subsEqual(a, [sub("1", "X", 1)]), false)
+  assert.equal(recordsEqual(a, [sub("2", "Y", 1), sub("1", "X", 1)]), true)
+  assert.equal(recordsEqual(a, [sub("1", "X2", 1), sub("2", "Y", 1)]), false)
+  assert.equal(recordsEqual(a, [sub("1", "X", 1)]), false)
 })
 
 // ── 删除标记 (tombstone) 删除传播 / 恢复 (Low-6) ────────────────────────────────────────

@@ -141,6 +141,3 @@ export function recordsEqual<T extends SyncRecord>(a: T[], b: T[]): boolean {
   const nb = norm(b)
   return na.every((v, i) => v === nb[i])
 }
-
-/** @deprecated 用 recordsEqual; 保留别名以兼容关注同步路径与现有测试。 */
-export const subsEqual = recordsEqual

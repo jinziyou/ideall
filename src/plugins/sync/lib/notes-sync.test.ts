@@ -1,9 +1,13 @@
 // 笔记跨端块级合并回归 (§7 ②): notes-sync 的 note 级合并 —— 整篇删除 node 级 LWW, 正文块级合并。
 // 锁死: 跨端并发改不同块无损; 较新整篇删除胜; 较旧墓碑被较新活跃复活。
-import { test } from "node:test"
+// 末尾另有 syncNotes 编排测试: 无变更跳过上传 / 有本地新增照常上传 (内存服务端 + 真实加解密)。
+import { test, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import type { Note } from "@protocol/files"
-import { mergeTwoNotes, mergeNotes, isValidRemoteNote } from "./notes-sync"
+import { registerFilesPort, type FilesPort } from "@protocol/files"
+import type { SyncBlob } from "@protocol/sync"
+import { deriveKeys, encryptJson } from "@/lib/sync-crypto"
+import { mergeTwoNotes, mergeNotes, isValidRemoteNote, syncNotes } from "./notes-sync"
 
 const blk = (id: string, text: string) => ({ id, type: "p", children: [{ text }] })
 const note = (over: Partial<Note>): Note => ({
@@ -152,4 +156,74 @@ test("mergeNotes: 单边笔记直取, 同 id 合并, 交换律 (集合等价)", 
     n1.content.map((x) => (x as { id: string }).id),
     ["B1", "B2"],
   )
+})
+
+// ── syncNotes 编排: 无变更跳过上传 (远端是单一加密 blob, 等价时不重新加密/PUT) ──
+
+const CODE = "0123456789abcdef0123456789abcdef" // 32 hex = 合法同步码
+
+const realFetch = globalThis.fetch
+afterEach(() => {
+  globalThis.fetch = realFetch
+})
+
+/** 内存「服务端」(同 subscription-sync.test): 单同步块 + 乐观并发; putCount 计收到的 PUT 数。 */
+function makeServer(initial: SyncBlob | null = null) {
+  const state = { blob: initial, putCount: 0 }
+  const text = (s: number, b: string) => ({
+    ok: s >= 200 && s < 300,
+    status: s,
+    text: async () => b,
+  })
+  globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
+    const url = String(input)
+    if (!url.includes("/sync/")) throw new Error("unexpected url: " + url)
+    if ((init.method ?? "GET") === "GET") {
+      return state.blob ? text(200, JSON.stringify({ data: state.blob })) : text(404, "")
+    }
+    state.putCount++
+    const expected = Number(url.match(/[?&]expected=(\d+)/)?.[1] ?? "0")
+    const current = state.blob?.updated_at ?? 0
+    if (expected !== current) return text(409, "conflict")
+    state.blob = JSON.parse(String(init.body)) as SyncBlob
+    return text(200, "{}")
+  }) as unknown as typeof fetch
+  return state
+}
+
+/** 内存 FilesPort (syncNotes 仅用 listAllNotes / bulkPutNotes)。 */
+function makeNotesHub(initial: Note[]) {
+  const store: Note[] = initial.map((n) => ({ ...n }))
+  const port = {
+    async listAllNotes() {
+      return store.map((n) => ({ ...n }))
+    },
+    async bulkPutNotes(ns: Note[]) {
+      store.length = 0
+      store.push(...ns.map((n) => ({ ...n })))
+    },
+  }
+  registerFilesPort(port as unknown as FilesPort)
+  return { store }
+}
+
+test("syncNotes: 合并结果与远端等价 → 跳过重新加密上传", async () => {
+  const { key } = await deriveKeys(CODE, "notes")
+  const notes = [note({ id: "n1", createdAt: 1000, updatedAt: 1000 })]
+  const enc = await encryptJson(key, notes)
+  const server = makeServer({ iv: enc.iv, ciphertext: enc.ciphertext, updated_at: 111 })
+  makeNotesHub(notes)
+  const res = await syncNotes(CODE)
+  assert.equal(server.putCount, 0, "无变更 → 不应 PUT")
+  assert.equal(server.blob!.updated_at, 111, "远端 blob 保持原样")
+  assert.equal(res.total, 1)
+})
+
+test("syncNotes: 本地有远端没有的笔记 → 照常上传", async () => {
+  const server = makeServer()
+  makeNotesHub([note({ id: "n1", createdAt: 1000, updatedAt: 1000 })])
+  const res = await syncNotes(CODE)
+  assert.equal(server.putCount, 1, "有增量 → 应 PUT 一次")
+  assert.ok(server.blob, "服务端应已写入密文")
+  assert.equal(res.total, 1)
 })

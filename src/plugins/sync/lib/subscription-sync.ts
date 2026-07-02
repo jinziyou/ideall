@@ -5,7 +5,7 @@
 import type { Subscription } from "@protocol/subscription"
 import {
   unionMerge,
-  subsEqual,
+  recordsEqual,
   isLive,
   isSaneSyncTimestamp,
   pruneExpiredTombstones,
@@ -61,10 +61,16 @@ export async function syncNow(code: string): Promise<SyncResult> {
     if (!got.ok) throw new Error(got.message)
     const base = got.data?.updated_at ?? 0 // 尚无数据 → 基线 0 (期望服务端也无数据)
     let remote: Subscription[] = []
+    let remoteDirty = false // 远端 blob 含非法/被过滤项 → 即使集合等价也重传以清洗
     if (got.data) {
       try {
         const decoded = await decryptJson<unknown[]>(key, got.data.iv, got.data.ciphertext)
-        if (Array.isArray(decoded)) remote = decoded.filter((x) => isValidRemoteSub(x, now))
+        if (Array.isArray(decoded)) {
+          remote = decoded.filter((x) => isValidRemoteSub(x, now))
+          remoteDirty = remote.length !== decoded.length
+        } else {
+          remoteDirty = true
+        }
       } catch {
         throw new Error("解密失败：同步码可能不一致")
       }
@@ -74,8 +80,15 @@ export async function syncNow(code: string): Promise<SyncResult> {
     // GC: 落地/上传前剔除过期删除标记, 使本地与远端同步块都不再无限累积删除标记。
     kept = pruneExpiredTombstones(merged, Date.now())
     // LWW 下即使长度不变也可能有字段更新 (含删除标记), 故按"非等价就写回"判定; 写回会物理清除过期删除标记。
-    if (!subsEqual(kept, localAll)) {
+    if (!recordsEqual(kept, localAll)) {
       await filesPort.bulkPutSubscriptions(kept)
+    }
+
+    // 合并结果与远端等价且远端干净 → 跳过重新加密与上传 (无变更的周期同步只下载)。
+    // 等价判定按序列化逐字比较, 偶发误判只会退化为照常上传 (fail-open), 不影响正确性。
+    if (!remoteDirty && recordsEqual(kept, remote)) {
+      succeeded = true
+      break
     }
 
     const enc = await encryptJson(key, kept)
