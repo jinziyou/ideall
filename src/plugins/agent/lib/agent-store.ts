@@ -3,19 +3,8 @@
 // 消息语义 (AgentMessage) 属本插件域; 端口以 Thread.messages: unknown[] 透传, 本边界断言为 AgentMessage[]。
 import { getFilesPort } from "@protocol/files"
 import type { Thread } from "@protocol/files"
+import { randomId } from "@/lib/id"
 import { AgentMessage, AgentRole, AgentThread } from "./model"
-
-function uid(): string {
-  // crypto.randomUUID 仅安全上下文 (localhost / https) 可用; 非安全 HTTP 下退化为时间戳+随机。
-  try {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID()
-    }
-  } catch {
-    /* 落到下面的退化方案 */
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-}
 
 /** 端口 Thread (messages: unknown[]) → 插件 AgentThread (断言 messages 为 AgentMessage[])。 */
 function toAgentThread(t: Thread): AgentThread {
@@ -53,7 +42,7 @@ export async function renameThread(id: string, title: string): Promise<void> {
 
 /** 构造一条消息 (供调用方追加到线程的 messages)。 */
 export function makeMessage(role: AgentRole, content: string): AgentMessage {
-  return { id: uid(), role, content, createdAt: Date.now() }
+  return { id: randomId(), role, content, createdAt: Date.now() }
 }
 
 /** 由首条用户消息推断线程标题 (截断)。 */

@@ -6,6 +6,7 @@
 // 本切片不开同步 (维持现状未同步); sortKey/updatedAt 已补齐, 删除标记 GC 随 bookmark-sync 落地 (与笔记同纪律)。
 import { Bookmark, BookmarkFolder } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
+import { faviconForUrl } from "@/lib/favicon"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
@@ -15,16 +16,6 @@ import { notifyFilesUpdated } from "@/files/flowback"
 
 type BookmarkNode = NodeOfKind<"bookmark">
 type FolderNode = NodeOfKind<"folder">
-
-/** 从 URL 推断 favicon (Google s2 服务), 失败时图标位降级为占位 */
-export function faviconFor(url: string): string {
-  try {
-    const host = new URL(url).hostname
-    return `https://www.google.com/s2/favicons?domain=${host}&sz=64`
-  } catch {
-    return ""
-  }
-}
 
 // ---- 节点 ↔ 域类型映射 ----
 
@@ -188,7 +179,7 @@ export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
     content: {
       url: input.url.trim(),
       description: input.description?.trim() ?? "",
-      favicon: input.favicon || faviconFor(input.url),
+      favicon: input.favicon || faviconForUrl(input.url),
     },
   }
   await idbPut(STORE_NODES, node)
@@ -215,7 +206,7 @@ export async function bulkAddBookmarks(inputs: NewBookmark[]): Promise<Bookmark[
     content: {
       url: input.url.trim(),
       description: input.description?.trim() ?? "",
-      favicon: input.favicon || faviconFor(input.url),
+      favicon: input.favicon || faviconForUrl(input.url),
     },
   }))
   await idbBulkPut(STORE_NODES, nodes)

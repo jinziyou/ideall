@@ -7,3 +7,18 @@
 export function genId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
+
+/**
+ * 随机唯一 ID (UUID 优先): crypto.randomUUID 仅安全上下文 (localhost / https) 可用,
+ * 非安全 HTTP 下退化为时间戳+随机。用于无前缀语义的一次性标识 (消息 id / OAuth state 等)。
+ */
+export function randomId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID()
+    }
+  } catch {
+    /* 落到下面的退化方案 */
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}

@@ -64,8 +64,8 @@ const homeEntries: SidebarEntry[] = [
     descriptor: { kind: "home-resources", module: "home", title: "资源", path: "/home/resources" },
   },
   {
-    // 「我的」语境下的书签区段 (标签/区段名统一为「书签」; 底层仍是 bookmark 节点)。
-    label: "书签",
+    // 「我的」语境下的书签区段 (底层仍是 bookmark 节点)。
+    label: MODULE_META.bookmarks.label,
     icon: MODULE_META.bookmarks.icon,
     descriptor: { kind: "home-bookmarks", module: "home", title: "书签", path: "/home/bookmarks" },
   },

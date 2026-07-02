@@ -17,6 +17,7 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
+import { randomId } from "@/lib/id"
 import { isTauri, resolveFetch } from "@/lib/tauri"
 
 const CALLBACK_PORT = 7843
@@ -77,17 +78,6 @@ async function openExternal(url: string): Promise<void> {
   if (typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer")
 }
 
-function randomState(): string {
-  try {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID()
-    }
-  } catch {
-    /* 落到下面 */
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-}
-
 /** 一个 MCP server 的 OAuth provider (无内存态; 全部读写 localStorage, 故可每次 new 且跨实例共享)。 */
 class McpOAuthProvider implements OAuthClientProvider {
   constructor(private readonly serverId: string) {}
@@ -99,7 +89,7 @@ class McpOAuthProvider implements OAuthClientProvider {
     return CLIENT_METADATA
   }
   state(): string {
-    const s = randomState()
+    const s = randomId()
     patch(this.serverId, { state: s })
     return s
   }

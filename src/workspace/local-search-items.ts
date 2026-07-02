@@ -3,12 +3,12 @@
 // 书签 → 打开网址 (协议白名单); 关注 → 打开关注模块。
 
 import type { ComponentType } from "react"
-import { Bookmark, FolderOpen, NotebookPen, Rss } from "lucide-react"
 import { safeHref } from "@/lib/safe-url"
 import { listNotes } from "@/files/stores/notes-store"
 import { listBookmarks } from "@/files/stores/bookmarks-store"
 import { listFiles } from "@/files/stores/files-store"
 import { listSubscriptions } from "@/files/stores/subscriptions-store"
+import { MODULE_META } from "./module-meta"
 import { openTab, openNodeTab } from "./store"
 import type { TabDescriptor } from "./types"
 
@@ -22,11 +22,12 @@ export type LocalSearchItem = {
 
 export const LOCAL_SEARCH_ORDER: LocalSearchGroup[] = ["笔记", "关注", "书签", "资源"]
 
+// 图标从 MODULE_META 派生 (分组名是本文件的展示口径, 与模块 label 恰好一致但语义独立)。
 export const LOCAL_SEARCH_ICON: Record<LocalSearchGroup, ComponentType<{ className?: string }>> = {
-  笔记: NotebookPen,
-  关注: Rss,
-  书签: Bookmark,
-  资源: FolderOpen,
+  笔记: MODULE_META.notes.icon,
+  关注: MODULE_META.subscriptions.icon,
+  书签: MODULE_META.bookmarks.icon,
+  资源: MODULE_META.resources.icon,
 }
 
 const SUBSCRIPTIONS_TAB: TabDescriptor = {

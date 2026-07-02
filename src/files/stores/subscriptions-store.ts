@@ -6,6 +6,7 @@
 import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
+import { faviconForDomain, faviconForUrl } from "@/lib/favicon"
 import { safeHref } from "@/lib/safe-url"
 import { sortKeyBetween } from "@/files/sort-key"
 import { feedNodeId, subToFeedNode, feedNodeToSub } from "@/files/feed-node"
@@ -13,21 +14,6 @@ import { idbBulkPutDelete, idbGet, idbGetAll, idbPut, STORE_NODES } from "@/lib/
 import { notifyFilesUpdated } from "@/files/flowback"
 
 type FeedNode = NodeOfKind<"feed">
-
-/** 由域名推断 favicon (Google s2 服务); 域名为空时降级为空串。 */
-export function faviconForDomain(domain: string): string {
-  const host = domain.trim()
-  return host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : ""
-}
-
-/** 由完整 URL 推断 favicon (取 hostname); 解析失败降级为空串。 */
-export function faviconForUrl(url: string): string {
-  try {
-    return faviconForDomain(new URL(url).hostname)
-  } catch {
-    return ""
-  }
-}
 
 // ---- feed 节点读 + sortKey 追加 ----
 
