@@ -1,18 +1,15 @@
 "use client"
 
+// AI 对话面板 (对话栏 / AI 标签共用): 状态与发送编排的所有者。
+// 展示块已拆为纯组件: 线程列表 (agent-thread-list) / 输入区 + 工具确认条 (agent-composer);
+// 消息气泡为 chat-message。本文件保留: 线程增删选、send() 两模式编排 (对话流式 / 智能体工具环)、
+// 技能触发、工具执行确认的 promise 桥接。
 import * as React from "react"
 import { toast } from "sonner"
-import { Loader2, Plus, Send, Settings, Sparkles, Trash2, Wrench, X } from "lucide-react"
+import { Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getActiveNodeRef } from "@/lib/active-node"
 import { Button } from "@/ui/button"
-import { Textarea } from "@/ui/textarea"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu"
 import { BUILTIN_SKILLS, type AgentSkill } from "../lib/agent-skills"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import type { ResolvedRun } from "../lib/agent-resolve"
@@ -31,7 +28,9 @@ import { streamChat } from "../lib/agent-chat"
 import { runAgent } from "../lib/agent-run"
 import ChatMessage from "./chat-message"
 import AgentSettingsDialog from "./agent-settings-dialog"
-import { Chip, ComposerShell } from "./ui-kit"
+import AgentThreadList from "./agent-thread-list"
+import AgentComposer, { ToolApprovalBar } from "./agent-composer"
+import { Chip } from "./ui-kit"
 
 const HISTORY_LIMIT = 20
 
@@ -101,7 +100,6 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null)
   const sendingRef = React.useRef(false)
-  const composingRef = React.useRef(false)
 
   function openSettings() {
     if (onOpenSettings) onOpenSettings()
@@ -335,13 +333,6 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
     }
   }
 
-  function onComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !composingRef.current) {
-      e.preventDefault()
-      send()
-    }
-  }
-
   function runSkill(skill: AgentSkill) {
     if (sendingRef.current) return
     if (!configured) {
@@ -371,53 +362,15 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
   return (
     <div className={cn("flex h-full min-h-0", !compact && "md:gap-6")}>
       {!compact && (
-        <aside className="flex w-48 shrink-0 flex-col md:w-52">
-          <button
-            type="button"
-            onClick={newChat}
-            className="mb-3 inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm font-medium transition-colors hover:bg-accent"
-          >
-            <Plus className="h-4 w-4" />
-            {newLabel}
-          </button>
-          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
-            {shownThreads.length === 0 && (
-              <p className="px-2 py-6 text-center text-[13px] text-muted-foreground">
-                {emptyLabel}
-              </p>
-            )}
-            {shownThreads.map((t) => {
-              const active = t.id === activeId
-              return (
-                <div
-                  key={t.id}
-                  className={cn(
-                    "group flex items-center gap-0.5 rounded-lg px-2 transition-colors",
-                    active ? "bg-accent/70" : "hover:bg-accent/40",
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 truncate py-2 text-left text-sm"
-                    title={t.title}
-                    onClick={() => selectThread(t.id)}
-                  >
-                    {t.title}
-                  </button>
-                  <button
-                    type="button"
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-                    title="删除"
-                    onClick={() => removeThread(t.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span className="sr-only">删除</span>
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        </aside>
+        <AgentThreadList
+          threads={shownThreads}
+          activeId={activeId}
+          newLabel={newLabel}
+          emptyLabel={emptyLabel}
+          onNew={newChat}
+          onSelect={selectThread}
+          onRemove={removeThread}
+        />
       )}
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -476,157 +429,34 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
         </div>
 
         {pendingApproval && (
-          <div className={cn("shrink-0", compact ? "px-4 pb-3" : "mt-4")}>
-            <ComposerShell className="flex items-center justify-between gap-3 text-sm">
-              <span className="min-w-0 text-[13px]">
-                <span className="font-medium">请求执行工具</span>
-                <span className="ml-1 font-mono text-muted-foreground">
-                  {pendingApproval.name}
-                  {pendingApproval.argsText ? `(${pendingApproval.argsText})` : ""}
-                </span>
-              </span>
-              <span className="flex shrink-0 items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    setPendingApproval((p) => {
-                      p?.resolve(false)
-                      return null
-                    })
-                  }
-                >
-                  拒绝
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    setPendingApproval((p) => {
-                      p?.resolve(true)
-                      return null
-                    })
-                  }
-                >
-                  允许
-                </Button>
-              </span>
-            </ComposerShell>
-          </div>
+          <ToolApprovalBar
+            compact={compact}
+            pending={pendingApproval}
+            onDecide={(allow) =>
+              setPendingApproval((p) => {
+                p?.resolve(allow)
+                return null
+              })
+            }
+          />
         )}
 
-        <div
-          className={cn(
-            "shrink-0 space-y-3",
-            compact ? "border-t bg-card px-4 py-4" : "mx-auto mt-6 w-full max-w-2xl",
-          )}
-        >
-          {compact && !configured && (
-            <div className="flex justify-end">
-              <Button size="sm" variant="ghost" onClick={openSettings}>
-                去配置
-              </Button>
-            </div>
-          )}
-          <ComposerShell className={cn("space-y-3", compact && "border-0 bg-transparent p-0")}>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setAgentMode((v) => !v)}
-                disabled={sending}
-                title="开启后助手可读写「我的」的数据"
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors disabled:opacity-50",
-                  agentMode
-                    ? "border-primary/30 bg-primary/5 text-primary"
-                    : "text-muted-foreground hover:bg-accent",
-                )}
-              >
-                <Wrench className="h-3.5 w-3.5" />
-                智能体
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    disabled={sending}
-                    title="一键技能"
-                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    技能
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-60">
-                  {skills.length === 0 && (
-                    <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-                      本工作区未启用技能
-                    </DropdownMenuItem>
-                  )}
-                  {skills.map((s) => (
-                    <DropdownMenuItem
-                      key={s.id}
-                      onSelect={() => runSkill(s)}
-                      className="flex flex-col items-start gap-0.5"
-                    >
-                      <span className="text-sm">{s.label}</span>
-                      <span className="text-xs text-muted-foreground">{s.hint}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <div className="flex items-end gap-2 rounded-lg border bg-background px-3 py-2">
-              <Textarea
-                ref={inputRef}
-                rows={compact ? 3 : 2}
-                value={input}
-                placeholder={
-                  !configured && compact
-                    ? "配置 API Key 后即可对话…"
-                    : agentMode
-                      ? "让助手整理本机的关注、书签、资源…"
-                      : "输入消息，Enter 发送，Shift+Enter 换行"
-                }
-                className="min-h-[2.75rem] max-h-40 flex-1 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                onChange={(e) => setInput(e.target.value)}
-                onCompositionStart={() => {
-                  composingRef.current = true
-                }}
-                onCompositionEnd={() => {
-                  composingRef.current = false
-                }}
-                onKeyDown={onComposerKeyDown}
-              />
-              {sending ? (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={stop}
-                  title="停止"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="sr-only">停止</span>
-                </Button>
-              ) : (
-                <Button
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => send()}
-                  disabled={!input.trim()}
-                  title="发送"
-                >
-                  {streamingId ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                  <span className="sr-only">发送</span>
-                </Button>
-              )}
-            </div>
-          </ComposerShell>
-        </div>
+        <AgentComposer
+          compact={compact}
+          configured={configured}
+          sending={sending}
+          streaming={streamingId !== null}
+          agentMode={agentMode}
+          onToggleAgentMode={() => setAgentMode((v) => !v)}
+          skills={skills}
+          onRunSkill={runSkill}
+          input={input}
+          onInputChange={setInput}
+          onSend={() => send()}
+          onStop={stop}
+          onOpenSettings={openSettings}
+          inputRef={inputRef}
+        />
       </section>
 
       <AgentSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
