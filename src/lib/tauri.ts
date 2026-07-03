@@ -140,6 +140,46 @@ export async function browserPress(key: string): Promise<void> {
   await invoke("browser_press", { key })
 }
 
+/** 可交互元素 (browser.listInteractive)。 */
+export interface BrowserInteractiveElement {
+  ref: number
+  role: string
+  name: string
+  selector: string
+  tag: string
+  type?: string
+}
+
+export interface BrowserInteractiveResult {
+  url: string
+  title: string
+  elements: BrowserInteractiveElement[]
+}
+
+/** 列出当前页可交互元素 (按钮/链接/输入框 + 建议 CSS 选择器)。 */
+export async function browserListInteractive(): Promise<BrowserInteractiveResult> {
+  if (!isTauri()) throw new Error("仅桌面 App 可用")
+  const { invoke } = await import("@tauri-apps/api/core")
+  return invoke<BrowserInteractiveResult>("browser_list_interactive")
+}
+
+/** 等待若干毫秒 (操作后让页面加载)。 */
+export async function browserWait(ms: number): Promise<void> {
+  if (!isTauri()) throw new Error("仅桌面 App 可用")
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("browser_wait", { ms })
+}
+
+/** 等待页面出现匹配选择器的元素。 */
+export async function browserWaitForSelector(
+  selector: string,
+  timeoutMs?: number,
+): Promise<void> {
+  if (!isTauri()) throw new Error("仅桌面 App 可用")
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("browser_wait_for_selector", { selector, timeoutMs })
+}
+
 /** 监听内嵌浏览器当前 URL 变化 (on_navigation / on_page_load emit); 返回取消监听; 非 Tauri 为 no-op。 */
 export async function onBrowserUrl(cb: (url: string) => void): Promise<() => void> {
   if (!isTauri()) return () => {}

@@ -17,6 +17,9 @@
     "allow-browser-get-content",
     "allow-browser-click",
     "allow-browser-fill",
-    "allow-browser-press"
+    "allow-browser-press",
+    "allow-browser-list-interactive",
+    "allow-browser-wait",
+    "allow-browser-wait-for-selector"
   ]
 }

@@ -45,6 +45,9 @@ export const TOOL = {
   browserClick: "browser.click",
   browserFill: "browser.fill",
   browserPress: "browser.press",
+  browserListInteractive: "browser.listInteractive",
+  browserWait: "browser.wait",
+  browserWaitForSelector: "browser.waitForSelector",
 } as const
 
 export const RESOURCE = {

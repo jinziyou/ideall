@@ -16,8 +16,8 @@ export const CAPABILITY_OPTIONS: CapabilityOption[] = [
   { perm: "ui.tabs", label: "打开标签", hint: "把节点打开为工作区标签页" },
   { perm: "web:search", label: "联网搜索", hint: "web.search 搜索引擎" },
   { perm: "web:fetch", label: "抓取网页", hint: "web.fetch 读取网页正文" },
-  { perm: "browser:read", label: "读浏览器页", hint: "browser.getContent 读内嵌浏览器当前页" },
-  { perm: "browser:control", label: "操控浏览器", hint: "browser.navigate / click / fill / press" },
+  { perm: "browser:read", label: "读浏览器页", hint: "getContent / listInteractive" },
+  { perm: "browser:control", label: "操控浏览器", hint: "navigate / click / fill / wait" },
 ]
 
 const BY_PERM = new Map(CAPABILITY_OPTIONS.map((c) => [c.perm, c]))

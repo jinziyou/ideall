@@ -163,11 +163,62 @@ fn js_browser_press(key: &str) -> Result<String, String> {
 }
 
 #[cfg(desktop)]
-fn browser_run_js(app: AppHandle, js: String) -> Result<(), String> {
+fn js_browser_element_exists(selector: &str) -> Result<String, String> {
+    let sel_json = serde_json::to_string(&validate_css_selector(selector)?)
+        .map_err(|e| e.to_string())?;
+    Ok(format!(
+        "(function(){{try{{return JSON.stringify({{ok:!!document.querySelector({sel_json})}});}}catch(e){{return JSON.stringify({{ok:false}});}}}})()"
+    ))
+}
+
+/// 枚举当前页可交互元素 (按钮/链接/输入框等), 供 agent 选用 selector。
+#[cfg(desktop)]
+const BROWSER_LIST_INTERACTIVE_JS: &str = r#"
+(function(){
+  function vis(el){
+    var r=el.getBoundingClientRect();
+    return r.width>0&&r.height>0;
+  }
+  function esc(s){return String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"');}
+  function pickSel(el){
+    var tag=el.tagName.toLowerCase();
+    if(el.id&&/^[a-zA-Z][\w:-]*$/.test(el.id))return '#'+el.id;
+    var n=el.getAttribute('name');
+    if(n&&(tag==='input'||tag==='textarea'||tag==='select'))return tag+'[name="'+esc(n)+'"]';
+    var al=el.getAttribute('aria-label');
+    if(al)return '[aria-label="'+esc(al)+'"]';
+    var ph=el.getAttribute('placeholder');
+    if(ph&&(tag==='input'||tag==='textarea'))return tag+'[placeholder="'+esc(ph)+'"]';
+    return '';
+  }
+  function label(el){
+    var t=(el.innerText||el.value||'').trim();
+    if(t)return t.slice(0,120);
+    return (el.getAttribute('aria-label')||el.getAttribute('placeholder')||el.getAttribute('name')||el.id||'').trim().slice(0,120);
+  }
+  var q='button,a[href],input,textarea,select,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
+  var nodes=document.querySelectorAll(q);
+  var out=[],ref=1;
+  for(var i=0;i<nodes.length&&out.length<50;i++){
+    var el=nodes[i];
+    if(!vis(el))continue;
+    var sel=pickSel(el);
+    if(!sel)continue;
+    var tag=el.tagName.toLowerCase();
+    var role=el.getAttribute('role')||tag;
+    var typ=el.getAttribute('type')||'';
+    out.push({ref:ref++,role:role,name:label(el),selector:sel,tag:tag,type:typ});
+  }
+  return JSON.stringify({url:location.href,title:document.title,elements:out});
+})()
+"#;
+
+#[cfg(desktop)]
+fn browser_eval_json(app: AppHandle, js: String) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "linux")]
     {
         let _ = app;
-        return browser_linux::eval_json(&js).and_then(parse_browser_act_json);
+        return browser_linux::eval_json(&js);
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -188,10 +239,43 @@ fn browser_run_js(app: AppHandle, js: String) -> Result<(), String> {
         let json_str = rx
             .recv_timeout(Duration::from_secs(8))
             .map_err(|_| "执行超时".to_string())?;
-        let v: serde_json::Value =
-            serde_json::from_str(&json_str).map_err(|e| format!("解析脚本结果失败: {e}"))?;
-        parse_browser_act_json(v)
+        serde_json::from_str(&json_str).map_err(|e| format!("解析脚本结果失败: {e}"))
     }
+}
+
+#[cfg(desktop)]
+fn browser_run_js(app: AppHandle, js: String) -> Result<(), String> {
+    browser_eval_json(app, js).and_then(parse_browser_act_json)
+}
+
+/// 可交互元素 (browser.listInteractive 单项)。
+#[cfg(desktop)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserInteractiveElement {
+    #[serde(rename = "ref")]
+    ref_id: u32,
+    role: String,
+    name: String,
+    selector: String,
+    tag: String,
+    #[serde(rename = "type", default, skip_serializing_if = "String::is_empty")]
+    element_type: String,
+}
+
+/// browser.listInteractive 返回体。
+#[cfg(desktop)]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserInteractiveResult {
+    url: String,
+    title: String,
+    elements: Vec<BrowserInteractiveElement>,
+}
+
+#[cfg(desktop)]
+fn parse_list_interactive(v: serde_json::Value) -> Result<BrowserInteractiveResult, String> {
+    serde_json::from_value(v).map_err(|e| format!("解析可交互元素失败: {e}"))
 }
 
 /// 打开 (或重建) 内嵌浏览器子 webview, 加载 url, 定位到主窗口内容区 bounds。
@@ -407,6 +491,49 @@ fn browser_fill(app: AppHandle, selector: String, text: String) -> Result<(), St
 #[tauri::command]
 fn browser_press(app: AppHandle, key: String) -> Result<(), String> {
     browser_run_js(app, js_browser_press(&key)?)
+}
+
+/// 列出内嵌浏览器当前页可交互元素 (按钮/链接/输入框 + 建议 selector)。
+#[cfg(desktop)]
+#[tauri::command]
+fn browser_list_interactive(app: AppHandle) -> Result<BrowserInteractiveResult, String> {
+    let v = browser_eval_json(app, BROWSER_LIST_INTERACTIVE_JS.to_string())?;
+    parse_list_interactive(v)
+}
+
+/// 等待若干毫秒 (操作后让页面加载/渲染; agent observe-act 环用)。
+#[cfg(desktop)]
+#[tauri::command]
+async fn browser_wait(ms: u64) -> Result<(), String> {
+    let ms = ms.clamp(100, 15_000);
+    tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+    Ok(())
+}
+
+/// 等待内嵌浏览器页面出现匹配选择器的元素 (轮询, 超时失败)。
+#[cfg(desktop)]
+#[tauri::command]
+async fn browser_wait_for_selector(
+    app: AppHandle,
+    selector: String,
+    timeout_ms: Option<u64>,
+) -> Result<(), String> {
+    let js = js_browser_element_exists(&selector)?;
+    let timeout = timeout_ms.unwrap_or(8000).clamp(500, 30_000);
+    let start = std::time::Instant::now();
+    loop {
+        if browser_eval_json(app.clone(), js.clone())?
+            .get("ok")
+            .and_then(|x| x.as_bool())
+            == Some(true)
+        {
+            return Ok(());
+        }
+        if start.elapsed().as_millis() >= timeout as u128 {
+            return Err("wait-timeout".into());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
 }
 
 #[cfg(desktop)]
@@ -686,6 +813,9 @@ pub fn run() {
             browser_click,
             browser_fill,
             browser_press,
+            browser_list_interactive,
+            browser_wait,
+            browser_wait_for_selector,
             acp_transport::acp_spawn,
             acp_transport::acp_send,
             acp_transport::acp_close,
