@@ -118,6 +118,36 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
+  {
+    id: "shell",
+    mode: "local",
+    label: MODULE_META.shell.label,
+    icon: MODULE_META.shell.icon,
+    colorClass: MODULE_META.shell.tintClass,
+    sidebarTitle: "终端",
+    entries: [
+      {
+        label: "本地 Shell",
+        icon: MODULE_META.shell.icon,
+        descriptor: { kind: "shell", module: "shell", title: "终端", path: "/shell" },
+      },
+    ],
+  },
+  {
+    id: "music",
+    mode: "local",
+    label: MODULE_META.music.label,
+    icon: MODULE_META.music.icon,
+    colorClass: MODULE_META.music.tintClass,
+    sidebarTitle: "音乐",
+    entries: [
+      {
+        label: "音乐播放器",
+        icon: MODULE_META.music.icon,
+        descriptor: { kind: "music", module: "music", title: "音乐", path: "/music" },
+      },
+    ],
+  },
   // —— 连接 ——
   {
     id: "info",
@@ -264,6 +294,10 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
     return { kind: "browser-view", module: "browser", title: "浏览器", path: "/browser" }
   if (pathname.startsWith("/apps"))
     return { kind: "apps", module: "apps", title: "应用", path: "/apps" }
+  if (pathname.startsWith("/shell"))
+    return { kind: "shell", module: "shell", title: "终端", path: "/shell" }
+  if (pathname.startsWith("/music"))
+    return { kind: "music", module: "music", title: "音乐", path: "/music" }
   if (pathname.startsWith("/tool"))
     return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
   return null

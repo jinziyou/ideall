@@ -10,9 +10,11 @@ import {
   LayoutGrid,
   Map,
   Megaphone,
+  Music,
   Newspaper,
   NotebookPen,
   Rss,
+  Shell,
   Wrench,
 } from "lucide-react"
 import type { ComponentType } from "react"
@@ -45,4 +47,6 @@ export const MODULE_META = {
   },
   tool: { label: "工具", icon: Wrench, dotClass: "bg-spoke-tool", tintClass: "text-spoke-tool" },
   apps: { label: "应用", icon: LayoutGrid, tintClass: "text-spoke-tool" },
+  shell: { label: "终端", icon: Shell, tintClass: "text-spoke-tool" },
+  music: { label: "音乐", icon: Music, tintClass: "text-spoke-tool" },
 } satisfies Record<string, ModuleMeta>

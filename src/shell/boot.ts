@@ -24,6 +24,8 @@ import { openInBrowserTab } from "@/workspace/browser-open"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
 import { syncManifest } from "@/plugins/sync/manifest"
+import { shellManifest } from "@/plugins/shell/manifest"
+import { musicManifest } from "@/plugins/music/manifest"
 
 let booted = false
 
@@ -59,8 +61,8 @@ export function registerAll(): void {
   for (const m of [infoManifest, communityManifest]) {
     for (const r of m.resolvers ?? []) registerContentResolver(r.types, r.resolve)
   }
-  // 插件能力注册 (如 sync 的 SyncPort)。
-  for (const p of [syncManifest]) p.register?.()
+  // 插件能力注册 (如 sync 的 SyncPort; shell/music 视图由 workspace/registry 挂载)。
+  for (const p of [syncManifest, shellManifest, musicManifest]) p.register?.()
 }
 
 /**
@@ -68,6 +70,7 @@ export function registerAll(): void {
  * 与 registerAll (同步纯注册) 分开: 这里做异步、仅 App 的副作用。
  */
 export function bootClientEffects(): void {
+  // XState Inspector 由内嵌 XStateInspectorPanel 挂载 iframe 后初始化 (避免 Tauri 弹窗被拦 / 错误 URL)。
   // ACP 暴露自启动: 仅桌面 + 用户已开启时才动态加载 agent 暴露链路并启动监听 ——
   // 关闭时不加载 agent 内核 (acp-settings 轻量, 先查; acp-expose 重, 仅按需 import), 不拖累初始包。
   void (async () => {

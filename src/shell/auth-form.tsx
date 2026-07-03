@@ -7,13 +7,13 @@ import { toast } from "sonner"
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card"
-import { encryptPassword, newClientId, newKeypair } from "@protocol/auth"
-import { fetchMe, getServerPublicKey, login, register } from "@protocol/auth"
 import { setSession } from "@protocol/auth"
+import { runAuthFlow } from "@/lib/auth/auth-flow-machine"
+import { useFlowProgress } from "@/lib/use-flow-progress"
 
 /**
  * 登录 / 注册表单。密码在浏览器用 X25519 + XChaCha20-Poly1305 加密后才上传 (复刻 server orion 方案),
- * 上传的只有密文 (浏览器直连后端)。成功后存会话并回「我的」。
+ * 编排经 auth-flow-machine (XState); 成功后 setSession 并回「我的」。
  */
 export default function AuthForm() {
   const router = useRouter()
@@ -21,51 +21,18 @@ export default function AuthForm() {
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+  const progress = useFlowProgress()
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!email.trim() || !password) {
-      toast.error("请填写邮箱和密码")
-      return
-    }
     setBusy(true)
     try {
-      const clientId = newClientId()
-      const { priv, publicHex } = newKeypair()
-      const sk = await getServerPublicKey(clientId)
-      if (!sk.ok) {
-        toast.error(sk.message)
-        return
-      }
-      if (sk.data === null) {
-        toast.error("获取密钥失败，请重试")
-        return
-      }
-      const payload = {
-        client_id: clientId,
-        client_secret: publicHex,
-        email: email.trim(),
-        encrypted_password: encryptPassword(priv, sk.data, password),
-      }
-      const res = mode === "login" ? await login(payload) : await register(payload)
-      if (!res.ok) {
-        toast.error(res.message)
-        return
-      }
-      if (!res.data) {
-        toast.error(mode === "login" ? "登录失败，请重试" : "注册失败，请重试")
-        return
-      }
-      const me = await fetchMe(res.data.token)
-      const user =
-        me.ok && me.data
-          ? me.data
-          : { id: 0, email: email.trim(), name: email.trim(), avatar: null }
-      setSession(res.data.token, user)
+      const { token, user } = await runAuthFlow({ mode, email, password })
+      setSession(token, user)
       toast.success(mode === "login" ? "已登录" : "注册成功，已登录")
       router.push("/home")
-    } catch {
-      toast.error("操作失败，请重试")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "操作失败，请重试")
     } finally {
       setBusy(false)
     }
@@ -109,6 +76,11 @@ export default function AuthForm() {
             ) : null}
             {mode === "login" ? "登录" : "注册"}
           </Button>
+          {busy && progress?.kind === "auth" ? (
+            <p className="text-center text-xs text-muted-foreground" aria-live="polite">
+              {progress.label}
+            </p>
+          ) : null}
         </form>
         <button
           type="button"

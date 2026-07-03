@@ -6,6 +6,8 @@ import { Toaster } from "@/ui/sonner"
 import { THEME_INIT } from "@/lib/theme"
 import ThemeApplier from "./theme-applier"
 import BootGate from "./boot-gate"
+import ReduxProvider from "./redux-provider"
+import XStateInspectorPanel from "./xstate-inspector-panel"
 
 export const metadata: Metadata = {
   title: "ideall | 个人信息终端",
@@ -34,11 +36,14 @@ export default function RootLayout({
         {/* 水合后兜底重新断言主题 (防根树重渲染抹掉 .dark) */}
         <ThemeApplier />
         <BootGate>
-          {/* 现代面板式标签工作区壳: 活动栏 + 二级侧栏 + 多标签主区 + 状态栏 (移动端降级为顶栏+底栏)。
-              各路由页是无 UI 的「开标签」标记, 内容由壳内持久挂载的 TabHost 渲染 (keep-alive)。 */}
-          <WorkspaceShell>{children}</WorkspaceShell>
-          {/* ⌘K 浮层命令面板: 全局唯一实例 */}
-          <CommandPalette />
+          <ReduxProvider>
+            {/* 现代面板式标签工作区壳: 活动栏 + 二级侧栏 + 多标签主区 + 状态栏 (移动端降级为顶栏+底栏)。
+                各路由页是无 UI 的「开标签」标记, 内容由壳内持久挂载的 TabHost 渲染 (keep-alive)。 */}
+            <WorkspaceShell>{children}</WorkspaceShell>
+            {/* ⌘K 浮层命令面板: 全局唯一实例 */}
+            <CommandPalette />
+            <XStateInspectorPanel />
+          </ReduxProvider>
         </BootGate>
         <Toaster />
       </body>

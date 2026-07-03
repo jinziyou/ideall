@@ -10,8 +10,10 @@ import {
   Hexagon,
   Layers,
   LayoutGrid,
+  Music,
   NotebookPen,
   RefreshCw,
+  Shell,
   SunMoon,
   X,
 } from "lucide-react"
@@ -244,6 +246,20 @@ export default function CommandPalette() {
               <LayoutGrid className="h-4 w-4" />
               应用
               <CommandShortcut className="font-mono">/apps</CommandShortcut>
+            </CommandItem>
+          )}
+          {isDesktop && (
+            <CommandItem value="> 终端 shell terminal 命令行" onSelect={() => go("/shell")}>
+              <Shell className="h-4 w-4" />
+              终端
+              <CommandShortcut className="font-mono">/shell</CommandShortcut>
+            </CommandItem>
+          )}
+          {isDesktop && (
+            <CommandItem value="> 音乐 music player 播放器" onSelect={() => go("/music")}>
+              <Music className="h-4 w-4" />
+              音乐
+              <CommandShortcut className="font-mono">/music</CommandShortcut>
             </CommandItem>
           )}
         </CommandGroup>

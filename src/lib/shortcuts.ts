@@ -67,13 +67,7 @@ export function formatShortcut(combo: string, mac: boolean = isMacPlatform()): s
   const c = parseCombo(combo)
   const key = KEY_LABEL[c.key] ?? c.key.toUpperCase()
   if (mac) {
-    return [
-      c.ctrl ? "⌃" : "",
-      c.alt ? "⌥" : "",
-      c.shift ? "⇧" : "",
-      c.mod ? "⌘" : "",
-      key,
-    ].join("")
+    return [c.ctrl ? "⌃" : "", c.alt ? "⌥" : "", c.shift ? "⇧" : "", c.mod ? "⌘" : "", key].join("")
   }
   return [c.ctrl || c.mod ? "Ctrl" : "", c.alt ? "Alt" : "", c.shift ? "Shift" : "", key]
     .filter(Boolean)

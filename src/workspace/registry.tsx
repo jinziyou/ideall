@@ -28,6 +28,8 @@ const ToolSearch = React.lazy(() => import("@/modules/tool/search-page"))
 const ToolAi = React.lazy(() => import("@/modules/tool/ai-page"))
 const ToolNavigation = React.lazy(() => import("@/modules/tool/navigation-page"))
 const AppsPage = React.lazy(() => import("@/modules/apps/apps-page"))
+const ShellPage = React.lazy(() => import("@/plugins/shell/shell-page"))
+const MusicPage = React.lazy(() => import("@/plugins/music/music-page"))
 const BrowserView = React.lazy(() => import("./browser-view"))
 const AiSettings = React.lazy(() => import("@/plugins/agent/views/ai-settings"))
 const HomeSettings = React.lazy(() => import("@/modules/home/settings/settings-page"))
@@ -62,6 +64,8 @@ const REGISTRY: Record<string, Entry> = {
   "tool-ai": { render: () => <ToolAi />, layout: "padded" },
   "tool-navigation": { render: () => <ToolNavigation />, layout: "padded" },
   apps: { render: () => <AppsPage />, layout: "padded" },
+  shell: { render: () => <ShellPage />, layout: "fill" },
+  music: { render: () => <MusicPage />, layout: "padded" },
   "browser-view": { render: () => <BrowserView />, layout: "fill" },
   // AI 区段标签 (module:"agent", mode-中性)。任务标签按 params.workspaceId 实例化。
   "ai-settings": { render: () => <AiSettings />, layout: "fill" },

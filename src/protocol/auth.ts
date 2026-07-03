@@ -6,3 +6,5 @@ export { getSession, subscribeSession, setSession, clearSession } from "@/lib/au
 export type { Session } from "@/lib/auth/auth-store"
 export { newClientId, newKeypair, encryptPassword } from "@/lib/auth/crypto"
 export type { ClientKeypair } from "@/lib/auth/crypto"
+export { runAuthFlow } from "@/lib/auth/auth-flow-machine"
+export type { AuthFlowInput, AuthFlowResult } from "@/lib/auth/auth-flow-runner"

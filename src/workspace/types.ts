@@ -9,6 +9,8 @@ export type ModuleId =
   | "home"
   | "subscriptions"
   | "apps"
+  | "shell"
+  | "music"
   | "info"
   | "community"
   | "browser"

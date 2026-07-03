@@ -10,6 +10,7 @@ import { generateSyncCode, isValidSyncCode } from "@/lib/sync-crypto"
 import { clearSyncCode, getSyncCode, setSyncCode, subscribeSyncCode } from "@/lib/sync-code"
 import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
+import { useFlowProgress } from "@/lib/use-flow-progress"
 
 /**
  * 跨端同步面板 —— 用同步码在多设备间同步关注 (端到端加密)。
@@ -21,6 +22,7 @@ export default function SyncPanel() {
   const [busy, setBusy] = React.useState(false)
   const [input, setInput] = React.useState("")
   const [reveal, setReveal] = React.useState(false)
+  const progress = useFlowProgress()
 
   const runSync = React.useCallback(async (c: string, silent = false) => {
     setBusy(true)
@@ -86,6 +88,12 @@ export default function SyncPanel() {
           code ? { label: "已开启 · 端到端加密", tone: "ok" } : { label: "未开启", tone: "off" }
         }
       />
+      {busy && progress?.kind === "sync" ? (
+        <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+          {progress.label}
+          {progress.detail ? `（${progress.detail}）` : null}
+        </p>
+      ) : null}
       {code ? (
         <div className="mt-3 flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">

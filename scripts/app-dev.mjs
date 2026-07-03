@@ -243,7 +243,7 @@ async function main() {
   // Next.js dev (Turbopack) 依赖 eval + dev WebSocket; 生产 CSP 缺 unsafe-eval → SSR 壳能画出来但
   // React 无法水合, 表现为整窗点击无响应。仅 app:dev 注入放宽 CSP, 打包仍走 tauri.conf.json。
   const devCsp =
-    "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: ws: wss: http://127.0.0.1:* http://localhost:*; frame-src 'self' https://www.wonita.link https://wonita.link; worker-src 'self' blob:"
+    "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: ws: wss: http://127.0.0.1:* http://localhost:*; frame-src 'self' https://www.wonita.link https://wonita.link https://stately.ai; worker-src 'self' blob:"
   const tauriConfig = JSON.stringify({
     build: { beforeDevCommand: "", devUrl },
     app: { security: { csp: devCsp } },

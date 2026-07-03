@@ -67,5 +67,7 @@ export const HOME_SUBPAGES: NavLink[] = [
   },
   { href: "/home/resources", label: MODULE_META.resources.label, icon: MODULE_META.resources.icon },
   { href: "/home/bookmarks", label: MODULE_META.bookmarks.label, icon: MODULE_META.bookmarks.icon },
+  { href: "/shell", label: MODULE_META.shell.label, icon: MODULE_META.shell.icon, group: "system" },
+  { href: "/music", label: MODULE_META.music.label, icon: MODULE_META.music.icon, group: "system" },
   { href: "/home/agent", label: "AI 助手", icon: Bot, group: "system" },
 ]

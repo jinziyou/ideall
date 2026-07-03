@@ -437,7 +437,9 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         // HTTP: App 内 fetch 经 Rust 侧发出, 绕过 webview CORS (agent 直连任意 LLM 端点)。
-        .plugin(tauri_plugin_http::init());
+        .plugin(tauri_plugin_http::init())
+        // Shell: 本地终端执行系统命令 (仅桌面; 权限由 capability 限定)。
+        .plugin(tauri_plugin_shell::init());
 
     // 多显示器: 未在 tauri.conf 指定 x/y 时, 等窗口尺寸就绪后居中到主屏 (见 window_placement.rs)。
     #[cfg(desktop)]

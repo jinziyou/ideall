@@ -54,7 +54,7 @@ test("descriptorForNode: ?node=kind:id 解析为 entity 级节点标签; 非法/
 test("modulesForMode: 本地/连接各自簇 + crossMode 工具两侧都在", () => {
   const local = modulesForMode("local").map((m) => m.id)
   const connected = modulesForMode("connected").map((m) => m.id)
-  assert.deepEqual(local, ["home", "subscriptions", "apps", "tool"])
+  assert.deepEqual(local, ["home", "subscriptions", "apps", "shell", "music", "tool"])
   assert.deepEqual(connected, ["info", "community", "tool", "browser"])
 })
 

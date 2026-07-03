@@ -19,6 +19,8 @@ tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-opener = "2"
 # HTTP: App 内经 Rust 侧请求绕过浏览器 CORS (agent 直连任意 LLM 端点)。
 tauri-plugin-http = "2"
+# Shell: 本地终端执行系统命令 (仅桌面, 用户手动输入)。
+tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # agent 出站守卫 (agent_guarded_fetch 命令): 自带 reqwest client 做 resolve_to_addrs 钉连 + 解压, 闭合名解析 SSRF。
