@@ -39,6 +39,18 @@ pub(crate) struct Bounds {
     h: f64,
 }
 
+/// 内嵌浏览器后端信息 (CDP / WebKit / WebView)。
+#[cfg(desktop)]
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserBackendInfo {
+    /// `cdp` | `webkit` (Linux) | `webview` (Win/macOS)
+    mode: String,
+    cdp_available: bool,
+    running: bool,
+    chrome_path: Option<String>,
+}
+
 /// 内嵌浏览器当前页快照 (agent browser.getContent 用)。
 #[cfg(desktop)]
 #[derive(serde::Serialize)]
@@ -394,6 +406,26 @@ fn browser_show(app: AppHandle) -> Result<(), String> {
             .map_err(|e| e.to_string())
     }
 }
+/// 内嵌浏览器后端信息 (CDP / WebKit / WebView); 供 UI 显示模式徽标。
+#[cfg(desktop)]
+#[tauri::command]
+async fn browser_get_backend(app: AppHandle) -> Result<BrowserBackendInfo, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let state = app.state::<browser_cdp::BrowserCdpState>();
+        return Ok(state.backend_info().await);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(BrowserBackendInfo {
+            mode: "webview".into(),
+            cdp_available: false,
+            running: app.get_webview(BROWSER_LABEL).is_some(),
+            chrome_path: None,
+        })
+    }
+}
+
 /// 读取内嵌浏览器当前页 (URL + 标题 + 正文); 仅桌面、浏览器标签已打开时可用。
 #[cfg(desktop)]
 #[tauri::command]
@@ -789,6 +821,7 @@ pub fn run() {
             browser_hide,
             browser_show,
             browser_close,
+            browser_get_backend,
             browser_get_content,
             browser_click,
             browser_fill,

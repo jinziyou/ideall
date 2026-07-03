@@ -3,7 +3,7 @@
 import { getFilesPort } from "@protocol/files"
 import { getActiveNodeRef } from "@/lib/active-node"
 import { formatBytes } from "@/lib/format"
-import { getBrowserUrl } from "@/workspace/browser-state"
+import { getBrowserUrl, getBrowserBackend } from "@/workspace/browser-state"
 
 // 各类目最多列出的条数 (控制 token; 超出只给计数)
 const CAP = 50
@@ -157,7 +157,14 @@ export async function gatherReferencedContext(): Promise<string> {
 export function gatherBrowserContext(): string {
   const url = getBrowserUrl()
   if (!url) return ""
-  return `用户当前在「浏览器」标签页查看的页面 URL：${url}`
+  const mode = getBrowserBackend()
+  const engine =
+    mode === "cdp"
+      ? "（Chrome CDP 引擎）"
+      : mode === "webkit"
+        ? "（WebKitGTK 引擎）"
+        : ""
+  return `用户当前在「浏览器」标签页查看的页面 URL：${url}${engine}`
 }
 
 // —— 系统提示分段 (右栏 buildSystemPrompt 与工作区 assembleSystemPrompt 共用同一份文案) ——

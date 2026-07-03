@@ -4,6 +4,10 @@
 
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::Page;
+use chromiumoxide::cdp::browser_protocol::browser::{
+    Bounds as CdpWindowBounds, GetWindowForTargetParams, SetWindowBoundsParams, WindowId,
+    WindowState,
+};
 use futures::StreamExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -11,7 +15,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
 use crate::browser_scripts::{self, CONTENT_JS, LIST_INTERACTIVE_JS};
-use crate::{parse_list_interactive, BrowserInteractiveResult, BrowserPageContent, Bounds};
+use crate::{parse_list_interactive, BrowserBackendInfo, BrowserInteractiveResult, BrowserPageContent, Bounds};
 
 pub struct BrowserCdpState {
     pub chrome_path: Option<PathBuf>,
@@ -24,6 +28,7 @@ struct CdpSession {
     browser: Browser,
     page: Arc<Page>,
     _handler: tokio::task::JoinHandle<()>,
+    _url_poller: tokio::task::JoinHandle<()>,
 }
 
 pub fn init_state() -> BrowserCdpState {
@@ -46,6 +51,75 @@ impl BrowserCdpState {
     pub async fn is_running(&self) -> bool {
         self.session.lock().await.is_some()
     }
+
+    pub async fn backend_info(&self) -> BrowserBackendInfo {
+        let running = self.is_running().await;
+        BrowserBackendInfo {
+            mode: if self.enabled() {
+                "cdp".into()
+            } else {
+                "webkit".into()
+            },
+            cdp_available: self.enabled(),
+            running,
+            chrome_path: self
+                .chrome_path
+                .as_ref()
+                .map(|p| p.display().to_string()),
+        }
+    }
+}
+
+async fn window_id_of(browser: &Browser, page: &Page) -> Result<WindowId, String> {
+    let resp = browser
+        .execute(
+            GetWindowForTargetParams::builder()
+                .target_id(page.target_id().clone())
+                .build(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(resp.result.window_id)
+}
+
+async fn apply_window_bounds(
+    browser: &Browser,
+    page: &Page,
+    b: Bounds,
+    window_state: Option<WindowState>,
+) -> Result<(), String> {
+    let window_id = window_id_of(browser, page).await?;
+    let mut builder = CdpWindowBounds::builder()
+        .left(b.x.max(0.0) as i64)
+        .top(b.y.max(0.0) as i64)
+        .width(b.w.max(1.0) as i64)
+        .height(b.h.max(1.0) as i64);
+    if let Some(state) = window_state {
+        builder = builder.window_state(state);
+    }
+    browser
+        .execute(SetWindowBoundsParams::new(
+            window_id,
+            builder.build(),
+        ))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn spawn_url_poller(app: AppHandle, page: Arc<Page>) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut last = String::new();
+        loop {
+            if let Ok(Some(url)) = page.url().await {
+                if url != last {
+                    last = url.clone();
+                    let _ = app.emit("browser://url", url);
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+        }
+    })
 }
 
 fn find_chrome() -> Option<PathBuf> {
@@ -175,17 +249,24 @@ pub async fn open(
 
     emit_url(app, &page).await;
 
+    let page_arc = Arc::new(page);
+    let url_poller = spawn_url_poller(app.clone(), page_arc.clone());
+
     *state.session.lock().await = Some(CdpSession {
         browser,
-        page: Arc::new(page),
+        page: page_arc,
         _handler: handler_task,
+        _url_poller: url_poller,
     });
     Ok(())
 }
 
 pub async fn set_bounds(state: &BrowserCdpState, b: Bounds) -> Result<(), String> {
     *state.bounds.lock().await = b;
-    // CDP 窗口位置同步: 下次 open/navigate 会应用; 运行中 Chrome --app 窗口难精确拖动, 先记 bounds。
+    let guard = state.session.lock().await;
+    if let Some(sess) = guard.as_ref() {
+        apply_window_bounds(&sess.browser, &sess.page, b, Some(WindowState::Normal)).await?;
+    }
     Ok(())
 }
 
@@ -225,20 +306,35 @@ pub async fn reload(state: &BrowserCdpState, app: &AppHandle) -> Result<(), Stri
 
 pub async fn hide(state: &BrowserCdpState) -> Result<(), String> {
     *state.visible.lock().await = false;
-    // 最小化: 通过关闭 session 太重; 暂隐藏由前端占位区盖住, Chrome 窗口仍可见 —— 用户可手动最小化。
+    let guard = state.session.lock().await;
+    if let Some(sess) = guard.as_ref() {
+        let window_id = window_id_of(&sess.browser, &sess.page).await?;
+        let bounds = CdpWindowBounds::builder()
+            .window_state(WindowState::Minimized)
+            .build();
+        sess.browser
+            .execute(SetWindowBoundsParams::new(window_id, bounds))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
 pub async fn show(state: &BrowserCdpState) -> Result<(), String> {
     *state.visible.lock().await = true;
-    if let Some(page) = page_of(state).await.ok() {
-        let _ = page.bring_to_front().await;
+    let b = *state.bounds.lock().await;
+    let guard = state.session.lock().await;
+    if let Some(sess) = guard.as_ref() {
+        apply_window_bounds(&sess.browser, &sess.page, b, Some(WindowState::Normal)).await?;
+        let _ = sess.page.bring_to_front().await;
     }
     Ok(())
 }
 
 pub async fn close(state: &BrowserCdpState) -> Result<(), String> {
     if let Some(mut sess) = state.session.lock().await.take() {
+        sess._url_poller.abort();
+        sess._handler.abort();
         sess.browser.close().await.map_err(|e| e.to_string())?;
     }
     Ok(())

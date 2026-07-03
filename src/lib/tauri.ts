@@ -106,6 +106,20 @@ export function browserClose(): Promise<void> {
   return tauriInvoke("browser_close")
 }
 
+/** 内嵌浏览器后端信息 (CDP / WebKit / WebView)。 */
+export interface BrowserBackendInfo {
+  mode: "cdp" | "webkit" | "webview"
+  cdpAvailable: boolean
+  running: boolean
+  chromePath: string | null
+}
+
+export async function browserGetBackend(): Promise<BrowserBackendInfo> {
+  if (!isTauri()) throw new Error("仅桌面 App 可用")
+  const { invoke } = await import("@tauri-apps/api/core")
+  return invoke<BrowserBackendInfo>("browser_get_backend")
+}
+
 /** 内嵌浏览器当前页快照 (仅 Tauri 桌面; 浏览器标签须已打开)。 */
 export interface BrowserPageContent {
   url: string

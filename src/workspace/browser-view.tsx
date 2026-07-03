@@ -17,10 +17,12 @@ import {
   browserClose,
   browserShow,
   onBrowserUrl,
+  browserGetBackend,
   type BrowserBounds,
+  type BrowserBackendInfo,
 } from "@/lib/tauri"
 import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-open"
-import { setBrowserUrl } from "./browser-state"
+import { setBrowserUrl, setBrowserBackend } from "./browser-state"
 
 const START_URL = "https://www.google.com"
 
@@ -41,6 +43,17 @@ export default function BrowserView() {
   const initialUrl = React.useMemo(() => takePendingBrowserUrl() ?? START_URL, [])
   const currentUrlRef = React.useRef(initialUrl)
   const [addr, setAddr] = React.useState(initialUrl)
+  const [backend, setBackend] = React.useState<BrowserBackendInfo | null>(null)
+
+  React.useEffect(() => {
+    if (!isTauri()) return
+    browserGetBackend()
+      .then((info) => {
+        setBackend(info)
+        setBrowserBackend(info.mode)
+      })
+      .catch(() => {})
+  }, [])
 
   React.useEffect(() => {
     setBrowserUrl(initialUrl)
@@ -80,7 +93,9 @@ export default function BrowserView() {
       }
       if (!openedRef.current) {
         openedRef.current = true
-        openBrowserView(currentUrlRef.current, b).catch(() => {
+        openBrowserView(currentUrlRef.current, b)
+          .then(() => browserGetBackend().then((info) => setBackend(info)).catch(() => {}))
+          .catch(() => {
           openedRef.current = false
           toast.error("打开内嵌浏览器失败")
         })
@@ -117,6 +132,7 @@ export default function BrowserView() {
       cancelAnimationFrame(raf)
       browserClose().catch(() => {})
       openedRef.current = false
+      setBrowserBackend(null)
     }
   }, [])
 
@@ -138,11 +154,32 @@ export default function BrowserView() {
     )
   }
 
+  const backendLabel =
+    backend?.mode === "cdp"
+      ? "Chrome CDP"
+      : backend?.mode === "webkit"
+        ? "WebKit"
+        : backend?.mode === "webview"
+          ? "WebView"
+          : null
+
   return (
     <div className="flex h-full flex-col bg-muted/25 p-4">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
         {/* 工具条 (可信本地 DOM; 与下方子 webview 区域严格不重叠) */}
         <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+          {backendLabel ? (
+            <span
+              title={
+                backend?.mode === "cdp"
+                  ? backend.chromePath ?? "Chrome CDP 模式"
+                  : undefined
+              }
+              className="shrink-0 rounded-md border bg-muted/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            >
+              {backendLabel}
+            </span>
+          ) : null}
           <IconButton onClick={() => browserBack().catch(() => {})} title="后退" aria-label="后退">
             <ArrowLeft className="h-4 w-4" />
           </IconButton>
@@ -177,8 +214,18 @@ export default function BrowserView() {
             />
           </form>
         </div>
-        {/* 内容占位区: 原生子 webview 覆盖此矩形 */}
-        <div ref={contentRef} className="min-h-0 flex-1 bg-background" />
+        {/* 内容占位区: 原生子 webview 或 CDP Chrome 窗口对齐此矩形 */}
+        <div ref={contentRef} className="relative min-h-0 flex-1 bg-background">
+          {backend?.mode === "cdp" ? (
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 p-6 text-center text-muted-foreground">
+              <Globe className="h-6 w-6 opacity-40" />
+              <p className="text-xs">Chrome 独立窗口 (CDP)</p>
+              <p className="max-w-xs text-[11px] opacity-70">
+                页面在独立 Chrome 窗口中渲染，与本区域对齐；切换标签或缩放窗口时会自动同步位置。
+              </p>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   )

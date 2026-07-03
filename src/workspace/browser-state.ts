@@ -1,7 +1,20 @@
 // 内嵌浏览器当前 URL 快照 (供 AI 助手上下文注入; 由 BrowserView 在导航/加载时更新)。
 
 let currentUrl: string | null = null
+let backendMode: "cdp" | "webkit" | "webview" | null = null
 const subscribers = new Set<() => void>()
+
+/** 更新浏览器后端模式 (BrowserView 专用)。 */
+export function setBrowserBackend(mode: "cdp" | "webkit" | "webview" | null): void {
+  if (mode === backendMode) return
+  backendMode = mode
+  for (const cb of subscribers) cb()
+}
+
+/** 当前浏览器后端模式。 */
+export function getBrowserBackend(): "cdp" | "webkit" | "webview" | null {
+  return backendMode
+}
 
 /** 更新当前浏览器 URL (BrowserView 专用)。 */
 export function setBrowserUrl(url: string): void {
