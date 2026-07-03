@@ -1,4 +1,5 @@
-// Linux/WSL 内嵌浏览器 (gtk::Overlay / gtk::Fixed 精确定位子 webview)。
+// Linux/WSL 内嵌浏览器: WebKitGTK (wry) 或 CDP/Chromium 双后端。
+// 检测到 Chrome/Chromium 且未设 IDEALL_BROWSER_CDP=0 时优先 CDP (阶段 2)。
 
 use gtk::prelude::*;
 use std::cell::RefCell;
@@ -6,6 +7,8 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::{PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtUnix};
 
+use crate::browser_scripts::CONTENT_JS;
+use crate::browser_cdp::BrowserCdpState;
 use crate::Bounds;
 
 #[derive(Default)]
@@ -15,7 +18,6 @@ struct Inner {
     webview: Option<WebView>,
     overlay_ready: bool,
 }
-
 
 thread_local! {
     static BROWSER: RefCell<Inner> = RefCell::new(Inner::default());
@@ -41,6 +43,10 @@ fn remember_content(b: &Bounds) {
 fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window("main")
         .ok_or_else(|| "主窗口不存在".into())
+}
+
+fn cdp_enabled(app: &AppHandle) -> bool {
+    app.state::<BrowserCdpState>().enabled()
 }
 
 fn ensure_overlay(main: &WebviewWindow, inner: &mut Inner) -> Result<(), String> {
@@ -86,6 +92,11 @@ fn close_webview(inner: &mut Inner) {
 }
 
 pub fn open(app: &AppHandle, url: String, b: Bounds) -> Result<(), String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::open(&state, app, url, b));
+    }
+
     let target = if url.trim().is_empty() {
         "https://www.google.com".to_string()
     } else {
@@ -128,8 +139,12 @@ pub fn open(app: &AppHandle, url: String, b: Bounds) -> Result<(), String> {
     })
 }
 
-pub fn set_bounds(b: Bounds) -> Result<(), String> {
+pub fn set_bounds(app: &AppHandle, b: Bounds) -> Result<(), String> {
     remember_content(&b);
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::set_bounds(&state, b));
+    }
     with_browser(|inner| {
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
             apply_fixed_geometry(fixed, &b);
@@ -142,8 +157,12 @@ pub fn set_bounds(b: Bounds) -> Result<(), String> {
     })
 }
 
-pub fn navigate(url: &str) -> Result<(), String> {
+pub fn navigate(app: &AppHandle, url: &str) -> Result<(), String> {
     crate::parse_http_url(url)?;
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::navigate(&state, app, url));
+    }
     with_browser(|inner| {
         inner
             .webview
@@ -187,15 +206,27 @@ pub fn eval_json(js: &str) -> Result<serde_json::Value, String> {
     })
 }
 
-pub fn back() -> Result<(), String> {
+pub fn back(app: &AppHandle) -> Result<(), String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::back(&state, app));
+    }
     eval_script("history.back()")
 }
 
-pub fn forward() -> Result<(), String> {
+pub fn forward(app: &AppHandle) -> Result<(), String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::forward(&state, app));
+    }
     eval_script("history.forward()")
 }
 
-pub fn reload() -> Result<(), String> {
+pub fn reload(app: &AppHandle) -> Result<(), String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::reload(&state, app));
+    }
     with_browser(|inner| {
         inner
             .webview
@@ -206,12 +237,15 @@ pub fn reload() -> Result<(), String> {
     })
 }
 
-pub fn hide() -> Result<(), String> {
+pub fn hide(app: &AppHandle) -> Result<(), String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::hide(&state));
+    }
     with_browser(|inner| {
         if let Some(wv) = inner.webview.as_ref() {
             wv.set_visible(false).map_err(|e| e.to_string())?;
         }
-        // 仅隐藏 webview 不够: gtk::Fixed overlay 仍占矩形并拦截下方 iframe 的点击 (WSL/Linux)。
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
             fixed.hide();
         }
@@ -219,7 +253,11 @@ pub fn hide() -> Result<(), String> {
     })
 }
 
-pub fn show() -> Result<(), String> {
+pub fn show(app: &AppHandle) -> Result<(), String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::show(&state));
+    }
     with_browser(|inner| {
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
             fixed.show_all();
@@ -231,25 +269,24 @@ pub fn show() -> Result<(), String> {
     })
 }
 
-pub fn close() -> Result<(), String> {
+pub fn close(app: &AppHandle) -> Result<(), String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        return tauri::async_runtime::block_on(crate::browser_cdp::close(&state));
+    }
     with_browser(|inner| {
         close_webview(inner);
         Ok(())
     })
 }
 
-/// 读取当前页 URL + 标题 + 正文 (innerText, 截断 8000 字符)。
-pub fn get_content() -> Result<crate::BrowserPageContent, String> {
-    const JS: &str = r#"
-(function(){
-  try {
-    var t = (document.body && document.body.innerText) || '';
-    return JSON.stringify({title: document.title || '', text: t.slice(0, 8000)});
-  } catch(e) {
-    return JSON.stringify({title: '', text: '', error: String(e)});
-  }
-})()
-"#;
+pub fn get_content(app: &AppHandle) -> Result<crate::BrowserPageContent, String> {
+    if cdp_enabled(app) {
+        let state = app.state::<BrowserCdpState>();
+        if tauri::async_runtime::block_on(state.is_running()) {
+            return tauri::async_runtime::block_on(crate::browser_cdp::get_content(&state));
+        }
+    }
 
     with_browser(|inner| {
         let wv = inner
@@ -257,7 +294,7 @@ pub fn get_content() -> Result<crate::BrowserPageContent, String> {
             .as_ref()
             .ok_or_else(|| "浏览器视图不存在".to_string())?;
         let url = wv.url().unwrap_or_default();
-        let v = eval_json(JS)?;
+        let v = eval_json(CONTENT_JS)?;
         if let Some(err) = v.get("error").and_then(|x| x.as_str()) {
             if !err.is_empty() {
                 return Err(format!("页面脚本错误: {err}"));

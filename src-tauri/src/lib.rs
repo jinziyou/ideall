@@ -16,6 +16,10 @@ mod acp_transport;
 #[cfg(desktop)]
 mod oauth_callback;
 #[cfg(all(desktop, target_os = "linux"))]
+mod browser_cdp;
+#[cfg(desktop)]
+mod browser_scripts;
+#[cfg(all(desktop, target_os = "linux"))]
 mod browser_linux;
 #[cfg(desktop)]
 mod window_placement;
@@ -46,16 +50,7 @@ pub(crate) struct BrowserPageContent {
 }
 
 #[cfg(all(desktop, not(target_os = "linux")))]
-const BROWSER_CONTENT_JS: &str = r#"
-(function(){
-  try {
-    var t = (document.body && document.body.innerText) || '';
-    return JSON.stringify({title: document.title || '', text: t.slice(0, 8000)});
-  } catch(e) {
-    return JSON.stringify({title: '', text: '', error: String(e)});
-  }
-})()
-"#;
+const BROWSER_CONTENT_JS: &str = browser_scripts::CONTENT_JS;
 
 #[cfg(desktop)]
 pub(crate) fn parse_browser_page_json(
@@ -137,87 +132,47 @@ fn parse_browser_act_json(v: serde_json::Value) -> Result<(), String> {
 
 #[cfg(desktop)]
 fn js_browser_click(selector: &str) -> Result<String, String> {
-    let sel_json = serde_json::to_string(&validate_css_selector(selector)?)
-        .map_err(|e| e.to_string())?;
-    Ok(format!(
-        "(function(){{try{{var el=document.querySelector({sel_json});if(!el)return JSON.stringify({{ok:false,error:'not-found'}});el.click();return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"
-    ))
+    validate_css_selector(selector)?;
+    browser_scripts::js_click(selector)
 }
 
 #[cfg(desktop)]
 fn js_browser_fill(selector: &str, text: &str) -> Result<String, String> {
-    let sel_json = serde_json::to_string(&validate_css_selector(selector)?)
-        .map_err(|e| e.to_string())?;
-    let val_json = serde_json::to_string(&validate_fill_text(text)?).map_err(|e| e.to_string())?;
-    Ok(format!(
-        "(function(){{try{{var el=document.querySelector({sel_json});if(!el)return JSON.stringify({{ok:false,error:'not-found'}});el.focus();if('value' in el)el.value={val_json};else el.textContent={val_json};el.dispatchEvent(new Event('input',{{bubbles:true}}));el.dispatchEvent(new Event('change',{{bubbles:true}}));return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"
-    ))
-}
-
-#[cfg(desktop)]
-fn js_browser_press(key: &str) -> Result<String, String> {
-    let key_json = serde_json::to_string(&validate_press_key(key)?).map_err(|e| e.to_string())?;
-    Ok(format!(
-        "(function(){{try{{var t=document.activeElement||document.body;t.dispatchEvent(new KeyboardEvent('keydown',{{key:{key_json},bubbles:true}}));t.dispatchEvent(new KeyboardEvent('keyup',{{key:{key_json},bubbles:true}}));return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"
-    ))
+    validate_css_selector(selector)?;
+    validate_fill_text(text)?;
+    browser_scripts::js_fill(selector, text)
 }
 
 #[cfg(desktop)]
 fn js_browser_element_exists(selector: &str) -> Result<String, String> {
-    let sel_json = serde_json::to_string(&validate_css_selector(selector)?)
-        .map_err(|e| e.to_string())?;
-    Ok(format!(
-        "(function(){{try{{return JSON.stringify({{ok:!!document.querySelector({sel_json})}});}}catch(e){{return JSON.stringify({{ok:false}});}}}})()"
-    ))
+    validate_css_selector(selector)?;
+    browser_scripts::js_element_exists(selector)
+}
+
+#[cfg(desktop)]
+fn js_browser_press(key: &str) -> Result<String, String> {
+    let k = validate_press_key(key)?;
+    browser_scripts::js_press(&k)
 }
 
 /// 枚举当前页可交互元素 (按钮/链接/输入框等), 供 agent 选用 selector。
 #[cfg(desktop)]
-const BROWSER_LIST_INTERACTIVE_JS: &str = r#"
-(function(){
-  function vis(el){
-    var r=el.getBoundingClientRect();
-    return r.width>0&&r.height>0;
-  }
-  function esc(s){return String(s).replace(/\\/g,'\\\\').replace(/"/g,'\\"');}
-  function pickSel(el){
-    var tag=el.tagName.toLowerCase();
-    if(el.id&&/^[a-zA-Z][\w:-]*$/.test(el.id))return '#'+el.id;
-    var n=el.getAttribute('name');
-    if(n&&(tag==='input'||tag==='textarea'||tag==='select'))return tag+'[name="'+esc(n)+'"]';
-    var al=el.getAttribute('aria-label');
-    if(al)return '[aria-label="'+esc(al)+'"]';
-    var ph=el.getAttribute('placeholder');
-    if(ph&&(tag==='input'||tag==='textarea'))return tag+'[placeholder="'+esc(ph)+'"]';
-    return '';
-  }
-  function label(el){
-    var t=(el.innerText||el.value||'').trim();
-    if(t)return t.slice(0,120);
-    return (el.getAttribute('aria-label')||el.getAttribute('placeholder')||el.getAttribute('name')||el.id||'').trim().slice(0,120);
-  }
-  var q='button,a[href],input,textarea,select,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
-  var nodes=document.querySelectorAll(q);
-  var out=[],ref=1;
-  for(var i=0;i<nodes.length&&out.length<50;i++){
-    var el=nodes[i];
-    if(!vis(el))continue;
-    var sel=pickSel(el);
-    if(!sel)continue;
-    var tag=el.tagName.toLowerCase();
-    var role=el.getAttribute('role')||tag;
-    var typ=el.getAttribute('type')||'';
-    out.push({ref:ref++,role:role,name:label(el),selector:sel,tag:tag,type:typ});
-  }
-  return JSON.stringify({url:location.href,title:document.title,elements:out});
-})()
-"#;
+const BROWSER_LIST_INTERACTIVE_JS: &str = browser_scripts::LIST_INTERACTIVE_JS;
+
+#[cfg(all(desktop, target_os = "linux"))]
+fn cdp_running(app: &AppHandle) -> bool {
+    let state = app.state::<browser_cdp::BrowserCdpState>();
+    state.enabled() && tauri::async_runtime::block_on(state.is_running())
+}
 
 #[cfg(desktop)]
 fn browser_eval_json(app: AppHandle, js: String) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "linux")]
     {
-        let _ = app;
+        if cdp_running(&app) {
+            let state = app.state::<browser_cdp::BrowserCdpState>();
+            return tauri::async_runtime::block_on(browser_cdp::eval_json(&state, &js));
+        }
         return browser_linux::eval_json(&js);
     }
 
@@ -330,15 +285,15 @@ fn open_browser_view(
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_set_bounds(
-    _app: AppHandle,
+    app: AppHandle,
     b: Bounds,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::set_bounds(b);
+    return browser_linux::set_bounds(&app, b);
 
     #[cfg(not(target_os = "linux"))]
     {
-    let wv = _app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?;
+    let wv = app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?;
     wv.set_position(LogicalPosition::new(b.x, b.y))
         .map_err(|e| e.to_string())?;
     wv.set_size(LogicalSize::new(b.w, b.h))
@@ -351,16 +306,16 @@ fn browser_set_bounds(
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_navigate(
-    _app: AppHandle,
+    app: AppHandle,
     url: String,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::navigate(&url);
+    return browser_linux::navigate(&app, &url);
 
     #[cfg(not(target_os = "linux"))]
     {
     let parsed = parse_http_url(&url)?;
-    _app.get_webview(BROWSER_LABEL)
+    app.get_webview(BROWSER_LABEL)
         .ok_or("浏览器视图不存在")?
         .navigate(parsed)
         .map_err(|e| e.to_string())
@@ -369,13 +324,13 @@ fn browser_navigate(
 
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_back(_app: AppHandle) -> Result<(), String> {
+fn browser_back(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::back();
+    return browser_linux::back(&app);
 
     #[cfg(not(target_os = "linux"))]
     {
-        _app.get_webview(BROWSER_LABEL)
+        app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .eval("history.back()")
             .map_err(|e| e.to_string())
@@ -383,13 +338,13 @@ fn browser_back(_app: AppHandle) -> Result<(), String> {
 }
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_forward(_app: AppHandle) -> Result<(), String> {
+fn browser_forward(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::forward();
+    return browser_linux::forward(&app);
 
     #[cfg(not(target_os = "linux"))]
     {
-        _app.get_webview(BROWSER_LABEL)
+        app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .eval("history.forward()")
             .map_err(|e| e.to_string())
@@ -397,13 +352,13 @@ fn browser_forward(_app: AppHandle) -> Result<(), String> {
 }
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_reload(_app: AppHandle) -> Result<(), String> {
+fn browser_reload(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::reload();
+    return browser_linux::reload(&app);
 
     #[cfg(not(target_os = "linux"))]
     {
-        _app.get_webview(BROWSER_LABEL)
+        app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .eval("location.reload()")
             .map_err(|e| e.to_string())
@@ -413,13 +368,13 @@ fn browser_reload(_app: AppHandle) -> Result<(), String> {
 // 隐藏/显示/关闭子 webview (标签切走 hide, 切回 show, 关标签 close)。
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_hide(_app: AppHandle) -> Result<(), String> {
+fn browser_hide(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::hide();
+    return browser_linux::hide(&app);
 
     #[cfg(not(target_os = "linux"))]
     {
-        _app.get_webview(BROWSER_LABEL)
+        app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .hide()
             .map_err(|e| e.to_string())
@@ -427,13 +382,13 @@ fn browser_hide(_app: AppHandle) -> Result<(), String> {
 }
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_show(_app: AppHandle) -> Result<(), String> {
+fn browser_show(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::show();
+    return browser_linux::show(&app);
 
     #[cfg(not(target_os = "linux"))]
     {
-        _app.get_webview(BROWSER_LABEL)
+        app.get_webview(BROWSER_LABEL)
             .ok_or("浏览器视图不存在")?
             .show()
             .map_err(|e| e.to_string())
@@ -445,8 +400,7 @@ fn browser_show(_app: AppHandle) -> Result<(), String> {
 fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
     #[cfg(target_os = "linux")]
     {
-        let _ = app;
-        return browser_linux::get_content();
+        return browser_linux::get_content(&app);
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -476,6 +430,11 @@ fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_click(app: AppHandle, selector: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if cdp_running(&app) {
+        let state = app.state::<browser_cdp::BrowserCdpState>();
+        return tauri::async_runtime::block_on(browser_cdp::click(&state, &selector));
+    }
     browser_run_js(app, js_browser_click(&selector)?)
 }
 
@@ -483,6 +442,11 @@ fn browser_click(app: AppHandle, selector: String) -> Result<(), String> {
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_fill(app: AppHandle, selector: String, text: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if cdp_running(&app) {
+        let state = app.state::<browser_cdp::BrowserCdpState>();
+        return tauri::async_runtime::block_on(browser_cdp::fill(&state, &selector, &text));
+    }
     browser_run_js(app, js_browser_fill(&selector, &text)?)
 }
 
@@ -490,6 +454,11 @@ fn browser_fill(app: AppHandle, selector: String, text: String) -> Result<(), St
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_press(app: AppHandle, key: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if cdp_running(&app) {
+        let state = app.state::<browser_cdp::BrowserCdpState>();
+        return tauri::async_runtime::block_on(browser_cdp::press(&state, &key));
+    }
     browser_run_js(app, js_browser_press(&key)?)
 }
 
@@ -518,8 +487,13 @@ async fn browser_wait_for_selector(
     selector: String,
     timeout_ms: Option<u64>,
 ) -> Result<(), String> {
-    let js = js_browser_element_exists(&selector)?;
     let timeout = timeout_ms.unwrap_or(8000).clamp(500, 30_000);
+    #[cfg(target_os = "linux")]
+    if cdp_running(&app) {
+        let state = app.state::<browser_cdp::BrowserCdpState>();
+        return browser_cdp::wait_for_selector(&state, &selector, timeout).await;
+    }
+    let js = js_browser_element_exists(&selector)?;
     let start = std::time::Instant::now();
     loop {
         if browser_eval_json(app.clone(), js.clone())?
@@ -538,13 +512,13 @@ async fn browser_wait_for_selector(
 
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_close(_app: AppHandle) -> Result<(), String> {
+fn browser_close(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::close();
+    return browser_linux::close(&app);
 
     #[cfg(not(target_os = "linux"))]
     {
-        if let Some(w) = _app.get_webview(BROWSER_LABEL) {
+        if let Some(w) = app.get_webview(BROWSER_LABEL) {
             w.close().map_err(|e| e.to_string())?;
         }
         Ok(())
@@ -797,7 +771,13 @@ pub fn run() {
     let builder = builder
         .manage(acp_transport::init_state())
         .manage(acp_transport::init_server_state())
-        .manage(oauth_callback::init_oauth_state())
+        .manage(oauth_callback::init_oauth_state());
+
+    #[cfg(all(desktop, target_os = "linux"))]
+    let builder = builder.manage(browser_cdp::init_state());
+
+    #[cfg(desktop)]
+    let builder = builder
         .invoke_handler(tauri::generate_handler![
             agent_guarded_fetch,
             open_browser_view,
