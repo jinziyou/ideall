@@ -85,6 +85,115 @@ pub(crate) fn parse_http_url(url: &str) -> Result<tauri::Url, String> {
     Ok(u)
 }
 
+// ── 内嵌浏览器 DOM 操控 (agent browser.click / fill / press) ────────────────────────
+
+#[cfg(desktop)]
+fn validate_css_selector(sel: &str) -> Result<String, String> {
+    let s = sel.trim().to_string();
+    if s.is_empty() || s.len() > 500 {
+        return Err("invalid-selector".into());
+    }
+    if s.chars().any(|c| c == '\n' || c == '\r' || c == ';' || c == '\0') {
+        return Err("invalid-selector".into());
+    }
+    Ok(s)
+}
+
+#[cfg(desktop)]
+fn validate_fill_text(text: &str) -> Result<String, String> {
+    if text.len() > 4000 {
+        return Err("text-too-long".into());
+    }
+    Ok(text.to_string())
+}
+
+#[cfg(desktop)]
+fn validate_press_key(key: &str) -> Result<String, String> {
+    const ALLOWED: &[&str] = &[
+        "Enter", "Tab", "Escape", "Backspace", "Delete", "Space",
+        "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End",
+    ];
+    let k = key.trim();
+    if ALLOWED.contains(&k) {
+        return Ok(k.to_string());
+    }
+    if k.len() == 1 {
+        return Ok(k.to_string());
+    }
+    Err("invalid-key".into())
+}
+
+#[cfg(desktop)]
+fn parse_browser_act_json(v: serde_json::Value) -> Result<(), String> {
+    if v.get("ok").and_then(|x| x.as_bool()) == Some(true) {
+        return Ok(());
+    }
+    Err(v
+        .get("error")
+        .and_then(|x| x.as_str())
+        .unwrap_or("act-failed")
+        .to_string())
+}
+
+#[cfg(desktop)]
+fn js_browser_click(selector: &str) -> Result<String, String> {
+    let sel_json = serde_json::to_string(&validate_css_selector(selector)?)
+        .map_err(|e| e.to_string())?;
+    Ok(format!(
+        "(function(){{try{{var el=document.querySelector({sel_json});if(!el)return JSON.stringify({{ok:false,error:'not-found'}});el.click();return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"
+    ))
+}
+
+#[cfg(desktop)]
+fn js_browser_fill(selector: &str, text: &str) -> Result<String, String> {
+    let sel_json = serde_json::to_string(&validate_css_selector(selector)?)
+        .map_err(|e| e.to_string())?;
+    let val_json = serde_json::to_string(&validate_fill_text(text)?).map_err(|e| e.to_string())?;
+    Ok(format!(
+        "(function(){{try{{var el=document.querySelector({sel_json});if(!el)return JSON.stringify({{ok:false,error:'not-found'}});el.focus();if('value' in el)el.value={val_json};else el.textContent={val_json};el.dispatchEvent(new Event('input',{{bubbles:true}}));el.dispatchEvent(new Event('change',{{bubbles:true}}));return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"
+    ))
+}
+
+#[cfg(desktop)]
+fn js_browser_press(key: &str) -> Result<String, String> {
+    let key_json = serde_json::to_string(&validate_press_key(key)?).map_err(|e| e.to_string())?;
+    Ok(format!(
+        "(function(){{try{{var t=document.activeElement||document.body;t.dispatchEvent(new KeyboardEvent('keydown',{{key:{key_json},bubbles:true}}));t.dispatchEvent(new KeyboardEvent('keyup',{{key:{key_json},bubbles:true}}));return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"
+    ))
+}
+
+#[cfg(desktop)]
+fn browser_run_js(app: AppHandle, js: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        return browser_linux::eval_json(&js).and_then(parse_browser_act_json);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let wv = app
+            .get_webview(BROWSER_LABEL)
+            .ok_or_else(|| "浏览器视图不存在".to_string())?;
+        let (tx, rx) = mpsc::sync_channel(1);
+        wv.with_webview(move |platform| {
+            let _ = platform.evaluate_script_with_callback(&js, move |result| {
+                let _ = tx.send(result);
+            });
+        })
+        .map_err(|e| e.to_string())?;
+        let json_str = rx
+            .recv_timeout(Duration::from_secs(8))
+            .map_err(|_| "执行超时".to_string())?;
+        let v: serde_json::Value =
+            serde_json::from_str(&json_str).map_err(|e| format!("解析脚本结果失败: {e}"))?;
+        parse_browser_act_json(v)
+    }
+}
+
 /// 打开 (或重建) 内嵌浏览器子 webview, 加载 url, 定位到主窗口内容区 bounds。
 #[cfg(desktop)]
 #[tauri::command]
@@ -277,6 +386,27 @@ fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
             .map_err(|_| "读取页面超时".to_string())?;
         parse_browser_page_json(url, &json_str)
     }
+}
+
+/// 点击内嵌浏览器页面元素 (CSS 选择器)。
+#[cfg(desktop)]
+#[tauri::command]
+fn browser_click(app: AppHandle, selector: String) -> Result<(), String> {
+    browser_run_js(app, js_browser_click(&selector)?)
+}
+
+/// 向内嵌浏览器输入框/文本区填写内容 (CSS 选择器 + 文本)。
+#[cfg(desktop)]
+#[tauri::command]
+fn browser_fill(app: AppHandle, selector: String, text: String) -> Result<(), String> {
+    browser_run_js(app, js_browser_fill(&selector, &text)?)
+}
+
+/// 向内嵌浏览器当前焦点元素发送按键 (Enter / Tab / 单字符等)。
+#[cfg(desktop)]
+#[tauri::command]
+fn browser_press(app: AppHandle, key: String) -> Result<(), String> {
+    browser_run_js(app, js_browser_press(&key)?)
 }
 
 #[cfg(desktop)]
@@ -553,6 +683,9 @@ pub fn run() {
             browser_show,
             browser_close,
             browser_get_content,
+            browser_click,
+            browser_fill,
+            browser_press,
             acp_transport::acp_spawn,
             acp_transport::acp_send,
             acp_transport::acp_close,

@@ -42,6 +42,9 @@ export const TOOL = {
   // browser.* 内嵌浏览器面 (agent): 读当前页 / 导航 (含登录态, 非 web.fetch 重抓)。
   browserGetContent: "browser.getContent",
   browserNavigate: "browser.navigate",
+  browserClick: "browser.click",
+  browserFill: "browser.fill",
+  browserPress: "browser.press",
 } as const
 
 export const RESOURCE = {

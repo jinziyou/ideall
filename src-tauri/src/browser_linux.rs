@@ -165,6 +165,28 @@ fn eval_script(js: &str) -> Result<(), String> {
     })
 }
 
+/// 在子 webview 执行 JS 并解析 JSON 返回值 (evaluate_script_with_callback)。
+pub fn eval_json(js: &str) -> Result<serde_json::Value, String> {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    with_browser(|inner| {
+        let wv = inner
+            .webview
+            .as_ref()
+            .ok_or_else(|| "浏览器视图不存在".to_string())?;
+        let (tx, rx) = mpsc::sync_channel(1);
+        wv.evaluate_script_with_callback(js, move |result| {
+            let _ = tx.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+        let json_str = rx
+            .recv_timeout(Duration::from_secs(8))
+            .map_err(|_| "执行超时".to_string())?;
+        serde_json::from_str(&json_str).map_err(|e| format!("解析脚本结果失败: {e}"))
+    })
+}
+
 pub fn back() -> Result<(), String> {
     eval_script("history.back()")
 }
@@ -218,9 +240,6 @@ pub fn close() -> Result<(), String> {
 
 /// 读取当前页 URL + 标题 + 正文 (innerText, 截断 8000 字符)。
 pub fn get_content() -> Result<crate::BrowserPageContent, String> {
-    use std::sync::mpsc;
-    use std::time::Duration;
-
     const JS: &str = r#"
 (function(){
   try {
@@ -238,14 +257,16 @@ pub fn get_content() -> Result<crate::BrowserPageContent, String> {
             .as_ref()
             .ok_or_else(|| "浏览器视图不存在".to_string())?;
         let url = wv.url().unwrap_or_default();
-        let (tx, rx) = mpsc::sync_channel(1);
-        wv.evaluate_script_with_callback(JS, move |result| {
-            let _ = tx.send(result);
+        let v = eval_json(JS)?;
+        if let Some(err) = v.get("error").and_then(|x| x.as_str()) {
+            if !err.is_empty() {
+                return Err(format!("页面脚本错误: {err}"));
+            }
+        }
+        Ok(crate::BrowserPageContent {
+            url,
+            title: v["title"].as_str().unwrap_or("").to_string(),
+            text: v["text"].as_str().unwrap_or("").to_string(),
         })
-        .map_err(|e| e.to_string())?;
-        let json_str = rx
-            .recv_timeout(Duration::from_secs(8))
-            .map_err(|_| "读取页面超时".to_string())?;
-        crate::parse_browser_page_json(url, &json_str)
     })
 }

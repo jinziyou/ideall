@@ -119,6 +119,27 @@ export async function browserGetPageContent(): Promise<BrowserPageContent> {
   return invoke<BrowserPageContent>("browser_get_content")
 }
 
+/** 点击内嵌浏览器页面元素 (CSS 选择器)。 */
+export async function browserClick(selector: string): Promise<void> {
+  if (!isTauri()) throw new Error("仅桌面 App 可用")
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("browser_click", { selector })
+}
+
+/** 向内嵌浏览器输入框填写内容 (CSS 选择器 + 文本)。 */
+export async function browserFill(selector: string, text: string): Promise<void> {
+  if (!isTauri()) throw new Error("仅桌面 App 可用")
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("browser_fill", { selector, text })
+}
+
+/** 向当前焦点元素发送按键 (Enter / Tab / 单字符等)。 */
+export async function browserPress(key: string): Promise<void> {
+  if (!isTauri()) throw new Error("仅桌面 App 可用")
+  const { invoke } = await import("@tauri-apps/api/core")
+  await invoke("browser_press", { key })
+}
+
 /** 监听内嵌浏览器当前 URL 变化 (on_navigation / on_page_load emit); 返回取消监听; 非 Tauri 为 no-op。 */
 export async function onBrowserUrl(cb: (url: string) => void): Promise<() => void> {
   if (!isTauri()) return () => {}

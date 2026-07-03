@@ -9,7 +9,7 @@ import { NODE_KINDS, type NodeKind } from "@protocol/node"
 import { getUiActions } from "@/lib/ui-actions"
 import { safeHref } from "@/lib/safe-url"
 import { webSearch, webFetch, WebError } from "@/lib/web-search"
-import { browserGetPageContent, isTauri } from "@/lib/tauri"
+import { browserGetPageContent, browserClick, browserFill, browserPress, isTauri } from "@/lib/tauri"
 import { toast } from "sonner"
 import { TOOL, RESOURCE, type Permission } from "./protocol"
 import type { ScopedHost } from "./scoped-host"
@@ -387,6 +387,51 @@ export function registerGrantedTools(
         if (!open) return fail(-32000, "browser-not-available")
         await open(a.url)
         return ok({ ok: true })
+      },
+    )
+
+    server.tool(
+      TOOL.browserClick,
+      "点击内嵌浏览器页面上的元素（CSS 选择器，如 input[name=q]、#submit）。找不到元素时返回 not-found。",
+      { selector: z.string().min(1).max(500) },
+      async (a) => {
+        if (!isTauri()) return fail(-32000, "browser-not-available")
+        try {
+          await browserClick(a.selector)
+          return ok({ ok: true })
+        } catch (e) {
+          return fail(-32000, e instanceof Error ? e.message : "browser-click-failed")
+        }
+      },
+    )
+
+    server.tool(
+      TOOL.browserFill,
+      "向内嵌浏览器的输入框/文本区填写内容（CSS 选择器 + 文本；会触发 input/change 事件）。",
+      { selector: z.string().min(1).max(500), text: z.string().max(4000) },
+      async (a) => {
+        if (!isTauri()) return fail(-32000, "browser-not-available")
+        try {
+          await browserFill(a.selector, a.text)
+          return ok({ ok: true })
+        } catch (e) {
+          return fail(-32000, e instanceof Error ? e.message : "browser-fill-failed")
+        }
+      },
+    )
+
+    server.tool(
+      TOOL.browserPress,
+      "向内嵌浏览器当前焦点元素发送按键（Enter、Tab、Escape 或单字符；填表后常用 Enter 提交）。",
+      { key: z.string().min(1).max(20) },
+      async (a) => {
+        if (!isTauri()) return fail(-32000, "browser-not-available")
+        try {
+          await browserPress(a.key)
+          return ok({ ok: true })
+        } catch (e) {
+          return fail(-32000, e instanceof Error ? e.message : "browser-press-failed")
+        }
       },
     )
   }
