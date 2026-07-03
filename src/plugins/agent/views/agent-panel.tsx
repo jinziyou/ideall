@@ -24,7 +24,7 @@ import {
 } from "../lib/agent-store"
 import { getAgentSettings, isConfigured, subscribeAgentSettings } from "../lib/agent-settings"
 import { consumePendingOpenThread, onOpenThreadRequest } from "../lib/agent-panel-bus"
-import { buildSystemPrompt, gatherHomeContext, gatherReferencedContext } from "../lib/agent-context"
+import { buildSystemPrompt, gatherHomeContext, gatherReferencedContext, gatherBrowserContext } from "../lib/agent-context"
 import { streamChat } from "../lib/agent-chat"
 import { runAgent } from "../lib/agent-run"
 import ChatMessage from "./chat-message"
@@ -266,7 +266,8 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
         try {
           const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""
           const referenced = cfg.includeHomeContext ? await gatherReferencedContext() : ""
-          system = buildSystemPrompt(ctx, { tools: useAgent, referenced })
+          const browser = cfg.includeHomeContext ? gatherBrowserContext() : ""
+          system = buildSystemPrompt(ctx, { tools: useAgent, referenced, browser })
         } catch {
           system = buildSystemPrompt("", { tools: useAgent })
         }

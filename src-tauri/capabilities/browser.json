@@ -13,6 +13,7 @@
     "allow-browser-reload",
     "allow-browser-hide",
     "allow-browser-show",
-    "allow-browser-close"
+    "allow-browser-close",
+    "allow-browser-get-content"
   ]
 }

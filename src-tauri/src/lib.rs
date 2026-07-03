@@ -35,6 +35,47 @@ pub(crate) struct Bounds {
     h: f64,
 }
 
+/// 内嵌浏览器当前页快照 (agent browser.getContent 用)。
+#[cfg(desktop)]
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserPageContent {
+    url: String,
+    title: String,
+    text: String,
+}
+
+#[cfg(all(desktop, not(target_os = "linux")))]
+const BROWSER_CONTENT_JS: &str = r#"
+(function(){
+  try {
+    var t = (document.body && document.body.innerText) || '';
+    return JSON.stringify({title: document.title || '', text: t.slice(0, 8000)});
+  } catch(e) {
+    return JSON.stringify({title: '', text: '', error: String(e)});
+  }
+})()
+"#;
+
+#[cfg(desktop)]
+pub(crate) fn parse_browser_page_json(
+    url: String,
+    json_str: &str,
+) -> Result<BrowserPageContent, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(json_str).map_err(|e| format!("解析页面内容失败: {e}"))?;
+    if let Some(err) = v.get("error").and_then(|x| x.as_str()) {
+        if !err.is_empty() {
+            return Err(format!("页面脚本错误: {err}"));
+        }
+    }
+    Ok(BrowserPageContent {
+        url,
+        title: v["title"].as_str().unwrap_or("").to_string(),
+        text: v["text"].as_str().unwrap_or("").to_string(),
+    })
+}
+
 #[cfg(desktop)]
 pub(crate) fn parse_http_url(url: &str) -> Result<tauri::Url, String> {
     let u: tauri::Url = url.parse().map_err(|e| format!("非法网址: {e}"))?;
@@ -205,6 +246,39 @@ fn browser_show(_app: AppHandle) -> Result<(), String> {
             .map_err(|e| e.to_string())
     }
 }
+/// 读取内嵌浏览器当前页 (URL + 标题 + 正文); 仅桌面、浏览器标签已打开时可用。
+#[cfg(desktop)]
+#[tauri::command]
+fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        return browser_linux::get_content();
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let wv = app
+            .get_webview(BROWSER_LABEL)
+            .ok_or_else(|| "浏览器视图不存在".to_string())?;
+        let url = wv.url().map_err(|e| e.to_string())?.to_string();
+        let (tx, rx) = mpsc::sync_channel(1);
+        wv.with_webview(move |platform| {
+            let _ = platform.evaluate_script_with_callback(BROWSER_CONTENT_JS, move |result| {
+                let _ = tx.send(result);
+            });
+        })
+        .map_err(|e| e.to_string())?;
+        let json_str = rx
+            .recv_timeout(Duration::from_secs(8))
+            .map_err(|_| "读取页面超时".to_string())?;
+        parse_browser_page_json(url, &json_str)
+    }
+}
+
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_close(_app: AppHandle) -> Result<(), String> {
@@ -478,6 +552,7 @@ pub fn run() {
             browser_hide,
             browser_show,
             browser_close,
+            browser_get_content,
             acp_transport::acp_spawn,
             acp_transport::acp_send,
             acp_transport::acp_close,

@@ -12,6 +12,7 @@ import {
   buildWorkspaceSegments,
   gatherHomeContext,
   gatherReferencedContext,
+  gatherBrowserContext,
 } from "./agent-context"
 
 /** 一次运行解析出的连接 + 已组装系统提示 + 能力收窄 (工作区 / 精确模式在此注入)。 */
@@ -65,6 +66,7 @@ export async function resolveWorkspaceRun(
   const sel = homeSelectionOf(ws)
   let homeContext = ""
   let referenced = ""
+  let browser = ""
   if (sel) {
     try {
       homeContext = await gatherHomeContext(sel)
@@ -76,12 +78,14 @@ export async function resolveWorkspaceRun(
     } catch {
       /* 忽略 */
     }
+    browser = gatherBrowserContext()
   }
   const system = assembleSystemPrompt(
     buildWorkspaceSegments({
       tools: useAgent,
       homeContext,
       referenced,
+      browser,
       instructions: ws.prompt.instructions,
       rules: workspaceRulesText(ws),
       examples: "",

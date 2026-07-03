@@ -57,7 +57,7 @@ test("isGrantActive: 未过期 true / 已过期 false (失效时能力层挂零�
 
 // ── §6.2 隐私不变量: agentGrant 与 iframe manifest 的授权集 (锁死 §9 清单) ──
 
-test("agentGrant: 含 fs:read/fs:write/fs.notes:write/ui.tabs + web:search/web:fetch", () => {
+test("agentGrant: 含 fs:read/fs:write/fs.notes:write/ui.tabs + web + browser", () => {
   const g = agentGrant(NOW)
   assert.equal(g.tier, "first-party")
   assert.equal(g.consumerId, "ideall-agent")
@@ -69,6 +69,8 @@ test("agentGrant: 含 fs:read/fs:write/fs.notes:write/ui.tabs + web:search/web:f
     "ui.tabs",
     "web:search",
     "web:fetch",
+    "browser:read",
+    "browser:control",
   ] as const) {
     assert.ok(g.permissions.includes(p), `agentGrant 应含 ${p}`)
   }

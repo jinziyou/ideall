@@ -20,6 +20,7 @@ import {
   type BrowserBounds,
 } from "@/lib/tauri"
 import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-open"
+import { setBrowserUrl } from "./browser-state"
 
 const START_URL = "https://www.google.com"
 
@@ -42,9 +43,14 @@ export default function BrowserView() {
   const [addr, setAddr] = React.useState(initialUrl)
 
   React.useEffect(() => {
+    setBrowserUrl(initialUrl)
+  }, [initialUrl])
+
+  React.useEffect(() => {
     return subscribePendingBrowserUrl((url) => {
       currentUrlRef.current = url
       setAddr(url)
+      setBrowserUrl(url)
       if (openedRef.current) {
         browserNavigate(url).catch(() => toast.error("导航失败"))
         browserShow().catch(() => {})
@@ -91,6 +97,7 @@ export default function BrowserView() {
     onBrowserUrl((u) => {
       currentUrlRef.current = u
       setAddr(u)
+      setBrowserUrl(u)
     }).then((u) => {
       unUrl = u
     })

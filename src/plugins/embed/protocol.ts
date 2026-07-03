@@ -39,6 +39,9 @@ export const TOOL = {
   // web.* agent 联网面 (出站): 把 `/tool` 搜索升级为真·抓取并返回数据。egress 守卫在 @/lib/web-search。
   webSearch: "web.search",
   webFetch: "web.fetch",
+  // browser.* 内嵌浏览器面 (agent): 读当前页 / 导航 (含登录态, 非 web.fetch 重抓)。
+  browserGetContent: "browser.getContent",
+  browserNavigate: "browser.navigate",
 } as const
 
 export const RESOURCE = {
@@ -77,6 +80,9 @@ export const PERMISSIONS = [
   // 钉死 first-party (见 grant.ts PERMISSION_MIN_TIER): 仅本应用 agent 持有, 不下放给 verified/any-origin 嵌入页。
   "web:search",
   "web:fetch",
+  // browser.* 内嵌浏览器: 读当前子 webview 页 / 导航 (钉死 first-party, 仅 agent)。
+  "browser:read",
+  "browser:control",
 ] as const
 
 /** 嵌入桥授权位 —— 宿主据此注册 tool/resource (越权 = 工具不存在)。 */

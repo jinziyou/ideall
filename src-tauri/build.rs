@@ -16,6 +16,7 @@ fn main() {
                 "browser_hide",
                 "browser_show",
                 "browser_close",
+                "browser_get_content",
                 // ACP 外部智能体传输 (仅桌面注册, 但命令名须在此声明以生成 ACL permission)。
                 "acp_spawn",
                 "acp_send",

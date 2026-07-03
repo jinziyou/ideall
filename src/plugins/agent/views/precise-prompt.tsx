@@ -16,6 +16,7 @@ import {
   DEFAULT_WORKSPACE_TEMPLATE,
   gatherHomeContext,
   gatherReferencedContext,
+  gatherBrowserContext,
   SNAPSHOT_GUARD_SIGNATURE,
   WORKSPACE_SEGMENT_LABELS,
   WORKSPACE_SEGMENT_ORDER,
@@ -39,6 +40,7 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
       const sel = homeSelectionOf(ws)
       let homeContext = ""
       let referenced = ""
+      let browser = ""
       if (sel) {
         try {
           homeContext = await gatherHomeContext(sel)
@@ -50,12 +52,14 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
         } catch {
           /* 忽略 */
         }
+        browser = gatherBrowserContext()
       }
       const text = assembleSystemPrompt(
         buildWorkspaceSegments({
           tools,
           homeContext,
           referenced,
+          browser,
           instructions: ws.prompt.instructions,
           rules: workspaceRulesText(ws),
           examples: "",

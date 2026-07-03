@@ -92,6 +92,8 @@ export const PERMISSION_MIN_TIER: Partial<Record<Permission, GrantTier>> = {
   // 不能借宿主拿到任意外网 egress (嵌入页自有同源取数, 不该走宿主出站通道)。
   "web:search": "first-party",
   "web:fetch": "first-party",
+  "browser:read": "first-party",
+  "browser:control": "first-party",
 }
 
 /**
@@ -121,6 +123,8 @@ export const AGENT_PERMISSIONS: Permission[] = [
   "ui.tabs",
   "web:search",
   "web:fetch",
+  "browser:read",
+  "browser:control",
 ]
 
 /**
