@@ -16,11 +16,12 @@ import {
   useTabs,
   useActiveId,
   useTransientId,
+  useDirtyTabIds,
   setActiveTab,
   promoteTab,
-  closeTab,
-  closeAllTabs,
-  closeOtherTabs,
+  requestCloseTab,
+  requestCloseAllTabs,
+  requestCloseOtherTabs,
   reorderTabs,
 } from "./store"
 import type { Tab } from "./types"
@@ -79,7 +80,15 @@ function TabLeadingMark({
   )
 }
 
-function TabBarTail({ tabs, activeId }: { tabs: Tab[]; activeId: string | null }) {
+function TabBarTail({
+  tabs,
+  activeId,
+  dirtyIds,
+}: {
+  tabs: Tab[]
+  activeId: string | null
+  dirtyIds: Set<string>
+}) {
   const [mgmtOpen, setMgmtOpen] = React.useState(false)
   const [listOpen, setListOpen] = React.useState(false)
 
@@ -114,14 +123,14 @@ function TabBarTail({ tabs, activeId }: { tabs: Tab[]; activeId: string | null }
           <DropdownMenuItem
             disabled={!activeId || tabs.length <= 1}
             onSelect={() => {
-              if (activeId) closeOtherTabs(activeId)
+              if (activeId) requestCloseOtherTabs(activeId)
             }}
           >
             关闭其他标签
           </DropdownMenuItem>
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
-            onSelect={() => closeAllTabs()}
+            onSelect={() => requestCloseAllTabs()}
           >
             关闭所有标签
           </DropdownMenuItem>
@@ -161,9 +170,13 @@ function TabBarTail({ tabs, activeId }: { tabs: Tab[]; activeId: string | null }
               <span className="min-w-0 flex-1 truncate" title={t.title}>
                 {t.title}
               </span>
+              {dirtyIds.has(t.id) && (
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+              )}
               <TabCloseButton
                 title={t.title}
-                onClose={() => closeTab(t.id)}
+                dirty={dirtyIds.has(t.id)}
+                onClose={() => requestCloseTab(t.id)}
                 className="opacity-100"
               />
             </DropdownMenuItem>
@@ -177,19 +190,21 @@ function TabBarTail({ tabs, activeId }: { tabs: Tab[]; activeId: string | null }
 function TabCloseButton({
   title,
   active,
+  dirty,
   onClose,
   className,
 }: {
   title: string
   active?: boolean
+  dirty?: boolean
   onClose: () => void
   className?: string
 }) {
   return (
     <button
       type="button"
-      title="关闭"
-      aria-label={`关闭 ${title}`}
+      title={dirty ? "关闭（有未保存更改）" : "关闭"}
+      aria-label={`关闭 ${title}${dirty ? "，有未保存更改" : ""}`}
       onClick={(e) => {
         e.stopPropagation()
         onClose()
@@ -219,6 +234,7 @@ function TabItem({
   tabs,
   active,
   transient,
+  dirty,
   dragIdRef,
   tabRef,
 }: {
@@ -227,6 +243,7 @@ function TabItem({
   tabs: Tab[]
   active: boolean
   transient: boolean
+  dirty: boolean
   dragIdRef: React.MutableRefObject<string | null>
   tabRef: (el: HTMLDivElement | null) => void
 }) {
@@ -238,7 +255,7 @@ function TabItem({
       aria-controls={tabPanelId(t.id)}
       tabIndex={active ? 0 : -1}
       aria-selected={active}
-      title={transient ? `${t.title} · 预览 (双击固定)` : t.title}
+      title={dirty ? `${t.title} · 未保存` : transient ? `${t.title} · 预览 (双击固定)` : t.title}
       draggable
       onDragStart={() => {
         dragIdRef.current = t.id
@@ -258,7 +275,7 @@ function TabItem({
           setActiveTab(t.id)
         } else if (e.key === "Delete" || e.key === "Backspace") {
           e.preventDefault()
-          closeTab(t.id)
+          requestCloseTab(t.id)
         } else if (e.ctrlKey && e.shiftKey && e.key === "ArrowLeft" && i > 0) {
           e.preventDefault()
           reorderTabs(t.id, tabs[i - 1].id)
@@ -282,7 +299,7 @@ function TabItem({
       onAuxClick={(e) => {
         if (e.button === 1) {
           e.preventDefault()
-          closeTab(t.id)
+          requestCloseTab(t.id)
         }
       }}
       style={{ minWidth: TAB_MIN_PX, maxWidth: TAB_MAX_PX }}
@@ -302,7 +319,13 @@ function TabItem({
       <span className="min-w-0 flex-1 truncate" title={t.title}>
         {t.title}
       </span>
-      <TabCloseButton title={t.title} active={active} onClose={() => closeTab(t.id)} />
+      {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />}
+      <TabCloseButton
+        title={t.title}
+        active={active || dirty}
+        dirty={dirty}
+        onClose={() => requestCloseTab(t.id)}
+      />
     </div>
   )
 }
@@ -311,6 +334,7 @@ export default function TabBar() {
   const tabs = useTabs()
   const activeId = useActiveId()
   const transientId = useTransientId()
+  const dirtyIds = new Set(useDirtyTabIds())
   const dragIdRef = React.useRef<string | null>(null)
   const tabRefs = React.useRef(new Map<string, HTMLDivElement>())
 
@@ -340,6 +364,7 @@ export default function TabBar() {
                 tabs={tabs}
                 active={t.id === activeId}
                 transient={t.id === transientId}
+                dirty={dirtyIds.has(t.id)}
                 dragIdRef={dragIdRef}
                 tabRef={(el) => {
                   if (el) tabRefs.current.set(t.id, el)
@@ -349,7 +374,7 @@ export default function TabBar() {
             ))
           )}
         </div>
-        {tabs.length > 0 && <TabBarTail tabs={tabs} activeId={activeId} />}
+        {tabs.length > 0 && <TabBarTail tabs={tabs} activeId={activeId} dirtyIds={dirtyIds} />}
       </div>
     </div>
   )

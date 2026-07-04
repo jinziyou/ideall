@@ -14,6 +14,7 @@ export type WorkspaceState = {
   sidebarCollapsed: boolean
   rightPanelOpen: boolean
   lru: string[]
+  dirtyTabs: string[]
   hydrated: boolean
 }
 
@@ -27,16 +28,22 @@ export const workspaceInitialState: WorkspaceState = {
   sidebarCollapsed: false,
   rightPanelOpen: false,
   lru: [],
+  dirtyTabs: [],
   hydrated: false,
 }
 
-function applyLruAfterPatch(state: WorkspaceState, patch: Partial<WorkspaceState>, prevActive: string | null) {
+function applyDerivedAfterPatch(
+  state: WorkspaceState,
+  patch: Partial<WorkspaceState>,
+  prevActive: string | null,
+) {
   if (state.activeId && state.activeId !== prevActive) {
     state.lru = [...state.lru.filter((id) => id !== state.activeId), state.activeId]
   }
   if (patch.tabs) {
     const ids = new Set(state.tabs.map((t) => t.id))
     state.lru = state.lru.filter((id) => ids.has(id))
+    state.dirtyTabs = state.dirtyTabs.filter((id) => ids.has(id))
   }
 }
 
@@ -47,7 +54,7 @@ export const workspaceSlice = createSlice({
     patch(state, action: PayloadAction<Partial<WorkspaceState>>) {
       const prevActive = state.activeId
       Object.assign(state, action.payload)
-      applyLruAfterPatch(state, action.payload, prevActive)
+      applyDerivedAfterPatch(state, action.payload, prevActive)
     },
     hydrate(state, action: PayloadAction<Partial<WorkspaceState>>) {
       Object.assign(state, action.payload, { hydrated: true })

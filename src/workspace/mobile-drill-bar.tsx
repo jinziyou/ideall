@@ -8,7 +8,7 @@
 import { ChevronLeft } from "lucide-react"
 import type { NodeKind } from "./node-ref"
 import { parseNodeParams } from "./node-tab"
-import { closeTab, getTabs, openTab, useActiveId, useTabs } from "./store"
+import { getTabs, openTab, requestCloseTab, useActiveId, useTabs } from "./store"
 import { HOME_SECTIONS } from "./tree/home-sections"
 import type { TabDescriptor } from "./types"
 
@@ -39,7 +39,7 @@ export default function MobileDrillBar() {
 
   function goBack() {
     if (!tab) return
-    closeTab(tab.id)
+    if (!requestCloseTab(tab.id)) return
     // 关掉的是唯一标签 → 主区留白无处可去, 落到该节点所属分区列表 (预览槽, 不堆常驻)。
     if (getTabs().length === 0) {
       openTab(section?.descriptor ?? OVERVIEW, "user", { transient: true })

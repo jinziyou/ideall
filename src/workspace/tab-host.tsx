@@ -11,7 +11,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { isTauri, browserHide } from "@/lib/tauri"
-import { useTabs, useActiveId, useActiveTabKind } from "./store"
+import { useTabs, useActiveId, useActiveTabKind, useDirtyTabIds } from "./store"
 import { TabContent, tabLayout } from "./registry"
 import { TabActiveContext } from "./tab-active-context"
 import { tabElId, tabPanelId } from "./tab-view-type"
@@ -30,6 +30,7 @@ export default function TabHost() {
   const tabs = useTabs()
   const activeId = useActiveId()
   const activeKind = useActiveTabKind()
+  const dirtyTabIds = useDirtyTabIds()
 
   // 切离「浏览器」标签 (或无激活标签) 时强制收起原生子 webview —— Linux GTK overlay 否则会挡全窗点击。
   React.useEffect(() => {
@@ -74,6 +75,7 @@ export default function TabHost() {
   // 应挂载集: 每池保持后台运行最近 cap 个 + padded 全挂 + 激活项强制挂。
   const byId = new Map(tabs.map((t) => [t.id, t]))
   const alive = new Set<string>()
+  for (const id of dirtyTabIds) alive.add(id)
   const keepRecent = (cat: "fill" | "iframe", cap: number) => {
     const ids = lru.filter((id) => {
       const t = byId.get(id)

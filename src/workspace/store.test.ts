@@ -14,9 +14,12 @@ import {
   closeTab,
   closeAllTabs,
   closeActiveTab,
+  requestCloseTab,
   setActiveTab,
   activateAdjacentTab,
   activateTabAt,
+  isTabDirty,
+  setTabDirty,
   getActiveId,
   getActiveSource,
   getTransientId,
@@ -146,6 +149,49 @@ test("软上限: 预览标签不计入上限, 也不被回收", () => {
     "预览标签未被回收",
   )
   assert.equal(getTransientId(), previewId)
+})
+
+test("dirty 标签: 受保护关闭会询问, 拒绝时保留标签与 dirty 状态", () => {
+  closeAllTabs()
+  openNodeTab({ kind: "file", id: "dirty" }, "dirty.ts")
+  const id = getActiveId()!
+  setTabDirty(id, true)
+  assert.equal(isTabDirty(id), true)
+
+  const g = globalThis as typeof globalThis & { confirm?: (message?: string) => boolean }
+  const prevConfirm = g.confirm
+  try {
+    g.confirm = () => false
+    assert.equal(requestCloseTab(id), false)
+    assert.ok(
+      getTabs().some((t) => t.id === id),
+      "拒绝关闭 → 标签仍在",
+    )
+    assert.equal(isTabDirty(id), true)
+
+    g.confirm = () => true
+    assert.equal(requestCloseTab(id), true)
+    assert.ok(!getTabs().some((t) => t.id === id), "确认关闭 → 标签移除")
+    assert.equal(isTabDirty(id), false, "关闭后 dirty 标记同步清理")
+  } finally {
+    if (prevConfirm) g.confirm = prevConfirm
+    else delete g.confirm
+  }
+})
+
+test("dirty 标签: 常驻软上限回收时跳过未保存标签", () => {
+  closeAllTabs()
+  openNodeTab({ kind: "file", id: "keep-dirty" }, "keep.ts")
+  const dirtyId = getActiveId()!
+  setTabDirty(dirtyId, true)
+  for (let i = 0; i < 12; i++) openNodeTab({ kind: "note", id: `clean-${i}` }, String(i))
+  const tabs = getTabs()
+  assert.equal(tabs.length, 12)
+  assert.ok(
+    tabs.some((t) => t.id === dirtyId),
+    "未保存标签不被软上限回收",
+  )
+  assert.equal(isTabDirty(dirtyId), true)
 })
 
 // —— 本地/连接 模式镜头 (仅显式导航切换; 打开/激活/关闭标签不翻转) ——

@@ -24,6 +24,10 @@ function setState(patch: Partial<WorkspaceState>) {
   store.dispatch(workspaceActions.patch(patch))
 }
 
+function dirtySet(): Set<string> {
+  return new Set(ws().dirtyTabs)
+}
+
 /** 模块 → 工作区模式视图 (本地 / 连接)。仅在「显式模块导航」(活动栏 toggleModule) 时据此同步视图;
  *  打开/激活/关闭标签一律不翻 mode —— 否则点一个另一模式的标签会整排重构活动栏, 摧毁空间锚点
  *  (视图切换只归 ModeSwitch 与活动栏图标两个显式入口)。 */
@@ -220,12 +224,13 @@ const MAX_PERMANENT_TABS = 12
  *  在 setState 之前调用 → 读 ws().lru / ws().transientId 的当前快照。 */
 function evictColdTabs(tabs: Tab[], protect: Set<string>): Tab[] {
   const transient = ws().transientId
+  const dirty = dirtySet()
   const permanentCount = tabs.reduce((n, t) => (t.id === transient ? n : n + 1), 0)
   const overflow = permanentCount - MAX_PERMANENT_TABS
   if (overflow <= 0) return tabs
   const rank = new Map(ws().lru.map((id, i) => [id, i])) // 越小越久未用
   const evictable = tabs
-    .filter((t) => t.id !== transient && !protect.has(t.id))
+    .filter((t) => t.id !== transient && !protect.has(t.id) && !dirty.has(t.id))
     .sort((a, b) => (rank.get(a.id) ?? -1) - (rank.get(b.id) ?? -1))
     .slice(0, overflow)
   if (evictable.length === 0) return tabs
@@ -359,6 +364,42 @@ export function renameNodeTab(ref: NodeRef, title: string) {
   setState({ tabs: ws().tabs.map((t) => (t.id === id ? { ...t, title } : t)) })
 }
 
+/** 标记标签存在未保存草稿。dirty 标签不会被自动回收; UI 关闭前会二次确认。 */
+export function setTabDirty(id: string, dirty: boolean) {
+  if (!ws().tabs.some((t) => t.id === id)) return
+  const next = dirtySet()
+  if (dirty) next.add(id)
+  else next.delete(id)
+  const dirtyTabs = [...next]
+  if (
+    dirtyTabs.length === ws().dirtyTabs.length &&
+    dirtyTabs.every((x, i) => x === ws().dirtyTabs[i])
+  )
+    return
+  setState({ dirtyTabs })
+}
+
+export function isTabDirty(id: string): boolean {
+  return ws().dirtyTabs.includes(id)
+}
+
+function confirmCloseDirty(ids: string[]): boolean {
+  const dirtyIds = ids.filter((id) => ws().dirtyTabs.includes(id))
+  if (dirtyIds.length === 0) return true
+  const dirtyTabs = ws().tabs.filter((t) => dirtyIds.includes(t.id))
+  const names = dirtyTabs
+    .slice(0, 3)
+    .map((t) => `「${t.title || "未命名"}」`)
+    .join("、")
+  const extra = dirtyTabs.length > 3 ? `等 ${dirtyTabs.length} 个标签` : ""
+  const message = `${names}${extra} 有未保存更改，关闭后会丢失这些更改。确定关闭吗？`
+  if (typeof window !== "undefined" && typeof window.confirm === "function") {
+    return window.confirm(message)
+  }
+  if (typeof globalThis.confirm === "function") return globalThis.confirm(message)
+  return true
+}
+
 /** 关闭标签; 若关的是激活项, 焦点转移到相邻标签。 */
 export function closeTab(id: string) {
   const idx = ws().tabs.findIndex((t) => t.id === id)
@@ -387,6 +428,13 @@ export function closeTab(id: string) {
   })
 }
 
+/** UI 关闭标签入口: dirty 标签先确认; 返回是否真的关闭。 */
+export function requestCloseTab(id: string): boolean {
+  if (!confirmCloseDirty([id])) return false
+  closeTab(id)
+  return true
+}
+
 /** 关闭全部标签。 */
 export function closeAllTabs() {
   if (ws().tabs.length === 0) return
@@ -397,6 +445,12 @@ export function closeAllTabs() {
     transientId: null,
     activeSource: "user",
   })
+}
+
+export function requestCloseAllTabs(): boolean {
+  if (!confirmCloseDirty(ws().tabs.map((t) => t.id))) return false
+  closeAllTabs()
+  return true
 }
 
 /** 关闭除 keepId 外的全部标签。 */
@@ -411,6 +465,19 @@ export function closeOtherTabs(keepId: string) {
     transientId: ws().transientId === keepId ? keepId : null,
     activeSource: "user",
   })
+}
+
+export function requestCloseOtherTabs(keepId: string): boolean {
+  if (
+    !confirmCloseDirty(
+      ws()
+        .tabs.filter((t) => t.id !== keepId)
+        .map((t) => t.id),
+    )
+  )
+    return false
+  closeOtherTabs(keepId)
+  return true
 }
 
 export function setActiveTab(id: string) {
@@ -517,6 +584,12 @@ export function closeActiveTab() {
   if (id) closeTab(id)
 }
 
+export function requestCloseActiveTab(): boolean {
+  const id = ws().activeId
+  if (!id) return true
+  return requestCloseTab(id)
+}
+
 /** 按标签条顺序激活相邻标签 (Ctrl+Tab / Ctrl+PgUp/PgDn), 首尾循环。 */
 export function activateAdjacentTab(delta: 1 | -1) {
   const n = ws().tabs.length
@@ -546,6 +619,10 @@ export function useActiveId() {
 /** 当前预览/瞬态标签 id (标签条斜体显示用); 无预览标签 → null。 */
 export function useTransientId() {
   return useAppSelector((s) => s.workspace.transientId)
+}
+
+export function useDirtyTabIds() {
+  return useAppSelector((s) => s.workspace.dirtyTabs)
 }
 
 /** 当前激活标签的 kind (活动栏 AI 固定钮高亮用); 无激活标签 → null。 */

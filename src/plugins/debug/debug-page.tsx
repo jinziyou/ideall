@@ -6,11 +6,13 @@ import { toast } from "sonner"
 import { isTauri } from "@/lib/tauri"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
+import { safeStoragePreview } from "./debug-redact"
 
 type StorageEntry = {
   key: string
   bytes: number
   preview: string
+  redacted: boolean
 }
 
 type DebugSnapshot = {
@@ -141,10 +143,12 @@ function readStorage(storage: Storage): StorageEntry[] {
     const key = storage.key(i)
     if (!key) continue
     const value = storage.getItem(key) ?? ""
+    const preview = safeStoragePreview(key, value)
     entries.push({
       key,
       bytes: new Blob([value]).size,
-      preview: value.length > 160 ? `${value.slice(0, 160)}...` : value,
+      preview: preview.value,
+      redacted: preview.redacted,
     })
   }
   return entries.sort((a, b) => a.key.localeCompare(b.key))
@@ -197,6 +201,9 @@ function StoragePanel({ title, entries }: { title: string; entries: StorageEntry
                     {formatBytes(entry.bytes)}
                   </span>
                 </div>
+                {entry.redacted && (
+                  <div className="mt-1 text-[10px] font-medium text-amber-600">已脱敏</div>
+                )}
                 {entry.preview && (
                   <pre className="mt-1 overflow-hidden text-ellipsis whitespace-pre-wrap break-all text-[11px] leading-relaxed text-muted-foreground">
                     {entry.preview}

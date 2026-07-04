@@ -10,7 +10,13 @@ import { Layers, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/ui/sheet"
-import { useTabs, useActiveId, setActiveTab, closeTab } from "@/workspace/store"
+import {
+  useTabs,
+  useActiveId,
+  useDirtyTabIds,
+  setActiveTab,
+  requestCloseTab,
+} from "@/workspace/store"
 import { tabViewType, TAB_VIEW_LABEL } from "@/workspace/tab-view-type"
 import { MODULE_DOT } from "@/workspace/module-dot"
 
@@ -18,6 +24,7 @@ export default function TabsSheet({ variant = "icon" }: { variant?: "icon" | "ba
   const [open, setOpen] = React.useState(false)
   const tabs = useTabs()
   const activeId = useActiveId()
+  const dirtyIds = new Set(useDirtyTabIds())
 
   const countBadge =
     tabs.length > 0 ? (
@@ -78,11 +85,14 @@ export default function TabsSheet({ variant = "icon" }: { variant?: "icon" | "ba
                         {TAB_VIEW_LABEL[tabViewType(t)]}
                       </span>
                       <span className="flex-1 truncate text-sm text-foreground">{t.title}</span>
+                      {dirtyIds.has(t.id) && (
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                      )}
                     </button>
                     <button
                       type="button"
-                      aria-label={`关闭 ${t.title}`}
-                      onClick={() => closeTab(t.id)}
+                      aria-label={`关闭 ${t.title}${dirtyIds.has(t.id) ? "，有未保存更改" : ""}`}
+                      onClick={() => requestCloseTab(t.id)}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-shell text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-muted/80"
                     >
                       <X className="h-4 w-4" strokeWidth={2.25} />

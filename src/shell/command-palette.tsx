@@ -46,10 +46,10 @@ import {
   type LocalSearchItem,
 } from "@/workspace/local-search-items"
 import {
-  closeActiveTab,
-  closeOtherTabs,
   getActiveId,
   openNodeTab,
+  requestCloseActiveTab,
+  requestCloseOtherTabs,
   setActiveTab,
   useActiveId,
   useLru,
@@ -308,7 +308,7 @@ export default function CommandPalette() {
             value="> 关闭当前标签 close tab"
             onSelect={() => {
               setOpen(false)
-              closeActiveTab()
+              requestCloseActiveTab()
             }}
           >
             <X className="h-4 w-4" />
@@ -320,7 +320,7 @@ export default function CommandPalette() {
             onSelect={() => {
               setOpen(false)
               const id = getActiveId()
-              if (id) closeOtherTabs(id)
+              if (id) requestCloseOtherTabs(id)
             }}
           >
             <Layers className="h-4 w-4" />

@@ -11,7 +11,7 @@
 
 import * as React from "react"
 import { inEditableTarget, matchesCombo, type ShortcutDef } from "@/lib/shortcuts"
-import { activateAdjacentTab, activateTabAt, closeActiveTab, toggleSidebar } from "./store"
+import { activateAdjacentTab, activateTabAt, requestCloseActiveTab, toggleSidebar } from "./store"
 
 /** 标签/布局快捷键绑定表 (⌘K 命令面板据此展示键位)。 */
 export const WORKSPACE_SHORTCUTS: ShortcutDef[] = [
@@ -20,7 +20,7 @@ export const WORKSPACE_SHORTCUTS: ShortcutDef[] = [
     combo: "mod+w",
     label: "关闭当前标签",
     inEditable: true,
-    run: closeActiveTab,
+    run: requestCloseActiveTab,
   },
   {
     id: "tab.next",
