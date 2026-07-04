@@ -64,7 +64,7 @@ pub(crate) struct BrowserPageContent {
 #[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_CONTENT_JS: &str = browser_scripts::CONTENT_JS;
 
-#[cfg(desktop)]
+#[cfg(all(desktop, not(target_os = "linux")))]
 pub(crate) fn parse_browser_page_json(
     url: String,
     json_str: &str,
@@ -498,6 +498,11 @@ fn browser_press(app: AppHandle, key: String) -> Result<(), String> {
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_list_interactive(app: AppHandle) -> Result<BrowserInteractiveResult, String> {
+    #[cfg(target_os = "linux")]
+    if cdp_running(&app) {
+        let state = app.state::<browser_cdp::BrowserCdpState>();
+        return tauri::async_runtime::block_on(browser_cdp::list_interactive(&state));
+    }
     let v = browser_eval_json(app, BROWSER_LIST_INTERACTIVE_JS.to_string())?;
     parse_list_interactive(v)
 }
@@ -763,10 +768,24 @@ pub fn run() {
         if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
-        // 注: 内嵌浏览器子 webview (Window::add_child) 仅支持 X11 (Wayland 下不显示)。但在 WSLg 下
-        // 强制 GDK_BACKEND=x11 会使 XWayland 不渲染鼠标光标 (整窗看不到鼠标) —— 二者不可兼得, 故此处
-        // 不默认强制 x11 (优先保 app 可用)。需在 WSLg 调内嵌浏览器时, 手动 `GDK_BACKEND=x11 pnpm app:dev`
-        // 临时开启 (接受光标副作用)。目标平台 Windows(WebView2) 无 Wayland/XWayland, 无此矛盾。
+        // WSLg 多屏: Wayland 下程序设窗坐标无效 (outer_position 恒为 0,0), 需 X11 才能居中到主屏。
+        // 副作用: XWayland 下鼠标光标可能不可见 (见 docs); IDEALL_GDK_X11=0 可退回 Wayland。
+        if std::env::var_os("GDK_BACKEND").is_none()
+            && std::env::var("IDEALL_GDK_X11").ok().as_deref() != Some("0")
+        {
+            std::env::set_var("GDK_BACKEND", "x11");
+        }
+        // WSLg: 抑制 AT-SPI / dconf 启动噪音 (无 a11y bus、无系统 dconf db)。
+        if std::env::var_os("NO_AT_BRIDGE").is_none() {
+            std::env::set_var("NO_AT_BRIDGE", "1");
+        }
+        if std::env::var_os("GTK_A11Y").is_none() {
+            std::env::set_var("GTK_A11Y", "none");
+        }
+        if std::env::var_os("GSETTINGS_BACKEND").is_none() {
+            std::env::set_var("GSETTINGS_BACKEND", "memory");
+        }
+        // 注: 内嵌浏览器子 webview (Window::add_child) 仅支持 X11 (Wayland 下不显示)。
     }
 
     let context = tauri::generate_context!();

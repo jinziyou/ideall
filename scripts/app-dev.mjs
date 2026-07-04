@@ -184,6 +184,16 @@ const env = { ...process.env }
 if (process.platform === "linux") {
   env.WEBKIT_DISABLE_DMABUF_RENDERER ??= "1"
   env.WEBKIT_DISABLE_COMPOSITING_MODE ??= "1"
+  // WSLg: 抑制 AT-SPI / dconf 启动噪音。
+  env.NO_AT_BRIDGE ??= "1"
+  env.GTK_A11Y ??= "none"
+  env.GSETTINGS_BACKEND ??= "memory"
+  // 无 DRI3 的 WSLg X11 下抑制 libEGL/MESA 噪音 (与 WebKit 软件渲染一致)。
+  env.LIBGL_ALWAYS_SOFTWARE ??= "1"
+  // WSLg 多屏窗口定位需 X11; IDEALL_GDK_X11=0 退回 Wayland (坐标不可控)。
+  if (env.IDEALL_GDK_X11 !== "0") {
+    env.GDK_BACKEND ??= "x11"
+  }
   const ime = has("fcitx5") || has("fcitx") ? "fcitx" : has("ibus") ? "ibus" : null
   if (ime) {
     env.GTK_IM_MODULE ??= ime
