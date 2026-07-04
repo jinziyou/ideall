@@ -4,13 +4,16 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
   Bookmark,
+  Bug,
   Copy,
+  Database,
   DownloadCloud,
+  FileAudio,
+  GitBranch,
   Globe,
   Hexagon,
   Layers,
   LayoutGrid,
-  Music,
   NotebookPen,
   RefreshCw,
   Shell,
@@ -256,10 +259,31 @@ export default function CommandPalette() {
             </CommandItem>
           )}
           {isDesktop && (
-            <CommandItem value="> 音乐 music player 播放器" onSelect={() => go("/music")}>
-              <Music className="h-4 w-4" />
-              音乐
-              <CommandShortcut className="font-mono">/music</CommandShortcut>
+            <CommandItem value="> Git git repository 仓库" onSelect={() => go("/git")}>
+              <GitBranch className="h-4 w-4" />
+              Git
+              <CommandShortcut className="font-mono">/git</CommandShortcut>
+            </CommandItem>
+          )}
+          {isDesktop && (
+            <CommandItem value="> 数据库 database table db" onSelect={() => go("/database")}>
+              <Database className="h-4 w-4" />
+              数据库
+              <CommandShortcut className="font-mono">/database</CommandShortcut>
+            </CommandItem>
+          )}
+          {isDesktop && (
+            <CommandItem value="> 音频 audio player 播放器" onSelect={() => go("/audio")}>
+              <FileAudio className="h-4 w-4" />
+              音频
+              <CommandShortcut className="font-mono">/audio</CommandShortcut>
+            </CommandItem>
+          )}
+          {isDesktop && (
+            <CommandItem value="> Debug debug 调试 diagnostics 诊断" onSelect={() => go("/debug")}>
+              <Bug className="h-4 w-4" />
+              Debug
+              <CommandShortcut className="font-mono">/debug</CommandShortcut>
             </CommandItem>
           )}
         </CommandGroup>

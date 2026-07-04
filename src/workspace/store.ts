@@ -11,11 +11,7 @@ import type { NodeRef } from "./node-ref"
 import { moduleById, isModeNeutralModule } from "./modules"
 import { isTauri, browserHide } from "@/lib/tauri"
 import { store, useAppSelector } from "@/lib/store"
-import {
-  workspaceActions,
-  type ActiveSource,
-  type WorkspaceState,
-} from "./workspace-slice"
+import { workspaceActions, type ActiveSource, type WorkspaceState } from "./workspace-slice"
 import { WORKSPACE_STORAGE_KEY } from "./workspace-persist"
 
 export type { ActiveSource }
@@ -37,7 +33,10 @@ const MODE_OF: Record<ModuleId, WsMode> = {
   apps: "local",
   plugins: "local",
   shell: "local",
-  music: "local",
+  git: "local",
+  database: "local",
+  audio: "local",
+  debug: "local",
   tool: "connected",
   info: "connected",
   community: "connected",
@@ -54,7 +53,10 @@ const VALID_MODULES = new Set(
     apps: 1,
     plugins: 1,
     shell: 1,
-    music: 1,
+    git: 1,
+    database: 1,
+    audio: 1,
+    debug: 1,
     info: 1,
     community: 1,
     browser: 1,
@@ -62,6 +64,16 @@ const VALID_MODULES = new Set(
     agent: 1,
   } satisfies Record<ModuleId, 1>) as ModuleId[],
 )
+
+function validModule(value: unknown): ModuleId | null {
+  return typeof value === "string" && VALID_MODULES.has(value as ModuleId)
+    ? (value as ModuleId)
+    : null
+}
+
+function validMode(value: unknown): WsMode {
+  return value === "connected" || value === "local" ? value : "local"
+}
 
 type OpenTabOpts = { transient?: boolean }
 
@@ -97,7 +109,8 @@ export function hydrateWorkspace() {
     rightPanelOpen: boolean
   } | null = null
   try {
-    const raw = sessionStorage.getItem(WORKSPACE_STORAGE_KEY) ?? localStorage.getItem(WORKSPACE_STORAGE_KEY)
+    const raw =
+      sessionStorage.getItem(WORKSPACE_STORAGE_KEY) ?? localStorage.getItem(WORKSPACE_STORAGE_KEY)
     if (raw) {
       const p = JSON.parse(raw) as {
         tabs?: Tab[]
@@ -113,8 +126,8 @@ export function hydrateWorkspace() {
           tabs: p.tabs,
           activeId: p.activeId ?? null,
           transientId: p.transientId ?? null,
-          activeModule: p.activeModule ?? "home",
-          mode: p.mode ?? "local",
+          activeModule: validModule(p.activeModule) ?? "home",
+          mode: validMode(p.mode),
           sidebarCollapsed: p.sidebarCollapsed ?? false,
           rightPanelOpen: p.rightPanelOpen ?? false,
         }
@@ -537,7 +550,9 @@ export function useTransientId() {
 
 /** 当前激活标签的 kind (活动栏 AI 固定钮高亮用); 无激活标签 → null。 */
 export function useActiveTabKind(): string | null {
-  return useAppSelector((s) => s.workspace.tabs.find((t) => t.id === s.workspace.activeId)?.kind ?? null)
+  return useAppSelector(
+    (s) => s.workspace.tabs.find((t) => t.id === s.workspace.activeId)?.kind ?? null,
+  )
 }
 
 /** 当前激活的 ai-tasks 标签所属工作区 id (AI 侧栏高亮用); 否则 null。 */

@@ -13,6 +13,7 @@ import { navigateExternal } from "../browser-open"
 import { openNodeTab, getTabs } from "../store"
 import { parseNodeParams } from "../node-tab"
 import type { ModuleId } from "../types"
+import { FileTypeIcon } from "@/shared/file-type-icon"
 
 type DropZone = "before" | "after" | "inside"
 
@@ -189,7 +190,11 @@ export function NodeTreeBranch({
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </span>
-        <Icon className="h-3.5 w-3.5 shrink-0" />
+        {item.kind === "file" ? (
+          <FileTypeIcon name={item.title || ""} type={item.mime} className="h-3.5 w-3.5 shrink-0" />
+        ) : (
+          <Icon className="h-3.5 w-3.5 shrink-0" />
+        )}
         <span className="min-w-0 flex-1 truncate text-left">{item.title || "无标题"}</span>
       </div>
       {isOpen &&

@@ -136,6 +136,41 @@ export async function updateFileMeta(
   notifyFilesUpdated()
 }
 
+/** 更新文本/代码类文件内容: Blob 与文件节点元数据同事务写回。 */
+export async function updateFileContent(
+  id: string,
+  content: string,
+  mime?: string,
+): Promise<StoredFile | undefined> {
+  const current = await idbGet<FileNode>(STORE_NODES, id)
+  if (!current || current.kind !== "file" || !isLive(current)) return undefined
+  const blob = new Blob([content], { type: mime || current.blobRef.mime || "text/plain" })
+  const now = Date.now()
+  const next: FileNode = {
+    ...current,
+    updatedAt: now,
+    blobRef: {
+      ...current.blobRef,
+      size: blob.size,
+      mime: blob.type || current.blobRef.mime,
+    },
+  }
+  await idbPutAcrossStores([
+    { store: STORE_BLOBS, value: { key: current.blobRef.key, blob } satisfies BlobRecord },
+    { store: STORE_NODES, value: next },
+  ])
+  notifyFilesUpdated()
+  return {
+    id: next.id,
+    name: next.title,
+    type: next.blobRef.mime,
+    size: next.blobRef.size,
+    blob,
+    createdAt: next.createdAt,
+    tags: next.tags,
+  }
+}
+
 /** 删除文件 (软删标记 + 物理删 Blob; 撤销靠 restoreFile 从快照重放)。 */
 export async function deleteFile(id: string): Promise<void> {
   const now = Date.now()

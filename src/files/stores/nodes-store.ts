@@ -30,6 +30,7 @@ import { feedNodeId } from "@/files/feed-node"
 export interface NodeSummary extends TreeItem {
   kind: NodeKind
   hasChildren: boolean
+  mime?: string
 }
 
 /** 全部本地 node kind (fs.list kind 缺省时遍历全部)。 */
@@ -42,6 +43,7 @@ type RawNode = {
   parentId?: string | null
   sortKey?: string
   deletedAt?: number
+  blobRef?: { mime?: string }
 }
 
 /**
@@ -68,6 +70,7 @@ export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[
     parentId: n.parentId ?? null,
     sortKey: n.sortKey ?? "",
     hasChildren: withChildren.has(n.id),
+    mime: n.kind === "file" ? (n.blobRef?.mime ?? "") : undefined,
   }))
 }
 

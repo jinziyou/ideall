@@ -276,8 +276,13 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
     return { kind: "apps", module: "apps", title: "应用", path: "/apps" }
   if (pathname.startsWith("/shell"))
     return { kind: "shell", module: "shell", title: "终端", path: "/shell" }
-  if (pathname.startsWith("/music"))
-    return { kind: "music", module: "music", title: "音乐", path: "/music" }
+  if (pathname.startsWith("/git")) return { kind: "git", module: "git", title: "Git", path: "/git" }
+  if (pathname.startsWith("/database"))
+    return { kind: "database", module: "database", title: "数据库", path: "/database" }
+  if (pathname.startsWith("/audio"))
+    return { kind: "audio", module: "audio", title: "音频播放器", path: "/audio" }
+  if (pathname.startsWith("/debug"))
+    return { kind: "debug", module: "debug", title: "Debug", path: "/debug" }
   if (pathname.startsWith("/tool"))
     return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
   return null

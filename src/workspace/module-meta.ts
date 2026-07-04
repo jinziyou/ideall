@@ -5,13 +5,16 @@
 //     Tailwind v4 按源码字面量扫描生成工具类, 不可用模板拼接 (拼接会被当成未用而不生成 → 掉色)。
 import {
   Bookmark,
+  Bug,
+  Database,
+  FileAudio,
   FolderOpen,
+  GitBranch,
   LayoutDashboard,
   LayoutGrid,
   Blocks,
   Map,
   Megaphone,
-  Music,
   Newspaper,
   NotebookPen,
   Rss,
@@ -50,5 +53,8 @@ export const MODULE_META = {
   apps: { label: "应用", icon: LayoutGrid, tintClass: "text-spoke-tool" },
   plugins: { label: "插件", icon: Blocks, tintClass: "text-spoke-tool" },
   shell: { label: "终端", icon: Shell, tintClass: "text-spoke-tool" },
-  music: { label: "音乐", icon: Music, tintClass: "text-spoke-tool" },
+  git: { label: "Git", icon: GitBranch, tintClass: "text-spoke-tool" },
+  database: { label: "数据库", icon: Database, tintClass: "text-spoke-tool" },
+  audio: { label: "音频", icon: FileAudio, tintClass: "text-spoke-tool" },
+  debug: { label: "Debug", icon: Bug, tintClass: "text-spoke-tool" },
 } satisfies Record<string, ModuleMeta>

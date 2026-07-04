@@ -7,14 +7,16 @@ import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoredFile } from "@protocol/files"
 import { getFile } from "@/files/stores/files-store"
-import { fileKind } from "@/lib/format"
+import { formatBytes, fileTypeInfo } from "@/lib/format"
+import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 
-export const TEXT_PREVIEW_LIMIT = 200 * 1024
+export const TEXT_PREVIEW_LIMIT = 512 * 1024
 
 export type FilePreviewState = {
   file: StoredFile | null
   url: string | null
   text: string | null
+  textTruncated: boolean
   loading: boolean
 }
 
@@ -22,10 +24,11 @@ export type FilePreviewState = {
  * 加载文件 + (文本类) 截断预览; 自动 createObjectURL / 卸载时 revoke。
  * key=fileId 重挂时由 useState 初值起步于 loading (调用方对切换文件用 key 重挂)。
  */
-export function useFilePreview(fileId: string): FilePreviewState {
+export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
   const [file, setFile] = React.useState<StoredFile | null>(null)
   const [url, setUrl] = React.useState<string | null>(null)
   const [text, setText] = React.useState<string | null>(null)
+  const [textTruncated, setTextTruncated] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -39,7 +42,10 @@ export function useFilePreview(fileId: string): FilePreviewState {
         }
         objectUrl = URL.createObjectURL(f.blob)
         let preview: string | null = null
-        if (fileKind(f.name, f.type) === "text") {
+        const type = fileTypeInfo(f.name, f.type)
+        const canTextPreview =
+          type.editable || ["markdown", "json", "csv", "code", "text", "svg"].includes(type.preview)
+        if (canTextPreview) {
           preview = await f.blob.slice(0, TEXT_PREVIEW_LIMIT).text()
         }
         if (!active) {
@@ -49,6 +55,7 @@ export function useFilePreview(fileId: string): FilePreviewState {
         setFile(f)
         setUrl(objectUrl)
         setText(preview)
+        setTextTruncated(f.size > TEXT_PREVIEW_LIMIT && preview !== null)
         setLoading(false)
       })
       .catch(() => {
@@ -58,9 +65,9 @@ export function useFilePreview(fileId: string): FilePreviewState {
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [fileId])
+  }, [fileId, revision])
 
-  return { file, url, text, loading }
+  return { file, url, text, textTruncated, loading }
 }
 
 /** 预览框 (按 mime 分派)；不含标题/下载, 供模态与标签复用。fill=true 时填满父高 (标签场景)。 */
@@ -68,28 +75,36 @@ export function FilePreviewBox({
   file,
   url,
   text,
+  textTruncated,
   loading,
   fill = false,
 }: FilePreviewState & { fill?: boolean }) {
-  const kind = file ? fileKind(file.name, file.type) : "other"
+  const type = file ? fileTypeInfo(file.name, file.type) : null
   const maxH = fill ? "max-h-full" : "max-h-[60vh]"
   return (
     <div
       className={cn(
-        "flex items-center justify-center overflow-auto rounded-md bg-muted",
+        "flex items-center justify-center overflow-auto rounded-md border border-border/60 bg-muted/40",
         fill ? "h-full" : "max-h-[60vh] min-h-[160px]",
       )}
     >
       {loading || !file || !url ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      ) : kind === "image" ? (
+      ) : type?.preview === "svg" && text !== null && !textTruncated ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={svgDataUrl(text)}
+          alt={file.name}
+          className={cn(maxH, "max-w-full object-contain")}
+        />
+      ) : type?.kind === "image" ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={file.name} className={cn(maxH, "max-w-full object-contain")} />
-      ) : kind === "video" ? (
+      ) : type?.preview === "video" ? (
         <video src={url} controls className={cn(maxH, "w-full")} />
-      ) : kind === "audio" ? (
+      ) : type?.preview === "audio" ? (
         <audio src={url} controls className="w-full p-4" />
-      ) : kind === "pdf" ? (
+      ) : type?.preview === "pdf" ? (
         // sandbox (无 allow-scripts/allow-same-origin): blob: 与 app 文档同源, 不沙箱则一个 MIME 实为
         // text/html 却名为 .pdf 的文件会以 ideall origin 执行脚本、读 localStorage。
         <iframe
@@ -98,20 +113,224 @@ export function FilePreviewBox({
           sandbox=""
           className={cn(fill ? "h-full" : "h-[60vh]", "w-full")}
         />
-      ) : kind === "text" ? (
-        <pre className="w-full whitespace-pre-wrap break-words p-4 text-left text-xs">
-          {text}
-          {text !== null && file.size > TEXT_PREVIEW_LIMIT && (
-            <span className="text-muted-foreground">{"\n… (仅预览前 200KB)"}</span>
-          )}
-        </pre>
+      ) : type?.preview === "markdown" ? (
+        <MarkdownPreview text={text ?? ""} truncated={textTruncated} />
+      ) : type?.preview === "json" ? (
+        <CodePreview text={formatJson(text ?? "")} language="JSON" truncated={textTruncated} />
+      ) : type?.preview === "csv" ? (
+        <CsvPreview text={text ?? ""} truncated={textTruncated} />
+      ) : type?.preview === "code" ? (
+        <CodePreview
+          text={text ?? ""}
+          language={type.language ?? type.label}
+          truncated={textTruncated}
+        />
+      ) : type?.preview === "text" ? (
+        <CodePreview
+          text={text ?? ""}
+          language={type.language ?? type.label}
+          truncated={textTruncated}
+        />
+      ) : type?.preview === "font" ? (
+        <FontPreview file={file} url={url} />
       ) : (
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          该类型暂不支持预览，请下载后查看。
-        </div>
+        <UnsupportedPreview file={file} />
       )}
     </div>
   )
+}
+
+function CodePreview({
+  text,
+  language,
+  truncated,
+}: {
+  text: string
+  language: string
+  truncated: boolean
+}) {
+  const lines = text.split("\n")
+  return (
+    <div className="h-full w-full overflow-auto bg-background text-left font-mono text-xs">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-muted/80 px-3 py-2 font-sans text-xs text-muted-foreground backdrop-blur">
+        <span>{language}</span>
+        <span>{lines.length} 行</span>
+      </div>
+      <pre className="grid grid-cols-[auto_minmax(0,1fr)]">
+        {lines.map((line, idx) => (
+          <React.Fragment key={idx}>
+            <span className="select-none border-r bg-muted/30 px-3 py-0.5 text-right text-muted-foreground">
+              {idx + 1}
+            </span>
+            <span className="whitespace-pre-wrap break-words px-3 py-0.5">{line || " "}</span>
+          </React.Fragment>
+        ))}
+      </pre>
+      {truncated && <TruncatedHint />}
+    </div>
+  )
+}
+
+function MarkdownPreview({ text, truncated }: { text: string; truncated: boolean }) {
+  return (
+    <div className="h-full w-full overflow-auto bg-background p-5 text-left">
+      <div className="mx-auto max-w-3xl space-y-2">
+        {text.split("\n").map((line, idx) => {
+          if (line.startsWith("# "))
+            return (
+              <h1 key={idx} className="text-2xl font-semibold">
+                {line.slice(2)}
+              </h1>
+            )
+          if (line.startsWith("## "))
+            return (
+              <h2 key={idx} className="text-xl font-semibold">
+                {line.slice(3)}
+              </h2>
+            )
+          if (line.startsWith("### "))
+            return (
+              <h3 key={idx} className="text-lg font-semibold">
+                {line.slice(4)}
+              </h3>
+            )
+          if (line.startsWith("- ") || line.startsWith("* "))
+            return (
+              <p key={idx} className="pl-4 text-sm">
+                • {line.slice(2)}
+              </p>
+            )
+          if (line.startsWith("> "))
+            return (
+              <blockquote key={idx} className="border-l-2 pl-3 text-sm text-muted-foreground">
+                {line.slice(2)}
+              </blockquote>
+            )
+          if (!line.trim()) return <div key={idx} className="h-2" />
+          return (
+            <p key={idx} className="whitespace-pre-wrap break-words text-sm leading-7">
+              {line}
+            </p>
+          )
+        })}
+        {truncated && <TruncatedHint />}
+      </div>
+    </div>
+  )
+}
+
+function CsvPreview({ text, truncated }: { text: string; truncated: boolean }) {
+  const rows = parseDelimited(text).slice(0, 200)
+  return (
+    <div className="h-full w-full overflow-auto bg-background text-left text-xs">
+      <table className="w-full min-w-[640px] border-collapse">
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr
+              key={rowIndex}
+              className={cn(rowIndex === 0 && "sticky top-0 bg-muted font-medium")}
+            >
+              {row.map((cell, cellIndex) => (
+                <td key={cellIndex} className="border px-2 py-1 align-top">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(truncated || rows.length >= 200) && <TruncatedHint />}
+    </div>
+  )
+}
+
+function FontPreview({ file, url }: { file: StoredFile; url: string }) {
+  const family = `ideall-font-${file.id.replace(/[^a-zA-Z0-9_-]/g, "")}`
+  return (
+    <div className="h-full w-full overflow-auto bg-background p-6 text-left">
+      <style>{`@font-face{font-family:"${family}";src:url("${url}");}`}</style>
+      <div className="space-y-5" style={{ fontFamily: `"${family}", sans-serif` }}>
+        <p className="text-5xl leading-tight">Aa 字体预览 123</p>
+        <p className="text-2xl leading-relaxed">The quick brown fox jumps over the lazy dog.</p>
+        <p className="text-base leading-7 text-muted-foreground">
+          ABCDEFGHIJKLMNOPQRSTUVWXYZ · abcdefghijklmnopqrstuvwxyz · 0123456789
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function UnsupportedPreview({ file }: { file: StoredFile }) {
+  const type = fileTypeInfo(file.name, file.type)
+  return (
+    <div className="flex max-w-md flex-col items-center gap-3 p-8 text-center">
+      <span className="flex h-16 w-16 items-center justify-center rounded-lg bg-background">
+        <FileTypeIcon name={file.name} type={file.type} className="h-9 w-9" />
+      </span>
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{file.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {type.label} · {formatBytes(file.size)}
+        </p>
+      </div>
+      <FileTypeBadge name={file.name} type={file.type} />
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        该类型不能在浏览器内可靠预览，可下载后使用本机应用打开。
+      </p>
+    </div>
+  )
+}
+
+function TruncatedHint() {
+  return (
+    <div className="border-t bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      仅预览前 {formatBytes(TEXT_PREVIEW_LIMIT)}
+    </div>
+  )
+}
+
+function formatJson(text: string): string {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+
+function parseDelimited(text: string): string[][] {
+  const first = text.split(/\r?\n/, 1)[0] ?? ""
+  const delimiter = first.includes("\t") ? "\t" : ","
+  return text
+    .split(/\r?\n/)
+    .filter((row) => row.length > 0)
+    .map((row) => splitDelimitedRow(row, delimiter))
+}
+
+function splitDelimitedRow(row: string, delimiter: string): string[] {
+  const cells: string[] = []
+  let current = ""
+  let quoted = false
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i]
+    const next = row[i + 1]
+    if (ch === '"' && quoted && next === '"') {
+      current += '"'
+      i++
+    } else if (ch === '"') {
+      quoted = !quoted
+    } else if (ch === delimiter && !quoted) {
+      cells.push(current.trim())
+      current = ""
+    } else {
+      current += ch
+    }
+  }
+  cells.push(current.trim())
+  return cells
+}
+
+function svgDataUrl(text: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`
 }
 
 /** 触发浏览器下载 (沿用 file-manager 的延后 revoke, 避部分引擎同步 revoke 致下载中断)。 */

@@ -25,7 +25,10 @@ import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
 import { syncManifest } from "@/plugins/sync/manifest"
 import { shellManifest } from "@/plugins/shell/manifest"
-import { musicManifest } from "@/plugins/music/manifest"
+import { gitManifest } from "@/plugins/git/manifest"
+import { databaseManifest } from "@/plugins/database/manifest"
+import { audioManifest } from "@/plugins/audio/manifest"
+import { debugManifest } from "@/plugins/debug/manifest"
 
 let booted = false
 
@@ -61,8 +64,17 @@ export function registerAll(): void {
   for (const m of [infoManifest, communityManifest]) {
     for (const r of m.resolvers ?? []) registerContentResolver(r.types, r.resolve)
   }
-  // 插件能力注册 (如 sync 的 SyncPort; shell/music 视图由 workspace/registry 挂载)。
-  for (const p of [syncManifest, shellManifest, musicManifest]) p.register?.()
+  // 插件能力注册 (如 sync 的 SyncPort; shell/git/database/audio/debug 视图由 workspace/registry 挂载)。
+  for (const p of [
+    syncManifest,
+    shellManifest,
+    gitManifest,
+    databaseManifest,
+    audioManifest,
+    debugManifest,
+  ]) {
+    p.register?.()
+  }
 }
 
 /**

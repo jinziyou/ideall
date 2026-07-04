@@ -68,6 +68,14 @@ export const HOME_SUBPAGES: NavLink[] = [
   { href: "/home/resources", label: MODULE_META.resources.label, icon: MODULE_META.resources.icon },
   { href: "/home/bookmarks", label: MODULE_META.bookmarks.label, icon: MODULE_META.bookmarks.icon },
   { href: "/shell", label: MODULE_META.shell.label, icon: MODULE_META.shell.icon, group: "system" },
-  { href: "/music", label: MODULE_META.music.label, icon: MODULE_META.music.icon, group: "system" },
+  { href: "/git", label: MODULE_META.git.label, icon: MODULE_META.git.icon, group: "system" },
+  {
+    href: "/database",
+    label: MODULE_META.database.label,
+    icon: MODULE_META.database.icon,
+    group: "system",
+  },
+  { href: "/audio", label: MODULE_META.audio.label, icon: MODULE_META.audio.icon, group: "system" },
+  { href: "/debug", label: MODULE_META.debug.label, icon: MODULE_META.debug.icon, group: "system" },
   { href: "/home/agent", label: "AI 助手", icon: Bot, group: "system" },
 ]

@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import {
+  FileAudio,
   FolderPlus,
-  ListMusic,
   Pause,
   Play,
   Repeat,
@@ -19,19 +19,21 @@ import { Button } from "@/ui/button"
 import { Slider } from "@/ui/slider"
 import { EmptyState } from "@/ui/empty-state"
 import {
-  addTrack,
-  listTracks,
-  loadPlaybackState,
-  removeTrack,
-  savePlaybackState,
-  type Track,
-} from "./music-store"
+  addAudioTrack,
+  listAudioTracks,
+  loadAudioPlaybackState,
+  removeAudioTrack,
+  saveAudioPlaybackState,
+  updateAudioTrack,
+  type AudioTrack,
+} from "./audio-store"
 
-const AUDIO_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma"])
+const AUDIO_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"])
 
-export default function MusicPage() {
-  const [tracks, setTracks] = React.useState<Track[]>([])
+export default function AudioPage() {
+  const [tracks, setTracks] = React.useState<AudioTrack[]>([])
   const [currentId, setCurrentId] = React.useState<string | null>(null)
+  const [currentSrc, setCurrentSrc] = React.useState("")
   const [isPlaying, setIsPlaying] = React.useState(false)
   const [currentTime, setCurrentTime] = React.useState(0)
   const [duration, setDuration] = React.useState(0)
@@ -41,77 +43,85 @@ export default function MusicPage() {
   const [loading, setLoading] = React.useState(true)
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
-  const previousTracksRef = React.useRef<Track[]>([])
+  const pendingTimeRef = React.useRef<number | null>(null)
+  const shuffleSeedRef = React.useRef(0)
 
   const currentTrack = React.useMemo(
     () => tracks.find((t) => t.id === currentId) ?? null,
     [tracks, currentId],
   )
 
-  const pendingTimeRef = React.useRef<number | null>(null)
-  const shuffleSeedRef = React.useRef<number>(0)
-
   React.useEffect(() => {
-    // 在 effect 内生成随机种子, 避免 render 期调用 Math.random。
     shuffleSeedRef.current = Math.floor(Math.random() * 1_000_000)
   }, [])
 
   React.useEffect(() => {
     let alive = true
-    Promise.all([listTracks(), loadPlaybackState()])
-      .then(([t, state]) => {
+    Promise.all([listAudioTracks(), loadAudioPlaybackState()])
+      .then(([savedTracks, state]) => {
         if (!alive) return
-        setTracks(t)
-        if (state.currentTrackId && t.some((x) => x.id === state.currentTrackId)) {
+        setTracks(savedTracks)
+        if (state.currentTrackId && savedTracks.some((t) => t.id === state.currentTrackId)) {
           setCurrentId(state.currentTrackId)
           setCurrentTime(state.currentTime)
           pendingTimeRef.current = state.currentTime
+          const savedTrack = savedTracks.find((t) => t.id === state.currentTrackId)
+          setDuration(savedTrack?.duration ?? 0)
         }
         setVolume(state.volume)
         setRepeat(state.repeat)
         setShuffle(state.shuffle)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
     return () => {
       alive = false
     }
   }, [])
 
   React.useEffect(() => {
-    savePlaybackState({ currentTrackId: currentId, currentTime, volume, repeat, shuffle })
+    saveAudioPlaybackState({ currentTrackId: currentId, currentTime, volume, repeat, shuffle })
   }, [currentId, currentTime, volume, repeat, shuffle])
 
   React.useEffect(() => {
-    const prev = previousTracksRef.current
-    const next = tracks
-    const removed = prev.filter((p) => !next.some((n) => n.id === p.id))
-    for (const t of removed) {
-      if (t.src.startsWith("blob:")) URL.revokeObjectURL(t.src)
+    if (!currentTrack) {
+      setCurrentSrc("")
+      return
     }
-    previousTracksRef.current = next
-  }, [tracks])
+    const url = URL.createObjectURL(currentTrack.blob)
+    setCurrentSrc(url)
+    return () => URL.revokeObjectURL(url)
+  }, [currentTrack])
+
+  React.useEffect(() => {
+    setDuration(currentTrack?.duration ?? 0)
+  }, [currentTrack])
 
   React.useEffect(() => {
     const audio = audioRef.current
-    if (!audio || !currentTrack) return
-    if (audio.src !== currentTrack.src) {
-      audio.src = currentTrack.src
-      if (pendingTimeRef.current !== null) {
-        audio.currentTime = pendingTimeRef.current
-        pendingTimeRef.current = null
-      }
+    if (!audio) return
+    if (!currentSrc) {
+      audio.removeAttribute("src")
+      audio.load()
+      return
     }
+    if (audio.src !== currentSrc) audio.src = currentSrc
     if (isPlaying) {
-      void audio.play()
+      void audio.play().catch(() => setIsPlaying(false))
     } else {
       audio.pause()
     }
-  }, [currentTrack, isPlaying])
+  }, [currentSrc, isPlaying])
 
   React.useEffect(() => {
     const audio = audioRef.current
     if (audio) audio.volume = volume
   }, [volume])
+
+  const refreshTracks = React.useCallback(async () => {
+    setTracks(await listAudioTracks())
+  }, [])
 
   const playTrack = (id: string) => {
     if (currentId === id) {
@@ -121,7 +131,7 @@ export default function MusicPage() {
     setCurrentId(id)
     pendingTimeRef.current = 0
     setCurrentTime(0)
-    setDuration(0)
+    setDuration(tracks.find((t) => t.id === id)?.duration ?? 0)
     setIsPlaying(true)
   }
 
@@ -129,31 +139,31 @@ export default function MusicPage() {
     if (!files) return
     for (const file of Array.from(files)) {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-      if (!AUDIO_EXTS.has(ext)) continue
-      const src = URL.createObjectURL(file)
-      await addTrack({
-        title: file.name.replace(/\.[^.]+$/, ""),
-        src,
-      })
+      if (!file.type.startsWith("audio/") && !AUDIO_EXTS.has(ext)) continue
+      await addAudioTrack(file)
     }
-    setTracks(await listTracks())
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    await refreshTracks()
   }
 
   const handleRemove = async (id: string) => {
-    await removeTrack(id)
+    await removeAudioTrack(id)
     if (currentId === id) {
       setCurrentId(null)
       setIsPlaying(false)
       setCurrentTime(0)
       setDuration(0)
     }
-    setTracks(await listTracks())
+    await refreshTracks()
   }
 
   const playNext = () => {
     if (tracks.length === 0) return
     if (shuffle) {
-      const idx = tracks.findIndex((t) => t.id === currentId)
+      const idx = Math.max(
+        0,
+        tracks.findIndex((t) => t.id === currentId),
+      )
       const offset = shuffleSeedRef.current % tracks.length || 1
       const next = tracks[(idx + offset) % tracks.length]
       shuffleSeedRef.current = Math.floor(shuffleSeedRef.current * 1.2 + 7)
@@ -181,12 +191,29 @@ export default function MusicPage() {
       }
       return
     }
-    if (repeat === "all" || tracks.length > 1) {
+    const idx = tracks.findIndex((t) => t.id === currentId)
+    if (repeat === "all" || (idx >= 0 && idx < tracks.length - 1)) {
       playNext()
       return
     }
     setIsPlaying(false)
     setCurrentTime(0)
+  }
+
+  const onLoadedMetadata = async (e: React.SyntheticEvent<HTMLAudioElement>) => {
+    const audio = e.currentTarget
+    const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0
+    setDuration(nextDuration)
+    if (currentTrack && nextDuration && currentTrack.duration !== nextDuration) {
+      const updated = await updateAudioTrack(currentTrack.id, { duration: nextDuration })
+      if (updated) {
+        setTracks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+      }
+    }
+    if (pendingTimeRef.current !== null) {
+      audio.currentTime = Math.min(pendingTimeRef.current, nextDuration || pendingTimeRef.current)
+      pendingTimeRef.current = null
+    }
   }
 
   return (
@@ -214,7 +241,7 @@ export default function MusicPage() {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <FolderPlus className="h-4 w-4" />
-                添加文件
+                导入音频
               </Button>
             </div>
           </div>
@@ -222,7 +249,7 @@ export default function MusicPage() {
           {loading ? (
             <div className="flex-1 animate-pulse rounded bg-muted/50" />
           ) : tracks.length === 0 ? (
-            <EmptyState icon={ListMusic} title="播放列表为空，点击「添加文件」选择本地音频文件" />
+            <EmptyState icon={FileAudio} title="还没有音频文件" />
           ) : (
             <div className="min-h-0 flex-1 overflow-auto">
               <div className="flex flex-col gap-1">
@@ -245,11 +272,18 @@ export default function MusicPage() {
       <div className="shrink-0 rounded-lg border border-border/60 bg-card p-4">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{currentTrack?.title ?? "未选择曲目"}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {currentTrack ? formatTime(currentTime) + " / " + formatTime(duration) : "--:--"}
-              </p>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <FileAudio className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {currentTrack?.title ?? "未选择音频"}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {currentTrack ? `${formatTime(currentTime)} / ${formatTime(duration)}` : "--:--"}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-1">
               <Button
@@ -258,6 +292,7 @@ export default function MusicPage() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => setShuffle((s) => !s)}
+                aria-label="随机播放"
                 aria-pressed={shuffle}
               >
                 <Shuffle className={cn("h-4 w-4", shuffle && "text-primary")} />
@@ -286,7 +321,7 @@ export default function MusicPage() {
             max={Math.max(duration, 1)}
             step={1}
             disabled={!currentTrack}
-            onValueChange={([v]) => {
+            onValueChange={([v]: number[]) => {
               setCurrentTime(v)
               if (audioRef.current) audioRef.current.currentTime = v
             }}
@@ -300,7 +335,7 @@ export default function MusicPage() {
                 value={[volume * 100]}
                 max={100}
                 step={1}
-                onValueChange={([v]) => setVolume(v / 100)}
+                onValueChange={([v]: number[]) => setVolume(v / 100)}
               />
             </div>
             <div className="flex items-center gap-1">
@@ -310,6 +345,7 @@ export default function MusicPage() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={playPrev}
+                aria-label="上一首"
               >
                 <SkipBack className="h-4 w-4" />
               </Button>
@@ -319,6 +355,7 @@ export default function MusicPage() {
                 className="h-9 w-9"
                 disabled={!currentTrack}
                 onClick={() => setIsPlaying((p) => !p)}
+                aria-label={isPlaying ? "暂停" : "播放"}
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               </Button>
@@ -328,6 +365,7 @@ export default function MusicPage() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={playNext}
+                aria-label="下一首"
               >
                 <SkipForward className="h-4 w-4" />
               </Button>
@@ -339,7 +377,7 @@ export default function MusicPage() {
       <audio
         ref={audioRef}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => void onLoadedMetadata(e)}
         onEnded={onEnded}
         preload="metadata"
       />
@@ -354,7 +392,7 @@ function TrackRow({
   onPlay,
   onRemove,
 }: {
-  track: Track
+  track: AudioTrack
   active: boolean
   playing: boolean
   onPlay: () => void
@@ -371,6 +409,7 @@ function TrackRow({
         type="button"
         onClick={onPlay}
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+        aria-label={playing ? "暂停" : "播放"}
       >
         {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
       </button>
@@ -378,7 +417,11 @@ function TrackRow({
         <p className={cn("truncate text-sm", active && "font-medium text-primary")}>
           {track.title}
         </p>
-        {track.artist && <p className="truncate text-xs text-muted-foreground">{track.artist}</p>}
+        <p className="truncate text-xs text-muted-foreground">
+          {[formatBytes(track.size), track.duration ? formatTime(track.duration) : null]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
       </div>
       <button
         type="button"
@@ -393,10 +436,22 @@ function TrackRow({
 }
 
 function formatTime(seconds: number): string {
-  if (!isFinite(seconds) || seconds < 0) return "00:00"
+  if (!Number.isFinite(seconds) || seconds < 0) return "00:00"
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  let size = bytes
+  let unit = 0
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024
+    unit += 1
+  }
+  return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
 }
 
 function PageHeader() {
@@ -404,9 +459,9 @@ function PageHeader() {
     <div className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">音乐</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">音频播放器</h1>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            播放本地音频文件。播放列表仅保存在本机。
+            本地播放列表 · IndexedDB 持久化
           </p>
         </div>
       </div>

@@ -22,6 +22,10 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
   assert.equal(descriptorForPath("/tool/ai")?.kind, "tool-ai")
   assert.equal(descriptorForPath("/apps")?.kind, "apps")
   assert.equal(descriptorForPath("/browser")?.kind, "browser-view")
+  assert.equal(descriptorForPath("/git")?.kind, "git")
+  assert.equal(descriptorForPath("/database")?.kind, "database")
+  assert.equal(descriptorForPath("/audio")?.kind, "audio")
+  assert.equal(descriptorForPath("/debug")?.kind, "debug")
 })
 
 test("descriptorForPath: 前缀回退与旧路由兼容", () => {

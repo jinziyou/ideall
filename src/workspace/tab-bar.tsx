@@ -26,6 +26,8 @@ import {
 import type { Tab } from "./types"
 import { tabViewType, TAB_VIEW_LABEL, tabElId, tabPanelId } from "./tab-view-type"
 import { MODULE_DOT } from "./module-dot"
+import { parseNodeParams } from "./node-tab"
+import { FileTypeIcon } from "@/shared/file-type-icon"
 
 /** Chrome 近似: 最小保留色点 + 截断标题, 最大 ~240px; 溢出时横向滚动。 */
 const TAB_MIN_PX = 96
@@ -33,6 +35,49 @@ const TAB_MAX_PX = 240
 
 const tabTailTrigger =
   "flex h-full shrink-0 items-center outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+
+function isFileTab(t: Tab): boolean {
+  if (t.kind !== "node") return false
+  return parseNodeParams(t.params)?.kind === "file"
+}
+
+function TabLeadingMark({
+  tab,
+  active,
+  compact = false,
+}: {
+  tab: Tab
+  active?: boolean
+  compact?: boolean
+}) {
+  if (isFileTab(tab)) {
+    return (
+      <span
+        className={cn(
+          "flex shrink-0 items-center justify-center rounded bg-muted/70",
+          compact ? "h-4 w-4" : "h-5 w-5",
+          active && "bg-background",
+        )}
+      >
+        <FileTypeIcon name={tab.title} className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5"} />
+      </span>
+    )
+  }
+
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full transition-[width,height,box-shadow]",
+        compact
+          ? "h-1.5 w-1.5"
+          : active
+            ? "h-2.5 w-2.5 shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_3px_hsl(var(--primary)/0.55)]"
+            : "h-2 w-2",
+        MODULE_DOT[tab.module],
+      )}
+    />
+  )
+}
 
 function TabBarTail({ tabs, activeId }: { tabs: Tab[]; activeId: string | null }) {
   const [mgmtOpen, setMgmtOpen] = React.useState(false)
@@ -109,7 +154,7 @@ function TabBarTail({ tabs, activeId }: { tabs: Tab[]; activeId: string | null }
               onSelect={() => setActiveTab(t.id)}
               className={cn("gap-2", t.id === activeId && "bg-accent/60 font-medium")}
             >
-              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", MODULE_DOT[t.module])} />
+              <TabLeadingMark tab={t} active={t.id === activeId} compact />
               <span className="shrink-0 rounded bg-muted px-1 py-px text-[10px] font-medium text-muted-foreground">
                 {TAB_VIEW_LABEL[tabViewType(t)]}
               </span>
@@ -250,15 +295,7 @@ function TabItem({
         transient && "italic",
       )}
     >
-      <span
-        className={cn(
-          "shrink-0 rounded-full transition-[width,height,box-shadow]",
-          active
-            ? "h-2.5 w-2.5 shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_3px_hsl(var(--primary)/0.55)]"
-            : "h-2 w-2",
-          MODULE_DOT[t.module],
-        )}
-      />
+      <TabLeadingMark tab={t} active={active} />
       <span className="hidden shrink-0 rounded bg-muted px-1 py-px text-[10px] font-medium text-muted-foreground @[96px]/tab:inline">
         {TAB_VIEW_LABEL[tabViewType(t)]}
       </span>

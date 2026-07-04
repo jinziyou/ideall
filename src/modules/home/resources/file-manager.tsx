@@ -4,10 +4,6 @@ import * as React from "react"
 import { toast } from "sonner"
 import {
   Download,
-  FileArchive,
-  FileAudio,
-  FileText,
-  FileVideo,
   File as FileIcon,
   Image as ImageIcon,
   LayoutGrid,
@@ -40,38 +36,33 @@ import {
   updateFileMeta,
 } from "@/files/stores/files-store"
 import { undoableDeleteToast } from "@/lib/undo-toast"
-import { fileKind, FileKind, formatBytes, formatTime } from "@/lib/format"
+import { fileTypeInfo, formatBytes, formatTime } from "@/lib/format"
+import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import FilePreviewDialog from "./file-preview-dialog"
 import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"
 
-const KIND_ICON: Record<FileKind, React.ComponentType<{ className?: string }>> = {
-  image: ImageIcon,
-  video: FileVideo,
-  audio: FileAudio,
-  pdf: FileText,
-  text: FileText,
-  archive: FileArchive,
-  other: FileIcon,
-}
-
 // 类型筛选分组: 把细分 FileKind 归并为用户可理解的几类
-type TypeFilter = "all" | "image" | "doc" | "video" | "other"
+type TypeFilter = "all" | "image" | "code" | "doc" | "data" | "media" | "archive" | "other"
 
 const TYPE_TABS: { value: TypeFilter; label: string }[] = [
   { value: "all", label: "全部" },
   { value: "image", label: "图片" },
+  { value: "code", label: "代码" },
   { value: "doc", label: "文档" },
-  { value: "video", label: "视频" },
+  { value: "data", label: "数据" },
+  { value: "media", label: "媒体" },
+  { value: "archive", label: "压缩包" },
   { value: "other", label: "其他" },
 ]
 
-/** FileKind → 筛选分组 */
-function kindGroup(kind: FileKind): Exclude<TypeFilter, "all"> {
-  if (kind === "image") return "image"
-  if (kind === "pdf" || kind === "text") return "doc"
-  if (kind === "video") return "video"
-  return "other"
+/** FileTypeInfo.group → 筛选分组 */
+function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
+  const group = fileTypeInfo(file.name, file.type).group
+  if (group === "media") return "media"
+  if (group === "document") return "doc"
+  if (group === "binary") return "other"
+  return group
 }
 
 type ViewMode = "grid" | "list"
@@ -269,13 +260,16 @@ export default function FileManager() {
     let size = 0
     const byGroup: Record<Exclude<TypeFilter, "all">, number> = {
       image: 0,
+      code: 0,
       doc: 0,
-      video: 0,
+      data: 0,
+      media: 0,
+      archive: 0,
       other: 0,
     }
     for (const f of files) {
       size += f.size
-      byGroup[kindGroup(fileKind(f.name, f.type))]++
+      byGroup[typeGroup(f)]++
     }
     return { size, byGroup }
   }, [files])
@@ -283,7 +277,7 @@ export default function FileManager() {
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     return files.filter((f) => {
-      if (typeFilter !== "all" && kindGroup(fileKind(f.name, f.type)) !== typeFilter) return false
+      if (typeFilter !== "all" && typeGroup(f) !== typeFilter) return false
       if (!q) return true
       return f.name.toLowerCase().includes(q) || f.tags.some((t) => t.toLowerCase().includes(q))
     })
@@ -301,7 +295,7 @@ export default function FileManager() {
         <StatCard label="全部文件" value={String(files.length)} />
         <StatCard label="占用空间" value={formatBytes(stats.size)} />
         <StatCard label="图片" value={String(stats.byGroup.image)} />
-        <StatCard label="文档" value={String(stats.byGroup.doc)} />
+        <StatCard label="代码/文档" value={String(stats.byGroup.code + stats.byGroup.doc)} />
       </div>
 
       {/* 上传区 (拖拽 + 点击 + 键盘) */}
@@ -538,8 +532,7 @@ function FileMenu({ onPreview, onDownload, onRename, onDelete }: FileActions) {
 }
 
 function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
-  const kind = fileKind(file.name, file.type)
-  const Icon = KIND_ICON[kind]
+  const type = fileTypeInfo(file.name, file.type)
   return (
     <div className="group flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground transition-colors hover:border-foreground/20">
       <button
@@ -547,10 +540,10 @@ function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
         onClick={actions.onPreview}
         className="flex aspect-video items-center justify-center overflow-hidden bg-muted"
       >
-        {kind === "image" ? (
+        {type.kind === "image" ? (
           <Thumbnail id={file.id} />
         ) : (
-          <Icon className="h-10 w-10 text-muted-foreground" />
+          <FileTypeIcon name={file.name} type={file.type} className="h-10 w-10" />
         )}
       </button>
       <div className="flex items-start gap-1 p-2.5">
@@ -558,8 +551,11 @@ function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
           <div className="truncate text-sm font-medium" title={file.name}>
             {file.name}
           </div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
-            {formatBytes(file.size)} · {formatTime(file.createdAt)}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <FileTypeBadge name={file.name} type={file.type} />
+            <span>{formatBytes(file.size)}</span>
+            <span>·</span>
+            <span>{formatTime(file.createdAt)}</span>
           </div>
         </div>
         <FileMenu {...actions} />
@@ -573,8 +569,7 @@ function FileListRow({
   first,
   ...actions
 }: { file: FileMeta; first: boolean } & FileActions) {
-  const kind = fileKind(file.name, file.type)
-  const Icon = KIND_ICON[kind]
+  const type = fileTypeInfo(file.name, file.type)
   return (
     <div
       className={cn(
@@ -587,17 +582,23 @@ function FileListRow({
         onClick={actions.onPreview}
         className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-muted"
       >
-        {kind === "image" ? (
+        {type.kind === "image" ? (
           <Thumbnail id={file.id} />
         ) : (
-          <Icon className="h-5 w-5 text-muted-foreground" />
+          <FileTypeIcon name={file.name} type={file.type} className="h-5 w-5" />
         )}
       </button>
       <button type="button" onClick={actions.onPreview} className="min-w-0 flex-1 text-left">
         <div className="truncate text-sm font-medium" title={file.name}>
           {file.name}
         </div>
+        <div className="mt-1 sm:hidden">
+          <FileTypeBadge name={file.name} type={file.type} />
+        </div>
       </button>
+      <div className="hidden shrink-0 sm:block">
+        <FileTypeBadge name={file.name} type={file.type} />
+      </div>
       <div className="hidden shrink-0 text-xs text-muted-foreground sm:block">
         {formatBytes(file.size)}
       </div>
