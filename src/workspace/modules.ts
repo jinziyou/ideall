@@ -1,6 +1,6 @@
 // 工作区模块配置 (桌面工作区壳的唯一数据来源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 活动栏按当前「本地/连接」模式视图过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
-//   本机/我的(local): 我的(home) · 关注(subscriptions) · 应用(apps)  ← + 活动栏 AI 钮
+//   本机/我的(local): 我的(home) · 关注(subscriptions) · [轨底] 插件 · 应用  ← + 活动栏「工作区」钮
 //   连接/发现(connected): 资讯(info) · 社区(community) · 工具(tool) · 浏览器(browser)
 //   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (与 AI 区段同类, 见 store isModeNeutralModule)。
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏搜索框/⌘K 统一面板搜本机内容, 两者职责分离。
@@ -14,6 +14,7 @@ import type { ComponentType } from "react"
 import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"
 import type { ModuleId, TabDescriptor, WsMode } from "./types"
 import { MODULE_META } from "./module-meta"
+import { PLUGIN_ENTRIES } from "./plugin-entries"
 import { nodeTab } from "./node-tab"
 import { parseNodeQuery } from "./node-ref"
 
@@ -119,34 +120,13 @@ export const MODULES: ModuleConfig[] = [
     ],
   },
   {
-    id: "shell",
+    id: "plugins",
     mode: "local",
-    label: MODULE_META.shell.label,
-    icon: MODULE_META.shell.icon,
-    colorClass: MODULE_META.shell.tintClass,
-    sidebarTitle: "终端",
-    entries: [
-      {
-        label: "本地 Shell",
-        icon: MODULE_META.shell.icon,
-        descriptor: { kind: "shell", module: "shell", title: "终端", path: "/shell" },
-      },
-    ],
-  },
-  {
-    id: "music",
-    mode: "local",
-    label: MODULE_META.music.label,
-    icon: MODULE_META.music.icon,
-    colorClass: MODULE_META.music.tintClass,
-    sidebarTitle: "音乐",
-    entries: [
-      {
-        label: "音乐播放器",
-        icon: MODULE_META.music.icon,
-        descriptor: { kind: "music", module: "music", title: "音乐", path: "/music" },
-      },
-    ],
+    label: MODULE_META.plugins.label,
+    icon: MODULE_META.plugins.icon,
+    colorClass: MODULE_META.plugins.tintClass,
+    sidebarTitle: "插件",
+    entries: PLUGIN_ENTRIES.map(({ label, icon, descriptor }) => ({ label, icon, descriptor })),
   },
   // —— 连接 ——
   {

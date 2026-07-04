@@ -35,6 +35,7 @@ const MODE_OF: Record<ModuleId, WsMode> = {
   home: "local",
   subscriptions: "local",
   apps: "local",
+  plugins: "local",
   shell: "local",
   music: "local",
   tool: "connected",
@@ -51,6 +52,7 @@ const VALID_MODULES = new Set(
     home: 1,
     subscriptions: 1,
     apps: 1,
+    plugins: 1,
     shell: 1,
     music: 1,
     info: 1,
@@ -158,6 +160,11 @@ export function hydrateWorkspace() {
     )
   } else {
     store.dispatch(workspaceActions.hydrate({}))
+  }
+  if (isTauri()) {
+    const { tabs, activeId } = store.getState().workspace
+    const active = tabs.find((t) => t.id === activeId)
+    if (active?.kind !== "browser-view") void browserHide().catch(() => {})
   }
 }
 
@@ -300,7 +307,7 @@ function openAgentTab(d: TabDescriptor, opts?: OpenTabOpts) {
 }
 
 /** AI 管理标签 = 全局 AI 设置 (次级入口: 右栏齿轮 / /ai 深链 / ui-actions 端口)。
- *  AI 主入口是对话: 活动栏 Bot 钮与移动中央 AI 钮均呼出右侧对话栏 (toggleRightPanel / setRightPanel)。 */
+ *  AI 主入口是对话: 顶栏 AI 钮与移动中央 AI 钮均呼出右侧对话栏 (toggleRightPanel / setRightPanel)。 */
 export function openAiSettings(opts?: OpenTabOpts) {
   openAgentTab(AI_SETTINGS_TAB, opts)
 }
@@ -409,7 +416,7 @@ export function toggleModule(m: ModuleId) {
   const first = mod.entries[0]
   // mode-中性模块 (跨模式工具): 切到它不翻视图; 否则同步到该模块所属模式。
   const mode = isModeNeutralModule(m) ? ws().mode : MODE_OF[m]
-  if (!first) {
+  if (!first || m === "plugins") {
     setState({ activeModule: m, mode, sidebarCollapsed: false })
     return
   }
@@ -454,7 +461,20 @@ export function toggleSidebar() {
   setState({ sidebarCollapsed: !ws().sidebarCollapsed })
 }
 
-/** 右侧 AI 对话栏开关 (顶栏布局开关 / 活动栏 AI / 移动底栏 AI)。 */
+/** 切换 AI 工作区侧栏 (活动栏「工作区」钮): 展开 agent 模块树 (MCP / Skills / 工作区任务等)。 */
+export function toggleWorkspace() {
+  if (ws().activeModule === "agent" && !ws().sidebarCollapsed) {
+    setState({ sidebarCollapsed: true })
+    return
+  }
+  setState({
+    activeModule: "agent",
+    sidebarCollapsed: false,
+    activeSource: "user",
+  })
+}
+
+/** 右侧 AI 对话栏开关 (顶栏 AI 钮 / 移动底栏中央 AI 钮)。 */
 export function toggleRightPanel() {
   setState({ rightPanelOpen: !ws().rightPanelOpen })
 }

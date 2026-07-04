@@ -186,6 +186,19 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Tauri 无边框窗: data-tauri-drag-region 在 Linux/WSL 会吞子树 mousedown; 交互控件显式 no-drag。 */
+  button,
+  a,
+  input,
+  textarea,
+  select,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [contenteditable="true"] {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
 }
 
 /* 尊重「减少动态」系统偏好 (N-2): 全局兜底关掉动画/过渡/平滑滚动 —— 覆盖所有 animate-spin /

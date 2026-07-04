@@ -13,6 +13,7 @@ export default function TopSearch() {
     <button
       type="button"
       onClick={openCommandPalette}
+      onMouseDown={(e) => e.stopPropagation()}
       className="flex h-7 w-full max-w-md items-center gap-2 rounded-shell border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
       <Search className="h-3.5 w-3.5 shrink-0" />

@@ -67,7 +67,12 @@ export function initXStateInspector(): Promise<void> {
     inspector.start()
     inspectFn = inspector.inspect
   })().catch((err) => {
-    console.warn("[ideall] XState Inspector 初始化失败:", err)
+    // Dev HMR 会使 @statelyai/inspect 的 chunk 哈希失效; 仅 warn 一次, 不反复重试。
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[ideall] XState Inspector 初始化失败 (开发态 HMR 常见, 刷新即可):", err)
+    } else {
+      console.warn("[ideall] XState Inspector 初始化失败:", err)
+    }
     initPromise = undefined
   }) as Promise<void>
   return initPromise

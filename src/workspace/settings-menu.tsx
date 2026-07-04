@@ -7,7 +7,12 @@ import { IconButton } from "@/ui/icon-button"
 
 export default function SettingsMenu() {
   return (
-    <IconButton aria-label="设置" title="设置" onClick={() => openSettings()}>
+    <IconButton
+      aria-label="设置"
+      title="设置"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={() => openSettings()}
+    >
       <Settings className="h-[1.1rem] w-[1.1rem]" />
     </IconButton>
   )

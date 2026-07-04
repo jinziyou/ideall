@@ -7,6 +7,7 @@ export const MODULE_DOT: Record<ModuleId, string> = {
   home: "bg-primary",
   subscriptions: "bg-spoke-info",
   apps: "bg-spoke-tool",
+  plugins: "bg-spoke-tool",
   shell: "bg-spoke-tool",
   music: "bg-spoke-tool",
   info: "bg-spoke-info",

@@ -44,17 +44,19 @@ import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
 import { onTreeArrowNav, focusTreeSibling, forwardTreeFocus } from "./tree-keynav"
 import type { ModuleId } from "../types"
+import { isPluginModule } from "../plugin-entries"
 
 const NotesSidebarTree = React.lazy(() => import("@/modules/home/notes/notes-sidebar-tree"))
 
 const EXPANDED_KEY = "ideall:sidebar-tree:expanded"
 
 function rootsForModule(moduleId: ModuleId): SidebarTreeNode[] {
-  if (moduleId === "browser") return browserTreeRoots()
-  if (moduleId === "subscriptions") return subscriptionsTreeRoots()
-  if (moduleId === "info") return infoTreeRoots()
-  if (moduleId === "community") return communityTreeRoots()
-  return staticTreeRoots(moduleId)
+  const id = isPluginModule(moduleId) ? "plugins" : moduleId
+  if (id === "browser") return browserTreeRoots()
+  if (id === "subscriptions") return subscriptionsTreeRoots()
+  if (id === "info") return infoTreeRoots()
+  if (id === "community") return communityTreeRoots()
+  return staticTreeRoots(id)
 }
 
 function defaultExpandedSection(moduleId: ModuleId): string | null {

@@ -7,12 +7,14 @@ import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/lib/utils"
 import SidebarTree from "./tree/sidebar-tree"
 import { moduleById } from "./modules"
+import { isPluginModule } from "./plugin-entries"
 import { useActiveModule, setSidebarCollapsed } from "./store"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
   const activeModule = useActiveModule()
   const mod = moduleById(activeModule)
-  const title = activeModule === "agent" ? "AI" : mod.sidebarTitle
+  const isPlugins = activeModule === "plugins" || isPluginModule(activeModule)
+  const title = activeModule === "agent" ? "工作区" : isPlugins ? "插件" : mod.sidebarTitle
 
   return (
     <aside
@@ -30,6 +32,7 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
           <h2 className="text-sm font-semibold text-foreground">{title}</h2>
           <button
             type="button"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setSidebarCollapsed(true)}
             title="收起侧栏"
             aria-label="收起侧栏"

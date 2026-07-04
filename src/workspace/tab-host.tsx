@@ -30,9 +30,9 @@ export default function TabHost() {
   const activeId = useActiveId()
   const activeKind = useActiveTabKind()
 
-  // 切离「浏览器」标签时强制收起原生子 webview (Linux overlay 否则会挡 iframe 点击)。
+  // 切离「浏览器」标签 (或无激活标签) 时强制收起原生子 webview —— Linux GTK overlay 否则会挡全窗点击。
   React.useEffect(() => {
-    if (activeKind === "browser-view" || activeKind === null) return
+    if (activeKind === "browser-view") return
     if (isTauri()) void browserHide().catch(() => {})
   }, [activeKind])
 

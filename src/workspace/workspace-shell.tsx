@@ -8,6 +8,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { isTauri, browserHide } from "@/lib/tauri"
 import { Header } from "@/shell/header"
 import BottomTabBar from "@/shell/bottom-tab-bar"
 import TopBar from "./top-bar"
@@ -102,13 +103,23 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   const pathname = usePathname()
   const sidebarCollapsed = useSidebarCollapsed()
   const rightPanelOpen = useRightPanelOpen()
+  const isMdUp = useMediaQuery("(min-width: 768px)")
   const isLg = useMediaQuery("(min-width: 1024px)")
-  // <lg 时 AI 栏是全屏覆盖层 (dialog): 被遮住的工作区必须 inert, 防 Tab/读屏器穿透到覆盖层背后。
-  const aiOverlayActive = rightPanelOpen && !isLg
+  // 仅移动全屏 AI 覆盖 (<md) 时对主内容 inert; md+ 活动栏/侧栏/标签条始终可点。
+  const aiMainInert = rightPanelOpen && !isMdUp
+  // md–lg AI 右侧浮层: 给主列留位, 避免标签条右侧被盖住点不到。
+  const aiDockMargin = rightPanelOpen && isMdUp && !isLg
 
   // 客户端挂载后恢复上次的标签。
   React.useEffect(() => {
     hydrateWorkspace()
+  }, [])
+
+  // 启动 / 刷新后若不在「浏览器」标签, 强制收起 Linux 原生 overlay (否则会挡全窗点击)。
+  React.useEffect(() => {
+    if (!isTauri()) return
+    const t = getTabs().find((x) => x.id === getActiveId())
+    if (t?.kind !== "browser-view") void browserHide().catch(() => {})
   }, [])
 
   // 认证页: 跳出工作区壳。
@@ -132,22 +143,26 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
         <TopBar />
 
         <div className="flex min-h-0 flex-1">
-          {/* AI 覆盖层 (<lg) 打开时对被遮内容 inert (WCAG: 覆盖层背后不可聚焦/不可读) */}
-          <div inert={aiOverlayActive} className="flex min-w-0 flex-1">
+          <div className="relative z-10 flex min-w-0 flex-1">
             <ActivityBar />
             <SecondarySidebar collapsed={sidebarCollapsed} />
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div
+              className={
+                aiDockMargin
+                  ? "flex min-w-0 flex-1 flex-col md:max-lg:mr-[25rem]"
+                  : "flex min-w-0 flex-1 flex-col"
+              }
+            >
               <TabBar />
-              {/* 移动端下钻返回条 (md:hidden; 桌面有标签条无需它): 节点标签激活时给显式返回。 */}
               <MobileDrillBar />
-              {/* 移动端底栏含安全区(刘海/Home 指示条), 预留 4rem + 底栏内边距下限(0.35rem)/safe-area 取大 ——
-                  与 bottom-tab-bar 的 pb-[max(env(safe-area-inset-bottom),0.35rem)] 对齐, 防 safe-area≈0 时底部内容被遮 */}
-              <div className="min-h-0 flex-1 pb-[calc(4rem+max(env(safe-area-inset-bottom),0.35rem))] md:pb-0">
+              <div
+                inert={aiMainInert}
+                className="min-h-0 flex-1 pb-[calc(4rem+max(env(safe-area-inset-bottom),0.35rem))] md:pb-0"
+              >
                 <TabHost />
               </div>
             </div>
           </div>
-          {/* 右侧 AI 对话栏 (桌面停靠 / 移动全屏覆盖; 首次打开后 keep-alive, 关闭仅隐藏) */}
           <RightAiPanel />
         </div>
 

@@ -275,6 +275,12 @@ pub fn close(app: &AppHandle) -> Result<(), String> {
         return tauri::async_runtime::block_on(crate::browser_cdp::close(&state));
     }
     with_browser(|inner| {
+        if let Some(wv) = inner.webview.as_ref() {
+            let _ = wv.set_visible(false);
+        }
+        if let Some(fixed) = inner.overlay_fixed.as_ref() {
+            fixed.hide();
+        }
         close_webview(inner);
         Ok(())
     })

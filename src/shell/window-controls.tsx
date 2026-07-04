@@ -30,6 +30,7 @@ function TitleBarButton({
       type="button"
       aria-label={label}
       title={label}
+      onMouseDown={(e) => e.stopPropagation()}
       onClick={onClick}
       className={cn(
         "flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
@@ -51,13 +52,17 @@ export default function WindowControls() {
     let unlisten: (() => void) | undefined
     let alive = true
     ;(async () => {
-      const { getCurrentWindow } = await getWindowApi()
-      const win = getCurrentWindow()
-      if (!alive) return
-      setMaximized(await win.isMaximized())
-      unlisten = await win.onResized(async () => {
+      try {
+        const { getCurrentWindow } = await getWindowApi()
+        const win = getCurrentWindow()
+        if (!alive) return
         setMaximized(await win.isMaximized())
-      })
+        unlisten = await win.onResized(async () => {
+          setMaximized(await win.isMaximized())
+        })
+      } catch {
+        // Dev HMR 可能使动态 import 的 chunk 失效; 忽略至下次挂载/刷新。
+      }
     })()
     return () => {
       alive = false

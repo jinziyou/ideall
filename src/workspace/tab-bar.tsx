@@ -203,6 +203,7 @@ function TabItem({
         if (dragIdRef.current) reorderTabs(dragIdRef.current, t.id)
         dragIdRef.current = null
       }}
+      onMouseDown={(e) => e.stopPropagation()}
       onClick={() => setActiveTab(t.id)}
       onDoubleClick={() => promoteTab(t.id)}
       onKeyDown={(e) => {

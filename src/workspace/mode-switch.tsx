@@ -28,6 +28,7 @@ export default function ModeSwitch() {
             type="button"
             role="tab"
             aria-selected={active}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setMode(m.id)}
             className={cn(
               "flex items-center gap-1.5 rounded-shell px-2.5 py-1 text-sm font-medium transition-colors",
