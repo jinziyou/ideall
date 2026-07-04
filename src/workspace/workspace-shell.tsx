@@ -31,6 +31,7 @@ import {
   useTabs,
 } from "./store"
 import { useMediaQuery } from "@/lib/use-media-query"
+import { useWindowViewport } from "@/lib/use-window-viewport"
 import { descriptorForNode, descriptorForPath } from "./modules"
 
 // URL 同步抽成独立子组件: 它用 useSearchParams (output:export 下必须包 <Suspense>)。
@@ -101,6 +102,7 @@ function UrlSync() {
 
 export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  useWindowViewport()
   const sidebarCollapsed = useSidebarCollapsed()
   const rightPanelOpen = useRightPanelOpen()
   const isMdUp = useMediaQuery("(min-width: 768px)")
@@ -136,7 +138,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
       </React.Suspense>
       <GlobalShortcuts />
 
-      <div className="flex h-dvh flex-col">
+      <div className="flex h-[var(--app-h,100dvh)] min-h-0 flex-col">
         {/* 移动顶栏 (md:hidden 由组件内部控制; Tauri 窄窗兼作标题栏) */}
         <Header />
         {/* 桌面顶边栏 (hidden md:flex; Tauri 下兼作标题栏, 窗控已并入) */}

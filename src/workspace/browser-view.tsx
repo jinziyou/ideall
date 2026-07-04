@@ -23,6 +23,7 @@ import {
 } from "@/lib/tauri"
 import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-open"
 import { setBrowserUrl, setBrowserBackend } from "./browser-state"
+import { useTabActive } from "./tab-active-context"
 
 const START_URL = "https://www.google.com"
 
@@ -33,6 +34,7 @@ function normalizeInput(v: string): string {
 }
 
 export default function BrowserView() {
+  const tabActive = useTabActive()
   const tauri = React.useSyncExternalStore(
     () => () => {},
     () => isTauri(),
@@ -71,6 +73,38 @@ export default function BrowserView() {
     })
   }, [])
 
+  const tabActiveRef = React.useRef(tabActive)
+  tabActiveRef.current = tabActive
+
+  React.useEffect(() => {
+    if (!isTauri()) return
+    if (!tabActive) {
+      if (openedRef.current) browserHide().catch(() => {})
+      return
+    }
+    const el = contentRef.current
+    if (!el) return
+    const raf = requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect()
+      if (r.width < 1 || r.height < 1) return
+      const b = { x: r.left, y: r.top, w: r.width, h: r.height }
+      if (!openedRef.current) {
+        openedRef.current = true
+        openBrowserView(currentUrlRef.current, b)
+          .then(() => browserGetBackend().then((info) => setBackend(info)).catch(() => {}))
+          .catch(() => {
+            openedRef.current = false
+            toast.error("打开内嵌浏览器失败")
+          })
+      } else {
+        browserShow()
+          .then(() => browserSetBounds(b))
+          .catch(() => {})
+      }
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [tabActive])
+
   React.useEffect(() => {
     if (!isTauri()) return
     let unUrl: (() => void) | undefined
@@ -84,10 +118,13 @@ export default function BrowserView() {
       return { x: r.left, y: r.top, w: r.width, h: r.height }
     }
     const sync = () => {
+      if (!tabActiveRef.current) {
+        if (openedRef.current) browserHide().catch(() => {})
+        return
+      }
       const b = boundsOf()
       if (!b) return
       if (b.w < 1 || b.h < 1) {
-        // 标签切到后台 (display:none) → 隐藏原生层, 免遮挡其它标签的 DOM。
         if (openedRef.current) browserHide().catch(() => {})
         return
       }
@@ -96,12 +133,13 @@ export default function BrowserView() {
         openBrowserView(currentUrlRef.current, b)
           .then(() => browserGetBackend().then((info) => setBackend(info)).catch(() => {}))
           .catch(() => {
-          openedRef.current = false
-          toast.error("打开内嵌浏览器失败")
-        })
+            openedRef.current = false
+            toast.error("打开内嵌浏览器失败")
+          })
       } else {
-        // 已开 (含从后台切回): set_bounds 会同时让其重新可见并对齐。
-        browserSetBounds(b).catch(() => {})
+        browserShow()
+          .then(() => browserSetBounds(b))
+          .catch(() => {})
       }
     }
     const schedule = () => {

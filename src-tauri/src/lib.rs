@@ -562,6 +562,38 @@ fn browser_close(app: AppHandle) -> Result<(), String> {
     }
 }
 
+#[cfg(desktop)]
+fn main_window_conf(app: &AppHandle) -> Result<tauri::utils::config::WindowConfig, String> {
+    app.config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .or_else(|| app.config().app.windows.first())
+        .cloned()
+        .ok_or_else(|| "主窗口配置不存在".into())
+}
+
+/// 窗控最大化/还原 (WSL 下铺满主屏 work area, 非 WSL 走系统 toggleMaximize)。
+#[cfg(desktop)]
+#[tauri::command]
+fn window_toggle_maximize(app: AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let conf = main_window_conf(&app)?;
+    window_placement::toggle_primary_maximize(&window, &conf)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn window_query_maximized(app: AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())?;
+    Ok(window_placement::is_primary_maximized(&window))
+}
+
 // ── agent 出站联网守卫 (web.search / web.fetch 的 Rust 侧 SSRF 闭合) ────────────────────────────────
 // JS 侧 (src/lib/web-search.ts) 只能拦 IP 字面量与已知坏名; 「公网域名 A 记录指向私网/环回/元数据」必须在
 // **连接前**解析+校验+钉连。本命令: 自行解析主机→IP, 任一 IP 落非全局段即拒 (fail closed), 再用 resolve_to_addrs
@@ -862,7 +894,9 @@ pub fn run() {
             oauth_callback::oauth_callback_stop,
             installed_apps::list_installed_apps,
             installed_apps::launch_installed_app,
-            installed_apps::read_app_icon_data_url
+            installed_apps::read_app_icon_data_url,
+            window_toggle_maximize,
+            window_query_maximized,
         ]);
     #[cfg(not(desktop))]
     let builder = builder.invoke_handler(tauri::generate_handler![agent_guarded_fetch]);

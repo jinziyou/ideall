@@ -39,6 +39,8 @@ fn main() {
                 "list_installed_apps",
                 "launch_installed_app",
                 "read_app_icon_data_url",
+                "window_toggle_maximize",
+                "window_query_maximized",
             ]),
         ),
     )

@@ -350,6 +350,7 @@ export function renameNodeTab(ref: NodeRef, title: string) {
 export function closeTab(id: string) {
   const idx = ws().tabs.findIndex((t) => t.id === id)
   if (idx === -1) return
+  const closingKind = ws().tabs[idx]?.kind
   const tabs = ws().tabs.filter((t) => t.id !== id)
   let activeId = ws().activeId
   let activeModule = ws().activeModule
@@ -360,6 +361,8 @@ export function closeTab(id: string) {
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next.kind)
       activeModule = next.module
+    } else if (closingKind === "browser-view" && isTauri()) {
+      void browserHide().catch(() => {})
     }
   }
   setState({

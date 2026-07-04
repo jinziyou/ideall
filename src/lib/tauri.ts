@@ -194,6 +194,20 @@ export async function browserWaitForSelector(
   await invoke("browser_wait_for_selector", { selector, timeoutMs })
 }
 
+/** 窗控最大化/还原 (WSL 下铺满主屏 work area)。返回最大化后是否为「已最大化」态。 */
+export async function windowToggleMaximize(): Promise<boolean> {
+  if (!isTauri()) return false
+  const { invoke } = await import("@tauri-apps/api/core")
+  return invoke<boolean>("window_toggle_maximize")
+}
+
+/** 窗控最大化图标状态 (含 WSL 伪最大化)。 */
+export async function windowQueryMaximized(): Promise<boolean> {
+  if (!isTauri()) return false
+  const { invoke } = await import("@tauri-apps/api/core")
+  return invoke<boolean>("window_query_maximized")
+}
+
 /** 监听内嵌浏览器当前 URL 变化 (on_navigation / on_page_load emit); 返回取消监听; 非 Tauri 为 no-op。 */
 export async function onBrowserUrl(cb: (url: string) => void): Promise<() => void> {
   if (!isTauri()) return () => {}

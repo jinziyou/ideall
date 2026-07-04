@@ -186,6 +186,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  html,
+  body {
+    height: 100%;
+  }
   /* Tauri 无边框窗: data-tauri-drag-region 在 Linux/WSL 会吞子树 mousedown; 交互控件显式 no-drag。 */
   button,
   a,

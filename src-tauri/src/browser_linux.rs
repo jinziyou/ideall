@@ -1,5 +1,4 @@
-// Linux/WSL 内嵌浏览器: WebKitGTK (wry) 或 CDP/Chromium 双后端。
-// 检测到 Chrome/Chromium 且未设 IDEALL_BROWSER_CDP=0 时优先 CDP (阶段 2)。
+// Linux/WSL 内嵌浏览器: 默认 WebKitGTK (wry) 嵌在窗口内; IDEALL_BROWSER_CDP=1 时改用 CDP 独立 Chrome。
 
 use gtk::prelude::*;
 use std::cell::RefCell;
@@ -17,6 +16,7 @@ struct Inner {
     overlay_fixed: Option<gtk::Fixed>,
     webview: Option<WebView>,
     overlay_ready: bool,
+    visible: bool,
 }
 
 thread_local! {
@@ -135,6 +135,7 @@ pub fn open(app: &AppHandle, url: String, b: Bounds) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         inner.webview = Some(webview);
+        inner.visible = true;
         Ok(())
     })
 }
@@ -146,6 +147,9 @@ pub fn set_bounds(app: &AppHandle, b: Bounds) -> Result<(), String> {
         return tauri::async_runtime::block_on(crate::browser_cdp::set_bounds(&state, b));
     }
     with_browser(|inner| {
+        if !inner.visible {
+            return Ok(());
+        }
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
             apply_fixed_geometry(fixed, &b);
         }
@@ -243,10 +247,12 @@ pub fn hide(app: &AppHandle) -> Result<(), String> {
         return tauri::async_runtime::block_on(crate::browser_cdp::hide(&state));
     }
     with_browser(|inner| {
+        inner.visible = false;
         if let Some(wv) = inner.webview.as_ref() {
             wv.set_visible(false).map_err(|e| e.to_string())?;
         }
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
+            fixed.set_size_request(0, 0);
             fixed.hide();
         }
         Ok(())
@@ -259,7 +265,10 @@ pub fn show(app: &AppHandle) -> Result<(), String> {
         return tauri::async_runtime::block_on(crate::browser_cdp::show(&state));
     }
     with_browser(|inner| {
+        inner.visible = true;
+        let b = LAST_CONTENT.with(|c| *c.borrow());
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
+            apply_fixed_geometry(fixed, &b);
             fixed.show_all();
         }
         if let Some(wv) = inner.webview.as_ref() {
@@ -275,10 +284,12 @@ pub fn close(app: &AppHandle) -> Result<(), String> {
         return tauri::async_runtime::block_on(crate::browser_cdp::close(&state));
     }
     with_browser(|inner| {
+        inner.visible = false;
         if let Some(wv) = inner.webview.as_ref() {
             let _ = wv.set_visible(false);
         }
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
+            fixed.set_size_request(0, 0);
             fixed.hide();
         }
         close_webview(inner);

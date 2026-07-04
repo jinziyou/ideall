@@ -6,7 +6,7 @@
 import * as React from "react"
 import { Minus, Square, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { isTauri } from "@/lib/tauri"
+import { isTauri, windowQueryMaximized, windowToggleMaximize } from "@/lib/tauri"
 
 type WinApi = typeof import("@tauri-apps/api/window")
 
@@ -56,9 +56,9 @@ export default function WindowControls() {
         const { getCurrentWindow } = await getWindowApi()
         const win = getCurrentWindow()
         if (!alive) return
-        setMaximized(await win.isMaximized())
+        setMaximized(await windowQueryMaximized())
         unlisten = await win.onResized(async () => {
-          setMaximized(await win.isMaximized())
+          setMaximized(await windowQueryMaximized())
         })
       } catch {
         // Dev HMR 可能使动态 import 的 chunk 失效; 忽略至下次挂载/刷新。
@@ -85,9 +85,7 @@ export default function WindowControls() {
       </TitleBarButton>
       <TitleBarButton
         label={maximized ? "还原" : "最大化"}
-        onClick={() =>
-          void getWindowApi().then(({ getCurrentWindow }) => getCurrentWindow().toggleMaximize())
-        }
+        onClick={() => void windowToggleMaximize().then(setMaximized)}
       >
         <Square className="h-3 w-3" strokeWidth={2.25} />
       </TitleBarButton>

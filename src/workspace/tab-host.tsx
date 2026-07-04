@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { isTauri, browserHide } from "@/lib/tauri"
 import { useTabs, useActiveId, useActiveTabKind } from "./store"
 import { TabContent, tabLayout } from "./registry"
+import { TabActiveContext } from "./tab-active-context"
 import { tabElId, tabPanelId } from "./tab-view-type"
 import type { Tab } from "./types"
 
@@ -34,7 +35,7 @@ export default function TabHost() {
   React.useEffect(() => {
     if (activeKind === "browser-view") return
     if (isTauri()) void browserHide().catch(() => {})
-  }, [activeKind])
+  }, [activeKind, activeId])
 
   // LRU 顺序: 最近激活在末尾。openTab 即激活, 故每个曾打开的标签都进过此表。
   // 用 React 官方「渲染期按 key 调整派生态」模式维护 (非 effect): 当 activeId / 标签集变化时
@@ -101,18 +102,20 @@ export default function TabHost() {
             className={cn("h-full w-full", !active && "hidden")}
             aria-hidden={!active}
           >
-            {fill ? (
-              // 桌面: 组件自管理内部滚动 (h-full); 移动: 允许整体滚动兜底 (笔记等无视口高度约束)。
-              <div className="h-full w-full overflow-y-auto md:overflow-hidden">
-                <TabContent tab={t} />
-              </div>
-            ) : (
-              <div className="h-full w-full overflow-y-auto">
-                <div className="mx-auto w-full max-w-screen-2xl p-4 sm:p-6">
+            <TabActiveContext.Provider value={active}>
+              {fill ? (
+                // 桌面: 组件自管理内部滚动 (h-full); 移动: 允许整体滚动兜底 (笔记等无视口高度约束)。
+                <div className="h-full w-full overflow-y-auto md:overflow-hidden">
                   <TabContent tab={t} />
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="h-full w-full overflow-y-auto">
+                  <div className="mx-auto w-full max-w-screen-2xl p-4 sm:p-6">
+                    <TabContent tab={t} />
+                  </div>
+                </div>
+              )}
+            </TabActiveContext.Provider>
           </div>
         )
       })}

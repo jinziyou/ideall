@@ -1,8 +1,11 @@
+"use client"
+
 import Link from "next/link"
 import { WonitaMark } from "@/shared/wonita-mark"
 import CommandTrigger from "@/shared/command-trigger"
 import MobileNav from "./mobile-nav"
 import WindowControls from "./window-controls"
+import { useTauriDragRegion } from "@/lib/use-tauri-drag-region"
 
 /**
  * 移动端顶栏 (md:hidden) —— 桌面端由左侧图标轨取代。已瘦身为 3+1 项:
@@ -12,9 +15,11 @@ import WindowControls from "./window-controls"
  * data-tauri-drag-region + WindowControls: 当 Tauri 窗口被收窄到 <md (此时本栏取代顶边栏) 仍保有窗口拖拽与窗控。
  */
 export function Header() {
+  const dragRegion = useTauriDragRegion()
+
   return (
     <header
-      data-tauri-drag-region
+      {...(dragRegion ? { "data-tauri-drag-region": true } : {})}
       className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-stretch gap-2 border-b bg-background/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden"
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">

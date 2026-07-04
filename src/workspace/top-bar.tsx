@@ -11,8 +11,11 @@ import ModeSwitch from "./mode-switch"
 import SettingsMenu from "./settings-menu"
 import TopSearch from "./top-search"
 import LayoutToggles from "./layout-toggles"
+import { useTauriDragRegion } from "@/lib/use-tauri-drag-region"
 
 export default function TopBar() {
+  const dragRegion = useTauriDragRegion()
+
   return (
     <header className="relative z-20 hidden h-11 shrink-0 items-center gap-2 border-b bg-card px-3 md:flex">
       <div className="flex shrink-0 items-center gap-2">
@@ -23,7 +26,7 @@ export default function TopBar() {
         <ModeSwitch />
       </div>
       <div
-        data-tauri-drag-region
+        {...(dragRegion ? { "data-tauri-drag-region": true } : {})}
         className="flex min-w-0 flex-1 justify-center px-4"
       >
         <TopSearch />

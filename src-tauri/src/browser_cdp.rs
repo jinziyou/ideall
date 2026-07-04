@@ -1,6 +1,5 @@
-// Linux 内嵌浏览器 CDP 后端 (阶段 2): 用 Chromium/Chrome + DevTools Protocol 替代 WebKitGTK。
-// 检测到本机 Chrome/Chromium 且未设 IDEALL_BROWSER_CDP=0 时启用; 窗口用 --app= 定位到内容区矩形。
-// Agent 工具走 CDP (find_element / evaluate / press_key), 兼容性与自动化能力强于 WebKit。
+// Linux 内嵌浏览器 CDP 后端 (可选): 用 Chromium/Chrome + DevTools Protocol 开独立窗口。
+// 默认不启用 (内嵌 WebKitGTK); 设 IDEALL_BROWSER_CDP=1 时启用 —— Agent 自动化更强, 但会弹出系统 Chrome。
 
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::Page;
@@ -41,11 +40,16 @@ pub fn init_state() -> BrowserCdpState {
 }
 
 impl BrowserCdpState {
-    /// 是否应尝试 CDP (Linux + 找到 Chrome + 未显式禁用)。
+    /// 本机是否装有 Chrome/Chromium (可 opt-in CDP, 不等于当前在用 CDP)。
+    pub fn chrome_available(&self) -> bool {
+        self.chrome_path.is_some()
+    }
+
+    /// 是否启用 CDP 独立窗口模式 (Linux + 有 Chrome + IDEALL_BROWSER_CDP=1)。
     pub fn enabled(&self) -> bool {
         cfg!(target_os = "linux")
-            && self.chrome_path.is_some()
-            && std::env::var("IDEALL_BROWSER_CDP").ok().as_deref() != Some("0")
+            && self.chrome_available()
+            && std::env::var("IDEALL_BROWSER_CDP").ok().as_deref() == Some("1")
     }
 
     pub async fn is_running(&self) -> bool {
@@ -55,12 +59,14 @@ impl BrowserCdpState {
     pub async fn backend_info(&self) -> BrowserBackendInfo {
         let running = self.is_running().await;
         BrowserBackendInfo {
-            mode: if self.enabled() {
+            mode: if running && self.enabled() {
                 "cdp".into()
-            } else {
+            } else if cfg!(target_os = "linux") {
                 "webkit".into()
+            } else {
+                "webview".into()
             },
-            cdp_available: self.enabled(),
+            cdp_available: self.chrome_available(),
             running,
             chrome_path: self
                 .chrome_path
