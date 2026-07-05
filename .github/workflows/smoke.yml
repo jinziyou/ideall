@@ -17,6 +17,7 @@ on:
       - "scripts/smoke-lib.mjs"
       - "scripts/smoke-notes.mjs"
       - "scripts/smoke-files.mjs"
+      - "scripts/smoke-plugins.mjs"
       - "scripts/serve-out.mjs"
       - ".github/workflows/smoke.yml"
   push:
@@ -31,6 +32,7 @@ on:
       - "scripts/smoke-lib.mjs"
       - "scripts/smoke-notes.mjs"
       - "scripts/smoke-files.mjs"
+      - "scripts/smoke-plugins.mjs"
       - "scripts/serve-out.mjs"
       - ".github/workflows/smoke.yml"
   schedule:
@@ -66,6 +68,8 @@ jobs:
           echo "静态服 30s 未就绪"; cat /tmp/serve.log; exit 1
       - name: Smoke (notes e2e)
         run: BASE=http://localhost:5030 pnpm smoke:notes
+      - name: Smoke (plugins core)
+        run: BASE=http://localhost:5030 pnpm smoke:plugins
       - name: Smoke (files e2e core)
         if: github.event_name == 'pull_request'
         run: SMOKE_LEVEL=core BASE=http://localhost:5030 pnpm smoke:files
@@ -80,4 +84,5 @@ jobs:
           path: |
             /tmp/notes-smoke
             /tmp/files-smoke
+            /tmp/plugins-smoke
           if-no-files-found: ignore

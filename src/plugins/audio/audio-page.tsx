@@ -20,6 +20,7 @@ import { Slider } from "@/ui/slider"
 import { EmptyState } from "@/ui/empty-state"
 import {
   addAudioTrack,
+  isSupportedAudioFile,
   listAudioTracks,
   loadAudioPlaybackState,
   removeAudioTrack,
@@ -27,8 +28,6 @@ import {
   updateAudioTrack,
   type AudioTrack,
 } from "./audio-store"
-
-const AUDIO_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"])
 
 export default function AudioPage() {
   const [tracks, setTracks] = React.useState<AudioTrack[]>([])
@@ -138,8 +137,7 @@ export default function AudioPage() {
   const handleFiles = async (files: FileList | null) => {
     if (!files) return
     for (const file of Array.from(files)) {
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-      if (!file.type.startsWith("audio/") && !AUDIO_EXTS.has(ext)) continue
+      if (!isSupportedAudioFile(file)) continue
       await addAudioTrack(file)
     }
     if (fileInputRef.current) fileInputRef.current.value = ""

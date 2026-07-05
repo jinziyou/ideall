@@ -1,9 +1,11 @@
 // 音频播放器 —— 播放列表本地存储。音频 Blob 直接存 IndexedDB, 不进入统一 Node 库。
+import { createPluginDb } from "@/plugins/shared/plugin-idb"
 
 const DB_NAME = "ideall:audio"
 const DB_VERSION = 1
 const STORE_TRACKS = "tracks"
 const STORE_STATE = "state"
+const AUDIO_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"])
 
 export type AudioTrack = {
   id: string
@@ -26,7 +28,7 @@ export type AudioPlaybackState = {
   shuffle: boolean
 }
 
-const DEFAULT_STATE: AudioPlaybackState = {
+export const DEFAULT_AUDIO_PLAYBACK_STATE: AudioPlaybackState = {
   currentTrackId: null,
   currentTime: 0,
   volume: 0.8,
@@ -34,93 +36,52 @@ const DEFAULT_STATE: AudioPlaybackState = {
   shuffle: false,
 }
 
-let dbPromise: Promise<IDBDatabase> | null = null
-
-function openDb(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise
-  dbPromise = new Promise((resolve, reject) => {
-    if (typeof indexedDB === "undefined") {
-      dbPromise = null
-      reject(new Error("当前环境不支持 IndexedDB"))
-      return
+const audioDb = createPluginDb({
+  name: DB_NAME,
+  version: DB_VERSION,
+  upgrade: (db) => {
+    if (!db.objectStoreNames.contains(STORE_TRACKS)) {
+      db.createObjectStore(STORE_TRACKS, { keyPath: "id" })
     }
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onerror = () => {
-      dbPromise = null
-      reject(req.error)
+    if (!db.objectStoreNames.contains(STORE_STATE)) {
+      db.createObjectStore(STORE_STATE, { keyPath: "key" })
     }
-    req.onblocked = () => {
-      dbPromise = null
-      reject(new Error("IndexedDB 升级被其它标签页阻塞"))
-    }
-    req.onsuccess = () => {
-      const db = req.result
-      db.onversionchange = () => {
-        db.close()
-        dbPromise = null
-      }
-      resolve(db)
-    }
-    req.onupgradeneeded = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains(STORE_TRACKS)) {
-        db.createObjectStore(STORE_TRACKS, { keyPath: "id" })
-      }
-      if (!db.objectStoreNames.contains(STORE_STATE)) {
-        db.createObjectStore(STORE_STATE, { keyPath: "key" })
-      }
-    }
-  })
-  return dbPromise
-}
-
-function requestToPromise<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-async function getAll<T>(storeName: string): Promise<T[]> {
-  const db = await openDb()
-  const tx = db.transaction(storeName, "readonly")
-  return requestToPromise<T[]>(tx.objectStore(storeName).getAll())
-}
-
-async function readStore<T>(storeName: string, key: IDBValidKey): Promise<T | undefined> {
-  const db = await openDb()
-  const tx = db.transaction(storeName, "readonly")
-  return requestToPromise<T | undefined>(tx.objectStore(storeName).get(key))
-}
-
-async function writeStore<T>(storeName: string, value: T): Promise<void> {
-  const db = await openDb()
-  const tx = db.transaction(storeName, "readwrite")
-  await requestToPromise(tx.objectStore(storeName).put(value))
-}
-
-async function deleteStore(storeName: string, key: IDBValidKey): Promise<void> {
-  const db = await openDb()
-  const tx = db.transaction(storeName, "readwrite")
-  await requestToPromise(tx.objectStore(storeName).delete(key))
-}
-
-async function clearStore(storeName: string): Promise<void> {
-  const db = await openDb()
-  const tx = db.transaction(storeName, "readwrite")
-  await requestToPromise(tx.objectStore(storeName).clear())
-}
+  },
+})
 
 function makeId(): string {
   return `audio:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
 }
 
-function titleFromFile(file: File): string {
-  return file.name.replace(/\.[^.]+$/, "") || file.name
+export function audioTitleFromName(name: string): string {
+  return name.replace(/\.[^.]+$/, "") || name
+}
+
+export function isSupportedAudioFile(file: Pick<File, "name" | "type">): boolean {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+  return file.type.startsWith("audio/") || AUDIO_EXTS.has(ext)
+}
+
+export function normalizeAudioPlaybackState(value: unknown): AudioPlaybackState {
+  const saved = value && typeof value === "object" ? (value as Partial<AudioPlaybackState>) : {}
+  const repeat = saved.repeat
+  return {
+    currentTrackId: typeof saved.currentTrackId === "string" ? saved.currentTrackId : null,
+    currentTime:
+      typeof saved.currentTime === "number" && Number.isFinite(saved.currentTime)
+        ? Math.max(0, saved.currentTime)
+        : DEFAULT_AUDIO_PLAYBACK_STATE.currentTime,
+    volume:
+      typeof saved.volume === "number" && Number.isFinite(saved.volume)
+        ? Math.min(1, Math.max(0, saved.volume))
+        : DEFAULT_AUDIO_PLAYBACK_STATE.volume,
+    repeat: repeat === "one" || repeat === "all" || repeat === "none" ? repeat : "none",
+    shuffle: typeof saved.shuffle === "boolean" ? saved.shuffle : false,
+  }
 }
 
 export async function listAudioTracks(): Promise<AudioTrack[]> {
-  const tracks = await getAll<AudioTrack>(STORE_TRACKS)
+  const tracks = await audioDb.getAll<AudioTrack>(STORE_TRACKS)
   return tracks.sort((a, b) => a.createdAt - b.createdAt)
 }
 
@@ -128,14 +89,14 @@ export async function addAudioTrack(file: File): Promise<AudioTrack> {
   const now = Date.now()
   const track: AudioTrack = {
     id: makeId(),
-    title: titleFromFile(file),
+    title: audioTitleFromName(file.name),
     mime: file.type || "audio/*",
     size: file.size,
     blob: file,
     createdAt: now,
     updatedAt: now,
   }
-  await writeStore(STORE_TRACKS, track)
+  await audioDb.put(STORE_TRACKS, track)
   return track
 }
 
@@ -143,28 +104,28 @@ export async function updateAudioTrack(
   id: string,
   patch: Partial<Pick<AudioTrack, "title" | "artist" | "album" | "duration">>,
 ): Promise<AudioTrack | null> {
-  const current = await readStore<AudioTrack>(STORE_TRACKS, id)
+  const current = await audioDb.get<AudioTrack>(STORE_TRACKS, id)
   if (!current) return null
   const next = { ...current, ...patch, updatedAt: Date.now() }
-  await writeStore(STORE_TRACKS, next)
+  await audioDb.put(STORE_TRACKS, next)
   return next
 }
 
 export async function removeAudioTrack(id: string): Promise<void> {
-  await deleteStore(STORE_TRACKS, id)
+  await audioDb.remove(STORE_TRACKS, id)
 }
 
 export async function clearAudioTracks(): Promise<void> {
-  await clearStore(STORE_TRACKS)
+  await audioDb.clear(STORE_TRACKS)
 }
 
 export async function loadAudioPlaybackState(): Promise<AudioPlaybackState> {
-  const saved = await readStore<AudioPlaybackState & { key: string }>(STORE_STATE, "playback")
-  if (!saved) return DEFAULT_STATE
+  const saved = await audioDb.get<AudioPlaybackState & { key: string }>(STORE_STATE, "playback")
+  if (!saved) return DEFAULT_AUDIO_PLAYBACK_STATE
   const { key: _key, ...state } = saved
-  return { ...DEFAULT_STATE, ...state }
+  return normalizeAudioPlaybackState(state)
 }
 
 export async function saveAudioPlaybackState(state: AudioPlaybackState): Promise<void> {
-  await writeStore(STORE_STATE, { ...state, key: "playback" })
+  await audioDb.put(STORE_STATE, { ...normalizeAudioPlaybackState(state), key: "playback" })
 }

@@ -3,49 +3,15 @@
 import * as React from "react"
 import { Bug, ClipboardCopy, HardDrive, Info, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
-import { isTauri } from "@/lib/tauri"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
-import { safeStoragePreview } from "./debug-redact"
-
-type StorageEntry = {
-  key: string
-  bytes: number
-  preview: string
-  redacted: boolean
-}
-
-type DebugSnapshot = {
-  generatedAt: string
-  runtime: {
-    href: string
-    userAgent: string
-    language: string
-    online: boolean
-    timezone: string
-    viewport: string
-    tauri: boolean
-  }
-  storage: {
-    localStorage: StorageEntry[]
-    sessionStorage: StorageEntry[]
-  }
-  workspace?: {
-    source: "localStorage" | "sessionStorage"
-    tabs: number
-    activeId: string | null
-    activeModule: string | null
-    mode: string | null
-  }
-}
-
-const WORKSPACE_KEY = "ideall:workspace:v1"
+import { readBrowserDebugSnapshot, type DebugSnapshot, type StorageBucket } from "./debug-snapshot"
 
 export default function DebugPage() {
   const [snapshot, setSnapshot] = React.useState<DebugSnapshot | null>(null)
 
   const refresh = React.useCallback(() => {
-    setSnapshot(readSnapshot())
+    setSnapshot(readBrowserDebugSnapshot())
   }, [])
 
   React.useEffect(() => {
@@ -106,90 +72,22 @@ export default function DebugPage() {
       </div>
 
       <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
-        <StoragePanel title="localStorage" entries={snapshot.storage.localStorage} />
-        <StoragePanel title="sessionStorage" entries={snapshot.storage.sessionStorage} />
+        <StoragePanel title="localStorage" bucket={snapshot.storage.localStorage} />
+        <StoragePanel title="sessionStorage" bucket={snapshot.storage.sessionStorage} />
       </section>
     </div>
   )
 }
 
-function readSnapshot(): DebugSnapshot {
-  const local = readStorage(localStorage)
-  const session = readStorage(sessionStorage)
-  return {
-    generatedAt: new Date().toISOString(),
-    runtime: {
-      href: window.location.href,
-      userAgent: navigator.userAgent,
-      language: navigator.language,
-      online: navigator.onLine,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      viewport: `${window.innerWidth}x${window.innerHeight}`,
-      tauri: isTauri(),
-    },
-    storage: {
-      localStorage: local,
-      sessionStorage: session,
-    },
-    workspace:
-      readWorkspace(sessionStorage.getItem(WORKSPACE_KEY), "sessionStorage") ??
-      readWorkspace(localStorage.getItem(WORKSPACE_KEY), "localStorage"),
-  }
-}
-
-function readStorage(storage: Storage): StorageEntry[] {
-  const entries: StorageEntry[] = []
-  for (let i = 0; i < storage.length; i += 1) {
-    const key = storage.key(i)
-    if (!key) continue
-    const value = storage.getItem(key) ?? ""
-    const preview = safeStoragePreview(key, value)
-    entries.push({
-      key,
-      bytes: new Blob([value]).size,
-      preview: preview.value,
-      redacted: preview.redacted,
-    })
-  }
-  return entries.sort((a, b) => a.key.localeCompare(b.key))
-}
-
-function readWorkspace(
-  raw: string | null,
-  source: "localStorage" | "sessionStorage",
-): DebugSnapshot["workspace"] | undefined {
-  if (!raw) return undefined
-  try {
-    const parsed = JSON.parse(raw) as {
-      tabs?: unknown[]
-      activeId?: unknown
-      activeModule?: unknown
-      mode?: unknown
-    }
-    return {
-      source,
-      tabs: Array.isArray(parsed.tabs) ? parsed.tabs.length : 0,
-      activeId: typeof parsed.activeId === "string" ? parsed.activeId : null,
-      activeModule: typeof parsed.activeModule === "string" ? parsed.activeModule : null,
-      mode: typeof parsed.mode === "string" ? parsed.mode : null,
-    }
-  } catch {
-    return {
-      source,
-      tabs: 0,
-      activeId: null,
-      activeModule: "parse-error",
-      mode: null,
-    }
-  }
-}
-
-function StoragePanel({ title, entries }: { title: string; entries: StorageEntry[] }) {
+function StoragePanel({ title, bucket }: { title: string; bucket: StorageBucket }) {
+  const entries = bucket.entries
   return (
     <section className="min-h-0 rounded-lg border border-border/60 bg-card">
       <SectionTitle icon={HardDrive} title={`${title} · ${entries.length}`} />
       <div className="max-h-[420px] overflow-auto p-2">
-        {entries.length === 0 ? (
+        {bucket.error ? (
+          <div className="px-2 py-8 text-center text-sm text-destructive">{bucket.error}</div>
+        ) : entries.length === 0 ? (
           <div className="px-2 py-8 text-center text-sm text-muted-foreground">无数据</div>
         ) : (
           <div className="flex flex-col gap-1">
@@ -203,6 +101,9 @@ function StoragePanel({ title, entries }: { title: string; entries: StorageEntry
                 </div>
                 {entry.redacted && (
                   <div className="mt-1 text-[10px] font-medium text-amber-600">已脱敏</div>
+                )}
+                {entry.error && (
+                  <div className="mt-1 text-[10px] font-medium text-destructive">读取失败</div>
                 )}
                 {entry.preview && (
                   <pre className="mt-1 overflow-hidden text-ellipsis whitespace-pre-wrap break-all text-[11px] leading-relaxed text-muted-foreground">

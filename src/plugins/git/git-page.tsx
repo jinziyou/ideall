@@ -27,8 +27,7 @@ import {
   type GitSnapshot,
   type GitStatusFile,
 } from "./git-commands"
-
-const STORAGE_KEY = "ideall:git:repos"
+import { addGitRepo, loadGitRepos, removeGitRepo, saveGitRepos } from "./git-repos-store"
 
 export default function GitPage() {
   const [repos, setRepos] = React.useState<string[]>([])
@@ -41,31 +40,22 @@ export default function GitPage() {
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]") as unknown
-      if (Array.isArray(parsed)) {
-        const saved = parsed.filter((x): x is string => typeof x === "string")
-        setRepos(saved)
-        setRepoPath(saved[0] ?? "")
-      }
-    } catch {
-      setRepos([])
-    }
+    const saved = loadGitRepos()
+    setRepos(saved)
+    setRepoPath(saved[0] ?? "")
   }, [])
 
   const persistRepos = (next: string[]) => {
     setRepos(next)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    saveGitRepos(next)
   }
 
   const saveRepo = () => {
-    const path = repoPath.trim()
-    if (!path) return
-    persistRepos([path, ...repos.filter((r) => r !== path)].slice(0, 12))
+    persistRepos(addGitRepo(repos, repoPath))
   }
 
   const removeRepo = (path: string) => {
-    const next = repos.filter((r) => r !== path)
+    const next = removeGitRepo(repos, path)
     persistRepos(next)
     if (repoPath === path) {
       setRepoPath(next[0] ?? "")

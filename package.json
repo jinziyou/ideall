@@ -36,6 +36,7 @@
     "test": "node --import tsx scripts/run-tests.mjs",
     "smoke:notes": "node scripts/smoke-notes.mjs",
     "smoke:files": "node scripts/smoke-files.mjs",
+    "smoke:plugins": "node scripts/smoke-plugins.mjs",
     "serve:out": "node scripts/serve-out.mjs",
     "bump": "node scripts/bump-version.mjs"
   },

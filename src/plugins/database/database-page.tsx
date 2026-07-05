@@ -15,6 +15,7 @@ import {
   listRows,
   listTables,
   normalizeColumns,
+  rowValuesForColumns,
   type DataRow,
   type DataTable,
 } from "./database-store"
@@ -123,9 +124,7 @@ export default function DatabasePage() {
     if (!activeTable || busy) return
     setBusy(true)
     try {
-      const values = Object.fromEntries(
-        activeTable.columns.map((column) => [column, draft[column]?.trim() ?? ""]),
-      )
+      const values = rowValuesForColumns(activeTable.columns, draft)
       await addRow(activeTable.id, values)
       setDraft(Object.fromEntries(activeTable.columns.map((column) => [column, ""])))
       await reloadRows()
