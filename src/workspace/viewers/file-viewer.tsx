@@ -4,29 +4,9 @@
 // 复用 home/resources/file-preview 的核心 (与预览对话框同一逻辑, 不 fork)。onLoaded 回填标签标题。
 import * as React from "react"
 import dynamic from "next/dynamic"
-import {
-  ClipboardCopy,
-  Download,
-  Eye,
-  Loader2,
-  MoreHorizontal,
-  Pencil,
-  RotateCcw,
-  Save,
-  Tags,
-  Trash2,
-} from "lucide-react"
+import { Eye, Loader2, Pencil } from "lucide-react"
 import { toast } from "sonner"
-import { Button } from "@/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
-import { fileTypeInfo, formatBytes, formatTime } from "@/lib/format"
+import { fileTypeInfo } from "@/lib/format"
 import {
   deleteFile,
   restoreFile,
@@ -45,9 +25,10 @@ import { nodeTab } from "../node-tab"
 import { closeTab, promoteActiveTab, renameNodeTab, setTabDirty, tabKey } from "../store"
 import { useTabActive } from "../tab-active-context"
 import { clearFileDraft, readFileDraft, writeFileDraft } from "./file-draft"
+import FileViewerToolbar from "./file-viewer-toolbar"
 import type { NodeViewerProps } from "../node-viewers"
 
-type FileViewerMode = "preview" | "edit"
+export type FileViewerMode = "preview" | "edit"
 
 const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
   ssr: false,
@@ -258,135 +239,30 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
-          {file ? (
-            <FileTypeIcon name={displayName} type={file.type} className="h-5 w-5" />
-          ) : (
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-semibold" title={displayName}>
-            {displayName || "加载中..."}
-          </h1>
-          {file && type && (
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <FileTypeBadge name={displayName} type={file.type} />
-              <span>{formatBytes(file.size)}</span>
-              <span>{file.type || type.label}</span>
-              {dirty && <span className="text-amber-600">未保存</span>}
-              {dirty && (
-                <span>草稿已暂存{draftSavedAt ? ` · ${formatTime(draftSavedAt)}` : ""}</span>
-              )}
-              {displayTags.map((tag) => (
-                <span key={tag} className="rounded bg-muted px-1.5 py-0.5">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {editable && (
-            <div className="inline-flex h-9 items-center rounded-md border border-input bg-background p-0.5">
-              <button
-                type="button"
-                title="预览"
-                aria-label="预览"
-                onClick={() => setMode("preview")}
-                className={cn(
-                  "flex h-7 w-8 items-center justify-center rounded text-muted-foreground transition-colors",
-                  mode === "preview" && "bg-secondary text-secondary-foreground",
-                )}
-              >
-                <Eye className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                title="编辑"
-                aria-label="编辑"
-                onClick={() => setMode("edit")}
-                className={cn(
-                  "flex h-7 w-8 items-center justify-center rounded text-muted-foreground transition-colors",
-                  mode === "edit" && "bg-secondary text-secondary-foreground",
-                )}
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-          {editable && (
-            <Button variant="outline" size="sm" onClick={handleSave} disabled={!dirty || saving}>
-              {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="mr-2 h-4 w-4" />
-              )}
-              保存
-            </Button>
-          )}
-          {file && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => downloadStoredFile(displayFile ?? file)}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              下载
-            </Button>
-          )}
-          {file && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9">
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">文件操作</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  重命名
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTagsOpen(true)}>
-                  <Tags className="mr-2 h-4 w-4" />
-                  编辑标签
-                </DropdownMenuItem>
-                {displayTags.length > 0 && (
-                  <DropdownMenuItem onClick={() => void handleTags("")}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    清空标签
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={() => void copyText("文件名", displayName)}>
-                  <ClipboardCopy className="mr-2 h-4 w-4" />
-                  复制文件名
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => void copyText("文件引用", `fs://file/${file.id}`)}>
-                  <ClipboardCopy className="mr-2 h-4 w-4" />
-                  复制引用
-                </DropdownMenuItem>
-                {dirty && (
-                  <DropdownMenuItem onClick={discardDraft}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    丢弃草稿
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  删除
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
+      <FileViewerToolbar
+        file={file}
+        displayFile={displayFile}
+        displayName={displayName}
+        displayTags={displayTags}
+        type={type}
+        editable={editable}
+        mode={mode}
+        dirty={dirty}
+        saving={saving}
+        draftSavedAt={draftSavedAt}
+        onModeChange={setMode}
+        onSave={() => void handleSave()}
+        onDownload={downloadStoredFile}
+        onRename={() => setRenameOpen(true)}
+        onEditTags={() => setTagsOpen(true)}
+        onClearTags={() => void handleTags("")}
+        onCopyName={() => void copyText("文件名", displayName)}
+        onCopyRef={() => {
+          if (file) void copyText("文件引用", `fs://file/${file.id}`)
+        }}
+        onDiscardDraft={discardDraft}
+        onDelete={() => setDeleteOpen(true)}
+      />
 
       <div className="min-h-0 flex-1">
         {mode === "edit" && editable ? (
