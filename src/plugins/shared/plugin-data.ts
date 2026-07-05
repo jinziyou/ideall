@@ -1,5 +1,7 @@
 export const PLUGIN_DATA_PACKAGE_KIND = "ideall.plugin-data"
 export const PLUGIN_DATA_PACKAGE_VERSION = 1
+export const WORKSPACE_BACKUP_PACKAGE_KIND = "ideall.workspace-backup"
+export const WORKSPACE_BACKUP_PACKAGE_VERSION = 1
 
 export type PluginDataPackage<
   TPayload = unknown,
@@ -16,6 +18,13 @@ export type PluginDataPackage<
   }
   exportedAt: string
   payload: TPayload
+}
+
+export type WorkspaceBackupPackage = {
+  kind: typeof WORKSPACE_BACKUP_PACKAGE_KIND
+  version: typeof WORKSPACE_BACKUP_PACKAGE_VERSION
+  exportedAt: string
+  plugins: PluginDataPackage[]
 }
 
 export type PluginDataSpec<
@@ -110,6 +119,48 @@ export function parsePluginDataPackage(raw: string): PluginDataPackage {
     exportedAt: requireString(parsed.exportedAt, "exportedAt"),
     payload: parsed.payload,
   }
+}
+
+export function createWorkspaceBackupPackage(
+  plugins: PluginDataPackage[],
+  exportedAt = new Date().toISOString(),
+): WorkspaceBackupPackage {
+  return {
+    kind: WORKSPACE_BACKUP_PACKAGE_KIND,
+    version: WORKSPACE_BACKUP_PACKAGE_VERSION,
+    exportedAt,
+    plugins,
+  }
+}
+
+export function parseWorkspaceBackupPackage(raw: string): WorkspaceBackupPackage {
+  const parsed = JSON.parse(raw) as unknown
+  if (!isRecord(parsed)) throw new Error("工作区备份 JSON 格式无效")
+  if (
+    parsed.kind !== WORKSPACE_BACKUP_PACKAGE_KIND ||
+    parsed.version !== WORKSPACE_BACKUP_PACKAGE_VERSION
+  ) {
+    throw new Error("不支持的工作区备份 JSON 版本")
+  }
+  if (!Array.isArray(parsed.plugins)) throw new Error("工作区备份缺少 plugins 列表")
+  return {
+    kind: WORKSPACE_BACKUP_PACKAGE_KIND,
+    version: WORKSPACE_BACKUP_PACKAGE_VERSION,
+    exportedAt: requireString(parsed.exportedAt, "exportedAt"),
+    plugins: parsed.plugins.map((plugin, index) => {
+      try {
+        return parsePluginDataPackage(JSON.stringify(plugin))
+      } catch (error) {
+        throw new Error(
+          `plugins[${index}] ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }),
+  }
+}
+
+export function stringifyWorkspaceBackupPackage(pack: WorkspaceBackupPackage): string {
+  return JSON.stringify(pack, null, 2)
 }
 
 export function parseExpectedPluginDataPackage<

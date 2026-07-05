@@ -49,6 +49,7 @@ import {
 } from "@/plugins/shared/plugin-data-registry"
 import { pluginDataFilename } from "@/plugins/shared/plugin-data"
 import {
+  exportWorkspaceBackupJson,
   formatPluginImportResult,
   importPluginDataPackage,
   previewPluginDataImport,
@@ -125,6 +126,18 @@ export default function CodePage() {
     try {
       downloadTextFile(pluginDataFilename(port.filenamePrefix), await port.exportJson())
       toast(`已导出${port.pluginLabel}数据`)
+    } catch (e) {
+      toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const exportWorkspaceBackup = async () => {
+    try {
+      downloadTextFile(
+        pluginDataFilename("ideall-workspace-backup"),
+        await exportWorkspaceBackupJson(),
+      )
+      toast("已导出全部插件数据")
     } catch (e) {
       toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
     }
@@ -306,6 +319,7 @@ export default function CodePage() {
           entries={pluginData}
           loading={pluginLoading}
           onExport={(pluginId) => void exportPluginData(pluginId)}
+          onExportAll={() => void exportWorkspaceBackup()}
           onImportSelect={selectImportFile}
           importPreview={importPreview}
           importBackup={importBackup}
@@ -481,6 +495,7 @@ function PluginDataPanel({
   entries,
   loading,
   onExport,
+  onExportAll,
   onImportSelect,
   importPreview,
   importBackup,
@@ -494,6 +509,7 @@ function PluginDataPanel({
   entries: PluginDataInspection[]
   loading: boolean
   onExport: (pluginId: string) => void
+  onExportAll: () => void
   onImportSelect: () => void
   importPreview: PluginDataImportPreview | null
   importBackup: PluginDataImportBackup | null
@@ -510,16 +526,29 @@ function PluginDataPanel({
         icon={HardDrive}
         title={`插件数据 · ${entries.length}`}
         actions={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1.5 px-2"
-            onClick={onImportSelect}
-          >
-            <Upload className="h-3.5 w-3.5" />
-            导入
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 px-2"
+              disabled={loading || entries.length === 0}
+              onClick={onExportAll}
+            >
+              <Download className="h-3.5 w-3.5" />
+              导出全部
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 px-2"
+              onClick={onImportSelect}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              导入
+            </Button>
+          </div>
         }
       />
       <div className="space-y-2 overflow-auto p-2">
@@ -646,6 +675,15 @@ function ImportPreviewCard({
           <dd>{importModeLabel(preview.target!.importMode)}</dd>
           <dt className="text-muted-foreground">说明</dt>
           <dd>{preview.target!.importDescription}</dd>
+          {preview.workspace && (
+            <>
+              <dt className="text-muted-foreground">范围</dt>
+              <dd>
+                {preview.workspace.pluginCount} 个插件 ·{" "}
+                {preview.workspace.plugins.map((plugin) => plugin.pluginLabel).join(" / ")}
+              </dd>
+            </>
+          )}
           {preview.current && (
             <>
               <dt className="text-muted-foreground">当前</dt>

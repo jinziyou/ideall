@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises"
 import {
   CODE_IMPORT_REPO,
   GIT_REPOS_KEY,
@@ -143,6 +144,45 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
     "Code 插件可预检并导入插件数据",
     Array.isArray(importedRepos) && importedRepos.includes(CODE_IMPORT_REPO),
   )
+  await openPluginPage(page, "/code")
+  await page.getByRole("button", { name: "导出全部", exact: true }).waitFor({
+    state: "visible",
+    timeout: 15000,
+  })
+  const workspaceDownloadPromise = page.waitForEvent("download")
+  await page.getByRole("button", { name: "导出全部", exact: true }).click()
+  const workspaceDownload = await workspaceDownloadPromise
+  const workspaceExportPath = await workspaceDownload.path()
+  if (!workspaceExportPath) throw new Error("workspace backup export path unavailable")
+  const workspaceBackup = JSON.parse(await readFile(workspaceExportPath, "utf8"))
+  record(
+    "Code 插件可导出全量插件备份",
+    workspaceBackup.kind === "ideall.workspace-backup" &&
+      Array.isArray(workspaceBackup.plugins) &&
+      workspaceBackup.plugins.some((plugin) => plugin?.plugin?.id === "git"),
+  )
+  await page.evaluate((key) => localStorage.setItem(key, "[]"), GIT_REPOS_KEY)
+  await page
+    .locator('input[type="file"][accept="application/json,.json"]')
+    .last()
+    .setInputFiles(workspaceExportPath)
+  await page.getByText("ideall.workspace-backup", { exact: false }).waitFor({
+    state: "visible",
+    timeout: 15000,
+  })
+  await page.getByRole("button", { name: "执行导入", exact: true }).click()
+  await page.waitForFunction(
+    ({ key, repo }) => {
+      try {
+        return JSON.parse(localStorage.getItem(key) || "[]").includes(repo)
+      } catch {
+        return false
+      }
+    },
+    { key: GIT_REPOS_KEY, repo: CODE_IMPORT_REPO },
+    { timeout: 15000 },
+  )
+  record("Code 插件可导入全量插件备份", true)
   await page.getByRole("button", { name: "恢复导入前备份", exact: true }).click()
   await page.waitForFunction((key) => localStorage.getItem(key) === "[]", GIT_REPOS_KEY)
   record("Code 插件可恢复导入前备份", true)

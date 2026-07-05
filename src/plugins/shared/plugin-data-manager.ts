@@ -1,12 +1,21 @@
 import {
+  createWorkspaceBackupPackage,
   parsePluginDataPackage,
+  parseWorkspaceBackupPackage,
   pluginDataErrorInspection,
+  stringifyWorkspaceBackupPackage,
   type PluginDataInspection,
   type PluginDataPackage,
   type PluginDataPort,
   type PluginImportResult,
+  type WorkspaceBackupPackage,
 } from "./plugin-data"
 import { PLUGIN_DATA_PORTS } from "./plugin-data-registry"
+
+const WORKSPACE_BACKUP_ID = "workspace"
+const WORKSPACE_BACKUP_LABEL = "全部插件"
+const WORKSPACE_BACKUP_DATA_KIND = "ideall.workspace-backup"
+const WORKSPACE_BACKUP_DATA_VERSION = 1
 
 export type PluginDataImportPreview = {
   ok: boolean
@@ -26,6 +35,15 @@ export type PluginDataImportPreview = {
     dataVersion: number
     importMode: NonNullable<PluginDataPort["importMode"]>
     importDescription: string
+  }
+  workspace?: {
+    pluginCount: number
+    plugins: {
+      pluginId: string
+      pluginLabel: string
+      dataKind: string
+      dataVersion: number
+    }[]
   }
   current?: PluginDataInspection
 }
@@ -56,6 +74,15 @@ function bytesOf(raw: string): number {
   return new TextEncoder().encode(raw).byteLength
 }
 
+function isWorkspaceBackupRaw(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(raw) as { kind?: unknown }
+    return parsed?.kind === WORKSPACE_BACKUP_DATA_KIND
+  } catch {
+    return false
+  }
+}
+
 function packageSummary(pack: PluginDataPackage): NonNullable<PluginDataImportPreview["package"]> {
   return {
     pluginId: pack.plugin.id,
@@ -74,6 +101,60 @@ function portSummary(port: PluginDataPort): NonNullable<PluginDataImportPreview[
     dataVersion: port.dataVersion,
     importMode: port.importMode ?? "replace",
     importDescription: port.importDescription ?? "导入后按插件默认策略写入本地数据。",
+  }
+}
+
+function workspacePackageSummary(
+  pack: WorkspaceBackupPackage,
+): NonNullable<PluginDataImportPreview["package"]> {
+  return {
+    pluginId: WORKSPACE_BACKUP_ID,
+    pluginLabel: WORKSPACE_BACKUP_LABEL,
+    dataKind: WORKSPACE_BACKUP_DATA_KIND,
+    dataVersion: WORKSPACE_BACKUP_DATA_VERSION,
+    exportedAt: pack.exportedAt,
+  }
+}
+
+function workspaceTargetSummary(): NonNullable<PluginDataImportPreview["target"]> {
+  return {
+    pluginId: WORKSPACE_BACKUP_ID,
+    pluginLabel: WORKSPACE_BACKUP_LABEL,
+    dataKind: WORKSPACE_BACKUP_DATA_KIND,
+    dataVersion: WORKSPACE_BACKUP_DATA_VERSION,
+    importMode: "replace",
+    importDescription: "导入会按插件端口逐项恢复所有可识别插件数据，并创建导入前全量备份。",
+  }
+}
+
+function workspaceInspection(
+  pack: WorkspaceBackupPackage,
+  bytes = bytesOf(stringifyWorkspaceBackupPackage(pack)),
+): PluginDataInspection {
+  return {
+    pluginId: WORKSPACE_BACKUP_ID,
+    label: WORKSPACE_BACKUP_LABEL,
+    dataKind: WORKSPACE_BACKUP_DATA_KIND,
+    dataVersion: WORKSPACE_BACKUP_DATA_VERSION,
+    status: pack.plugins.length ? "ready" : "empty",
+    itemCount: pack.plugins.length,
+    bytes,
+    updatedAt: Number.isFinite(Date.parse(pack.exportedAt)) ? Date.parse(pack.exportedAt) : null,
+    detail: `${pack.plugins.length} 个插件数据包`,
+  }
+}
+
+function workspacePreviewPayload(
+  pack: WorkspaceBackupPackage,
+): NonNullable<PluginDataImportPreview["workspace"]> {
+  return {
+    pluginCount: pack.plugins.length,
+    plugins: pack.plugins.map((plugin) => ({
+      pluginId: plugin.plugin.id,
+      pluginLabel: plugin.plugin.label,
+      dataKind: plugin.plugin.dataKind,
+      dataVersion: plugin.plugin.dataVersion,
+    })),
   }
 }
 
@@ -99,6 +180,21 @@ async function createImportBackup(port: PluginDataPort): Promise<PluginDataImpor
   }
 }
 
+async function createWorkspaceImportBackup(
+  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+): Promise<PluginDataImportBackup> {
+  const raw = await exportWorkspaceBackupJson(ports)
+  return {
+    pluginId: WORKSPACE_BACKUP_ID,
+    pluginLabel: WORKSPACE_BACKUP_LABEL,
+    dataKind: WORKSPACE_BACKUP_DATA_KIND,
+    dataVersion: WORKSPACE_BACKUP_DATA_VERSION,
+    createdAt: new Date().toISOString(),
+    raw,
+    bytes: bytesOf(raw),
+  }
+}
+
 export function pluginDataPortForPackage(
   pack: Pick<PluginDataPackage, "plugin">,
   ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
@@ -116,6 +212,40 @@ export async function previewPluginDataImport(
   filename?: string,
   ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
 ): Promise<PluginDataImportPreview> {
+  if (isWorkspaceBackupRaw(raw)) {
+    let pack: WorkspaceBackupPackage
+    try {
+      pack = parseWorkspaceBackupPackage(raw)
+    } catch (error) {
+      return {
+        ok: false,
+        filename,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+    const missing = pack.plugins.find((plugin) => !pluginDataPortForPackage(plugin, ports))
+    if (missing) {
+      const samePlugin = ports.find((port) => port.pluginId === missing.plugin.id)
+      return {
+        ok: false,
+        filename,
+        package: workspacePackageSummary(pack),
+        workspace: workspacePreviewPayload(pack),
+        error: samePlugin
+          ? `不支持的${samePlugin.pluginLabel}插件数据版本`
+          : `未找到插件数据端口: ${missing.plugin.id}`,
+      }
+    }
+    return {
+      ok: true,
+      filename,
+      package: workspacePackageSummary(pack),
+      target: workspaceTargetSummary(),
+      workspace: workspacePreviewPayload(pack),
+      current: workspaceInspection(pack, bytesOf(raw)),
+    }
+  }
+
   let pack: PluginDataPackage
   try {
     pack = parsePluginDataPackage(raw)
@@ -154,6 +284,9 @@ export async function importPluginDataPackage(
   filename?: string,
   ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
 ): Promise<PluginDataImportExecution> {
+  if (isWorkspaceBackupRaw(raw)) {
+    return importWorkspaceBackupPackage(raw, filename, ports)
+  }
   const preview = await previewPluginDataImport(raw, filename, ports)
   if (!preview.ok || !preview.package) {
     throw new Error(preview.error ?? "插件数据无法导入")
@@ -178,10 +311,65 @@ export async function importPluginDataPackage(
   return { preview, backup, result, after: await inspectPort(port) }
 }
 
+export async function exportWorkspaceBackupJson(
+  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+): Promise<string> {
+  const plugins = await Promise.all(
+    ports.map(async (port) => parsePluginDataPackage(await port.exportJson())),
+  )
+  return stringifyWorkspaceBackupPackage(createWorkspaceBackupPackage(plugins))
+}
+
+async function applyWorkspaceBackupPackage(
+  pack: WorkspaceBackupPackage,
+  ports: readonly PluginDataPort[],
+): Promise<PluginImportResult> {
+  let imported = 0
+  let noop = 0
+  for (const plugin of pack.plugins) {
+    const port = pluginDataPortForPackage(plugin, ports)
+    if (!port) throw new Error(`插件数据端口不存在: ${plugin.plugin.id}`)
+    await port.importJson(JSON.stringify(plugin))
+    if ((port.importMode ?? "replace") === "noop") noop += 1
+    else imported += 1
+  }
+  return { plugins: pack.plugins.length, imported, noop }
+}
+
+export async function importWorkspaceBackupPackage(
+  raw: string,
+  filename?: string,
+  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+): Promise<PluginDataImportExecution> {
+  const preview = await previewPluginDataImport(raw, filename, ports)
+  if (!preview.ok || !preview.package) {
+    throw new Error(preview.error ?? "工作区备份无法导入")
+  }
+  const pack = parseWorkspaceBackupPackage(raw)
+  const backup = await createWorkspaceImportBackup(ports)
+  let result: PluginImportResult
+  try {
+    result = await applyWorkspaceBackupPackage(pack, ports)
+  } catch (error) {
+    try {
+      await restorePluginDataBackup(backup, ports)
+    } catch {
+      /* 保留原始导入错误; 备份仍在 UI 中可手动恢复。 */
+    }
+    throw error
+  }
+  return { preview, backup, result, after: workspaceInspection(pack, bytesOf(raw)) }
+}
+
 export async function restorePluginDataBackup(
   backup: PluginDataImportBackup,
   ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
 ): Promise<PluginDataRestoreExecution> {
+  if (isWorkspaceBackupRaw(backup.raw)) {
+    const pack = parseWorkspaceBackupPackage(backup.raw)
+    const result = await applyWorkspaceBackupPackage(pack, ports)
+    return { result, after: workspaceInspection(pack, backup.bytes) }
+  }
   const pack = parsePluginDataPackage(backup.raw)
   const port = pluginDataPortForPackage(pack, ports)
   if (!port) throw new Error(`备份对应的插件数据端口不存在: ${backup.pluginId}`)

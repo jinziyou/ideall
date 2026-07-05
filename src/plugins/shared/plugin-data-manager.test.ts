@@ -1,7 +1,12 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { createPluginDataPackage, type PluginDataPort } from "./plugin-data"
 import {
+  createPluginDataPackage,
+  parseWorkspaceBackupPackage,
+  type PluginDataPort,
+} from "./plugin-data"
+import {
+  exportWorkspaceBackupJson,
   formatPluginImportResult,
   importPluginDataPackage,
   previewPluginDataImport,
@@ -97,4 +102,26 @@ test("importPluginDataPackage: 导入失败后尝试恢复备份", async () => {
   await assert.rejects(() => importPluginDataPackage(raw, "demo.json", [recoveringPort]), /boom/)
   assert.equal(calls, 2)
   assert.match(importedRaw, /before-failure/)
+})
+
+test("workspace backup: 导出、预检、导入与恢复全量插件包", async () => {
+  importedRaw = ""
+  const raw = await exportWorkspaceBackupJson([demoPort])
+  const pack = parseWorkspaceBackupPackage(raw)
+  assert.equal(pack.kind, "ideall.workspace-backup")
+  assert.equal(pack.plugins.length, 1)
+  assert.equal(pack.plugins[0].plugin.id, "demo")
+
+  const preview = await previewPluginDataImport(raw, "workspace.json", [demoPort])
+  assert.equal(preview.ok, true)
+  assert.equal(preview.target?.pluginLabel, "全部插件")
+  assert.equal(preview.workspace?.pluginCount, 1)
+
+  const result = await importPluginDataPackage(raw, "workspace.json", [demoPort])
+  assert.deepEqual(result.result, { plugins: 1, imported: 1, noop: 0 })
+  assert.equal(result.backup?.pluginId, "workspace")
+  assert.match(importedRaw, /current/)
+
+  await restorePluginDataBackup(result.backup!, [demoPort])
+  assert.match(importedRaw, /current/)
 })

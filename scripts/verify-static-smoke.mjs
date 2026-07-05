@@ -123,6 +123,8 @@ async function main() {
     await runCommand(PNPM, ["build"])
   }
 
+  await runCommand(NODE, ["scripts/check-static-export.mjs"])
+
   const baseUrl = await startReadyStaticServer()
   const env = { ...process.env, BASE: baseUrl, SMOKE_LEVEL: smokeLevel }
 
