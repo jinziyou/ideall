@@ -82,7 +82,7 @@ jobs:
       - name: Build static export
         run: pnpm build
       - name: Upload static export
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: static-export
           path: out
@@ -137,7 +137,7 @@ jobs:
           SMOKE_LEVEL: ${{ github.event_name == 'pull_request' && 'core' || 'full' }}
       - name: 上传截图 (失败排查用)
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-screenshots-${{ matrix.name }}
           path: |
