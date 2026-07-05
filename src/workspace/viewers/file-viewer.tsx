@@ -7,23 +7,13 @@ import dynamic from "next/dynamic"
 import { Eye, Loader2, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { fileTypeInfo } from "@/lib/format"
-import {
-  deleteFile,
-  restoreFile,
-  updateFileContent,
-  updateFileMeta,
-} from "@/files/stores/files-store"
-import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
+import { updateFileContent } from "@/files/stores/files-store"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
-import { undoableDeleteToast } from "@/lib/undo-toast"
-import {
-  useFilePreview,
-  FilePreviewBox,
-  downloadStoredFile,
-} from "@/modules/home/resources/file-preview"
+import { useFilePreview, FilePreviewBox } from "@/modules/home/resources/file-preview"
 import { nodeTab } from "../node-tab"
-import { closeTab, promoteActiveTab, renameNodeTab, setTabDirty, tabKey } from "../store"
+import { promoteActiveTab, renameNodeTab, setTabDirty, tabKey } from "../store"
 import { useTabActive } from "../tab-active-context"
+import { useFileActions } from "../use-file-actions"
 import { clearFileDraft, readFileDraft, writeFileDraft } from "./file-draft"
 import FileViewerToolbar from "./file-viewer-toolbar"
 import type { NodeViewerProps } from "../node-viewers"
@@ -106,6 +96,23 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     setTabDirty(tabId, dirty)
   }, [dirty, tabId])
 
+  const handleFileRenamed = React.useCallback(
+    (nextName: string) => {
+      setMetaOverride((prev) => ({ ...prev, name: nextName }))
+      if (!dirty) setRevision((v) => v + 1)
+    },
+    [dirty],
+  )
+
+  const handleFileTagsChanged = React.useCallback((tags: string[]) => {
+    setMetaOverride((prev) => ({ ...prev, tags }))
+  }, [])
+
+  const fileActions = useFileActions({
+    onRenamed: handleFileRenamed,
+    onTagsChanged: handleFileTagsChanged,
+  })
+
   React.useEffect(() => {
     if (!file || !editable || preview.text === null) return
     if (dirty) {
@@ -175,45 +182,22 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
 
   async function handleRename(nextName: string) {
     if (!file || nextName === displayName) return
-    try {
-      await updateFileMeta(file.id, { name: nextName })
-      setMetaOverride((prev) => ({ ...prev, name: nextName }))
-      renameNodeTab({ kind: "file", id: nodeId }, nextName)
-      if (!dirty) setRevision((v) => v + 1)
-      toast.success("已重命名")
-    } catch (e) {
-      toast.error("重命名失败", { description: String(e) })
-    }
+    await fileActions.rename(file.id, nextName)
   }
 
   async function handleTags(nextTagsText: string) {
     if (!file) return
-    const tags = nextTagsText
-      .split(/[,，\n]/)
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-    try {
-      await updateFileMeta(file.id, { tags })
-      setMetaOverride((prev) => ({ ...prev, tags }))
-      toast.success("已更新标签")
-    } catch (e) {
-      toast.error("更新标签失败", { description: String(e) })
-    }
+    await fileActions.updateTags(file.id, nextTagsText)
   }
 
   async function handleDelete() {
     if (!file) return
-    try {
-      const captured = { ...file, name: displayName, tags: displayTags }
-      await deleteFile(file.id)
-      clearFileDraft(file.id)
-      undoableDeleteToast(displayName, async () => {
-        await restoreFile(captured)
-      })
-      closeTab(tabId)
-    } catch (e) {
-      toast.error("删除失败", { description: String(e) })
-    }
+    await fileActions.remove({
+      id: file.id,
+      name: displayName,
+      file: displayFile ?? file,
+      closeTab: true,
+    })
   }
 
   function discardDraft() {
@@ -222,15 +206,6 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     setDraft(preview.text)
     setDraftSavedAt(null)
     toast.success("已丢弃草稿")
-  }
-
-  async function copyText(label: string, text: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success(`已复制${label}`)
-    } catch {
-      toast.error("复制失败")
-    }
   }
 
   if (!loading && !file) {
@@ -252,13 +227,13 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
         draftSavedAt={draftSavedAt}
         onModeChange={setMode}
         onSave={() => void handleSave()}
-        onDownload={downloadStoredFile}
+        onDownload={(target) => void fileActions.download(target)}
         onRename={() => setRenameOpen(true)}
         onEditTags={() => setTagsOpen(true)}
         onClearTags={() => void handleTags("")}
-        onCopyName={() => void copyText("文件名", displayName)}
+        onCopyName={() => void fileActions.copyName(displayName)}
         onCopyRef={() => {
-          if (file) void copyText("文件引用", `fs://file/${file.id}`)
+          if (file) void fileActions.copyRef(file.id)
         }}
         onDiscardDraft={discardDraft}
         onDelete={() => setDeleteOpen(true)}

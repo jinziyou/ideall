@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { ChevronRight, ClipboardCopy, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { Tree } from "@/files/notes-tree-util"
 import type { NodeSummary } from "@/files/stores/nodes-store"
@@ -10,13 +9,12 @@ import type { NodeKind } from "@protocol/node"
 import { iconForNodeKind } from "./sidebar-tree-data"
 import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import { getBookmark } from "@/files/stores/bookmarks-store"
-import { deleteFile, getFile, restoreFile, updateFileMeta } from "@/files/stores/files-store"
 import { navigateExternal } from "../browser-open"
-import { closeTab, openNodeTab, getTabs, renameNodeTab, tabKey } from "../store"
-import { nodeTab, parseNodeParams } from "../node-tab"
+import { openNodeTab, getTabs } from "../store"
+import { parseNodeParams } from "../node-tab"
 import type { ModuleId } from "../types"
 import { FileTypeIcon } from "@/shared/file-type-icon"
-import { downloadStoredFile } from "@/modules/home/resources/file-preview"
+import { useFileActions } from "../use-file-actions"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,9 +23,6 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
-import { undoableDeleteToast } from "@/lib/undo-toast"
-import { refreshSidebarTree } from "./sidebar-tree-bus"
-import { clearFileDraft } from "../viewers/file-draft"
 
 type DropZone = "before" | "after" | "inside"
 
@@ -89,6 +84,7 @@ export function NodeTreeBranch({
   const [fileMenuOpen, setFileMenuOpen] = React.useState(false)
   const [renameOpen, setRenameOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const fileActions = useFileActions()
 
   const invalidTarget =
     draggable &&
@@ -116,58 +112,17 @@ export function NodeTreeBranch({
 
   async function handleFileRename(name: string) {
     if (item.kind !== "file" || name === item.title) return
-    try {
-      await updateFileMeta(item.id, { name })
-      renameNodeTab({ kind: "file", id: item.id }, name)
-      refreshSidebarTree()
-      toast.success("已重命名")
-    } catch (e) {
-      toast.error("重命名失败", { description: String(e) })
-    }
+    await fileActions.rename(item.id, name)
   }
 
   async function handleFileDownload() {
     if (item.kind !== "file") return
-    try {
-      const file = await getFile(item.id)
-      if (!file) {
-        toast.error("文件不存在或已删除")
-        return
-      }
-      downloadStoredFile(file)
-    } catch (e) {
-      toast.error("下载失败", { description: String(e) })
-    }
+    await fileActions.download(item.id)
   }
 
   async function handleFileDelete() {
     if (item.kind !== "file") return
-    try {
-      const file = await getFile(item.id)
-      if (!file) {
-        toast.error("文件不存在或已删除")
-        return
-      }
-      await deleteFile(item.id)
-      clearFileDraft(item.id)
-      closeTab(tabKey(nodeTab({ kind: "file", id: item.id }, item.title)))
-      refreshSidebarTree()
-      undoableDeleteToast(item.title || file.name, async () => {
-        await restoreFile(file)
-        refreshSidebarTree()
-      })
-    } catch (e) {
-      toast.error("删除失败", { description: String(e) })
-    }
-  }
-
-  async function copyText(label: string, text: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success(`已复制${label}`)
-    } catch {
-      toast.error("复制失败")
-    }
+    await fileActions.remove({ id: item.id, name: item.title || "无标题", closeTab: true })
   }
 
   const rowProps =
@@ -296,11 +251,11 @@ export function NodeTreeBranch({
                 <Download className="mr-2 h-4 w-4" />
                 下载
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void copyText("文件名", item.title || "无标题")}>
+              <DropdownMenuItem onClick={() => void fileActions.copyName(item.title || "无标题")}>
                 <ClipboardCopy className="mr-2 h-4 w-4" />
                 复制文件名
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void copyText("文件引用", `fs://file/${item.id}`)}>
+              <DropdownMenuItem onClick={() => void fileActions.copyRef(item.id)}>
                 <ClipboardCopy className="mr-2 h-4 w-4" />
                 复制引用
               </DropdownMenuItem>
