@@ -11,14 +11,32 @@ import { closeTab, renameNodeTab, tabKey } from "./store"
 import { refreshSidebarTree } from "./tree/sidebar-tree-bus"
 import { clearFileDraft } from "./viewers/file-draft"
 
-type UseFileActionsOptions = {
+type FileMetaPatch = Partial<Pick<StoredFile, "name" | "tags">>
+
+export type FileActionDeps = {
+  updateFileMeta: (id: string, patch: FileMetaPatch) => Promise<void>
+  getFile: (id: string) => Promise<StoredFile | undefined>
+  deleteFile: (id: string) => Promise<void>
+  restoreFile: (file: StoredFile) => Promise<void>
+  renameFileTab: (id: string, name: string) => void
+  closeFileTab: (id: string, label: string) => void
+  refreshTree: () => void
+  clearFileDraft: (id: string) => void
+  downloadFile: (file: StoredFile) => void
+  writeClipboard: (text: string) => Promise<void>
+  showSuccess: (message: string) => void
+  showError: (message: string, description?: string) => void
+  showUndoDelete: (label: string, restore: () => void | Promise<void>) => void
+}
+
+export type UseFileActionsOptions = {
   refreshTree?: boolean
   onRenamed?: (name: string) => void
   onTagsChanged?: (tags: string[]) => void
   onDeleted?: (file: StoredFile) => void
 }
 
-type RemoveFileInput = {
+export type RemoveFileInput = {
   id: string
   name?: string
   file?: StoredFile | null
@@ -41,130 +59,147 @@ export function fileReference(id: string): string {
   return `fs://file/${id}`
 }
 
+const realFileActionDeps: FileActionDeps = {
+  updateFileMeta,
+  getFile,
+  deleteFile,
+  restoreFile,
+  renameFileTab: (id, name) => renameNodeTab({ kind: "file", id }, name),
+  closeFileTab: (id, label) => closeTab(tabKey(nodeTab({ kind: "file", id }, label))),
+  refreshTree: refreshSidebarTree,
+  clearFileDraft,
+  downloadFile: downloadStoredFile,
+  writeClipboard: (text) => navigator.clipboard.writeText(text),
+  showSuccess: (message) => toast.success(message),
+  showError: (message, description) => {
+    if (description) toast.error(message, { description })
+    else toast.error(message)
+  },
+  showUndoDelete: undoableDeleteToast,
+}
+
+export function createFileActionHandlers(
+  deps: FileActionDeps,
+  { refreshTree = true, onRenamed, onTagsChanged, onDeleted }: UseFileActionsOptions = {},
+) {
+  const refreshTreeIfNeeded = () => {
+    if (refreshTree) deps.refreshTree()
+  }
+
+  const rename = async (id: string, nextName: string): Promise<boolean> => {
+    const name = nextName.trim()
+    if (!name) return false
+    try {
+      await deps.updateFileMeta(id, { name })
+      deps.renameFileTab(id, name)
+      refreshTreeIfNeeded()
+      onRenamed?.(name)
+      deps.showSuccess("已重命名")
+      return true
+    } catch (e) {
+      deps.showError("重命名失败", String(e))
+      return false
+    }
+  }
+
+  const updateTags = async (id: string, tagText: string): Promise<boolean> => {
+    const tags = parseFileTags(tagText)
+    try {
+      await deps.updateFileMeta(id, { tags })
+      refreshTreeIfNeeded()
+      onTagsChanged?.(tags)
+      deps.showSuccess("已更新标签")
+      return true
+    } catch (e) {
+      deps.showError("更新标签失败", String(e))
+      return false
+    }
+  }
+
+  const download = async (target: string | StoredFile): Promise<boolean> => {
+    try {
+      const file = typeof target === "string" ? await deps.getFile(target) : target
+      if (!file) {
+        deps.showError("文件不存在或已删除")
+        return false
+      }
+      deps.downloadFile(file)
+      return true
+    } catch (e) {
+      deps.showError("下载失败", String(e))
+      return false
+    }
+  }
+
+  const copyText = async (label: string, text: string): Promise<boolean> => {
+    try {
+      await deps.writeClipboard(text)
+      deps.showSuccess(`已复制${label}`)
+      return true
+    } catch {
+      deps.showError("复制失败")
+      return false
+    }
+  }
+
+  const copyName = (name: string) => copyText("文件名", name || "无标题")
+
+  const copyRef = (id: string) => copyText("文件引用", fileReference(id))
+
+  const remove = async ({
+    id,
+    name,
+    file,
+    closeTab: shouldCloseTab = true,
+  }: RemoveFileInput): Promise<boolean> => {
+    try {
+      const captured = file ?? (await deps.getFile(id))
+      if (!captured) {
+        deps.showError("文件不存在或已删除")
+        return false
+      }
+      const label = name || captured.name || "无标题"
+      await deps.deleteFile(id)
+      deps.clearFileDraft(id)
+      if (shouldCloseTab) deps.closeFileTab(id, label)
+      refreshTreeIfNeeded()
+      deps.showUndoDelete(label, async () => {
+        await deps.restoreFile(captured)
+        refreshTreeIfNeeded()
+      })
+      onDeleted?.(captured)
+      return true
+    } catch (e) {
+      deps.showError("删除失败", String(e))
+      return false
+    }
+  }
+
+  return {
+    rename,
+    updateTags,
+    download,
+    copyText,
+    copyName,
+    copyRef,
+    remove,
+  }
+}
+
 export function useFileActions({
   refreshTree = true,
   onRenamed,
   onTagsChanged,
   onDeleted,
 }: UseFileActionsOptions = {}) {
-  const refreshTreeIfNeeded = React.useCallback(() => {
-    if (refreshTree) refreshSidebarTree()
-  }, [refreshTree])
-
-  const rename = React.useCallback(
-    async (id: string, nextName: string): Promise<boolean> => {
-      const name = nextName.trim()
-      if (!name) return false
-      try {
-        await updateFileMeta(id, { name })
-        renameNodeTab({ kind: "file", id }, name)
-        refreshTreeIfNeeded()
-        onRenamed?.(name)
-        toast.success("已重命名")
-        return true
-      } catch (e) {
-        toast.error("重命名失败", { description: String(e) })
-        return false
-      }
-    },
-    [onRenamed, refreshTreeIfNeeded],
-  )
-
-  const updateTags = React.useCallback(
-    async (id: string, tagText: string): Promise<boolean> => {
-      const tags = parseFileTags(tagText)
-      try {
-        await updateFileMeta(id, { tags })
-        refreshTreeIfNeeded()
-        onTagsChanged?.(tags)
-        toast.success("已更新标签")
-        return true
-      } catch (e) {
-        toast.error("更新标签失败", { description: String(e) })
-        return false
-      }
-    },
-    [onTagsChanged, refreshTreeIfNeeded],
-  )
-
-  const download = React.useCallback(async (target: string | StoredFile): Promise<boolean> => {
-    try {
-      const file = typeof target === "string" ? await getFile(target) : target
-      if (!file) {
-        toast.error("文件不存在或已删除")
-        return false
-      }
-      downloadStoredFile(file)
-      return true
-    } catch (e) {
-      toast.error("下载失败", { description: String(e) })
-      return false
-    }
-  }, [])
-
-  const copyText = React.useCallback(async (label: string, text: string): Promise<boolean> => {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success(`已复制${label}`)
-      return true
-    } catch {
-      toast.error("复制失败")
-      return false
-    }
-  }, [])
-
-  const copyName = React.useCallback(
-    (name: string) => copyText("文件名", name || "无标题"),
-    [copyText],
-  )
-
-  const copyRef = React.useCallback(
-    (id: string) => copyText("文件引用", fileReference(id)),
-    [copyText],
-  )
-
-  const remove = React.useCallback(
-    async ({
-      id,
-      name,
-      file,
-      closeTab: shouldCloseTab = true,
-    }: RemoveFileInput): Promise<boolean> => {
-      try {
-        const captured = file ?? (await getFile(id))
-        if (!captured) {
-          toast.error("文件不存在或已删除")
-          return false
-        }
-        const label = name || captured.name || "无标题"
-        await deleteFile(id)
-        clearFileDraft(id)
-        if (shouldCloseTab) closeTab(tabKey(nodeTab({ kind: "file", id }, label)))
-        refreshTreeIfNeeded()
-        undoableDeleteToast(label, async () => {
-          await restoreFile(captured)
-          refreshTreeIfNeeded()
-        })
-        onDeleted?.(captured)
-        return true
-      } catch (e) {
-        toast.error("删除失败", { description: String(e) })
-        return false
-      }
-    },
-    [onDeleted, refreshTreeIfNeeded],
-  )
-
   return React.useMemo(
-    () => ({
-      rename,
-      updateTags,
-      download,
-      copyText,
-      copyName,
-      copyRef,
-      remove,
-    }),
-    [copyName, copyRef, copyText, download, remove, rename, updateTags],
+    () =>
+      createFileActionHandlers(realFileActionDeps, {
+        refreshTree,
+        onRenamed,
+        onTagsChanged,
+        onDeleted,
+      }),
+    [onDeleted, onRenamed, onTagsChanged, refreshTree],
   )
 }
