@@ -1,5 +1,5 @@
 // 路由 → 标签解析测试 (node:test + tsx): descriptorForPath / descriptorForNode 是深链、
-// 刷新恢复与路由薄标记 (OpenWorkspaceTab) 的唯一入口, 锁定精确匹配 / 前缀回退 / 旧路由兼容 / 非法输入。
+// 刷新恢复与路由薄标记 (OpenWorkspaceTab) 的唯一入口, 锁定精确匹配 / 前缀回退 / 非法输入。
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
@@ -28,12 +28,8 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
   assert.equal(descriptorForPath("/debug")?.kind, "debug")
 })
 
-test("descriptorForPath: 前缀回退与旧路由兼容", () => {
+test("descriptorForPath: 前缀回退", () => {
   assert.equal(descriptorForPath("/home/subscriptions?x=1".split("?")[0])?.kind, "subscriptions")
-  // /home/following 已并入 subscriptions 模块, 旧深链仍可达
-  const legacy = descriptorForPath("/home/following")
-  assert.equal(legacy?.kind, "subscriptions")
-  assert.equal(legacy?.path, "/home/subscriptions")
   assert.equal(descriptorForPath("/home/settings/anything")?.kind, "home-settings")
   assert.equal(descriptorForPath("/info/entity")?.kind, "info", "info 子路径回退到 info 标签")
   assert.equal(descriptorForPath("/tool/whatever")?.kind, "tool-search")

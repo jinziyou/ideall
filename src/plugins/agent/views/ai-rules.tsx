@@ -7,11 +7,14 @@
 import * as React from "react"
 import { ScrollText, Trash2 } from "lucide-react"
 import { Button } from "@/ui/button"
+import { Chip } from "@/ui/chip"
 import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
+import { Panel } from "@/ui/panel"
 import { Textarea } from "@/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
-import { AddButton, AiPage, Chip, ListRow, Panel, Toggle } from "./ui-kit"
+import { Switch } from "@/ui/switch"
+import { AddButton, AiPage, ListRow } from "./ui-kit"
 import {
   createRule,
   deleteRule,
@@ -58,7 +61,7 @@ export default function AiRules() {
             trailing={
               <>
                 <Chip>{activationLabel(rule.activation)}</Chip>
-                <Toggle
+                <Switch
                   checked={rule.enabled}
                   onChange={(v) => setRuleEnabled(rule.id, v)}
                   label={`启用 ${rule.name}`}

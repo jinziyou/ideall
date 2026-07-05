@@ -17,9 +17,7 @@ import { SlashKit } from "@/ui/editor/plugins/slash-kit"
 import { NoteContent } from "@protocol/files"
 import { enqueueNoteDraft, markNoteDirty } from "@/files/note-write-queue"
 import NoteSaveIndicator from "./note-save-indicator"
-// 保存回传元数据类型下沉到数据层 (写队列是其产出方); 此处再导出以兼容现有 ./note-editor 引用。
 import type { NoteEditorSaved } from "@/files/note-write-queue"
-export type { NoteEditorSaved }
 
 const AUTOSAVE_DELAY = 600
 

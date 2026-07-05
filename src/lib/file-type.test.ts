@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { fileExtension, fileKind, fileTypeInfo, isEditableFile } from "./file-type"
+import { fileExtension, fileTypeInfo } from "./file-type"
 
 test("fileExtension: 支持普通扩展名、点文件与特殊无扩展文件", () => {
   assert.equal(fileExtension("src/app/page.tsx"), "tsx")
@@ -56,11 +56,4 @@ test("fileTypeInfo: MIME 可补足无扩展文件识别", () => {
   assert.equal(fileTypeInfo("download", "image/png").preview, "image")
   assert.equal(fileTypeInfo("download", "application/pdf").preview, "pdf")
   assert.equal(fileTypeInfo("download", "application/vnd.ms-excel").preview, "spreadsheet")
-})
-
-test("fileKind / isEditableFile: 保持旧格式化入口兼容语义", () => {
-  assert.equal(fileKind("image.png"), "image")
-  assert.equal(fileKind("README.md"), "text")
-  assert.equal(isEditableFile("README.md"), true)
-  assert.equal(isEditableFile("archive.zip"), false)
 })

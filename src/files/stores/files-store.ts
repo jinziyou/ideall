@@ -18,7 +18,7 @@ import {
   STORE_BLOBS,
   STORE_NODES,
 } from "@/lib/idb"
-import { notifyFilesUpdated } from "@/files/flowback"
+import { notifyFilesUpdated } from "@protocol/flowback"
 
 type FileNode = NodeOfKind<"file">
 type BlobRecord = { key: string; blob: Blob }

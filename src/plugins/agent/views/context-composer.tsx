@@ -9,6 +9,7 @@ import { getFilesPort } from "@protocol/files"
 import { Checkbox } from "@/ui/checkbox"
 import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
+import { Panel } from "@/ui/panel"
 import { Textarea } from "@/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
 import type { Permission } from "@/plugins/embed/protocol"
@@ -16,7 +17,6 @@ import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manif
 import { BUILTIN_SKILLS } from "../lib/agent-skills"
 import { getRules, getServerRules, subscribeRules } from "../lib/agent-rules"
 import { PROVIDER_PRESETS } from "../lib/agent-settings"
-import { Panel } from "./ui-kit"
 import {
   saveWorkspace,
   type AgentWorkspace,

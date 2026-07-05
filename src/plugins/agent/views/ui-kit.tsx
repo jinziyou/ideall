@@ -1,21 +1,13 @@
 "use client"
 
 // agent 视图的视觉套件 —— MCP / Skills / 规则 / 工作空间 / 全局设置 复用同一套基础组件。
-// 通用原语 (StatusDot/CountBadge/Chip/Switch/Panel/SettingRow/SurfacePanel) 已下沉 src/ui
-// (全站单一事实来源, 消除「壳层反向依赖插件」的层级倒置), 此处仅 re-export 兼容既有导入点;
-// 本文件只保留 agent 专属的组合件 (AiPage/ListRow/AddButton/ComposerShell)。
+// 通用原语已下沉 src/ui; 本文件只保留 agent 专属的组合件
+// (AiPage/ListRow/AddButton/ComposerShell)。
 // 视觉约定 (间距三档 / border-first / type ramp / 半径阶梯) 的成文规范: docs/design/ui-style.md。
 
 import * as React from "react"
 import { Plus, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Switch } from "@/ui/switch"
-
-export { StatusDot, CountBadge, type Tone } from "@/ui/status-dot"
-export { Chip } from "@/ui/chip"
-export { Panel, SettingRow, SurfacePanel } from "@/ui/panel"
-/** @deprecated 用 @/ui/switch 的 Switch; 此别名仅兼容既有 agent 视图。 */
-export { Switch as Toggle }
 
 /** 标签页内容壳: 顶条 (标题 + 主操作) + 居中限宽滚动内容列。 */
 export function AiPage({

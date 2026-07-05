@@ -7,19 +7,12 @@
 import * as React from "react"
 import { KeyRound, Loader2, Plug, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Chip } from "@/ui/chip"
+import { Panel, SettingRow } from "@/ui/panel"
+import { StatusDot, CountBadge, type Tone } from "@/ui/status-dot"
+import { Switch } from "@/ui/switch"
 
-import {
-  AiPage,
-  Panel,
-  SettingRow,
-  StatusDot,
-  CountBadge,
-  Chip,
-  Toggle,
-  ListRow,
-  AddButton,
-  type Tone,
-} from "./ui-kit"
+import { AiPage, ListRow, AddButton } from "./ui-kit"
 import {
   getMcpServers,
   subscribeMcpServers,
@@ -342,7 +335,7 @@ function ServerRow({
       trailing={
         <>
           {isLoopback && <CountBadge>{CAPABILITY_OPTIONS.length}</CountBadge>}
-          <Toggle
+          <Switch
             checked={server.enabled}
             onChange={(v) => setMcpEnabled(server.id, v)}
             label="启用"
@@ -575,7 +568,7 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">OAuth 授权</span>
-            <Toggle
+            <Switch
               checked={server.auth === "oauth"}
               onChange={(v) => {
                 saveMcpServer({ ...server, auth: v ? "oauth" : "none" })

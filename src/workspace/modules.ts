@@ -250,14 +250,6 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
       title: "关注",
       path: "/home/subscriptions",
     }
-  if (pathname.startsWith("/home/following"))
-    // 关注已合并入 subscriptions 模块; /home/following 仍可达, 解析到统一「关注」标签。
-    return {
-      kind: "subscriptions",
-      module: "subscriptions",
-      title: "关注",
-      path: "/home/subscriptions",
-    }
   if (pathname.startsWith("/home/settings"))
     return {
       kind: "home-settings",

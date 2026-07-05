@@ -1,5 +1,5 @@
 // 跨模块通用展示格式化工具 (时间 / 字节) —— home、agent、shell、workspace 共用。
-export { fileKind, fileTypeInfo, fileExtension, isEditableFile } from "./file-type"
+export { fileTypeInfo, fileExtension } from "./file-type"
 export type { FileKind, FilePreviewKind, FileTypeInfo, FileTypeTone } from "./file-type"
 
 /**

@@ -5,6 +5,9 @@
 
 import * as React from "react"
 import { Sparkles } from "lucide-react"
+import { Chip } from "@/ui/chip"
+import { Panel } from "@/ui/panel"
+import { Switch } from "@/ui/switch"
 
 import {
   getSkills,
@@ -16,7 +19,7 @@ import {
   deleteSkill,
   type AgentSkill,
 } from "../lib/agent-skills"
-import { AddButton, AiPage, Chip, ListRow, Panel, Toggle } from "./ui-kit"
+import { AddButton, AiPage, ListRow } from "./ui-kit"
 import { EmptyState } from "@/ui/empty-state"
 
 import { Button } from "@/ui/button"
@@ -85,7 +88,7 @@ export default function AiSkills() {
                   <>
                     <Chip>{skill.builtin ? "内置" : "自定义"}</Chip>
                     <Chip tone="neutral">{skill.invocation === "manual" ? "手动" : "自动"}</Chip>
-                    <Toggle
+                    <Switch
                       checked={skill.enabled !== false}
                       onChange={(v) => setSkillEnabled(skill.id, v)}
                       label={`启用 ${skill.label}`}

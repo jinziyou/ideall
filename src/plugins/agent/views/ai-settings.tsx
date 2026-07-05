@@ -1,16 +1,19 @@
 "use client"
 
 // 全局 AI 设置 —— 默认模型 / 上下文 / 工具审批。密钥只存本机 (见 ../lib/agent-settings)。
-// 复用 AI 重设计共享套件 (ui-kit): AiPage 壳 + Panel 区段 + SettingRow + Toggle/Chip。
+// 复用 AI 重设计共享套件: AiPage 壳 + 公共 Panel/SettingRow/Switch/Chip 原语。
 
 import * as React from "react"
 import { SlidersHorizontal } from "lucide-react"
 
+import { Chip } from "@/ui/chip"
 import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
+import { Panel, SettingRow } from "@/ui/panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
+import { Switch } from "@/ui/switch"
 
-import { AiPage, Panel, SettingRow, Toggle, Chip } from "./ui-kit"
+import { AiPage } from "./ui-kit"
 import {
   getAgentSettings,
   setAgentSettings,
@@ -108,7 +111,7 @@ export default function AiSettings() {
         <Panel title="上下文">
           <div className="divide-y">
             <SettingRow label="带上「我的」数据">
-              <Toggle
+              <Switch
                 checked={settings.includeHomeContext}
                 onChange={(v) => update({ includeHomeContext: v })}
                 label="带上「我的」数据"

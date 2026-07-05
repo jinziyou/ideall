@@ -441,14 +441,6 @@ export function fileTypeInfo(name: string, type = ""): FileTypeInfo {
   return info(ext, mime, "other", "other", "other", extLabel(ext, "File"), false, undefined, "zinc")
 }
 
-export function fileKind(name: string, type = ""): FileKind {
-  return fileTypeInfo(name, type).kind
-}
-
-export function isEditableFile(name: string, type = ""): boolean {
-  return fileTypeInfo(name, type).editable
-}
-
 function info(
   ext: string,
   mime: string,

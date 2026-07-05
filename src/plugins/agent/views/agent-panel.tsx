@@ -10,6 +10,7 @@ import { Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getActiveNodeRef } from "@/lib/active-node"
 import { Button } from "@/ui/button"
+import { Chip } from "@/ui/chip"
 import { BUILTIN_SKILLS, type AgentSkill } from "../lib/agent-skills"
 import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import type { ResolvedRun } from "../lib/agent-resolve"
@@ -24,14 +25,18 @@ import {
 } from "../lib/agent-store"
 import { getAgentSettings, isConfigured, subscribeAgentSettings } from "../lib/agent-settings"
 import { consumePendingOpenThread, onOpenThreadRequest } from "../lib/agent-panel-bus"
-import { buildSystemPrompt, gatherHomeContext, gatherReferencedContext, gatherBrowserContext } from "../lib/agent-context"
+import {
+  buildSystemPrompt,
+  gatherHomeContext,
+  gatherReferencedContext,
+  gatherBrowserContext,
+} from "../lib/agent-context"
 import { streamChat } from "../lib/agent-chat"
 import { runAgent } from "../lib/agent-run"
 import ChatMessage from "./chat-message"
 import AgentSettingsDialog from "./agent-settings-dialog"
 import AgentThreadList from "./agent-thread-list"
 import AgentComposer, { ToolApprovalBar } from "./agent-composer"
-import { Chip } from "./ui-kit"
 
 const HISTORY_LIMIT = 20
 

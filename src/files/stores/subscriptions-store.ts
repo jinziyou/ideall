@@ -11,7 +11,7 @@ import { safeHref } from "@/lib/safe-url"
 import { sortKeyBetween } from "@/files/sort-key"
 import { feedNodeId, subToFeedNode, feedNodeToSub } from "@/files/feed-node"
 import { idbBulkPutDelete, idbGet, idbGetAll, idbPut, STORE_NODES } from "@/lib/idb"
-import { notifyFilesUpdated } from "@/files/flowback"
+import { notifyFilesUpdated } from "@protocol/flowback"
 
 type FeedNode = NodeOfKind<"feed">
 

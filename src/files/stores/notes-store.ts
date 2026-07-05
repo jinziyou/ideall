@@ -25,7 +25,7 @@ import {
   idbReadModifyWrite,
   STORE_NODES,
 } from "@/lib/idb"
-import { notifyFilesUpdated } from "@/files/flowback"
+import { notifyFilesUpdated } from "@protocol/flowback"
 
 /** 笔记的物理存储形态 = Note + kind 辨识位 (统一 nodes 仓库按 kind 收纳)。 */
 type NoteRow = Note & { kind: "note" }
