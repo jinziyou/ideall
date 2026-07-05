@@ -38,7 +38,8 @@ function migrate(raw: Partial<AgentTask>): AgentTask {
   }
 }
 
-const store = createCollection<AgentTask>("ideall:agent:tasks:v1", () => [], migrate)
+export const AGENT_TASKS_STORAGE_KEY = "ideall:agent:tasks:v1"
+const store = createCollection<AgentTask>(AGENT_TASKS_STORAGE_KEY, () => [], migrate)
 
 export const subscribeTasks = store.subscribe
 export const getTasks = store.get

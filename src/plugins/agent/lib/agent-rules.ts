@@ -66,7 +66,8 @@ function seed(): AgentRule[] {
   ]
 }
 
-const store = createCollection<AgentRule>("ideall:agent:rules:v1", seed, migrate)
+export const AGENT_RULES_STORAGE_KEY = "ideall:agent:rules:v1"
+const store = createCollection<AgentRule>(AGENT_RULES_STORAGE_KEY, seed, migrate)
 
 export const subscribeRules = store.subscribe
 export const getRules = store.get

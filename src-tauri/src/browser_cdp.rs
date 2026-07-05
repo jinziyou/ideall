@@ -384,7 +384,7 @@ pub async fn click(state: &BrowserCdpState, selector: &str) -> Result<(), String
     match page.find_element(selector).await {
         Ok(el) => {
             el.click().await.map_err(|e| e.to_string())?;
-            return Ok(());
+            Ok(())
         }
         Err(_) => run_act_json(&page, browser_scripts::js_click(selector)?).await,
     }
@@ -397,7 +397,7 @@ pub async fn fill(state: &BrowserCdpState, selector: &str, text: &str) -> Result
             el.click().await.map_err(|e| e.to_string())?;
             // 清空后输入
             el.type_str(text).await.map_err(|e| e.to_string())?;
-            return Ok(());
+            Ok(())
         }
         Err(_) => run_act_json(&page, browser_scripts::js_fill(selector, text)?).await,
     }

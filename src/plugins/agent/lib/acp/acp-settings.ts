@@ -1,6 +1,6 @@
 // ACP 接入设置 —— 本地优先, 仅存本机 localStorage。
 // 暴露方向 (编辑器经 ACP 连入 ideall): 是否允许 + 监听端口。仅 App 桌面生效 (web/dev 无监听器)。
-const KEY = "wonita:acp:settings"
+export const ACP_SETTINGS_STORAGE_KEY = "wonita:acp:settings"
 
 /** 客户端方向: 要驱动的外部 ACP 智能体命令 (用户配置, 非模型可控)。 */
 export interface ExternalAgentConfig {
@@ -55,7 +55,7 @@ export function getAcpSettings(): AcpSettings {
   if (typeof localStorage === "undefined") return DEFAULT_ACP_SETTINGS
   let raw: string | null = null
   try {
-    raw = localStorage.getItem(KEY)
+    raw = localStorage.getItem(ACP_SETTINGS_STORAGE_KEY)
   } catch {
     return DEFAULT_ACP_SETTINGS
   }
@@ -67,7 +67,7 @@ export function getAcpSettings(): AcpSettings {
 
 export function setAcpSettings(next: AcpSettings): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(next))
+    localStorage.setItem(ACP_SETTINGS_STORAGE_KEY, JSON.stringify(next))
   } catch {
     /* 隐私模式 / 存储受限时忽略 */
   }

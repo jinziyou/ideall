@@ -36,6 +36,7 @@ import {
   getServerSecrets,
   setSecret,
   deleteSecret,
+  hydrateAgentSecretsSecure,
   isValidSecretName,
 } from "../lib/agent-secrets"
 import {
@@ -248,6 +249,9 @@ function SecretsDialog({
   const secrets = React.useSyncExternalStore(subscribeSecrets, getSecrets, getServerSecrets)
   const [name, setName] = React.useState("")
   const [value, setValue] = React.useState("")
+  React.useEffect(() => {
+    if (open) void hydrateAgentSecretsSecure()
+  }, [open])
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>

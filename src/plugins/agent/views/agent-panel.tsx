@@ -23,7 +23,12 @@ import {
   saveThread,
   titleFromMessage,
 } from "../lib/agent-store"
-import { getAgentSettings, isConfigured, subscribeAgentSettings } from "../lib/agent-settings"
+import {
+  getAgentSettings,
+  hydrateAgentSettingsSecure,
+  isConfigured,
+  subscribeAgentSettings,
+} from "../lib/agent-settings"
 import { consumePendingOpenThread, onOpenThreadRequest } from "../lib/agent-panel-bus"
 import {
   buildSystemPrompt,
@@ -106,6 +111,10 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null)
   const sendingRef = React.useRef(false)
+
+  React.useEffect(() => {
+    void hydrateAgentSettingsSecure()
+  }, [])
 
   function openSettings() {
     if (onOpenSettings) onOpenSettings()
@@ -266,7 +275,7 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
         }
         runCfg = r
       } else {
-        const cfg = getAgentSettings()
+        const cfg = await hydrateAgentSettingsSecure()
         let system = ""
         try {
           const ctx = cfg.includeHomeContext ? await gatherHomeContext() : ""

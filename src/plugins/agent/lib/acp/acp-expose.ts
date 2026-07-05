@@ -8,7 +8,7 @@
 import type { Stream } from "@agentclientprotocol/sdk"
 import type { ConnectAgentOpts } from "../agent-mcp"
 import { runAgent } from "../agent-run"
-import { getAgentSettings, isConfigured } from "../agent-settings"
+import { hydrateAgentSettingsSecure, isConfigured } from "../agent-settings"
 import { gatherHomeContext, buildSystemPrompt } from "../agent-context"
 import { buildIdeallAcpAgent, type AcpTurnRunner } from "./acp-agent"
 import {
@@ -34,7 +34,7 @@ export interface AcpRunContext {
 
 /** 无 React, 从本地设置 + home 快照 (仅标题) 组装运行上下文; 未配置模型/Key 返回 null。 */
 export async function resolveRun(): Promise<AcpRunContext | null> {
-  const s = getAgentSettings()
+  const s = await hydrateAgentSettingsSecure()
   if (!isConfigured(s)) return null
   const home = s.includeHomeContext ? await gatherHomeContext().catch(() => "") : ""
   // 暴露方向 = 智能体模式 (tools on)。

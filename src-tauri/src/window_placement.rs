@@ -464,8 +464,8 @@ fn screen_largest_overlap(primary: &Monitor, screens: &[Monitor]) -> Option<Moni
     let pr = primary.work_area();
     screens
         .iter()
-        .max_by_key(|m| intersection_area(&pr, &m.work_area()))
-        .filter(|m| intersection_area(&pr, &m.work_area()) > 0)
+        .max_by_key(|m| intersection_area(pr, m.work_area()))
+        .filter(|m| intersection_area(pr, m.work_area()) > 0)
         .cloned()
 }
 
@@ -536,7 +536,7 @@ fn center_in_work_area(monitor: &Monitor, size: PhysicalSize<u32>) -> PhysicalPo
     let work = monitor.work_area();
     let x = work.position.x + (work.size.width as i32 - size.width as i32) / 2;
     let y = work.position.y + (work.size.height as i32 - size.height as i32) / 2;
-    clamp_to_work_area(&work, size, PhysicalPosition::new(x, y))
+    clamp_to_work_area(work, size, PhysicalPosition::new(x, y))
 }
 
 fn clamp_to_work_area(
@@ -636,15 +636,11 @@ fn window_rect_fits_in_work_area(
 }
 
 fn rects_overlap(
-    ax: i32,
-    ay: i32,
-    aw: u32,
-    ah: u32,
-    bx: i32,
-    by: i32,
-    bw: u32,
-    bh: u32,
+    a: (i32, i32, u32, u32),
+    b: (i32, i32, u32, u32),
 ) -> bool {
+    let (ax, ay, aw, ah) = a;
+    let (bx, by, bw, bh) = b;
     ax < bx + bw as i32
         && ax + aw as i32 > bx
         && ay < by + bh as i32
@@ -670,14 +666,13 @@ fn straddles_work_areas(
         .iter()
         .filter(|work| {
             rects_overlap(
-                pos.x,
-                pos.y,
-                size.width,
-                size.height,
-                work.position.x,
-                work.position.y,
-                work.size.width,
-                work.size.height,
+                (pos.x, pos.y, size.width, size.height),
+                (
+                    work.position.x,
+                    work.position.y,
+                    work.size.width,
+                    work.size.height,
+                ),
             )
         })
         .count()

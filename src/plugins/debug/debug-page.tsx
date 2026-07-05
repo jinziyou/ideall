@@ -1,10 +1,28 @@
 "use client"
 
 import * as React from "react"
-import { Bug, ClipboardCopy, Download, HardDrive, Info, RefreshCw } from "lucide-react"
+import {
+  AlertTriangle,
+  Bug,
+  ClipboardCopy,
+  Download,
+  HardDrive,
+  Info,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react"
 import { toast } from "sonner"
 import { downloadTextFile } from "@/lib/browser-download"
 import { formatBytes, formatTimestamp } from "@/lib/format"
+import { secureStoreStatus, type SecureStoreStatus } from "@/lib/secure-store"
+import {
+  agentSettingsSecuritySnapshot,
+  hydrateAgentSettingsSecure,
+} from "@/plugins/agent/lib/agent-settings"
+import {
+  agentSecretsSecuritySnapshot,
+  hydrateAgentSecretsSecure,
+} from "@/plugins/agent/lib/agent-secrets"
 import {
   pluginDataPortById,
   inspectPluginDataPorts,
@@ -18,6 +36,7 @@ import { readBrowserDebugSnapshot, type DebugSnapshot, type StorageBucket } from
 export default function DebugPage() {
   const [snapshot, setSnapshot] = React.useState<DebugSnapshot | null>(null)
   const [pluginData, setPluginData] = React.useState<PluginDataInspection[]>([])
+  const [security, setSecurity] = React.useState<SecurityDiagnostics | null>(null)
   const [pluginLoading, setPluginLoading] = React.useState(false)
 
   const refresh = React.useCallback(() => {
@@ -26,6 +45,9 @@ export default function DebugPage() {
     inspectPluginDataPorts()
       .then(setPluginData)
       .finally(() => setPluginLoading(false))
+    readSecurityDiagnostics()
+      .then(setSecurity)
+      .catch(() => setSecurity(null))
   }, [])
 
   React.useEffect(() => {
@@ -36,7 +58,7 @@ export default function DebugPage() {
     if (!snapshot) return
     try {
       await navigator.clipboard.writeText(
-        JSON.stringify(createDebugBundle(snapshot, pluginData), null, 2),
+        JSON.stringify(createDebugBundle(snapshot, pluginData, security), null, 2),
       )
       toast("已复制诊断信息")
     } catch {
@@ -48,7 +70,7 @@ export default function DebugPage() {
     if (!snapshot) return
     downloadTextFile(
       pluginDataFilename("ideall-debug-bundle"),
-      JSON.stringify(createDebugBundle(snapshot, pluginData), null, 2),
+      JSON.stringify(createDebugBundle(snapshot, pluginData, security), null, 2),
     )
     toast("已导出诊断包")
   }
@@ -61,6 +83,16 @@ export default function DebugPage() {
       toast(`已导出${port.pluginLabel}数据`)
     } catch (e) {
       toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const migrateSensitiveData = async () => {
+    try {
+      await Promise.all([hydrateAgentSettingsSecure(), hydrateAgentSecretsSecure()])
+      toast("已迁移可识别的敏感配置")
+      refresh()
+    } catch (e) {
+      toast.error("迁移失败", { description: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -111,11 +143,14 @@ export default function DebugPage() {
         </section>
       </div>
 
-      <PluginDataPanel
-        entries={pluginData}
-        loading={pluginLoading}
-        onExport={(pluginId) => void exportPluginData(pluginId)}
-      />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <SecurityPanel diagnostics={security} onMigrate={() => void migrateSensitiveData()} />
+        <PluginDataPanel
+          entries={pluginData}
+          loading={pluginLoading}
+          onExport={(pluginId) => void exportPluginData(pluginId)}
+        />
+      </div>
 
       <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
         <StoragePanel title="localStorage" bucket={snapshot.storage.localStorage} />
@@ -125,14 +160,100 @@ export default function DebugPage() {
   )
 }
 
-function createDebugBundle(snapshot: DebugSnapshot, pluginData: PluginDataInspection[]) {
+type SecurityDiagnostics = {
+  secureStore: SecureStoreStatus
+  agentSettings: ReturnType<typeof agentSettingsSecuritySnapshot>
+  agentSecrets: ReturnType<typeof agentSecretsSecuritySnapshot>
+  issues: string[]
+}
+
+async function readSecurityDiagnostics(): Promise<SecurityDiagnostics> {
+  const secureStore = await secureStoreStatus()
+  const agentSettings = agentSettingsSecuritySnapshot()
+  const agentSecrets = agentSecretsSecuritySnapshot()
+  const issues = [
+    !secureStore.native ? "当前环境未使用系统凭据后端" : "",
+    agentSettings.localApiKeyPresent ? "全局 AI API Key 仍存在于 localStorage" : "",
+    agentSecrets.localValueCount
+      ? `${agentSecrets.localValueCount} 个 MCP 密钥值仍存在于 localStorage`
+      : "",
+  ].filter((issue): issue is string => Boolean(issue))
+  return { secureStore, agentSettings, agentSecrets, issues }
+}
+
+function createDebugBundle(
+  snapshot: DebugSnapshot,
+  pluginData: PluginDataInspection[],
+  security?: SecurityDiagnostics | null,
+) {
   return {
     kind: "ideall.debug-bundle",
     version: 1,
     exportedAt: new Date().toISOString(),
     snapshot,
     pluginData,
+    security,
   }
+}
+
+function SecurityPanel({
+  diagnostics,
+  onMigrate,
+}: {
+  diagnostics: SecurityDiagnostics | null
+  onMigrate: () => void
+}) {
+  const issueCount = diagnostics?.issues.length ?? 0
+  return (
+    <section className="rounded-lg border border-border/60 bg-card">
+      <SectionTitle icon={ShieldCheck} title="安全存储" />
+      <div className="space-y-3 p-4 text-sm">
+        {!diagnostics ? (
+          <div className="text-muted-foreground">正在读取安全存储状态</div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-medium">
+                  {diagnostics.secureStore.native ? "系统凭据后端" : "本地存储降级"}
+                </p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  {diagnostics.secureStore.backend}
+                </p>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={onMigrate}>
+                迁移敏感值
+              </Button>
+            </div>
+            <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+              <dt className="text-muted-foreground">AI Key</dt>
+              <dd>{diagnostics.agentSettings.localApiKeyPresent ? "待迁移" : "未见明文本地值"}</dd>
+              <dt className="text-muted-foreground">MCP 密钥</dt>
+              <dd>
+                {diagnostics.agentSecrets.localValueCount
+                  ? `${diagnostics.agentSecrets.localValueCount} 个待迁移`
+                  : `${diagnostics.agentSecrets.total} 个名称 / 未见明文本地值`}
+              </dd>
+            </dl>
+            {issueCount > 0 ? (
+              <div className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
+                {diagnostics.issues.map((issue) => (
+                  <div key={issue} className="flex gap-1.5">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>{issue}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-700">
+                未发现可自动迁移的明文敏感值
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  )
 }
 
 function PluginDataPanel({

@@ -13,7 +13,7 @@ import type { HomeSelection } from "./agent-context"
 import { getAgentSettings } from "./agent-settings"
 import { activeRulesText } from "./agent-rules"
 
-const STORE_KEY = "ideall:agent:workspaces:v1"
+export const AGENT_WORKSPACES_STORAGE_KEY = "ideall:agent:workspaces:v1"
 
 /** 数据组: 「我的」概览 + 本地目录。 */
 export interface WorkspaceData {
@@ -144,7 +144,7 @@ const listeners = new Set<() => void>()
 function load(): WorkspacesState {
   if (typeof localStorage === "undefined") return SERVER_STATE
   try {
-    const raw = localStorage.getItem(STORE_KEY)
+    const raw = localStorage.getItem(AGENT_WORKSPACES_STORAGE_KEY)
     if (raw) {
       const p = JSON.parse(raw) as Partial<WorkspacesState>
       if (Array.isArray(p.workspaces) && p.workspaces.length) {
@@ -170,7 +170,7 @@ function ensure(): WorkspacesState {
 function persist(s: WorkspacesState) {
   if (typeof localStorage === "undefined") return
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(s))
+    localStorage.setItem(AGENT_WORKSPACES_STORAGE_KEY, JSON.stringify(s))
   } catch {
     /* 隐私模式 / 配额满 → 放弃持久化 */
   }

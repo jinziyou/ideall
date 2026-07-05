@@ -7,7 +7,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import { StdioMcpTransport } from "./agent-mcp-stdio"
 import type { McpServer } from "./agent-mcp-registry"
-import { resolveSecrets } from "./agent-secrets"
+import { hydrateAgentSecretsSecure, resolveSecrets } from "./agent-secrets"
 import { mcpOAuthProvider, isMcpAuthorized } from "./agent-oauth"
 import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
 import { agentGrant } from "@/plugins/embed/grant"
@@ -149,6 +149,7 @@ export function toExternalServer(s: McpServer): ExternalMcpServer {
 export async function probeMcpServer(
   s: McpServer,
 ): Promise<{ ok: boolean; toolCount?: number; tools?: string[]; error?: string }> {
+  await hydrateAgentSecretsSecure()
   // 未授权的 oauth server 不发起连接 (否则 SDK 401 → 自动弹浏览器授权页, 还会覆盖手动授权态)。
   if (s.auth === "oauth" && !isMcpAuthorized(s.id)) {
     return { ok: false, error: "OAuth 未授权：请先在上方完成「授权」" }
@@ -179,6 +180,7 @@ export async function probeMcpServer(
 /** 起一条 agent 的多源 MCP 会话: loopback 本地能力 (可关) + 外部 MCP server (sse/http) + 自动技能工具。
  *  统一 dispatch 按工具名路由; opts 缺省 = loopback 全能力 (兼容右栏随手对话)。 */
 export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp> {
+  await hydrateAgentSecretsSecure()
   const tools: OpenAiTool[] = []
   const dispatch = new Map<
     string,

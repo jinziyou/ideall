@@ -16,6 +16,7 @@ import { Switch } from "@/ui/switch"
 import { AiPage } from "./ui-kit"
 import {
   getAgentSettings,
+  hydrateAgentSettingsSecure,
   setAgentSettings,
   subscribeAgentSettings,
   PROVIDER_PRESETS,
@@ -32,6 +33,10 @@ export default function AiSettings() {
     getAgentSettings,
   )
   const update = (patch: Partial<AgentSettings>) => setAgentSettings({ ...settings, ...patch })
+
+  React.useEffect(() => {
+    void hydrateAgentSettingsSecure()
+  }, [])
 
   const presetLabel =
     PROVIDER_PRESETS.find((p) => p.baseURL === settings.baseURL)?.label ?? CUSTOM_LABEL

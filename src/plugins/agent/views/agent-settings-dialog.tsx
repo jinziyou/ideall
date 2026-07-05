@@ -11,6 +11,7 @@ import {
   AgentSettings,
   DEFAULT_SETTINGS,
   getAgentSettings,
+  hydrateAgentSettingsSecure,
   PROVIDER_PRESETS,
   setAgentSettings,
 } from "../lib/agent-settings"
@@ -66,6 +67,11 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
   // 仅在异步 resolve 里 setState (不在 effect 体内同步 setState)。
   React.useEffect(() => {
     let alive = true
+    hydrateAgentSettingsSecure()
+      .then((settings) => {
+        if (alive) setForm(settings)
+      })
+      .catch(() => {})
     detectAgents()
       .then((a) => {
         if (alive) setDetected(a)

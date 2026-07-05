@@ -135,7 +135,15 @@ try {
   )
   record(
     "Debug 插件展示插件数据端口",
-    debugText.includes("ideall.audio.library") && debugText.includes("ideall.database.workspace"),
+    debugText.includes("ideall.audio.library") &&
+      debugText.includes("ideall.database.workspace") &&
+      debugText.includes("ideall.git.repos") &&
+      debugText.includes("ideall.agent.config") &&
+      debugText.includes("ideall.sync.status"),
+  )
+  record(
+    "Debug 插件展示安全存储诊断",
+    debugText.includes("安全存储") && debugText.includes("迁移敏感值"),
   )
   await page.screenshot({ path: `${SHOT_DIR}/3-debug.png` })
 

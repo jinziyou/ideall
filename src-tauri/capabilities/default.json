@@ -21,6 +21,22 @@
       "comment": "agent 联网 (web.search/web.fetch) 的出站守卫命令: 自带 reqwest client 做 resolve+校验所有 IP+钉连 (闭合名解析 SSRF)。两端通用。"
     },
     "allow-window-toggle-maximize",
-    "allow-window-query-maximized"
+    "allow-window-query-maximized",
+    {
+      "identifier": "allow-secure-store-status",
+      "comment": "桌面安全存储状态: 用于 Debug 诊断当前是否走系统凭据后端。"
+    },
+    {
+      "identifier": "allow-secure-store-get",
+      "comment": "桌面安全存储读取: 仅可信主窗口用于读取用户本机保存的 API Key / OAuth token / secret。"
+    },
+    {
+      "identifier": "allow-secure-store-set",
+      "comment": "桌面安全存储写入: 仅可信主窗口用于保存用户本机敏感配置。"
+    },
+    {
+      "identifier": "allow-secure-store-delete",
+      "comment": "桌面安全存储删除: 仅可信主窗口用于撤销本机敏感配置。"
+    }
   ]
 }

@@ -25,6 +25,8 @@ mod browser_linux;
 mod window_placement;
 #[cfg(desktop)]
 mod installed_apps;
+#[cfg(desktop)]
+mod secure_store;
 
 #[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_LABEL: &str = "browser_view";
@@ -185,7 +187,7 @@ fn browser_eval_json(app: AppHandle, js: String) -> Result<serde_json::Value, St
             let state = app.state::<browser_cdp::BrowserCdpState>();
             return tauri::async_runtime::block_on(browser_cdp::eval_json(&state, &js));
         }
-        return browser_linux::eval_json(&js);
+        browser_linux::eval_json(&js)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -432,7 +434,7 @@ async fn browser_get_backend(app: AppHandle) -> Result<BrowserBackendInfo, Strin
 fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
     #[cfg(target_os = "linux")]
     {
-        return browser_linux::get_content(&app);
+        browser_linux::get_content(&app)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -895,6 +897,10 @@ pub fn run() {
             installed_apps::list_installed_apps,
             installed_apps::launch_installed_app,
             installed_apps::read_app_icon_data_url,
+            secure_store::secure_store_status,
+            secure_store::secure_store_get,
+            secure_store::secure_store_set,
+            secure_store::secure_store_delete,
             window_toggle_maximize,
             window_query_maximized,
         ]);

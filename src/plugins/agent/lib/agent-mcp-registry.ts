@@ -88,7 +88,8 @@ function seed(): McpServer[] {
   return [loopbackRow()]
 }
 
-const store = createCollection<McpServer>("ideall:agent:mcp:v1", seed, migrate)
+export const AGENT_MCP_STORAGE_KEY = "ideall:agent:mcp:v1"
+const store = createCollection<McpServer>(AGENT_MCP_STORAGE_KEY, seed, migrate)
 
 // 内置 loopback 行由 seed() 注入 (空存储时); getter 保持纯 (勿在 getSnapshot 内 commit)。
 export const subscribeMcpServers = store.subscribe
