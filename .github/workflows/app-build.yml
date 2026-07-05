@@ -21,6 +21,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: app-build-${{ github.ref }}
+  cancel-in-progress: false
+
 # 静态导出把地址内联进包 (用仓库变量覆盖, Settings → Variables; 未设则回退生产默认):
 #   NEXT_PUBLIC_SERVER_ADDR — 数据服务 (apiserver)。
 #   NEXT_PUBLIC_EMBED_BASE  — 内嵌门户 (info/community 经 iframe 嵌入的 portal); 未设则回退 https://www.wonita.link (须在 tauri.conf.json CSP frame-src 白名单内)。
