@@ -6,9 +6,9 @@ import {
   SECURE_STORE_KEYS,
   publicStorageRemove,
   secureDelete,
+  secureFallbackGet,
   secureFallbackStorageKey,
   secureGetWithLegacy,
-  secureMigrateLegacyValueSync,
   secureSet,
 } from "@/lib/secure-store"
 
@@ -24,13 +24,7 @@ function notify() {
 }
 
 function readSyncCodeSync(): string | null {
-  const value = secureMigrateLegacyValueSync(SYNC_CODE_SECURE_KEY, SYNC_CODE_STORAGE_KEY)
-  if (value !== null) {
-    cachedCode = value
-    hydrated = true
-    return value
-  }
-  return cachedCode
+  return secureFallbackGet(SYNC_CODE_SECURE_KEY) ?? cachedCode
 }
 
 export async function hydrateSyncCodeSecure(): Promise<string | null> {
@@ -49,9 +43,7 @@ export async function hydrateSyncCodeSecure(): Promise<string | null> {
 }
 
 export function getSyncCode(): string | null {
-  const syncValue = readSyncCodeSync()
-  if (!hydrated) void hydrateSyncCodeSecure()
-  return syncValue
+  return readSyncCodeSync()
 }
 
 /** 监听同步码变化 (供 useSyncExternalStore); 写入/清除时通知。 */
@@ -87,9 +79,15 @@ if (typeof window !== "undefined") {
       e.key === SYNC_CODE_STORAGE_KEY ||
       e.key === secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)
     ) {
-      cachedCode = secureMigrateLegacyValueSync(SYNC_CODE_SECURE_KEY, SYNC_CODE_STORAGE_KEY)
-      hydrated = cachedCode !== null
-      if (!hydrated) void hydrateSyncCodeSecure()
+      if (e.key === SYNC_CODE_STORAGE_KEY || e.key === null) {
+        cachedCode = null
+        hydrated = false
+        void hydrateSyncCodeSecure()
+        notify()
+        return
+      }
+      cachedCode = secureFallbackGet(SYNC_CODE_SECURE_KEY)
+      hydrated = true
       notify()
     }
   })

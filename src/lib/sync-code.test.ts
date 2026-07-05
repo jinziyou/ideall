@@ -6,6 +6,7 @@ import {
   SYNC_CODE_STORAGE_KEY,
   clearSyncCode,
   getSyncCode,
+  hydrateSyncCodeSecure,
   setSyncCode,
 } from "./sync-code"
 
@@ -21,13 +22,23 @@ const mem = new Map<string, string>()
   },
 } as Storage
 
-test("sync-code: 旧公开同步码自动迁移到 secure-store fallback", () => {
+test("sync-code: getter 不迁移旧公开同步码", () => {
   mem.clear()
   mem.set(SYNC_CODE_STORAGE_KEY, "legacy-sync-code")
 
-  assert.equal(getSyncCode(), "legacy-sync-code")
-  assert.equal(mem.get(SYNC_CODE_STORAGE_KEY), undefined)
+  assert.equal(getSyncCode(), null)
+  assert.equal(mem.get(SYNC_CODE_STORAGE_KEY), "legacy-sync-code")
+  assert.equal(mem.get(secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)), undefined)
+})
+
+test("sync-code: hydrate 显式迁移旧公开同步码到 secure-store fallback", async () => {
+  mem.clear()
+  mem.set(SYNC_CODE_STORAGE_KEY, "legacy-sync-code")
+
+  assert.equal(await hydrateSyncCodeSecure(), "legacy-sync-code")
   assert.equal(mem.get(secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)), "legacy-sync-code")
+  assert.equal(mem.get(SYNC_CODE_STORAGE_KEY), undefined)
+  assert.equal(getSyncCode(), "legacy-sync-code")
 })
 
 test("sync-code: 新写入只落 secure-store fallback", () => {

@@ -132,21 +132,6 @@ export async function secureGetWithLegacy(key: string, legacyKey: string): Promi
   return null
 }
 
-export function secureMigrateLegacyValueSync(key: string, legacyKey: string): string | null {
-  const fallbackValue = secureFallbackGet(key)
-  const legacyValue = publicStorageGet(legacyKey)
-  if (fallbackValue !== null) {
-    if (legacyValue !== null) publicStorageRemove(legacyKey)
-    return fallbackValue
-  }
-  if (legacyValue !== null) {
-    void secureSet(key, legacyValue)
-    publicStorageRemove(legacyKey)
-    return legacyValue
-  }
-  return null
-}
-
 export function secureStoreSecuritySnapshot(
   items = SECURE_STORE_KNOWN_ITEMS,
 ): SecureStoreSecuritySnapshot {

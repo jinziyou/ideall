@@ -234,7 +234,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     toast.success("已丢弃草稿")
   }
 
-  if (!loading && !file) {
+  if (!loading && !file && !preview.error) {
     return <div className="p-6 text-sm text-muted-foreground">该文件不存在或已删除。</div>
   }
 

@@ -8,9 +8,9 @@ import {
   publicStorageGet,
   publicStorageRemove,
   secureDelete,
+  secureFallbackGet,
   secureFallbackStorageKey,
   secureGetWithLegacy,
-  secureMigrateLegacyValueSync,
   secureSet,
 } from "@/lib/secure-store"
 
@@ -32,13 +32,7 @@ function notify() {
 }
 
 function readTokenSync(): string | null {
-  const value = secureMigrateLegacyValueSync(AUTH_TOKEN_SECURE_KEY, AUTH_TOKEN_STORAGE_KEY)
-  if (value !== null) {
-    cachedTokenRaw = value
-    tokenHydrated = true
-    return value
-  }
-  return cachedTokenRaw
+  return secureFallbackGet(AUTH_TOKEN_SECURE_KEY) ?? cachedTokenRaw
 }
 
 export async function hydrateSessionTokenSecure(): Promise<string | null> {
@@ -65,7 +59,6 @@ export function getSession(): Session {
   } catch {
     return null
   }
-  if (!tokenHydrated) void hydrateSessionTokenSecure()
   if (cache && cache.tokenRaw === tokenRaw && cache.userRaw === userRaw) return cache.value
   let value: Session = null
   if (tokenRaw && userRaw) {
@@ -126,14 +119,29 @@ if (typeof window !== "undefined") {
       e.key === secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY) ||
       e.key === AUTH_USER_STORAGE_KEY
     ) {
-      cachedTokenRaw =
-        e.key === AUTH_USER_STORAGE_KEY
-          ? cachedTokenRaw
-          : secureMigrateLegacyValueSync(AUTH_TOKEN_SECURE_KEY, AUTH_TOKEN_STORAGE_KEY)
-      tokenHydrated = cachedTokenRaw !== null
-      if (!tokenHydrated) void hydrateSessionTokenSecure()
-      cache = null
-      notify()
+      if (e.key === AUTH_USER_STORAGE_KEY) {
+        cache = null
+        notify()
+        return
+      }
+      if (e.key === AUTH_TOKEN_STORAGE_KEY) {
+        void hydrateSessionTokenSecure()
+        return
+      }
+      if (e.key === null) {
+        cachedTokenRaw = null
+        tokenHydrated = false
+        cache = null
+        void hydrateSessionTokenSecure()
+        notify()
+        return
+      }
+      if (e.key === secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)) {
+        cachedTokenRaw = secureFallbackGet(AUTH_TOKEN_SECURE_KEY)
+        tokenHydrated = true
+        cache = null
+        notify()
+      }
     }
   })
 }

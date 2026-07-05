@@ -71,6 +71,7 @@ export default function FileViewerToolbar({
   onDiscardDraft,
   onDelete,
 }: Props) {
+  const capability = type ? previewCapabilityLabel(type.preview, editable) : null
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -89,6 +90,7 @@ export default function FileViewerToolbar({
             <FileTypeBadge name={displayName} type={file.type} />
             <span>{formatBytes(file.size)}</span>
             <span>{file.type || type.label}</span>
+            {capability && <span>{capability}</span>}
             {dirty && <span className="text-amber-600">未保存</span>}
             {dirty && <span>草稿已暂存{draftSavedAt ? ` · ${formatTime(draftSavedAt)}` : ""}</span>}
             {displayTags.map((tag) => (
@@ -196,4 +198,16 @@ export default function FileViewerToolbar({
       </div>
     </div>
   )
+}
+
+function previewCapabilityLabel(preview: FileTypeInfo["preview"], editable: boolean): string {
+  if (editable) return "可编辑 / 可预览"
+  if (
+    ["binary", "archive", "document", "presentation", "spreadsheet", "model", "other"].includes(
+      preview,
+    )
+  ) {
+    return "仅下载"
+  }
+  return "可预览"
 }

@@ -4,12 +4,13 @@
 // 文件查看器 (workspace/viewers/file-viewer, 标签) 共用, 不 fork 预览逻辑。
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { Loader2 } from "lucide-react"
+import { AlertTriangle, Loader2, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoredFile } from "@protocol/files"
 import { getFile } from "@/files/stores/files-store"
 import { formatBytes, fileTypeInfo } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
+import { Button } from "@/ui/button"
 
 export const TEXT_PREVIEW_LIMIT = 512 * 1024
 const JSON_FORMAT_LIMIT = 128 * 1024
@@ -32,6 +33,8 @@ export type FilePreviewState = {
   text: string | null
   textTruncated: boolean
   loading: boolean
+  error: string | null
+  reload: () => void
 }
 
 /**
@@ -39,19 +42,30 @@ export type FilePreviewState = {
  * key=fileId 重挂时由 useState 初值起步于 loading (调用方对切换文件用 key 重挂)。
  */
 export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
+  const [reloadNonce, setReloadNonce] = React.useState(0)
   const [file, setFile] = React.useState<StoredFile | null>(null)
   const [url, setUrl] = React.useState<string | null>(null)
   const [text, setText] = React.useState<string | null>(null)
   const [textTruncated, setTextTruncated] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const reload = React.useCallback(() => setReloadNonce((v) => v + 1), [])
 
   React.useEffect(() => {
     let active = true
     let objectUrl: string | null = null
+    setLoading(true)
+    setError(null)
     getFile(fileId)
       .then(async (f) => {
         if (!f) {
-          if (active) setLoading(false)
+          if (active) {
+            setFile(null)
+            setUrl(null)
+            setText(null)
+            setTextTruncated(false)
+            setLoading(false)
+          }
           return
         }
         objectUrl = URL.createObjectURL(f.blob)
@@ -72,16 +86,24 @@ export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
         setTextTruncated(f.size > TEXT_PREVIEW_LIMIT && preview !== null)
         setLoading(false)
       })
-      .catch(() => {
-        if (active) setLoading(false)
+      .catch((e) => {
+        if (objectUrl) URL.revokeObjectURL(objectUrl)
+        if (active) {
+          setFile(null)
+          setUrl(null)
+          setText(null)
+          setTextTruncated(false)
+          setError(e instanceof Error ? e.message : "读取文件预览失败")
+          setLoading(false)
+        }
       })
     return () => {
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [fileId, revision])
+  }, [fileId, revision, reloadNonce])
 
-  return { file, url, text, textTruncated, loading }
+  return { file, url, text, textTruncated, loading, error, reload }
 }
 
 /** 预览框 (按 mime 分派)；不含标题/下载, 供模态与标签复用。fill=true 时填满父高 (标签场景)。 */
@@ -91,6 +113,8 @@ export function FilePreviewBox({
   text,
   textTruncated,
   loading,
+  error,
+  reload,
   fill = false,
 }: FilePreviewState & { fill?: boolean }) {
   const type = file ? fileTypeInfo(file.name, file.type) : null
@@ -102,8 +126,14 @@ export function FilePreviewBox({
         fill ? "h-full" : "max-h-[60vh] min-h-[160px]",
       )}
     >
-      {loading || !file || !url ? (
+      {loading ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      ) : error ? (
+        <PreviewError message={error} onRetry={reload} />
+      ) : !file ? (
+        <MissingPreview />
+      ) : !url ? (
+        <PreviewError message="无法创建文件预览资源。" onRetry={reload} />
       ) : type?.preview === "svg" && text !== null && !textTruncated ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -157,6 +187,38 @@ export function FilePreviewBox({
       ) : (
         <UnsupportedPreview file={file} />
       )}
+    </div>
+  )
+}
+
+function PreviewError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex max-w-md flex-col items-center gap-3 p-8 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-background text-amber-600">
+        <AlertTriangle className="h-7 w-7" />
+      </span>
+      <div className="space-y-1">
+        <p className="text-sm font-medium">预览加载失败</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{message}</p>
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        <RotateCcw className="mr-2 h-4 w-4" />
+        重试
+      </Button>
+    </div>
+  )
+}
+
+function MissingPreview() {
+  return (
+    <div className="flex max-w-md flex-col items-center gap-3 p-8 text-center">
+      <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-background text-muted-foreground">
+        <AlertTriangle className="h-7 w-7" />
+      </span>
+      <div className="space-y-1">
+        <p className="text-sm font-medium">文件不可用</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">该文件不存在或已删除。</p>
+      </div>
     </div>
   )
 }

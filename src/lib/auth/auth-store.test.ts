@@ -7,6 +7,7 @@ import {
   AUTH_USER_STORAGE_KEY,
   clearSession,
   getSession,
+  hydrateSessionTokenSecure,
   setSession,
 } from "./auth-store"
 
@@ -24,14 +25,25 @@ const mem = new Map<string, string>()
 
 const user = { id: 1, email: "u@example.test", name: "User", avatar: null }
 
-test("auth-store: 旧公开 token 自动迁移到 secure-store fallback", () => {
+test("auth-store: getter 不迁移旧公开 token", () => {
   mem.clear()
   mem.set(AUTH_TOKEN_STORAGE_KEY, "legacy-token")
   mem.set(AUTH_USER_STORAGE_KEY, JSON.stringify(user))
 
-  assert.deepEqual(getSession(), { token: "legacy-token", user })
-  assert.equal(mem.get(AUTH_TOKEN_STORAGE_KEY), undefined)
+  assert.equal(getSession(), null)
+  assert.equal(mem.get(AUTH_TOKEN_STORAGE_KEY), "legacy-token")
+  assert.equal(mem.get(secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)), undefined)
+})
+
+test("auth-store: hydrate 显式迁移旧公开 token 到 secure-store fallback", async () => {
+  mem.clear()
+  mem.set(AUTH_TOKEN_STORAGE_KEY, "legacy-token")
+  mem.set(AUTH_USER_STORAGE_KEY, JSON.stringify(user))
+
+  assert.equal(await hydrateSessionTokenSecure(), "legacy-token")
   assert.equal(mem.get(secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)), "legacy-token")
+  assert.equal(mem.get(AUTH_TOKEN_STORAGE_KEY), undefined)
+  assert.deepEqual(getSession(), { token: "legacy-token", user })
 })
 
 test("auth-store: 新登录只把 token 写入 secure-store fallback", () => {

@@ -35,6 +35,17 @@ function DialogBody({
 }) {
   const preview = useFilePreview(fileId)
   const { file } = preview
+  if (!preview.loading && preview.error) {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>预览</DialogTitle>
+          <DialogDescription>文件预览加载失败，可重试或返回列表下载文件。</DialogDescription>
+        </DialogHeader>
+        <FilePreviewBox {...preview} />
+      </>
+    )
+  }
   // 文件不存在/已删 (getFile undefined): 给出明确提示, 不在加载框上无限转圈 (与 FileViewer 一致)。
   if (!preview.loading && !file) {
     return (
