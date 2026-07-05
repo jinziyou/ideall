@@ -133,6 +133,10 @@ try {
     "Debug 插件展示诊断且敏感存储脱敏",
     debugText.includes("已脱敏") && !debugText.includes(SECRET_TOKEN),
   )
+  record(
+    "Debug 插件展示插件数据端口",
+    debugText.includes("ideall.audio.library") && debugText.includes("ideall.database.workspace"),
+  )
   await page.screenshot({ path: `${SHOT_DIR}/3-debug.png` })
 
   markStage("git")

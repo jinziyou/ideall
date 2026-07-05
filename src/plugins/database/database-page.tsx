@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { downloadTextFile } from "@/lib/browser-download"
+import { pluginDataFilename } from "@/plugins/shared/plugin-data"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { Input } from "@/ui/input"
@@ -168,7 +169,7 @@ export default function DatabasePage() {
 
   const handleExportAll = async () => {
     try {
-      downloadTextFile(`ideall-database-${Date.now()}.json`, await exportDatabaseJson())
+      downloadTextFile(pluginDataFilename("ideall-database"), await exportDatabaseJson())
       toast("已导出数据库 JSON")
     } catch (e) {
       toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })

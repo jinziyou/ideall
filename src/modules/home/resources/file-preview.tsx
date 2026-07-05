@@ -3,6 +3,7 @@
 // 文件预览核心 (加载 + 按 mime 分派渲染) —— 供预览对话框 (file-preview-dialog, 模态) 与
 // 文件查看器 (workspace/viewers/file-viewer, 标签) 共用, 不 fork 预览逻辑。
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoredFile } from "@protocol/files"
@@ -11,6 +12,19 @@ import { formatBytes, fileTypeInfo } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 
 export const TEXT_PREVIEW_LIMIT = 512 * 1024
+const JSON_FORMAT_LIMIT = 128 * 1024
+const CSV_ROW_LIMIT = 200
+const CSV_COLUMN_LIMIT = 64
+
+const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      正在加载预览...
+    </div>
+  ),
+})
 
 export type FilePreviewState = {
   file: StoredFile | null
@@ -116,17 +130,24 @@ export function FilePreviewBox({
       ) : type?.preview === "markdown" ? (
         <MarkdownPreview text={text ?? ""} truncated={textTruncated} />
       ) : type?.preview === "json" ? (
-        <CodePreview text={formatJson(text ?? "")} language="JSON" truncated={textTruncated} />
+        <CodePreview
+          filename={file.name}
+          text={formatJsonForPreview(text ?? "", textTruncated)}
+          language="JSON"
+          truncated={textTruncated}
+        />
       ) : type?.preview === "csv" ? (
         <CsvPreview text={text ?? ""} truncated={textTruncated} />
       ) : type?.preview === "code" ? (
         <CodePreview
+          filename={file.name}
           text={text ?? ""}
           language={type.language ?? type.label}
           truncated={textTruncated}
         />
       ) : type?.preview === "text" ? (
         <CodePreview
+          filename={file.name}
           text={text ?? ""}
           language={type.language ?? type.label}
           truncated={textTruncated}
@@ -141,31 +162,33 @@ export function FilePreviewBox({
 }
 
 function CodePreview({
+  filename,
   text,
   language,
   truncated,
 }: {
+  filename: string
   text: string
   language: string
   truncated: boolean
 }) {
-  const lines = text.split("\n")
+  const lines = countLines(text)
   return (
-    <div className="h-full w-full overflow-auto bg-background text-left font-mono text-xs">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-muted/80 px-3 py-2 font-sans text-xs text-muted-foreground backdrop-blur">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background text-left">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b bg-muted/80 px-3 font-sans text-xs text-muted-foreground backdrop-blur">
         <span>{language}</span>
-        <span>{lines.length} 行</span>
+        <span>{lines} 行</span>
       </div>
-      <pre className="grid grid-cols-[auto_minmax(0,1fr)]">
-        {lines.map((line, idx) => (
-          <React.Fragment key={idx}>
-            <span className="select-none border-r bg-muted/30 px-3 py-0.5 text-right text-muted-foreground">
-              {idx + 1}
-            </span>
-            <span className="whitespace-pre-wrap break-words px-3 py-0.5">{line || " "}</span>
-          </React.Fragment>
-        ))}
-      </pre>
+      <div className="min-h-0 flex-1">
+        <CodeEditor
+          value={text}
+          filename={filename}
+          language={language}
+          readOnly
+          onChange={ignorePreviewChange}
+          className="min-h-0 flex-1"
+        />
+      </div>
       {truncated && <TruncatedHint />}
     </div>
   )
@@ -220,7 +243,10 @@ function MarkdownPreview({ text, truncated }: { text: string; truncated: boolean
 }
 
 function CsvPreview({ text, truncated }: { text: string; truncated: boolean }) {
-  const rows = parseDelimited(text).slice(0, 200)
+  const parsed = parseDelimited(text)
+  const clipped =
+    parsed.length > CSV_ROW_LIMIT || parsed.some((row) => row.length > CSV_COLUMN_LIMIT)
+  const rows = parsed.slice(0, CSV_ROW_LIMIT).map((row) => row.slice(0, CSV_COLUMN_LIMIT))
   return (
     <div className="h-full w-full overflow-auto bg-background text-left text-xs">
       <table className="w-full min-w-[640px] border-collapse">
@@ -239,7 +265,11 @@ function CsvPreview({ text, truncated }: { text: string; truncated: boolean }) {
           ))}
         </tbody>
       </table>
-      {(truncated || rows.length >= 200) && <TruncatedHint />}
+      {(truncated || clipped) && (
+        <TruncatedHint>
+          仅显示前 {CSV_ROW_LIMIT} 行 / {CSV_COLUMN_LIMIT} 列
+        </TruncatedHint>
+      )}
     </div>
   )
 }
@@ -281,21 +311,33 @@ function UnsupportedPreview({ file }: { file: StoredFile }) {
   )
 }
 
-function TruncatedHint() {
+function TruncatedHint({ children }: { children?: React.ReactNode }) {
   return (
     <div className="border-t bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-      仅预览前 {formatBytes(TEXT_PREVIEW_LIMIT)}
+      {children ?? `仅预览前 ${formatBytes(TEXT_PREVIEW_LIMIT)}`}
     </div>
   )
 }
 
-function formatJson(text: string): string {
+function formatJsonForPreview(text: string, truncated: boolean): string {
+  if (truncated || text.length > JSON_FORMAT_LIMIT) return text
   try {
     return JSON.stringify(JSON.parse(text), null, 2)
   } catch {
     return text
   }
 }
+
+function countLines(text: string): number {
+  if (!text) return 0
+  let count = 1
+  for (let i = 0; i < text.length; i += 1) {
+    if (text.charCodeAt(i) === 10) count += 1
+  }
+  return count
+}
+
+function ignorePreviewChange() {}
 
 function parseDelimited(text: string): string[][] {
   const first = text.split(/\r?\n/, 1)[0] ?? ""

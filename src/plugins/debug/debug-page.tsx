@@ -1,17 +1,31 @@
 "use client"
 
 import * as React from "react"
-import { Bug, ClipboardCopy, HardDrive, Info, RefreshCw } from "lucide-react"
+import { Bug, ClipboardCopy, Download, HardDrive, Info, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
+import { downloadTextFile } from "@/lib/browser-download"
+import { formatBytes, formatTimestamp } from "@/lib/format"
+import {
+  pluginDataPortById,
+  inspectPluginDataPorts,
+  type PluginDataInspection,
+} from "@/plugins/shared/plugin-data-registry"
+import { pluginDataFilename } from "@/plugins/shared/plugin-data"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { readBrowserDebugSnapshot, type DebugSnapshot, type StorageBucket } from "./debug-snapshot"
 
 export default function DebugPage() {
   const [snapshot, setSnapshot] = React.useState<DebugSnapshot | null>(null)
+  const [pluginData, setPluginData] = React.useState<PluginDataInspection[]>([])
+  const [pluginLoading, setPluginLoading] = React.useState(false)
 
   const refresh = React.useCallback(() => {
     setSnapshot(readBrowserDebugSnapshot())
+    setPluginLoading(true)
+    inspectPluginDataPorts()
+      .then(setPluginData)
+      .finally(() => setPluginLoading(false))
   }, [])
 
   React.useEffect(() => {
@@ -21,10 +35,32 @@ export default function DebugPage() {
   const copySnapshot = async () => {
     if (!snapshot) return
     try {
-      await navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2))
+      await navigator.clipboard.writeText(
+        JSON.stringify(createDebugBundle(snapshot, pluginData), null, 2),
+      )
       toast("已复制诊断信息")
     } catch {
       toast.error("复制失败")
+    }
+  }
+
+  const downloadBundle = () => {
+    if (!snapshot) return
+    downloadTextFile(
+      pluginDataFilename("ideall-debug-bundle"),
+      JSON.stringify(createDebugBundle(snapshot, pluginData), null, 2),
+    )
+    toast("已导出诊断包")
+  }
+
+  const exportPluginData = async (pluginId: string) => {
+    const port = pluginDataPortById(pluginId)
+    if (!port) return
+    try {
+      downloadTextFile(pluginDataFilename(port.filenamePrefix), await port.exportJson())
+      toast(`已导出${port.pluginLabel}数据`)
+    } catch (e) {
+      toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -39,7 +75,11 @@ export default function DebugPage() {
 
   return (
     <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
-      <PageHeader onRefresh={refresh} onCopy={() => void copySnapshot()} />
+      <PageHeader
+        onRefresh={refresh}
+        onCopy={() => void copySnapshot()}
+        onDownload={downloadBundle}
+      />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <section className="rounded-lg border border-border/60 bg-card">
@@ -71,11 +111,115 @@ export default function DebugPage() {
         </section>
       </div>
 
+      <PluginDataPanel
+        entries={pluginData}
+        loading={pluginLoading}
+        onExport={(pluginId) => void exportPluginData(pluginId)}
+      />
+
       <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
         <StoragePanel title="localStorage" bucket={snapshot.storage.localStorage} />
         <StoragePanel title="sessionStorage" bucket={snapshot.storage.sessionStorage} />
       </section>
     </div>
+  )
+}
+
+function createDebugBundle(snapshot: DebugSnapshot, pluginData: PluginDataInspection[]) {
+  return {
+    kind: "ideall.debug-bundle",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    snapshot,
+    pluginData,
+  }
+}
+
+function PluginDataPanel({
+  entries,
+  loading,
+  onExport,
+}: {
+  entries: PluginDataInspection[]
+  loading: boolean
+  onExport: (pluginId: string) => void
+}) {
+  return (
+    <section className="rounded-lg border border-border/60 bg-card">
+      <SectionTitle icon={HardDrive} title={`插件数据 · ${entries.length}`} />
+      <div className="overflow-auto p-2">
+        {loading && entries.length === 0 ? (
+          <div className="px-2 py-8 text-center text-sm text-muted-foreground">
+            正在读取插件数据
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="px-2 py-8 text-center text-sm text-muted-foreground">无插件数据端口</div>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {entries.map((entry) => (
+              <div key={entry.pluginId} className="rounded-md border border-border/60 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium">{entry.label}</p>
+                      <StatusBadge status={entry.status} />
+                    </div>
+                    <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                      {entry.dataKind} v{entry.dataVersion}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {formatBytes(entry.bytes)}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 gap-1.5 px-2"
+                      disabled={entry.status === "error"}
+                      onClick={() => onExport(entry.pluginId)}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      导出
+                    </Button>
+                  </div>
+                </div>
+                <dl className="mt-3 grid grid-cols-[80px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                  <dt className="text-muted-foreground">内容</dt>
+                  <dd className="min-w-0 break-words">{entry.detail}</dd>
+                  <dt className="text-muted-foreground">条目</dt>
+                  <dd className="tabular-nums">{entry.itemCount}</dd>
+                  <dt className="text-muted-foreground">更新</dt>
+                  <dd className="min-w-0 break-words">{formatTimestamp(entry.updatedAt)}</dd>
+                  {entry.error && (
+                    <>
+                      <dt className="text-muted-foreground">错误</dt>
+                      <dd className="min-w-0 break-words text-destructive">{entry.error}</dd>
+                    </>
+                  )}
+                </dl>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function StatusBadge({ status }: { status: PluginDataInspection["status"] }) {
+  const label = status === "ready" ? "可导出" : status === "empty" ? "空" : "异常"
+  const className =
+    status === "ready"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
+      : status === "empty"
+        ? "border-border bg-muted text-muted-foreground"
+        : "border-destructive/30 bg-destructive/10 text-destructive"
+  return (
+    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${className}`}>
+      {label}
+    </span>
   )
 }
 
@@ -134,7 +278,15 @@ function SectionTitle({
   )
 }
 
-function PageHeader({ onRefresh, onCopy }: { onRefresh?: () => void; onCopy?: () => void }) {
+function PageHeader({
+  onRefresh,
+  onCopy,
+  onDownload,
+}: {
+  onRefresh?: () => void
+  onCopy?: () => void
+  onDownload?: () => void
+}) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -144,11 +296,21 @@ function PageHeader({ onRefresh, onCopy }: { onRefresh?: () => void; onCopy?: ()
             本地运行态、工作区快照与浏览器存储诊断
           </p>
         </div>
-        {onRefresh && onCopy && (
+        {onRefresh && onCopy && onDownload && (
           <div className="flex items-center gap-2">
             <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onCopy}>
               <ClipboardCopy className="h-4 w-4" />
               复制
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={onDownload}
+            >
+              <Download className="h-4 w-4" />
+              导出
             </Button>
             <Button
               type="button"
@@ -165,16 +327,4 @@ function PageHeader({ onRefresh, onCopy }: { onRefresh?: () => void; onCopy?: ()
       </div>
     </div>
   )
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB"]
-  let size = bytes
-  let unit = 0
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024
-    unit += 1
-  }
-  return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
 }

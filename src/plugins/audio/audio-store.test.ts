@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
+  AUDIO_DATA_SPEC,
   AUDIO_EXPORT_KIND,
   AUDIO_EXPORT_VERSION,
   audioTitleFromName,
@@ -12,6 +13,7 @@ import {
   parseAudioLibraryExport,
   type AudioTrack,
 } from "./audio-store"
+import { PLUGIN_DATA_PACKAGE_KIND, PLUGIN_DATA_PACKAGE_VERSION } from "@/plugins/shared/plugin-data"
 
 test("audioTitleFromName: 扩展名剥离并保留无扩展名标题", () => {
   assert.equal(audioTitleFromName("track.demo.mp3"), "track.demo")
@@ -83,48 +85,70 @@ test("audioTrackToExport/audioTrackFromExport: Blob 以 base64 往返", async ()
 
 test("parseAudioLibraryExport: 校验版本并规范化播放状态", () => {
   const raw = JSON.stringify({
-    kind: AUDIO_EXPORT_KIND,
-    version: AUDIO_EXPORT_VERSION,
+    kind: PLUGIN_DATA_PACKAGE_KIND,
+    version: PLUGIN_DATA_PACKAGE_VERSION,
+    plugin: {
+      id: AUDIO_DATA_SPEC.pluginId,
+      label: AUDIO_DATA_SPEC.pluginLabel,
+      dataKind: AUDIO_EXPORT_KIND,
+      dataVersion: AUDIO_EXPORT_VERSION,
+    },
     exportedAt: "2026-01-01T00:00:00.000Z",
-    playback: { currentTrackId: "a1", currentTime: -10, volume: 2, repeat: "bad", shuffle: "no" },
-    tracks: [
-      {
-        id: "a1",
-        title: "Tone",
-        mime: "audio/wav",
-        size: 3,
-        createdAt: 1,
-        updatedAt: 2,
-        dataBase64: "AQID",
+    payload: {
+      playback: {
+        currentTrackId: "a1",
+        currentTime: -10,
+        volume: 2,
+        repeat: "bad",
+        shuffle: "no",
       },
-    ],
+      tracks: [
+        {
+          id: "a1",
+          title: "Tone",
+          mime: "audio/wav",
+          size: 3,
+          createdAt: 1,
+          updatedAt: 2,
+          dataBase64: "AQID",
+        },
+      ],
+    },
   })
 
   assert.deepEqual(parseAudioLibraryExport(raw), {
-    kind: AUDIO_EXPORT_KIND,
-    version: AUDIO_EXPORT_VERSION,
-    exportedAt: "2026-01-01T00:00:00.000Z",
-    playback: {
-      currentTrackId: "a1",
-      currentTime: 0,
-      volume: 1,
-      repeat: "none",
-      shuffle: false,
+    kind: PLUGIN_DATA_PACKAGE_KIND,
+    version: PLUGIN_DATA_PACKAGE_VERSION,
+    plugin: {
+      id: AUDIO_DATA_SPEC.pluginId,
+      label: AUDIO_DATA_SPEC.pluginLabel,
+      dataKind: AUDIO_EXPORT_KIND,
+      dataVersion: AUDIO_EXPORT_VERSION,
     },
-    tracks: [
-      {
-        id: "a1",
-        title: "Tone",
-        artist: undefined,
-        album: undefined,
-        mime: "audio/wav",
-        size: 3,
-        duration: undefined,
-        createdAt: 1,
-        updatedAt: 2,
-        dataBase64: "AQID",
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    payload: {
+      playback: {
+        currentTrackId: "a1",
+        currentTime: 0,
+        volume: 1,
+        repeat: "none",
+        shuffle: false,
       },
-    ],
+      tracks: [
+        {
+          id: "a1",
+          title: "Tone",
+          artist: undefined,
+          album: undefined,
+          mime: "audio/wav",
+          size: 3,
+          duration: undefined,
+          createdAt: 1,
+          updatedAt: 2,
+          dataBase64: "AQID",
+        },
+      ],
+    },
   })
   assert.throws(
     () => parseAudioLibraryExport(JSON.stringify({ kind: "bad", version: 1 })),
@@ -140,11 +164,25 @@ test("createAudioLibraryExport: 固定导出封套", () => {
       "now",
     ),
     {
-      kind: AUDIO_EXPORT_KIND,
-      version: AUDIO_EXPORT_VERSION,
+      kind: PLUGIN_DATA_PACKAGE_KIND,
+      version: PLUGIN_DATA_PACKAGE_VERSION,
+      plugin: {
+        id: AUDIO_DATA_SPEC.pluginId,
+        label: AUDIO_DATA_SPEC.pluginLabel,
+        dataKind: AUDIO_EXPORT_KIND,
+        dataVersion: AUDIO_EXPORT_VERSION,
+      },
       exportedAt: "now",
-      playback: { currentTrackId: null, currentTime: 0, volume: 0.5, repeat: "one", shuffle: true },
-      tracks: [],
+      payload: {
+        playback: {
+          currentTrackId: null,
+          currentTime: 0,
+          volume: 0.5,
+          repeat: "one",
+          shuffle: true,
+        },
+        tracks: [],
+      },
     },
   )
 })

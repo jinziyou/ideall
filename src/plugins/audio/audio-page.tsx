@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { downloadTextFile } from "@/lib/browser-download"
+import { pluginDataFilename } from "@/plugins/shared/plugin-data"
 import { Button } from "@/ui/button"
 import { Slider } from "@/ui/slider"
 import { EmptyState } from "@/ui/empty-state"
@@ -183,7 +184,7 @@ export default function AudioPage() {
 
   const handleExportJson = async () => {
     try {
-      downloadTextFile(`ideall-audio-${Date.now()}.json`, await exportAudioLibraryJson())
+      downloadTextFile(pluginDataFilename("ideall-audio"), await exportAudioLibraryJson())
       toast("已导出音频库 JSON")
     } catch (e) {
       toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })

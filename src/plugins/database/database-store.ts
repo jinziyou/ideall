@@ -1,4 +1,10 @@
 // 数据库插件 —— 本地表工作台。数据存独立 IndexedDB, 不进入统一 Node 库。
+import {
+  createPluginDataPackage,
+  parseExpectedPluginDataPackage,
+  stringifyPluginDataPackage,
+  type PluginDataPackage,
+} from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
 
 const DB_NAME = "ideall:database"
@@ -22,20 +28,31 @@ export type DataRow = {
   updatedAt: number
 }
 
-export const DATABASE_EXPORT_KIND = "ideall.database"
+export const DATABASE_PLUGIN_ID = "database"
+export const DATABASE_PLUGIN_LABEL = "数据库"
+export const DATABASE_EXPORT_KIND = "ideall.database.workspace"
 export const DATABASE_EXPORT_VERSION = 1
+export const DATABASE_DATA_SPEC = {
+  pluginId: DATABASE_PLUGIN_ID,
+  pluginLabel: DATABASE_PLUGIN_LABEL,
+  dataKind: DATABASE_EXPORT_KIND,
+  dataVersion: DATABASE_EXPORT_VERSION,
+} as const
 
 export type DatabaseExportTable = {
   table: DataTable
   rows: DataRow[]
 }
 
-export type DatabaseExport = {
-  kind: typeof DATABASE_EXPORT_KIND
-  version: typeof DATABASE_EXPORT_VERSION
-  exportedAt: string
+export type DatabasePayload = {
   tables: DatabaseExportTable[]
 }
+
+export type DatabaseExport = PluginDataPackage<
+  DatabasePayload,
+  typeof DATABASE_EXPORT_KIND,
+  typeof DATABASE_EXPORT_VERSION
+>
 
 const databaseDb = createPluginDb({
   name: DB_NAME,
@@ -142,23 +159,15 @@ export function createDatabaseExport(
   tables: DatabaseExportTable[],
   exportedAt = new Date().toISOString(),
 ): DatabaseExport {
-  return {
-    kind: DATABASE_EXPORT_KIND,
-    version: DATABASE_EXPORT_VERSION,
-    exportedAt,
-    tables,
-  }
+  return createPluginDataPackage(DATABASE_DATA_SPEC, { tables }, exportedAt)
 }
 
 export function parseDatabaseExport(raw: string): DatabaseExport {
-  const parsed = JSON.parse(raw) as unknown
-  if (!isRecord(parsed)) throw new Error("数据库 JSON 格式无效")
-  if (parsed.kind !== DATABASE_EXPORT_KIND || parsed.version !== DATABASE_EXPORT_VERSION) {
-    throw new Error("不支持的数据库 JSON 版本")
-  }
-  if (!Array.isArray(parsed.tables)) throw new Error("数据库 JSON 缺少 tables")
+  const pack = parseExpectedPluginDataPackage(raw, DATABASE_DATA_SPEC)
+  if (!isRecord(pack.payload)) throw new Error("数据库 JSON 缺少 payload")
+  if (!Array.isArray(pack.payload.tables)) throw new Error("数据库 JSON 缺少 tables")
   return createDatabaseExport(
-    parsed.tables.map((item) => {
+    pack.payload.tables.map((item) => {
       if (!isRecord(item)) throw new Error("表导出项格式无效")
       const table = normalizeTableRecord(item.table)
       const rows = Array.isArray(item.rows)
@@ -166,7 +175,7 @@ export function parseDatabaseExport(raw: string): DatabaseExport {
         : []
       return { table, rows }
     }),
-    requireString(parsed.exportedAt, "exportedAt"),
+    pack.exportedAt,
   )
 }
 
@@ -256,7 +265,7 @@ export async function exportDatabaseJson(): Promise<string> {
       rows: await listRows(table.id),
     })),
   )
-  return JSON.stringify(createDatabaseExport(entries), null, 2)
+  return stringifyPluginDataPackage(createDatabaseExport(entries))
 }
 
 export async function importDatabaseJson(raw: string): Promise<{ tables: number; rows: number }> {
@@ -268,7 +277,7 @@ export async function importDatabaseJson(raw: string): Promise<{ tables: number;
     const rows = tx.objectStore(STORE_ROWS)
     tables.clear()
     rows.clear()
-    for (const entry of backup.tables) {
+    for (const entry of backup.payload.tables) {
       tables.put(entry.table)
       for (const row of entry.rows) rows.put(row)
     }
@@ -277,7 +286,35 @@ export async function importDatabaseJson(raw: string): Promise<{ tables: number;
     tx.onabort = () => reject(tx.error)
   })
   return {
-    tables: backup.tables.length,
-    rows: backup.tables.reduce((sum, item) => sum + item.rows.length, 0),
+    tables: backup.payload.tables.length,
+    rows: backup.payload.tables.reduce((sum, item) => sum + item.rows.length, 0),
+  }
+}
+
+export async function inspectDatabaseData(): Promise<{
+  tables: number
+  rows: number
+  bytes: number
+  updatedAt: number | null
+}> {
+  const tables = await listTables()
+  const entries = await Promise.all(
+    tables.map(async (table) => ({
+      table,
+      rows: await listRows(table.id),
+    })),
+  )
+  const json = JSON.stringify(entries)
+  return {
+    tables: entries.length,
+    rows: entries.reduce((sum, entry) => sum + entry.rows.length, 0),
+    bytes: new TextEncoder().encode(json).byteLength,
+    updatedAt: entries.reduce<number | null>((latest, entry) => {
+      const tableLatest = entry.rows.reduce(
+        (rowLatest, row) => Math.max(rowLatest, row.updatedAt),
+        entry.table.updatedAt,
+      )
+      return latest === null ? tableLatest : Math.max(latest, tableLatest)
+    }, null),
   }
 }

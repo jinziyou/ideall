@@ -1,4 +1,10 @@
 // 音频播放器 —— 播放列表本地存储。音频 Blob 直接存 IndexedDB, 不进入统一 Node 库。
+import {
+  createPluginDataPackage,
+  parseExpectedPluginDataPackage,
+  stringifyPluginDataPackage,
+  type PluginDataPackage,
+} from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
 
 const DB_NAME = "ideall:audio"
@@ -28,20 +34,31 @@ export type AudioPlaybackState = {
   shuffle: boolean
 }
 
-export const AUDIO_EXPORT_KIND = "ideall.audio"
+export const AUDIO_PLUGIN_ID = "audio"
+export const AUDIO_PLUGIN_LABEL = "音频播放器"
+export const AUDIO_EXPORT_KIND = "ideall.audio.library"
 export const AUDIO_EXPORT_VERSION = 1
+export const AUDIO_DATA_SPEC = {
+  pluginId: AUDIO_PLUGIN_ID,
+  pluginLabel: AUDIO_PLUGIN_LABEL,
+  dataKind: AUDIO_EXPORT_KIND,
+  dataVersion: AUDIO_EXPORT_VERSION,
+} as const
 
 export type AudioTrackExport = Omit<AudioTrack, "blob"> & {
   dataBase64: string
 }
 
-export type AudioLibraryExport = {
-  kind: typeof AUDIO_EXPORT_KIND
-  version: typeof AUDIO_EXPORT_VERSION
-  exportedAt: string
+export type AudioLibraryPayload = {
   playback: AudioPlaybackState
   tracks: AudioTrackExport[]
 }
+
+export type AudioLibraryExport = PluginDataPackage<
+  AudioLibraryPayload,
+  typeof AUDIO_EXPORT_KIND,
+  typeof AUDIO_EXPORT_VERSION
+>
 
 export const DEFAULT_AUDIO_PLAYBACK_STATE: AudioPlaybackState = {
   currentTrackId: null,
@@ -203,26 +220,24 @@ export function createAudioLibraryExport(
   playback: AudioPlaybackState,
   exportedAt = new Date().toISOString(),
 ): AudioLibraryExport {
-  return {
-    kind: AUDIO_EXPORT_KIND,
-    version: AUDIO_EXPORT_VERSION,
+  return createPluginDataPackage(
+    AUDIO_DATA_SPEC,
+    {
+      playback: normalizeAudioPlaybackState(playback),
+      tracks,
+    },
     exportedAt,
-    playback: normalizeAudioPlaybackState(playback),
-    tracks,
-  }
+  )
 }
 
 export function parseAudioLibraryExport(raw: string): AudioLibraryExport {
-  const parsed = JSON.parse(raw) as unknown
-  if (!isRecord(parsed)) throw new Error("音频 JSON 格式无效")
-  if (parsed.kind !== AUDIO_EXPORT_KIND || parsed.version !== AUDIO_EXPORT_VERSION) {
-    throw new Error("不支持的音频 JSON 版本")
-  }
-  if (!Array.isArray(parsed.tracks)) throw new Error("音频 JSON 缺少 tracks")
+  const pack = parseExpectedPluginDataPackage(raw, AUDIO_DATA_SPEC)
+  if (!isRecord(pack.payload)) throw new Error("音频 JSON 缺少 payload")
+  if (!Array.isArray(pack.payload.tracks)) throw new Error("音频 JSON 缺少 tracks")
   return createAudioLibraryExport(
-    parsed.tracks.map(normalizeTrackExport),
-    normalizeAudioPlaybackState(parsed.playback),
-    requireString(parsed.exportedAt, "exportedAt"),
+    pack.payload.tracks.map(normalizeTrackExport),
+    normalizeAudioPlaybackState(pack.payload.playback),
+    pack.exportedAt,
   )
 }
 
@@ -282,12 +297,12 @@ export async function exportAudioLibraryJson(): Promise<string> {
     await Promise.all(tracks.map((track) => audioTrackToExport(track))),
     playback,
   )
-  return JSON.stringify(payload, null, 2)
+  return stringifyPluginDataPackage(payload)
 }
 
 export async function importAudioLibraryJson(raw: string): Promise<{ tracks: number }> {
   const backup = parseAudioLibraryExport(raw)
-  const tracks = backup.tracks.map(audioTrackFromExport)
+  const tracks = backup.payload.tracks.map(audioTrackFromExport)
   const db = await audioDb.open()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction([STORE_TRACKS, STORE_STATE], "readwrite")
@@ -295,10 +310,26 @@ export async function importAudioLibraryJson(raw: string): Promise<{ tracks: num
     const stateStore = tx.objectStore(STORE_STATE)
     trackStore.clear()
     for (const track of tracks) trackStore.put(track)
-    stateStore.put({ ...backup.playback, key: "playback" })
+    stateStore.put({ ...backup.payload.playback, key: "playback" })
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
     tx.onabort = () => reject(tx.error)
   })
   return { tracks: tracks.length }
+}
+
+export async function inspectAudioLibraryData(): Promise<{
+  tracks: number
+  bytes: number
+  updatedAt: number | null
+}> {
+  const tracks = await listAudioTracks()
+  return {
+    tracks: tracks.length,
+    bytes: tracks.reduce((sum, track) => sum + track.size, 0),
+    updatedAt: tracks.reduce<number | null>(
+      (latest, track) => (latest === null ? track.updatedAt : Math.max(latest, track.updatedAt)),
+      null,
+    ),
+  }
 }
