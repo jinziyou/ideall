@@ -61,16 +61,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
       - name: Restore Next cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .next/cache
           key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'next.config.ts', 'tsconfig.json', 'package.json') }}
@@ -82,7 +82,7 @@ jobs:
       - name: Build static export
         run: pnpm build
       - name: Upload static export
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: static-export
           path: out
@@ -107,16 +107,16 @@ jobs:
           - name: trash
             script: smoke:trash
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
       - name: Restore Playwright cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
@@ -127,7 +127,7 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium --with-deps
       - name: Download static export
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: static-export
           path: out
@@ -137,7 +137,7 @@ jobs:
           SMOKE_LEVEL: ${{ github.event_name == 'pull_request' && 'core' || 'full' }}
       - name: 上传截图 (失败排查用)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: smoke-screenshots-${{ matrix.name }}
           path: |

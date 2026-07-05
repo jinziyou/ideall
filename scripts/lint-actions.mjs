@@ -37,5 +37,12 @@ function isKnownFalsePositive(result) {
   // context in its expression context table. Repository/org variables are valid
   // in workflow expressions, so keep the rest of actionlint strict and suppress
   // only this stale-context diagnostic.
-  return result.kind === "expression" && result.message.includes('undefined variable "vars"')
+  if (result.kind === "expression" && result.message.includes('undefined variable "vars"')) {
+    return true
+  }
+
+  // The bundled actionlint runner-label table lags behind GitHub-hosted runner
+  // labels. `macos-15` is a valid hosted runner label and avoids the moving
+  // `macos-latest` migration warning.
+  return result.kind === "runner-label" && result.message.includes('label "macos-15" is unknown')
 }
