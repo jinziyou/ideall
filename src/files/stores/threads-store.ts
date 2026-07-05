@@ -1,13 +1,15 @@
 // 对话线程本地存储仓库 (core 拥有) —— 折叠步 D 后物理统一到 nodes 仓库 (kind:"thread")。
 // 经 FilesPort 暴露给 agent 插件 (修依赖反转破例: 线程数据归 core, 插件作消费方, 不直接碰存储)。
 // 消息语义属 agent 插件域, 本仓库以 unknown[] 透传 (同 NoteContent 不依赖编辑器实现)。
-// 本地独占: 默认不跨端同步 (无 thread sync scope), 删除走硬删 (无需删除标记传播)。
+// 本地独占: 默认不跨端同步 (无 thread sync scope), 删除走本机软删以进入统一回收站。
 import type { Thread } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import { genId } from "@/lib/id"
 import { sortKeyBetween } from "@/files/sort-key"
-import { idbDelete, idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES } from "@/lib/idb"
+import { idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES } from "@/lib/idb"
+import { notifyFilesUpdated } from "@protocol/flowback"
+import { captureTrashSnapshot } from "@/files/stores/trash-store"
 
 type ThreadNode = NodeOfKind<"thread">
 
@@ -92,6 +94,7 @@ export async function createThread(): Promise<Thread> {
   }
   const sortKey = nextKey(maxKey(await allThreadNodes()))
   await idbPut(STORE_NODES, threadToNode(thread, sortKey))
+  notifyFilesUpdated({ kind: "thread", id: thread.id })
   return thread
 }
 
@@ -101,18 +104,24 @@ export async function saveThread(thread: Thread): Promise<void> {
   const cur = all.find((n) => n.id === thread.id)
   const sortKey = cur?.sortKey || nextKey(maxKey(all))
   await idbPut(STORE_NODES, threadToNode({ ...thread, updatedAt: Date.now() }, sortKey))
+  notifyFilesUpdated({ kind: "thread", id: thread.id })
 }
 
-/** 物理删除 (线程本地独占, 无需删除标记传播); kind 守卫确保只删 thread 节点 (与其它 kind 作用域操作一致)。 */
+/** 软删除线程: 写 deletedAt 进入统一回收站; kind 守卫确保只改 thread 节点。 */
 export async function deleteThread(id: string): Promise<void> {
   const n = await idbGet<ThreadNode>(STORE_NODES, id)
-  if (n && n.kind === "thread") await idbDelete(STORE_NODES, id)
+  if (!n || n.kind !== "thread" || !isLive(n)) return
+  const now = Date.now()
+  await captureTrashSnapshot(n)
+  await idbPut(STORE_NODES, { ...n, deletedAt: now, updatedAt: now })
+  notifyFilesUpdated({ kind: "thread", id })
 }
 
 export async function renameThread(id: string, title: string): Promise<void> {
-  await idbReadModifyWrite<ThreadNode>(STORE_NODES, id, (current) =>
+  const next = await idbReadModifyWrite<ThreadNode>(STORE_NODES, id, (current) =>
     current && current.kind === "thread"
       ? { ...current, title: title.trim() || current.title, updatedAt: Date.now() }
       : undefined,
   )
+  if (next) notifyFilesUpdated({ kind: "thread", id })
 }

@@ -26,7 +26,7 @@ export type TrashSnapshot = {
 
 export type TrashItem = {
   id: string
-  kind: Exclude<NodeKind, "thread">
+  kind: NodeKind
   title: string
   deletedAt: number
   updatedAt: number
@@ -40,7 +40,7 @@ export type TrashItem = {
 }
 
 function isTrashKind(kind: NodeKind): kind is TrashItem["kind"] {
-  return kind !== "thread"
+  return ["folder", "note", "bookmark", "file", "feed", "thread"].includes(kind)
 }
 
 function trashDetail(
@@ -65,7 +65,7 @@ function trashDetail(
     case "feed":
       return { detail: `${node.content.type}:${node.content.key}` }
     case "thread":
-      return { detail: "对话线程已硬删除" }
+      return { detail: "对话线程" }
   }
 }
 
@@ -127,6 +127,11 @@ export async function listTrashItems(): Promise<TrashItem[]> {
       }
     })
     .sort((a, b) => b.deletedAt - a.deletedAt)
+}
+
+export async function countTrashItems(): Promise<number> {
+  const nodes = await idbGetAll<Node>(STORE_NODES)
+  return nodes.filter((node) => node.deletedAt != null && isTrashKind(node.kind)).length
 }
 
 export async function restoreTrashItem(id: string): Promise<void> {

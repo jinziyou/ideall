@@ -37,6 +37,7 @@
     "smoke:notes": "node scripts/smoke-notes.mjs",
     "smoke:files": "node scripts/smoke-files.mjs",
     "smoke:plugins": "node scripts/smoke-plugins.mjs",
+    "smoke:trash": "node scripts/smoke-trash.mjs",
     "serve:out": "node scripts/serve-out.mjs",
     "bump": "node scripts/bump-version.mjs"
   },

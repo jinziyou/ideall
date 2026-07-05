@@ -5,6 +5,7 @@ import { listSubscriptions } from "@/files/stores/subscriptions-store"
 import { countBookmarks } from "@/files/stores/bookmarks-store"
 import { countFiles } from "@/files/stores/files-store"
 import { countNotes } from "@/files/stores/notes-store"
+import { countTrashItems } from "@/files/stores/trash-store"
 import { onFilesUpdated } from "@protocol/flowback"
 
 /**
@@ -33,6 +34,44 @@ export function useNodeCount(): { count: number | null; flash: boolean } {
         if (prev.current !== null && n > prev.current) {
           setFlash(true)
           clearTimeout(flashTimer) // 快速连续关注时不让多枚计时器叠加
+          flashTimer = setTimeout(() => {
+            if (alive) setFlash(false)
+          }, 650)
+        }
+        prev.current = n
+        setCount(n)
+      } catch {
+        /* 本地读取失败时静默, 不显示 badge */
+      }
+    }
+    load()
+    const off = onFilesUpdated(load)
+    return () => {
+      alive = false
+      clearTimeout(flashTimer)
+      off()
+    }
+  }, [])
+
+  return { count, flash }
+}
+
+/** 回收站删除标记数量。删除/恢复/清空均经 FILES_UPDATED 刷新, 增加时闪烁提示。 */
+export function useTrashCount(): { count: number | null; flash: boolean } {
+  const [count, setCount] = React.useState<number | null>(null)
+  const [flash, setFlash] = React.useState(false)
+  const prev = React.useRef<number | null>(null)
+
+  React.useEffect(() => {
+    let alive = true
+    let flashTimer: ReturnType<typeof setTimeout> | undefined
+    async function load() {
+      try {
+        const n = await countTrashItems()
+        if (!alive) return
+        if (prev.current !== null && n > prev.current) {
+          setFlash(true)
+          clearTimeout(flashTimer)
           flashTimer = setTimeout(() => {
             if (alive) setFlash(false)
           }, 650)

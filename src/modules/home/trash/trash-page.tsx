@@ -7,6 +7,7 @@ import {
   Folder,
   Link2,
   Loader2,
+  MessageSquare,
   RefreshCw,
   RotateCcw,
   Rss,
@@ -32,6 +33,7 @@ const KIND_LABEL: Record<TrashItem["kind"], string> = {
   folder: "收藏夹",
   file: "文件",
   feed: "关注",
+  thread: "对话",
 }
 
 function KindIcon({ item }: { item: TrashItem }) {
@@ -47,7 +49,9 @@ function KindIcon({ item }: { item: TrashItem }) {
           ? Folder
           : item.kind === "feed"
             ? Rss
-            : Bookmark
+            : item.kind === "thread"
+              ? MessageSquare
+              : Bookmark
   return <Icon className="h-4 w-4 text-muted-foreground" />
 }
 
@@ -162,7 +166,11 @@ export default function TrashPage() {
             {items.map((item) => {
               const busy = busyId === item.id
               return (
-                <div key={item.id} className="flex flex-wrap items-center gap-3 p-3">
+                <div
+                  key={item.id}
+                  data-testid={`trash-item-${item.id}`}
+                  className="flex flex-wrap items-center gap-3 p-3"
+                >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/40">
                     <KindIcon item={item} />
                   </div>
@@ -191,6 +199,7 @@ export default function TrashPage() {
                       size="sm"
                       variant="outline"
                       disabled={!item.restorable || busy}
+                      data-testid={`trash-restore-${item.id}`}
                       onClick={() => void restore(item)}
                     >
                       {busy ? (
@@ -206,6 +215,7 @@ export default function TrashPage() {
                       variant="outline"
                       className="text-destructive hover:text-destructive"
                       disabled={busy}
+                      data-testid={`trash-purge-${item.id}`}
                       onClick={() => void purge(item)}
                     >
                       <Trash2 className="mr-1.5 h-4 w-4" />

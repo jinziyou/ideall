@@ -8,7 +8,7 @@
 import { Fragment } from "react"
 import { Boxes } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useNodeCount } from "@/shell/use-node-count"
+import { useNodeCount, useTrashCount } from "@/shell/use-node-count"
 import { moduleById, modulesForMode } from "./modules"
 import { isPluginModule } from "./plugin-entries"
 import {
@@ -29,6 +29,7 @@ export default function ActivityBar() {
   const sidebarCollapsed = useSidebarCollapsed()
   const workspaceActive = activeModule === "agent"
   const { count, flash } = useNodeCount()
+  const { count: trashCount, flash: trashFlash } = useTrashCount()
   const listed = modulesForMode(mode)
   const pluginsMod = listed.find((m) => m.id === "plugins")
   const appsMod = listed.find((m) => m.id === "apps")
@@ -74,7 +75,8 @@ export default function ActivityBar() {
   const moduleButton = (m: ReturnType<typeof moduleById>, opts?: { forceActive?: boolean }) => {
     const Icon = m.icon
     const active = opts?.forceActive ?? activeModule === m.id
-    const badge = m.id === "home" ? count : undefined
+    const badge = m.id === "home" ? count : m.id === "trash" ? trashCount : undefined
+    const badgeFlash = m.id === "trash" ? trashFlash : flash
     return (
       <button
         type="button"
@@ -98,7 +100,7 @@ export default function ActivityBar() {
             <span
               className={cn(
                 "absolute -right-2 -top-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-pop px-1 text-[9px] font-bold tabular-nums text-pop-foreground",
-                flash && "animate-flowback motion-reduce:animate-none",
+                badgeFlash && "animate-flowback motion-reduce:animate-none",
               )}
             >
               {badge > 99 ? "99+" : badge}
