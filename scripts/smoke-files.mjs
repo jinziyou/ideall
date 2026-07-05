@@ -5,30 +5,102 @@
 // Usage: pnpm smoke:files
 // Optional: BASE=http://localhost:<port> pnpm smoke:files
 // Screenshots: /tmp/files-smoke/*.png
-import { chromium } from "playwright"
-import { mkdir } from "node:fs/promises"
+import { BASE, createSmokeRun, escapeRegex, sleep } from "./smoke-lib.mjs"
 
-const BASE = process.env.BASE || "http://localhost:5020"
 const RESOURCES_URL = `${BASE}/home/resources`
 const SHOT_DIR = "/tmp/files-smoke"
 const RUN_ID = Date.now()
 const FILE_NAME = `ideall-file-smoke-${RUN_ID}.md`
 const RENAMED_NAME = `ideall-file-smoke-${RUN_ID}-renamed.md`
 const INITIAL_TEXT = "# Smoke file\n\nCreated by ideall files smoke.\n"
-const EDITED_TEXT = "# Smoke file\n\nEdited by files smoke.\n\n- persisted: yes\n"
+const FAST_SAVE_TOKEN = `fast-save-${RUN_ID}`
+const EDITED_TEXT = `# Smoke file\n\nEdited by files smoke.\n\n- persisted: yes\n\n${FAST_SAVE_TOKEN}\n`
 const TAGS_TEXT = "smoke, e2e"
+const TEXT_PREVIEW_LIMIT = 512 * 1024
 
-const checks = []
-const record = (name, ok, extra = "") => {
-  checks.push({ name, ok, extra })
-  console.log(`  ${ok ? "✓" : "✗"} ${name}${extra ? " — " + extra : ""}`)
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
+const PREVIEW_SAMPLES = [
+  {
+    label: "JSON",
+    name: `ideall-preview-${RUN_ID}.json`,
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ name: "Preview JSON", count: 2 })),
+    assert: async (dialog) => {
+      await dialog.getByText("Preview JSON", { exact: false }).waitFor({ state: "visible" })
+    },
+  },
+  {
+    label: "CSV",
+    name: `ideall-preview-${RUN_ID}.csv`,
+    mimeType: "text/csv",
+    buffer: Buffer.from("name,score\nalpha,42\n"),
+    assert: async (dialog) => {
+      await dialog.getByText("score", { exact: true }).waitFor({ state: "visible" })
+      await dialog.getByText("alpha", { exact: true }).waitFor({ state: "visible" })
+    },
+  },
+  {
+    label: "SVG 图片",
+    name: `ideall-preview-${RUN_ID}.svg`,
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="64"><rect width="120" height="64" fill="#0ea5e9"/><text x="12" y="38" font-size="18" fill="white">SVG</text></svg>',
+    ),
+    assert: async (dialog) => {
+      await dialog.getByRole("img", { name: `ideall-preview-${RUN_ID}.svg` }).waitFor({
+        state: "visible",
+      })
+    },
+  },
+  {
+    label: "PDF",
+    name: `ideall-preview-${RUN_ID}.pdf`,
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.1\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"),
+    assert: async (dialog) => {
+      await dialog.locator(`iframe[title="ideall-preview-${RUN_ID}.pdf"]`).waitFor({
+        state: "visible",
+      })
+    },
+  },
+  {
+    label: "音频",
+    name: `ideall-preview-${RUN_ID}.wav`,
+    mimeType: "audio/wav",
+    buffer: Buffer.from([0]),
+    assert: async (dialog) => {
+      await dialog.locator("audio[controls]").waitFor({ state: "visible" })
+    },
+  },
+  {
+    label: "视频",
+    name: `ideall-preview-${RUN_ID}.mp4`,
+    mimeType: "video/mp4",
+    buffer: Buffer.from([0]),
+    assert: async (dialog) => {
+      await dialog.locator("video[controls]").waitFor({ state: "visible" })
+    },
+  },
+  {
+    label: "二进制兜底",
+    name: `ideall-preview-${RUN_ID}.bin`,
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from([0, 1, 2, 3]),
+    assert: async (dialog) => {
+      await dialog
+        .getByText("该类型不能在浏览器内可靠预览", { exact: false })
+        .waitFor({ state: "visible" })
+    },
+  },
+  {
+    label: "大文本截断",
+    name: `ideall-preview-${RUN_ID}-large.txt`,
+    mimeType: "text/plain",
+    buffer: Buffer.from("A".repeat(TEXT_PREVIEW_LIMIT + 2048)),
+    assert: async (dialog) => {
+      await dialog.getByText("仅预览前", { exact: false }).waitFor({ state: "visible" })
+    },
+  },
+]
 
 async function readLiveFileByName(page, name) {
   return page.evaluate(async (targetName) => {
@@ -156,22 +228,44 @@ async function openToolbarFileMenu(page) {
   await page.getByRole("menu").waitFor({ state: "visible", timeout: 10000 })
 }
 
-await mkdir(SHOT_DIR, { recursive: true })
-const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
-
-const pageErrors = []
-let stage = "init"
-const markStage = (name) => {
-  stage = name
+async function uploadPreviewSamples(page) {
+  await page.goto(RESOURCES_URL, { waitUntil: "domcontentloaded", timeout: 30000 })
+  await page.getByRole("button", { name: /上传文件/ }).waitFor({ state: "visible", timeout: 30000 })
+  await page.locator('input[type="file"]').setInputFiles(
+    PREVIEW_SAMPLES.map((sample) => ({
+      name: sample.name,
+      mimeType: sample.mimeType,
+      buffer: sample.buffer,
+    })),
+  )
+  for (const sample of PREVIEW_SAMPLES) {
+    await waitForLiveFileByName(page, sample.name)
+  }
 }
-page.on("pageerror", (e) => pageErrors.push(`[${stage}] ${String(e.message).split("\n")[0]}`))
-page.on("console", (m) => {
-  if (m.type() === "error") pageErrors.push(`[${stage}] console: ${m.text().split("\n")[0]}`)
-})
+
+async function openResourcePreview(page, sample) {
+  await page.goto(RESOURCES_URL, { waitUntil: "domcontentloaded", timeout: 30000 })
+  await page.getByRole("button", { name: /上传文件/ }).waitFor({ state: "visible", timeout: 30000 })
+  await page.getByPlaceholder("搜索文件名 / 标签").fill(sample.name)
+  await page.getByText(sample.name, { exact: true }).first().waitFor({
+    state: "visible",
+    timeout: 15000,
+  })
+  await page.getByRole("button", { name: "操作", exact: true }).first().click()
+  await page.getByRole("menuitem", { name: "预览", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: sample.name, exact: true })
+  await dialog.waitFor({ state: "visible", timeout: 15000 })
+  await sample.assert(dialog)
+  await page.keyboard.press("Escape")
+  await dialog.waitFor({ state: "hidden", timeout: 10000 })
+}
+
+const run = await createSmokeRun({ shotDir: SHOT_DIR })
+const { page, pageErrors, record, markStage } = run
 
 let uploadedId = null
 let currentName = FILE_NAME
+const cleanupNames = [FILE_NAME, RENAMED_NAME, ...PREVIEW_SAMPLES.map((sample) => sample.name)]
 
 try {
   console.log(`\n▶ 冒烟目标: ${RESOURCES_URL}\n`)
@@ -230,7 +324,11 @@ try {
   await page
     .getByText("Edited by files smoke.", { exact: true })
     .waitFor({ state: "visible", timeout: 15000 })
+  await page
+    .getByText(FAST_SAVE_TOKEN, { exact: false })
+    .waitFor({ state: "visible", timeout: 15000 })
   record("预览区回显保存后的 Markdown 内容", true)
+  record("快速输入后立即保存保留尾部 token", true)
 
   markStage("rename")
   await openToolbarFileMenu(page)
@@ -283,6 +381,23 @@ try {
   record("通过资源列表执行最终清理", await waitForNoLiveFileByName(page, RENAMED_NAME))
   await page.screenshot({ path: `${SHOT_DIR}/4-cleaned.png` })
 
+  markStage("preview matrix upload")
+  await uploadPreviewSamples(page)
+  record("批量上传主流预览类型样例", true)
+
+  for (const sample of PREVIEW_SAMPLES) {
+    markStage(`preview ${sample.label}`)
+    await openResourcePreview(page, sample)
+    record(`预览类型覆盖：${sample.label}`, true)
+  }
+
+  await cleanupTestFiles(
+    page,
+    null,
+    PREVIEW_SAMPLES.map((sample) => sample.name),
+  )
+  record("清理预览类型样例", true)
+
   record(
     "运行期间无 page/console 错误",
     pageErrors.length === 0,
@@ -293,22 +408,11 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/error.png` }).catch(() => {})
 } finally {
   try {
-    await cleanupTestFiles(page, uploadedId, [FILE_NAME, RENAMED_NAME, currentName])
+    await cleanupTestFiles(page, uploadedId, [...cleanupNames, currentName])
   } catch (e) {
     console.log(`cleanup skipped: ${String(e.message).split("\n")[0]}`)
   }
-  await browser.close()
+  await run.close()
 }
 
-const passed = checks.filter((c) => c.ok).length
-console.log(`\n=== 结果: ${passed}/${checks.length} 通过 ===`)
-console.log(`截图: ${SHOT_DIR}/{1-uploaded,2-edited,3-renamed-tags,4-cleaned,error}.png`)
-if (pageErrors.length)
-  console.log(
-    "page errors:\n" +
-      pageErrors
-        .slice(0, 8)
-        .map((e) => "  - " + e)
-        .join("\n"),
-  )
-process.exit(checks.every((c) => c.ok) ? 0 : 1)
+run.finish("{1-uploaded,2-edited,3-renamed-tags,4-cleaned,error}.png")
