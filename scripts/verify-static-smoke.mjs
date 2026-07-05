@@ -111,9 +111,10 @@ async function main() {
   const noBuild = args.includes("--no-build")
   const smokeLevel = (process.env.SMOKE_LEVEL || "full").toLowerCase() === "core" ? "core" : "full"
   const defaultSmokeScripts = ["smoke:notes", "smoke:plugins", "smoke:trash", "smoke:files"]
+  const allowedSmokeScripts = [...defaultSmokeScripts, "smoke:files:preview"]
   const requestedScripts = args.filter((arg) => arg !== "--" && arg !== "--no-build")
   const smokeScripts = requestedScripts.length ? requestedScripts : defaultSmokeScripts
-  const unknownScript = smokeScripts.find((script) => !defaultSmokeScripts.includes(script))
+  const unknownScript = smokeScripts.find((script) => !allowedSmokeScripts.includes(script))
   if (unknownScript) {
     throw new Error(`unknown smoke script: ${unknownScript}`)
   }

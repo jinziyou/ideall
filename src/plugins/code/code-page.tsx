@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   AlertTriangle,
+  Archive,
   Bug,
   ClipboardCopy,
   Database,
@@ -58,6 +59,14 @@ import {
   type PluginDataImportPreview,
 } from "@/plugins/shared/plugin-data-manager"
 import {
+  exportWorkspaceArchiveJson,
+  importWorkspaceArchiveJson,
+  isWorkspaceArchiveRaw,
+  previewWorkspaceArchiveImport,
+  restoreWorkspaceArchiveBackup,
+  type WorkspaceArchiveImportPreview,
+} from "@/plugins/shared/workspace-archive"
+import {
   inspectLocalDataSchemas,
   repairLocalDataSchema,
   repairLocalDataSchemas,
@@ -72,7 +81,7 @@ export default function CodePage() {
   const [pluginData, setPluginData] = React.useState<PluginDataInspection[]>([])
   const [schemaData, setSchemaData] = React.useState<LocalDataSchemaInspection[]>([])
   const [security, setSecurity] = React.useState<SecurityDiagnostics | null>(null)
-  const [importPreview, setImportPreview] = React.useState<PluginDataImportPreview | null>(null)
+  const [importPreview, setImportPreview] = React.useState<CodeDataImportPreview | null>(null)
   const [importBackup, setImportBackup] = React.useState<PluginDataImportBackup | null>(null)
   const [importRaw, setImportRaw] = React.useState<string | null>(null)
   const [pluginLoading, setPluginLoading] = React.useState(false)
@@ -143,6 +152,18 @@ export default function CodePage() {
     }
   }
 
+  const exportWorkspaceArchive = async () => {
+    try {
+      downloadTextFile(
+        pluginDataFilename("ideall-workspace-archive"),
+        await exportWorkspaceArchiveJson(),
+      )
+      toast("已导出完整工作区归档")
+    } catch (e) {
+      toast.error("归档失败", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   const selectImportFile = () => {
     if (importInputRef.current) importInputRef.current.value = ""
     importInputRef.current?.click()
@@ -153,7 +174,11 @@ export default function CodePage() {
       const raw = await file.text()
       setImportRaw(raw)
       setImportBackup(null)
-      setImportPreview(await previewPluginDataImport(raw, file.name))
+      setImportPreview(
+        isWorkspaceArchiveRaw(raw)
+          ? await previewWorkspaceArchiveImport(raw, file.name)
+          : await previewPluginDataImport(raw, file.name),
+      )
     } catch (e) {
       setImportRaw(null)
       setImportBackup(null)
@@ -169,9 +194,12 @@ export default function CodePage() {
     if (!importRaw || !importPreview?.filename) return
     setImporting(true)
     try {
-      const result = await importPluginDataPackage(importRaw, importPreview.filename)
+      const importingArchive = isWorkspaceArchiveRaw(importRaw)
+      const result = importingArchive
+        ? await importWorkspaceArchiveJson(importRaw, importPreview.filename)
+        : await importPluginDataPackage(importRaw, importPreview.filename)
       setImportBackup(result.backup)
-      toast("插件数据已导入", {
+      toast(importingArchive ? "工作区归档已导入" : "插件数据已导入", {
         description: result.backup
           ? `${formatPluginImportResult(result.result)} / 已创建导入前备份`
           : formatPluginImportResult(result.result),
@@ -190,8 +218,13 @@ export default function CodePage() {
     if (!importBackup) return
     setRestoringBackup(true)
     try {
-      const result = await restorePluginDataBackup(importBackup)
-      toast("已恢复导入前备份", { description: formatPluginImportResult(result.result) })
+      const restoringArchive = isWorkspaceArchiveRaw(importBackup.raw)
+      const result = restoringArchive
+        ? await restoreWorkspaceArchiveBackup(importBackup)
+        : await restorePluginDataBackup(importBackup)
+      toast(restoringArchive ? "已恢复工作区归档备份" : "已恢复导入前备份", {
+        description: formatPluginImportResult(result.result),
+      })
       setImportBackup(null)
       refresh()
     } catch (e) {
@@ -271,6 +304,7 @@ export default function CodePage() {
         onRefresh={refresh}
         onCopy={() => void copySnapshot()}
         onDownload={downloadBundle}
+        onArchive={() => void exportWorkspaceArchive()}
       />
       <input
         ref={importInputRef}
@@ -359,6 +393,8 @@ type SecurityDiagnostics = {
   mcpOAuth: ReturnType<typeof mcpOAuthSecuritySnapshot>
   issues: string[]
 }
+
+type CodeDataImportPreview = PluginDataImportPreview | WorkspaceArchiveImportPreview
 
 async function readSecurityDiagnostics(): Promise<SecurityDiagnostics> {
   const secureStore = await secureStoreStatus()
@@ -511,7 +547,7 @@ function PluginDataPanel({
   onExport: (pluginId: string) => void
   onExportAll: () => void
   onImportSelect: () => void
-  importPreview: PluginDataImportPreview | null
+  importPreview: CodeDataImportPreview | null
   importBackup: PluginDataImportBackup | null
   importing: boolean
   restoringBackup: boolean
@@ -634,7 +670,7 @@ function ImportPreviewCard({
   onConfirm,
   onCancel,
 }: {
-  preview: PluginDataImportPreview
+  preview: CodeDataImportPreview
   importing: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -684,6 +720,16 @@ function ImportPreviewCard({
               </dd>
             </>
           )}
+          {isArchivePreview(preview) && preview.archive && (
+            <>
+              <dt className="text-muted-foreground">归档</dt>
+              <dd>
+                {preview.archive.nodeCount} 个节点 · {preview.archive.blobCount} 个 Blob ·{" "}
+                {preview.archive.trashSnapshotCount} 个回收站快照 · {preview.archive.pluginCount}{" "}
+                个插件 · {preview.archive.tabCount} 个标签
+              </dd>
+            </>
+          )}
           {preview.current && (
             <>
               <dt className="text-muted-foreground">当前</dt>
@@ -696,6 +742,12 @@ function ImportPreviewCard({
       )}
     </div>
   )
+}
+
+function isArchivePreview(
+  preview: CodeDataImportPreview,
+): preview is WorkspaceArchiveImportPreview {
+  return "archive" in preview
 }
 
 function ImportBackupCard({
@@ -971,10 +1023,12 @@ function PageHeader({
   onRefresh,
   onCopy,
   onDownload,
+  onArchive,
 }: {
   onRefresh?: () => void
   onCopy?: () => void
   onDownload?: () => void
+  onArchive?: () => void
 }) {
   return (
     <div className="space-y-2">
@@ -985,8 +1039,18 @@ function PageHeader({
             本地运行态、工作区快照与浏览器存储诊断
           </p>
         </div>
-        {onRefresh && onCopy && onDownload && (
+        {onRefresh && onCopy && onDownload && onArchive && (
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={onArchive}
+            >
+              <Archive className="h-4 w-4" />
+              归档
+            </Button>
             <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onCopy}>
               <ClipboardCopy className="h-4 w-4" />
               复制

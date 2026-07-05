@@ -200,6 +200,27 @@ export async function idbPutAcrossStores(
 }
 
 /**
+ * 单事务替换多个对象仓库: 先 clear 指定仓库, 再批量 put 新内容。
+ * 用于完整工作区归档恢复, 避免 nodes/blobs/trash_snapshots 出现半导入状态。
+ */
+export async function idbReplaceStores(
+  clears: string[],
+  writes: { store: string; value: unknown }[],
+): Promise<void> {
+  const stores = [...new Set([...clears, ...writes.map((w) => w.store)])]
+  if (!stores.length) return
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, "readwrite")
+    for (const storeName of clears) tx.objectStore(storeName).clear()
+    for (const w of writes) tx.objectStore(w.store).put(w.value)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+/**
  * 单事务批量 put + delete —— 用于跨端同步落地: 写回合并后的完整数据与清理过期删除标记须原子,
  * 否则 put 成功后 delete 中断会留下「已写回但删除标记未清」的中间态 (与 FilesPort「一次事务批处理」承诺不符)。
  */

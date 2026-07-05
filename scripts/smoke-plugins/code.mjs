@@ -186,5 +186,49 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
   await page.getByRole("button", { name: "恢复导入前备份", exact: true }).click()
   await page.waitForFunction((key) => localStorage.getItem(key) === "[]", GIT_REPOS_KEY)
   record("Code 插件可恢复导入前备份", true)
+
+  await page.evaluate(({ key, repo }) => localStorage.setItem(key, JSON.stringify([repo])), {
+    key: GIT_REPOS_KEY,
+    repo: CODE_IMPORT_REPO,
+  })
+  const archiveDownloadPromise = page.waitForEvent("download")
+  await page.getByRole("button", { name: "归档", exact: true }).click()
+  const archiveDownload = await archiveDownloadPromise
+  const archiveExportPath = await archiveDownload.path()
+  if (!archiveExportPath) throw new Error("workspace archive export path unavailable")
+  const workspaceArchive = JSON.parse(await readFile(archiveExportPath, "utf8"))
+  record(
+    "Code 插件可导出完整工作区归档",
+    workspaceArchive.kind === "ideall.workspace-archive" &&
+      Array.isArray(workspaceArchive.core?.nodes) &&
+      Array.isArray(workspaceArchive.core?.blobs) &&
+      Array.isArray(workspaceArchive.core?.trashSnapshots) &&
+      workspaceArchive.plugins?.kind === "ideall.workspace-backup",
+  )
+  await page.evaluate((key) => localStorage.setItem(key, "[]"), GIT_REPOS_KEY)
+  await page
+    .locator('input[type="file"][accept="application/json,.json"]')
+    .last()
+    .setInputFiles(archiveExportPath)
+  await page.getByText("ideall.workspace-archive", { exact: false }).waitFor({
+    state: "visible",
+    timeout: 15000,
+  })
+  await page.getByRole("button", { name: "执行导入", exact: true }).click()
+  await page.waitForFunction(
+    ({ key, repo }) => {
+      try {
+        return JSON.parse(localStorage.getItem(key) || "[]").includes(repo)
+      } catch {
+        return false
+      }
+    },
+    { key: GIT_REPOS_KEY, repo: CODE_IMPORT_REPO },
+    { timeout: 15000 },
+  )
+  record("Code 插件可导入完整工作区归档", true)
+  await page.getByRole("button", { name: "恢复导入前备份", exact: true }).click()
+  await page.waitForFunction((key) => localStorage.getItem(key) === "[]", GIT_REPOS_KEY)
+  record("Code 插件可恢复完整工作区归档备份", true)
   await page.screenshot({ path: `${SHOT_DIR}/3-code.png` })
 }

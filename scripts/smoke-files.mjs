@@ -28,6 +28,7 @@ const FAST_SAVE_TOKEN = `fast-save-${RUN_ID}`
 const EDITED_TEXT = `# Smoke file\n\nEdited by files smoke.\n\n- persisted: yes\n\n${FAST_SAVE_TOKEN}\n`
 const TAGS_TEXT = "smoke, e2e"
 const TEXT_PREVIEW_LIMIT = 512 * 1024
+const WORKSPACE_KEY = "ideall:workspace:v1"
 
 function createSmokePdfBuffer() {
   const stream = "BT /F1 24 Tf 48 120 Td (Smoke PDF) Tj ET"
@@ -143,6 +144,12 @@ async function openToolbarFileMenu(page) {
 }
 
 async function uploadPreviewSamples(page) {
+  await page
+    .evaluate((key) => {
+      sessionStorage.removeItem(key)
+      localStorage.removeItem(key)
+    }, WORKSPACE_KEY)
+    .catch(() => {})
   await page.goto(RESOURCES_URL, { waitUntil: "domcontentloaded", timeout: 30000 })
   await page.getByRole("button", { name: /上传文件/ }).waitFor({ state: "visible", timeout: 30000 })
   await page.locator('input[type="file"]').setInputFiles(
@@ -300,7 +307,7 @@ try {
   const missingNodeQuery = `file:${missingFileId}`
   const missingTabId = `node:id=${missingFileId}&kind=file`
   await page.evaluate(
-    ({ nodeQuery, tabId, fileId }) => {
+    ({ nodeQuery, tabId, fileId, key }) => {
       const snapshot = {
         tabs: [
           {
@@ -319,10 +326,10 @@ try {
         sidebarCollapsed: false,
         rightPanelOpen: false,
       }
-      sessionStorage.setItem("ideall:workspace:v1", JSON.stringify(snapshot))
-      localStorage.setItem("ideall:workspace:v1", JSON.stringify(snapshot))
+      sessionStorage.setItem(key, JSON.stringify(snapshot))
+      localStorage.setItem(key, JSON.stringify(snapshot))
     },
-    { nodeQuery: missingNodeQuery, tabId: missingTabId, fileId: missingFileId },
+    { nodeQuery: missingNodeQuery, tabId: missingTabId, fileId: missingFileId, key: WORKSPACE_KEY },
   )
   await page.goto(`${BASE}/home/notes?node=${encodeURIComponent(missingNodeQuery)}`, {
     waitUntil: "domcontentloaded",

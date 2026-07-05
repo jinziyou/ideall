@@ -1,0 +1,92 @@
+import { test } from "node:test"
+import assert from "node:assert/strict"
+import type { Node } from "@protocol/node"
+import { createPluginDataPackage, createWorkspaceBackupPackage } from "@/plugins/shared/plugin-data"
+import {
+  createWorkspaceArchivePackage,
+  isWorkspaceArchiveRaw,
+  parseWorkspaceArchivePackage,
+  previewWorkspaceArchiveImport,
+  stringifyWorkspaceArchivePackage,
+} from "./workspace-archive"
+
+const noteNode: Node = {
+  id: "n1",
+  kind: "note",
+  title: "Archive Note",
+  parentId: null,
+  sortKey: "a0",
+  tags: ["archive"],
+  createdAt: 1,
+  updatedAt: 2,
+  content: [{ type: "p", children: [{ text: "body" }] }],
+}
+
+const gitPackage = createPluginDataPackage(
+  {
+    pluginId: "git",
+    pluginLabel: "Git",
+    dataKind: "ideall.git.repos",
+    dataVersion: 1,
+  },
+  { repos: ["/tmp/ideall"] },
+  "2026-01-01T00:00:00.000Z",
+)
+
+test("workspace archive: 固定格式并可预检完整工作区归档", async () => {
+  const pack = createWorkspaceArchivePackage(
+    {
+      core: {
+        nodes: [noteNode],
+        blobs: [{ key: "f1", mime: "text/plain", size: 3, dataBase64: "YWJj" }],
+        trashSnapshots: [{ id: "n1", node: noteNode, capturedAt: 3 }],
+        workspace: {
+          tabs: [
+            {
+              id: "code",
+              kind: "code",
+              module: "code",
+              title: "Code",
+              path: "/code",
+            },
+          ],
+          activeId: "code",
+          transientId: null,
+          activeModule: "code",
+          mode: "local",
+          sidebarCollapsed: false,
+          rightPanelOpen: false,
+        },
+      },
+      plugins: createWorkspaceBackupPackage([gitPackage], "2026-01-01T00:00:00.000Z"),
+    },
+    "2026-01-01T00:00:00.000Z",
+  )
+  const raw = stringifyWorkspaceArchivePackage(pack)
+  const parsed = parseWorkspaceArchivePackage(raw)
+
+  assert.equal(parsed.kind, "ideall.workspace-archive")
+  assert.equal(isWorkspaceArchiveRaw(raw), true)
+  assert.equal(parsed.core.nodes.length, 1)
+  assert.equal(parsed.core.blobs[0].dataBase64, "YWJj")
+  assert.equal(parsed.core.trashSnapshots[0].id, "n1")
+  assert.equal(parsed.core.workspace?.tabs.length, 1)
+  assert.equal(parsed.plugins.plugins[0].plugin.id, "git")
+
+  const preview = await previewWorkspaceArchiveImport(raw, "workspace.json")
+  assert.equal(preview.ok, true)
+  assert.equal(preview.target?.pluginLabel, "完整工作区")
+  assert.equal(preview.archive?.nodeCount, 1)
+  assert.equal(preview.archive?.blobCount, 1)
+  assert.equal(preview.archive?.trashSnapshotCount, 1)
+  assert.equal(preview.archive?.pluginCount, 1)
+  assert.equal(preview.archive?.tabCount, 1)
+})
+
+test("workspace archive: 拒绝非归档格式", () => {
+  assert.equal(isWorkspaceArchiveRaw('{"kind":"ideall.workspace-backup"}'), false)
+  assert.throws(
+    () => parseWorkspaceArchivePackage('{"kind":"ideall.workspace-archive","version":2}'),
+    /不支持/,
+  )
+})

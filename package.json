@@ -43,6 +43,7 @@
     "test": "node --import tsx scripts/run-tests.mjs",
     "smoke:notes": "node scripts/smoke-notes.mjs",
     "smoke:files": "node scripts/smoke-files.mjs",
+    "smoke:files:preview": "node scripts/smoke-files-preview.mjs",
     "smoke:plugins": "node scripts/smoke-plugins.mjs",
     "smoke:trash": "node scripts/smoke-trash.mjs",
     "serve:out": "node scripts/serve-out.mjs",
