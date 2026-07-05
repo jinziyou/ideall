@@ -5,7 +5,16 @@
 // Usage: pnpm smoke:files
 // Optional: BASE=http://localhost:<port> pnpm smoke:files
 // Screenshots: /tmp/files-smoke/*.png
-import { BASE, createSmokeRun, escapeRegex, sleep } from "./smoke-lib.mjs"
+import {
+  BASE,
+  SMOKE_LEVEL,
+  cleanupTestFiles,
+  createSmokeRun,
+  escapeRegex,
+  waitForLiveFileById,
+  waitForLiveFileByName,
+  waitForNoLiveFileByName,
+} from "./smoke-lib.mjs"
 
 const RESOURCES_URL = `${BASE}/home/resources`
 const SHOT_DIR = "/tmp/files-smoke"
@@ -102,125 +111,6 @@ const PREVIEW_SAMPLES = [
   },
 ]
 
-async function readLiveFileByName(page, name) {
-  return page.evaluate(async (targetName) => {
-    const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open("wonita-home")
-      req.onsuccess = () => resolve(req.result)
-      req.onerror = () => reject(req.error)
-    })
-    try {
-      const all = await new Promise((resolve, reject) => {
-        const tx = db.transaction("nodes", "readonly")
-        const req = tx.objectStore("nodes").getAll()
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
-        tx.onerror = () => reject(tx.error)
-        tx.onabort = () => reject(tx.error)
-      })
-      return (
-        all
-          .filter((n) => n?.kind === "file" && n.title === targetName && n.deletedAt == null)
-          .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0] ?? null
-      )
-    } finally {
-      db.close()
-    }
-  }, name)
-}
-
-async function readLiveFileById(page, id) {
-  return page.evaluate(async (targetId) => {
-    const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open("wonita-home")
-      req.onsuccess = () => resolve(req.result)
-      req.onerror = () => reject(req.error)
-    })
-    try {
-      return await new Promise((resolve, reject) => {
-        const tx = db.transaction("nodes", "readonly")
-        const req = tx.objectStore("nodes").get(targetId)
-        req.onsuccess = () => {
-          const n = req.result
-          resolve(n?.kind === "file" && n.deletedAt == null ? n : null)
-        }
-        req.onerror = () => reject(req.error)
-        tx.onerror = () => reject(tx.error)
-        tx.onabort = () => reject(tx.error)
-      })
-    } finally {
-      db.close()
-    }
-  }, id)
-}
-
-async function waitForLiveFileByName(page, name, timeout = 15000) {
-  const end = Date.now() + timeout
-  while (Date.now() < end) {
-    const file = await readLiveFileByName(page, name)
-    if (file) return file
-    await sleep(250)
-  }
-  throw new Error(`file not found in IndexedDB: ${name}`)
-}
-
-async function waitForLiveFileById(page, id, timeout = 15000) {
-  const end = Date.now() + timeout
-  while (Date.now() < end) {
-    const file = await readLiveFileById(page, id)
-    if (file) return file
-    await sleep(250)
-  }
-  throw new Error(`file not restored in IndexedDB: ${id}`)
-}
-
-async function waitForNoLiveFileByName(page, name, timeout = 15000) {
-  const end = Date.now() + timeout
-  while (Date.now() < end) {
-    const file = await readLiveFileByName(page, name)
-    if (!file) return true
-    await sleep(250)
-  }
-  return false
-}
-
-async function cleanupTestFiles(page, id, names) {
-  await page.evaluate(
-    async ({ targetId, targetNames }) => {
-      const db = await new Promise((resolve, reject) => {
-        const req = indexedDB.open("wonita-home")
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
-      })
-      try {
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(["nodes", "blobs"], "readwrite")
-          const nodes = tx.objectStore("nodes")
-          const blobs = tx.objectStore("blobs")
-          const allReq = nodes.getAll()
-          allReq.onsuccess = () => {
-            const now = Date.now()
-            for (const n of allReq.result) {
-              const byId = targetId && n?.id === targetId
-              const byName = targetNames.includes(n?.title)
-              if (n?.kind !== "file" || n.deletedAt != null || (!byId && !byName)) continue
-              nodes.put({ ...n, deletedAt: now, updatedAt: now })
-              if (n.blobRef?.key) blobs.delete(n.blobRef.key)
-            }
-          }
-          allReq.onerror = () => reject(allReq.error)
-          tx.oncomplete = () => resolve()
-          tx.onerror = () => reject(tx.error)
-          tx.onabort = () => reject(tx.error)
-        })
-      } finally {
-        db.close()
-      }
-    },
-    { targetId: id, targetNames: names },
-  )
-}
-
 async function openToolbarFileMenu(page) {
   const button = page.getByRole("button", { name: "文件操作", exact: true })
   await button.waitFor({ state: "visible", timeout: 15000 })
@@ -268,7 +158,7 @@ let currentName = FILE_NAME
 const cleanupNames = [FILE_NAME, RENAMED_NAME, ...PREVIEW_SAMPLES.map((sample) => sample.name)]
 
 try {
-  console.log(`\n▶ 冒烟目标: ${RESOURCES_URL}\n`)
+  console.log(`\n▶ 冒烟目标: ${RESOURCES_URL} (level=${SMOKE_LEVEL})\n`)
 
   markStage("load resources")
   await page.goto(RESOURCES_URL, { waitUntil: "domcontentloaded", timeout: 30000 })
@@ -381,22 +271,26 @@ try {
   record("通过资源列表执行最终清理", await waitForNoLiveFileByName(page, RENAMED_NAME))
   await page.screenshot({ path: `${SHOT_DIR}/4-cleaned.png` })
 
-  markStage("preview matrix upload")
-  await uploadPreviewSamples(page)
-  record("批量上传主流预览类型样例", true)
+  if (SMOKE_LEVEL === "full") {
+    markStage("preview matrix upload")
+    await uploadPreviewSamples(page)
+    record("批量上传主流预览类型样例", true)
 
-  for (const sample of PREVIEW_SAMPLES) {
-    markStage(`preview ${sample.label}`)
-    await openResourcePreview(page, sample)
-    record(`预览类型覆盖：${sample.label}`, true)
+    for (const sample of PREVIEW_SAMPLES) {
+      markStage(`preview ${sample.label}`)
+      await openResourcePreview(page, sample)
+      record(`预览类型覆盖：${sample.label}`, true)
+    }
+
+    await cleanupTestFiles(
+      page,
+      null,
+      PREVIEW_SAMPLES.map((sample) => sample.name),
+    )
+    record("清理预览类型样例", true)
+  } else {
+    console.log("  - 跳过主流预览类型矩阵 (SMOKE_LEVEL=core)")
   }
-
-  await cleanupTestFiles(
-    page,
-    null,
-    PREVIEW_SAMPLES.map((sample) => sample.name),
-  )
-  record("清理预览类型样例", true)
 
   record(
     "运行期间无 page/console 错误",

@@ -3,7 +3,8 @@ name: smoke
 # 冒烟门: 真浏览器驱动关键本地优先链路 (notes + files IDE)。
 # 测的是**生产形态** —— 静态导出 (out/) 经 scripts/serve-out.mjs 提供,
 # 与 App 实际分发一致 (deep-link/.html 解析回归也在覆盖内), 不再依赖 dev 服。
-# paths 过滤: 仅应用面改动才跑 (纯文档/CI 改动不烧浏览器分钟数)。
+# PR 跑 files core 链路快速挡回归; push / 定时跑 files full 矩阵覆盖主流预览类型。
+# paths 过滤: 仅应用面改动才跑 (纯文档改动不烧浏览器分钟数)。
 on:
   pull_request:
     paths:
@@ -13,6 +14,7 @@ on:
       - "pnpm-lock.yaml"
       - "next.config.ts"
       - "tsconfig.json"
+      - "scripts/smoke-lib.mjs"
       - "scripts/smoke-notes.mjs"
       - "scripts/smoke-files.mjs"
       - "scripts/serve-out.mjs"
@@ -26,10 +28,14 @@ on:
       - "pnpm-lock.yaml"
       - "next.config.ts"
       - "tsconfig.json"
+      - "scripts/smoke-lib.mjs"
       - "scripts/smoke-notes.mjs"
       - "scripts/smoke-files.mjs"
       - "scripts/serve-out.mjs"
       - ".github/workflows/smoke.yml"
+  schedule:
+    - cron: "17 19 * * 0"
+  workflow_dispatch:
 
 jobs:
   smoke:
@@ -60,8 +66,12 @@ jobs:
           echo "静态服 30s 未就绪"; cat /tmp/serve.log; exit 1
       - name: Smoke (notes e2e)
         run: BASE=http://localhost:5030 pnpm smoke:notes
-      - name: Smoke (files e2e)
-        run: BASE=http://localhost:5030 pnpm smoke:files
+      - name: Smoke (files e2e core)
+        if: github.event_name == 'pull_request'
+        run: SMOKE_LEVEL=core BASE=http://localhost:5030 pnpm smoke:files
+      - name: Smoke (files e2e full)
+        if: github.event_name != 'pull_request'
+        run: SMOKE_LEVEL=full BASE=http://localhost:5030 pnpm smoke:files
       - name: 上传截图 (失败排查用)
         if: failure()
         uses: actions/upload-artifact@v4

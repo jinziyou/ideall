@@ -28,7 +28,6 @@ import { TextPromptDialog } from "@/shared/prompt-dialog"
 import { cn } from "@/lib/utils"
 import { FileMeta } from "@protocol/files"
 import {
-  addFile,
   deleteFile,
   getFile,
   listFiles,
@@ -41,6 +40,7 @@ import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import FilePreviewDialog from "./file-preview-dialog"
 import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"
+import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
 
 // 类型筛选分组: 把细分 FileKind 归并为用户可理解的几类
 type TypeFilter = "all" | "image" | "code" | "doc" | "data" | "media" | "archive" | "other"
@@ -180,33 +180,19 @@ export default function FileManager() {
       const arr = Array.from(fileList)
       if (!arr.length) return
       setUploading(true)
-      let ok = 0
-      let failed = 0
-      let lastError = ""
+      let feedback: ReturnType<typeof fileUploadFeedback> = { kind: "none" }
       try {
-        // 逐个落库各自兜底: 中途某个失败 (如 IndexedDB 配额耗尽) 不丢弃已成功的, 也不跳过刷新
-        for (const f of arr) {
-          try {
-            await addFile(f)
-            ok++
-          } catch (e) {
-            failed++
-            lastError = e instanceof Error ? e.message : String(e)
-          }
-        }
+        feedback = fileUploadFeedback(await saveUploadedFiles(arr))
         await refresh()
       } finally {
         setUploading(false)
       }
-      // 分级回执: 全成功 / 部分失败 / 全失败
-      if (ok && failed) {
-        toast.warning(`已添加 ${ok} 个，${failed} 个失败（可能是本机存储已满）`, {
-          description: lastError,
-        })
-      } else if (failed) {
-        toast.error("保存文件失败", { description: lastError })
-      } else {
-        toast.success(`已添加 ${ok} 个文件`)
+      if (feedback.kind === "warning") {
+        toast.warning(feedback.message, { description: feedback.description })
+      } else if (feedback.kind === "error") {
+        toast.error(feedback.message, { description: feedback.description })
+      } else if (feedback.kind === "success") {
+        toast.success(feedback.message)
       }
     },
     [refresh],
