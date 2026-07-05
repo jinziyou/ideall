@@ -12,6 +12,7 @@ import { idbGet, idbPut, STORE_BLOBS, STORE_NODES, STORE_TRASH_SNAPSHOTS } from 
 
 type FakeStore = {
   keyPath: string
+  indexes: Map<string, string>
   rows: Map<IDBValidKey, unknown>
 }
 
@@ -41,6 +42,10 @@ function request<T>(): FakeRequest<T> {
 }
 
 class FakeObjectStore {
+  readonly indexNames = {
+    contains: (name: string) => this.store.indexes.has(name),
+  } as DOMStringList
+
   constructor(
     private readonly store: FakeStore,
     private readonly tx: FakeTransaction,
@@ -67,6 +72,57 @@ class FakeObjectStore {
       this.store.rows.delete(key)
       return undefined
     })
+  }
+
+  createIndex(name: string, keyPath: string): IDBIndex {
+    this.store.indexes.set(name, keyPath)
+    return new FakeIndex(this.store, this.tx, keyPath) as unknown as IDBIndex
+  }
+
+  index(name: string): IDBIndex {
+    const keyPath = this.store.indexes.get(name)
+    if (!keyPath) throw new Error(`missing index: ${name}`)
+    return new FakeIndex(this.store, this.tx, keyPath) as unknown as IDBIndex
+  }
+}
+
+class FakeIndex {
+  constructor(
+    private readonly store: FakeStore,
+    private readonly tx: FakeTransaction,
+    private readonly keyPath: string,
+  ) {}
+
+  getAll(): IDBRequest<unknown[]> {
+    return this.tx.track(() =>
+      [...this.store.rows.values()]
+        .filter((row) => this.indexKey(row) !== undefined)
+        .sort((a, b) => this.compareIndexKeys(this.indexKey(a), this.indexKey(b)))
+        .map(cloneValue),
+    )
+  }
+
+  count(): IDBRequest<number> {
+    return this.tx.track(
+      () => [...this.store.rows.values()].filter((row) => this.indexKey(row) !== undefined).length,
+    )
+  }
+
+  private indexKey(row: unknown): IDBValidKey | undefined {
+    const value =
+      row && typeof row === "object" ? (row as Record<string, unknown>)[this.keyPath] : undefined
+    return typeof value === "number" || typeof value === "string" || value instanceof Date
+      ? value
+      : undefined
+  }
+
+  private compareIndexKeys(a: IDBValidKey | undefined, b: IDBValidKey | undefined): number {
+    if (a === b) return 0
+    if (a === undefined) return 1
+    if (b === undefined) return -1
+    const left = a instanceof Date ? a.getTime() : a
+    const right = b instanceof Date ? b.getTime() : b
+    return left < right ? -1 : 1
   }
 }
 
@@ -135,7 +191,11 @@ class FakeDatabase {
   constructor(private readonly state: FakeDbState) {}
 
   createObjectStore(name: string, opts: { keyPath: string }): FakeObjectStore {
-    const store = { keyPath: opts.keyPath, rows: new Map<IDBValidKey, unknown>() }
+    const store = {
+      keyPath: opts.keyPath,
+      indexes: new Map<string, string>(),
+      rows: new Map<IDBValidKey, unknown>(),
+    }
     this.state.stores.set(name, store)
     return new FakeObjectStore(store, new FakeTransaction(this.state))
   }
@@ -154,7 +214,7 @@ class FakeDatabase {
 
 function setupFakeIndexedDb(): void {
   ;(globalThis as typeof globalThis & { indexedDB: IDBFactory }).indexedDB = {
-    open(name: string): IDBOpenDBRequest {
+    open(name: string, _version?: number): IDBOpenDBRequest {
       const req = request<IDBDatabase>() as FakeRequest<IDBDatabase> & {
         onupgradeneeded: ((event: Event) => void) | null
         onblocked: ((event: Event) => void) | null

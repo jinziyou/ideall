@@ -39,7 +39,7 @@ export function ConfirmDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
+          <DialogDescription>{description ?? "确认此操作。"}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -88,6 +88,7 @@ export function TextPromptDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>输入{label}后确认提交。</DialogDescription>
         </DialogHeader>
         {/* 输入状态放在内部组件: Dialog 关闭即卸载, 每次打开重置为 defaultValue (上次输入不残留) */}
         <PromptForm

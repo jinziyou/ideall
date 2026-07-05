@@ -28,6 +28,28 @@ const EDITED_TEXT = `# Smoke file\n\nEdited by files smoke.\n\n- persisted: yes\
 const TAGS_TEXT = "smoke, e2e"
 const TEXT_PREVIEW_LIMIT = 512 * 1024
 
+function createSmokePdfBuffer() {
+  const stream = "BT /F1 24 Tf 48 120 Td (Smoke PDF) Tj ET"
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 240 180] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ]
+  let body = "%PDF-1.4\n"
+  const offsets = []
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(body))
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`
+  }
+  const xrefOffset = Buffer.byteLength(body)
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  body += offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")
+  body += `\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
+  return Buffer.from(body)
+}
+
 const PREVIEW_SAMPLES = [
   {
     label: "JSON",
@@ -65,7 +87,7 @@ const PREVIEW_SAMPLES = [
     label: "PDF",
     name: `ideall-preview-${RUN_ID}.pdf`,
     mimeType: "application/pdf",
-    buffer: Buffer.from("%PDF-1.1\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"),
+    buffer: createSmokePdfBuffer(),
     assert: async (dialog) => {
       await dialog.locator(`iframe[title="ideall-preview-${RUN_ID}.pdf"]`).waitFor({
         state: "visible",

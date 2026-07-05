@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   check:
-    name: lint + typecheck + format + test + contract + export
+    name: base verification
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -26,20 +26,8 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Lint (含依赖边界强制)
-        run: pnpm lint
-      - name: Typecheck
-        run: pnpm typecheck
-      - name: Format check
-        run: pnpm format:check
-      - name: Test
-        run: pnpm test
-      # server.d.ts 与 openapi/server.json 一致性 (改了 schema 忘重生成会在此失败)
-      - name: API contract
-        run: pnpm gen:api:check
-      # 静态导出守门 (App-only 唯一生产构建; 导出回归会在此失败)
-      - name: Build (static export)
-        run: pnpm build
+      - name: Verify base
+        run: pnpm verify:base
 
 # 另两道门拆在独立工作流 (带 paths 过滤, 省 CI 分钟数):
 #   rust.yml  — clippy 零警告 + cargo test (仅 src-tauri/** 改动时跑)

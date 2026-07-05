@@ -1,6 +1,6 @@
 name: smoke
 
-# 冒烟门: 真浏览器驱动关键本地优先链路 (notes + files IDE)。
+# 冒烟门: 真浏览器驱动关键本地优先链路 (notes + files IDE + plugins + trash)。
 # 测的是**生产形态** —— 静态导出 (out/) 经 scripts/serve-out.mjs 提供,
 # 与 App 实际分发一致 (deep-link/.html 解析回归也在覆盖内), 不再依赖 dev 服。
 # PR 跑 files core 链路快速挡回归; push / 定时跑 files full 矩阵覆盖主流预览类型。
@@ -18,6 +18,8 @@ on:
       - "scripts/smoke-notes.mjs"
       - "scripts/smoke-files.mjs"
       - "scripts/smoke-plugins.mjs"
+      - "scripts/smoke-trash.mjs"
+      - "scripts/verify-full.mjs"
       - "scripts/serve-out.mjs"
       - ".github/workflows/smoke.yml"
   push:
@@ -33,6 +35,8 @@ on:
       - "scripts/smoke-notes.mjs"
       - "scripts/smoke-files.mjs"
       - "scripts/smoke-plugins.mjs"
+      - "scripts/smoke-trash.mjs"
+      - "scripts/verify-full.mjs"
       - "scripts/serve-out.mjs"
       - ".github/workflows/smoke.yml"
   schedule:
@@ -75,6 +79,8 @@ jobs:
         run: BASE=http://localhost:5030 pnpm smoke:notes
       - name: Smoke (plugins core)
         run: BASE=http://localhost:5030 pnpm smoke:plugins
+      - name: Smoke (trash e2e)
+        run: BASE=http://localhost:5030 pnpm smoke:trash
       - name: Smoke (files e2e core)
         if: github.event_name == 'pull_request'
         run: SMOKE_LEVEL=core BASE=http://localhost:5030 pnpm smoke:files
@@ -90,4 +96,5 @@ jobs:
             /tmp/notes-smoke
             /tmp/files-smoke
             /tmp/plugins-smoke
+            /tmp/trash-smoke
           if-no-files-found: ignore

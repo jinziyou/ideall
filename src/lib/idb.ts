@@ -7,11 +7,12 @@
 const DB_NAME = "wonita-home"
 // 统一 Node 库 + Blob 旁存两仓; onupgradeneeded 只 createObjectStore, 零 I/O (报错会 abort DB open 且无恢复 UI)。
 // 版本号只升不降, 否则既有库会 VersionError; onversionchange 让旧标签页主动让位避免 onblocked 冻结。
-const DB_VERSION = 11
+const DB_VERSION = 12
 
 export const STORE_NODES = "nodes"
 export const STORE_BLOBS = "blobs"
 export const STORE_TRASH_SNAPSHOTS = "trash_snapshots"
+export const INDEX_NODES_DELETED_AT = "deletedAt"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -26,8 +27,11 @@ function openDB(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
-      if (!db.objectStoreNames.contains(STORE_NODES)) {
-        db.createObjectStore(STORE_NODES, { keyPath: "id" })
+      const nodes = db.objectStoreNames.contains(STORE_NODES)
+        ? req.transaction?.objectStore(STORE_NODES)
+        : db.createObjectStore(STORE_NODES, { keyPath: "id" })
+      if (nodes && !nodes.indexNames.contains(INDEX_NODES_DELETED_AT)) {
+        nodes.createIndex(INDEX_NODES_DELETED_AT, "deletedAt", { unique: false })
       }
       if (!db.objectStoreNames.contains(STORE_BLOBS)) {
         db.createObjectStore(STORE_BLOBS, { keyPath: "key" })
@@ -80,6 +84,28 @@ async function withStore<T>(
 
 export async function idbGetAll<T>(storeName: string): Promise<T[]> {
   return withStore<T[]>(storeName, "readonly", (store) => store.getAll())
+}
+
+export async function idbGetAllFromIndex<T>(
+  storeName: string,
+  indexName: string,
+  query?: IDBValidKey | IDBKeyRange,
+): Promise<T[]> {
+  return withStore<T[]>(storeName, "readonly", (store) => {
+    const index = store.index(indexName)
+    return query === undefined ? index.getAll() : index.getAll(query)
+  })
+}
+
+export async function idbCountFromIndex(
+  storeName: string,
+  indexName: string,
+  query?: IDBValidKey | IDBKeyRange,
+): Promise<number> {
+  return withStore<number>(storeName, "readonly", (store) => {
+    const index = store.index(indexName)
+    return query === undefined ? index.count() : index.count(query)
+  })
 }
 
 export async function idbGet<T>(storeName: string, key: IDBValidKey): Promise<T | undefined> {

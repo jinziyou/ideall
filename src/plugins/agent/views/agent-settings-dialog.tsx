@@ -2,7 +2,14 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/ui/dialog"
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
@@ -143,6 +150,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
     <>
       <DialogHeader>
         <DialogTitle>AI 助手设置</DialogTitle>
+        <DialogDescription>配置模型端点、密钥、本机上下文和外部 ACP 接入。</DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-3">

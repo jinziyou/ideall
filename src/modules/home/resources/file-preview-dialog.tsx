@@ -41,6 +41,7 @@ function DialogBody({
       <>
         <DialogHeader>
           <DialogTitle>预览</DialogTitle>
+          <DialogDescription>选择文件后在此预览内容。</DialogDescription>
         </DialogHeader>
         <div className="p-6 text-sm text-muted-foreground">该文件不存在或已删除。</div>
       </>
@@ -50,11 +51,9 @@ function DialogBody({
     <>
       <DialogHeader>
         <DialogTitle className="truncate pr-8">{file?.name ?? "预览"}</DialogTitle>
-        {file && (
-          <DialogDescription>
-            {file.type || "未知类型"} · {formatBytes(file.size)}
-          </DialogDescription>
-        )}
+        <DialogDescription>
+          {file ? `${file.type || "未知类型"} · ${formatBytes(file.size)}` : "正在载入文件预览。"}
+        </DialogDescription>
       </DialogHeader>
 
       <FilePreviewBox {...preview} />

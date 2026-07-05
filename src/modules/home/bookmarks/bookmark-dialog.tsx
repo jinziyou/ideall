@@ -2,7 +2,14 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/ui/dialog"
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
@@ -119,6 +126,9 @@ function BookmarkForm({
     <>
       <DialogHeader>
         <DialogTitle>{editing ? "编辑书签" : "新增书签"}</DialogTitle>
+        <DialogDescription>
+          {editing ? "更新书签的链接、标题、标签与收藏夹。" : "保存一个链接并归档到本地书签库。"}
+        </DialogDescription>
       </DialogHeader>
       <div className="grid gap-3">
         <div className="grid gap-1.5">

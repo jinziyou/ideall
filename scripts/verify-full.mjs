@@ -117,10 +117,13 @@ async function startReadyDevServer() {
 }
 
 async function main() {
+  const smokeOnly = process.argv.includes("--smoke-only")
   const smokeScripts = ["smoke:notes", "smoke:files", "smoke:plugins", "smoke:trash"]
 
-  console.log("[verify:full] running base verification")
-  await runCommand(["verify"])
+  if (!smokeOnly) {
+    console.log("[verify:full] running base verification")
+    await runCommand(["verify:base"])
+  }
 
   const baseUrl = await startReadyDevServer()
   const env = { ...process.env, BASE: baseUrl }

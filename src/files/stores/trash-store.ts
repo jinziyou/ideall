@@ -4,11 +4,14 @@ import type { Node, NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import {
   idbBulkPut,
+  idbCountFromIndex,
   idbDelete,
   idbGet,
   idbGetAll,
+  idbGetAllFromIndex,
   idbPut,
   idbPutAcrossStores,
+  INDEX_NODES_DELETED_AT,
   STORE_BLOBS,
   STORE_NODES,
   STORE_TRASH_SNAPSHOTS,
@@ -101,7 +104,7 @@ export async function captureTrashSnapshots(nodes: Node[]): Promise<void> {
 
 export async function listTrashItems(): Promise<TrashItem[]> {
   const [nodes, snapshots] = await Promise.all([
-    idbGetAll<Node>(STORE_NODES),
+    idbGetAllFromIndex<Node>(STORE_NODES, INDEX_NODES_DELETED_AT),
     idbGetAll<TrashSnapshot>(STORE_TRASH_SNAPSHOTS),
   ])
   const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]))
@@ -130,8 +133,7 @@ export async function listTrashItems(): Promise<TrashItem[]> {
 }
 
 export async function countTrashItems(): Promise<number> {
-  const nodes = await idbGetAll<Node>(STORE_NODES)
-  return nodes.filter((node) => node.deletedAt != null && isTrashKind(node.kind)).length
+  return idbCountFromIndex(STORE_NODES, INDEX_NODES_DELETED_AT)
 }
 
 export async function restoreTrashItem(id: string): Promise<void> {
