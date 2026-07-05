@@ -226,7 +226,7 @@ export async function moveNode(
   return getNodeRaw(id)
 }
 
-/** fs.delete: 按 kind 删 (note/bookmark/folder/file 软删标记; feed 取消关注写删除标记; thread 硬删)。 */
+/** fs.delete: 按 kind 删 (note/bookmark/folder/file/thread 软删标记; feed 取消关注写删除标记)。 */
 export async function deleteNode(kind: NodeKind, id: string): Promise<void> {
   switch (kind) {
     case "note":

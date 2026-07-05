@@ -2,6 +2,7 @@ import Link from "next/link"
 import { ChevronRight, CornerDownLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/format"
+import { FileTypeIcon } from "@/shared/file-type-icon"
 
 /** 一条「关注」记录: 把发现模块的对象 / 资源加入「我的」的一次动作。 */
 export type FlowItem = {
@@ -12,6 +13,7 @@ export type FlowItem = {
   label: string
   title: string
   href: string
+  fileType?: { name: string; type: string }
 }
 
 const GROUP_ORDER = ["今天", "本周", "更早"] as const
@@ -51,12 +53,22 @@ export function RecentFlowback({ items }: { items: FlowItem[] }) {
           <ol className="relative ml-1 border-l border-border pl-4">
             {group.items.map((it) => (
               <li key={it.id} className="relative flex items-center gap-3 py-1.5">
-                <span
-                  className={cn(
-                    "absolute -left-[21px] h-2.5 w-2.5 rounded-full ring-2 ring-card",
-                    it.dotClass,
-                  )}
-                />
+                {it.fileType ? (
+                  <span className="absolute -left-[25px] grid h-4 w-4 place-items-center rounded bg-card ring-2 ring-card">
+                    <FileTypeIcon
+                      name={it.fileType.name}
+                      type={it.fileType.type}
+                      className="h-3.5 w-3.5"
+                    />
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      "absolute -left-[21px] h-2.5 w-2.5 rounded-full ring-2 ring-card",
+                      it.dotClass,
+                    )}
+                  />
+                )}
                 <Link
                   href={it.href}
                   className="flex min-w-0 flex-1 items-center gap-2 text-sm hover:underline"

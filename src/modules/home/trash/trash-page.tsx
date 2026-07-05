@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { formatBytes, formatTimestamp } from "@/lib/format"
-import { FileTypeIcon } from "@/shared/file-type-icon"
+import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import {
   emptyTrash,
   listTrashItems,
@@ -177,9 +177,13 @@ export default function TrashPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="min-w-0 truncate text-sm font-medium">{item.title}</p>
-                      <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        {KIND_LABEL[item.kind]}
-                      </span>
+                      {item.kind === "file" ? (
+                        <FileTypeBadge name={item.title} type={item.mime} />
+                      ) : (
+                        <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          {KIND_LABEL[item.kind]}
+                        </span>
+                      )}
                       {item.snapshot && (
                         <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-700">
                           可恢复快照

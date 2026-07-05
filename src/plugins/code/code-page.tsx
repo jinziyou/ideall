@@ -342,10 +342,10 @@ async function readSecurityDiagnostics(): Promise<SecurityDiagnostics> {
       ? `${agentSecrets.localValueCount} 个 MCP 密钥值仍存在于 localStorage`
       : "",
     mcpOAuth.localTokenCount
-      ? `${mcpOAuth.localTokenCount} 个 MCP OAuth token 仍存在于 localStorage`
+      ? `${mcpOAuth.localTokenCount} 个旧 MCP OAuth token 仍存在于公开 localStorage`
       : "",
     mcpOAuth.localVerifierCount
-      ? `${mcpOAuth.localVerifierCount} 个 MCP OAuth verifier 仍存在于 localStorage`
+      ? `${mcpOAuth.localVerifierCount} 个旧 MCP OAuth verifier 仍存在于公开 localStorage`
       : "",
   ].filter((issue): issue is string => Boolean(issue))
   return { secureStore, agentSettings, agentSecrets, mcpOAuth, issues }
@@ -394,7 +394,7 @@ function SecurityPanel({
                 </p>
               </div>
               <Button type="button" size="sm" variant="outline" onClick={onMigrate}>
-                迁移敏感值
+                迁移/清理敏感值
               </Button>
             </div>
             <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
@@ -409,7 +409,7 @@ function SecurityPanel({
               <dt className="text-muted-foreground">OAuth</dt>
               <dd>
                 {diagnostics.mcpOAuth.localTokenCount || diagnostics.mcpOAuth.localVerifierCount
-                  ? `${diagnostics.mcpOAuth.localTokenCount} token / ${diagnostics.mcpOAuth.localVerifierCount} verifier 待迁移`
+                  ? `${diagnostics.mcpOAuth.localTokenCount} token / ${diagnostics.mcpOAuth.localVerifierCount} verifier 需清理`
                   : `${diagnostics.mcpOAuth.cachedTokenCount} 个 token 已载入安全缓存`}
               </dd>
             </dl>

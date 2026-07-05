@@ -19,6 +19,7 @@ export type LocalSearchItem = {
   id: string
   label: string
   group: LocalSearchGroup
+  fileType?: { name: string; type: string }
   run: () => void
 }
 
@@ -89,6 +90,7 @@ export async function loadLocalSearchItems(): Promise<LocalSearchItem[]> {
       id: "f" + f.id,
       label: f.name,
       group: "资源",
+      fileType: { name: f.name, type: f.type },
       run: () => openNodeTab({ kind: "file", id: f.id }, f.name),
     })
   // 对话 → 打开该 thread 的只读查看器标签 (thread-viewer 内可一键回 AI 栏继续)。

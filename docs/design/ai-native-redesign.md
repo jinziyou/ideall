@@ -107,7 +107,7 @@ export type Node = BaseNode & (
 | **bookmark / folder** | `sortKey/updatedAt` + 软删(`deletedAt`,非硬删) |
 | **file** | Blob 旁存 `STORE_BLOBS`,节点存 `blobRef`;软删 |
 | **feed** | **确定性 id `feed:type:key`,绝不 genId**;同步边界 `feed 节点 ↔ 旧 Subscription wire` 投影,`"subs"` scope 零改;含墓碑 |
-| **thread** | 跨 plugin/core 边界,agent 插件经 `FilesPort` 消费(修依赖反转破例);同步默认关(对象 LWW 会截断 `messages[]`);本地独占故硬删 |
+| **thread** | 跨 plugin/core 边界,agent 插件经 `FilesPort` 消费(修依赖反转破例);同步默认关(对象 LWW 会截断 `messages[]`);本机软删进入统一回收站 |
 
 `nodes-store` 读写主体见独立实现(`listNodes(kind)/listChildren/getNode/readBlob/getAncestors/createNode/updateNode(RMW)/moveNode/deleteNode({soft})/restoreNodes`),三处按 kind 分叉:`nodeText`(全文摘要)、file 的 Blob 旁存、content 归一化。树工具(`effectiveParentId/buildParentOf/cmpSibling`)、`computeSortKey`、`collectSubtreeIds` 逐字复用。
 
@@ -248,7 +248,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 4. 同步身份必须稳定不透明 id,不用 path/content/hash;不上 Yjs 全局库,note 用轻量块级合并。
 
 **仍开放(实现期/后续定)**:
-- `thread` 删除:硬删 + 会话内撤销(倾向)vs 软删墓碑。
+- `thread` 删除:已拍板为本机软删 + 统一回收站快照; 同步仍默认关闭。
 - peer 关注(关注)归属:全挂 `/feeds` + 按 type 分组(倾向)vs `root:following` 保两位置心智。
 - feed 是否按 type 建确定性子目录(倾向先扁平)。
 - `thread` 同步若开启:消息级 append-merge(独立 scope)。

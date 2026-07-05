@@ -163,7 +163,7 @@ export interface FilesPort {
   listAllNotes(): Promise<Note[]>
   /** 跨端同步落地: 写入合并 + GC 后的完整数据 (一次事务批处理)。 */
   bulkPutNotes(notes: Note[]): Promise<void>
-  // 对话线程 (agent 插件经此读写, 不直接依赖 core 存储; 本地独占, 默认不同步, 硬删)
+  // 对话线程 (agent 插件经此读写, 不直接依赖 core 存储; 本地独占, 默认不同步, 软删进回收站)
   /** 线程列表, 按最近更新倒序。 */
   listThreads(): Promise<Thread[]>
   getThread(id: string): Promise<Thread | undefined>
@@ -171,7 +171,7 @@ export interface FilesPort {
   createThread(): Promise<Thread>
   /** 整体写回线程 (消息内联, 调用方在内存改好 messages 后调用); 刷新 updatedAt。 */
   saveThread(thread: Thread): Promise<void>
-  /** 物理删除 (线程本地独占, 无需删除标记传播)。 */
+  /** 本机软删除 (线程默认不同步, 但仍进入统一回收站)。 */
   deleteThread(id: string): Promise<void>
   renameThread(id: string, title: string): Promise<void>
   // 统一 Node 文件面 (AI fs.* §6): 跨 kind 寻址读 (原始节点, 调用方按 kind gate / stripNode 净化)。
@@ -190,7 +190,7 @@ export interface FilesPort {
     parentId: string | null,
     afterSortKey?: string | null,
   ): Promise<Node | undefined>
-  /** fs.delete 后端: 按 kind 删 (软删/取消关注/硬删)。 */
+  /** fs.delete 后端: 按 kind 删 (软删 / 取消关注)。 */
   fsDeleteNode(kind: NodeKind, id: string): Promise<void>
   /** fs.readBlob 后端: 文件二进制 base64 (大文件不内联, base64 空)。 */
   fsReadBlob(id: string): Promise<{ mime: string; size: number; base64: string } | undefined>

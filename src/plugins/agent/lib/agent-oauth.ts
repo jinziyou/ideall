@@ -40,15 +40,15 @@ interface OAuthState {
   lastAuthUrl?: string
 }
 
-type LegacyOAuthState = OAuthState & {
-  tokens?: OAuthTokens
-  codeVerifier?: string
-}
-
 type OAuthSecretCache = {
   tokens?: OAuthTokens
   codeVerifier?: string
   hydrated?: boolean
+}
+
+type PublicOAuthState = OAuthState & {
+  tokens?: unknown
+  codeVerifier?: unknown
 }
 
 const keyOf = (serverId: string) => `ideall:agent:oauth:${serverId}`
@@ -68,7 +68,7 @@ function load(serverId: string): OAuthState {
   if (typeof localStorage === "undefined") return {}
   try {
     const raw = localStorage.getItem(keyOf(serverId))
-    const parsed = raw ? (JSON.parse(raw) as LegacyOAuthState) : {}
+    const parsed = raw ? (JSON.parse(raw) as Partial<OAuthState>) : {}
     return {
       clientInfo: parsed.clientInfo,
       state: parsed.state,
@@ -92,16 +92,6 @@ function patch(serverId: string, p: Partial<OAuthState>): void {
   write(serverId, { ...load(serverId), ...p })
 }
 
-function loadLegacy(serverId: string): LegacyOAuthState {
-  if (typeof localStorage === "undefined") return {}
-  try {
-    const raw = localStorage.getItem(keyOf(serverId))
-    return raw ? (JSON.parse(raw) as LegacyOAuthState) : {}
-  } catch {
-    return {}
-  }
-}
-
 function parseTokens(raw: string | null): OAuthTokens | undefined {
   if (!raw) return undefined
   try {
@@ -112,33 +102,37 @@ function parseTokens(raw: string | null): OAuthTokens | undefined {
   }
 }
 
-function writePublicWithoutLegacySecrets(serverId: string, legacy: LegacyOAuthState): void {
-  write(serverId, {
-    clientInfo: legacy.clientInfo,
-    state: legacy.state,
-    lastAuthUrl: legacy.lastAuthUrl,
-  })
+function stripPublicSecrets(serverId: string): { tokens: boolean; verifier: boolean } {
+  if (typeof localStorage === "undefined") return { tokens: false, verifier: false }
+  try {
+    const raw = localStorage.getItem(keyOf(serverId))
+    if (!raw) return { tokens: false, verifier: false }
+    const parsed = JSON.parse(raw) as PublicOAuthState
+    const tokens = Object.prototype.hasOwnProperty.call(parsed, "tokens")
+    const verifier = Object.prototype.hasOwnProperty.call(parsed, "codeVerifier")
+    if (tokens || verifier) {
+      write(serverId, {
+        clientInfo: parsed.clientInfo,
+        state: parsed.state,
+        lastAuthUrl: parsed.lastAuthUrl,
+      })
+    }
+    return { tokens, verifier }
+  } catch {
+    return { tokens: false, verifier: false }
+  }
 }
 
 export async function hydrateMcpOAuthSecure(serverId: string): Promise<void> {
   const cache = cacheFor(serverId)
   if (cache.hydrated) return
-  const legacy = loadLegacy(serverId)
   const [secureTokens, secureVerifier] = await Promise.all([
     secureGet(secureTokensKey(serverId)).then(parseTokens),
     secureGet(secureVerifierKey(serverId)),
   ])
-  const tokens = secureTokens ?? legacy.tokens
-  const codeVerifier = secureVerifier ?? legacy.codeVerifier
-  if (tokens) {
-    cache.tokens = tokens
-    if (!secureTokens) await secureSet(secureTokensKey(serverId), JSON.stringify(tokens))
-  }
-  if (codeVerifier) {
-    cache.codeVerifier = codeVerifier
-    if (!secureVerifier) await secureSet(secureVerifierKey(serverId), codeVerifier)
-  }
-  if (legacy.tokens || legacy.codeVerifier) writePublicWithoutLegacySecrets(serverId, legacy)
+  if (secureTokens) cache.tokens = secureTokens
+  if (secureVerifier) cache.codeVerifier = secureVerifier
+  stripPublicSecrets(serverId)
   cache.hydrated = true
 }
 
@@ -161,9 +155,15 @@ export function mcpOAuthSecuritySnapshot(): {
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i)
       if (!key?.startsWith("ideall:agent:oauth:")) continue
-      const legacy = loadLegacy(key.slice("ideall:agent:oauth:".length))
-      if (legacy.tokens?.access_token) localTokenCount += 1
-      if (legacy.codeVerifier) localVerifierCount += 1
+      try {
+        const raw = localStorage.getItem(key)
+        if (!raw) continue
+        const parsed = JSON.parse(raw) as PublicOAuthState
+        if (parsed.tokens) localTokenCount += 1
+        if (parsed.codeVerifier) localVerifierCount += 1
+      } catch {
+        /* ignore one corrupt OAuth public state */
+      }
     }
   } catch {
     /* ignore diagnostics scan failures */
@@ -190,7 +190,7 @@ async function openExternal(url: string): Promise<void> {
   if (typeof window !== "undefined") window.open(url, "_blank", "noopener,noreferrer")
 }
 
-/** 一个 MCP server 的 OAuth provider (无内存态; 全部读写 localStorage, 故可每次 new 且跨实例共享)。 */
+/** 一个 MCP server 的 OAuth provider: public state 写 localStorage, token/verifier 只写 secure-store。 */
 class McpOAuthProvider implements OAuthClientProvider {
   constructor(private readonly serverId: string) {}
 
@@ -357,11 +357,6 @@ export async function finishMcpAuth(
 export function isMcpAuthorized(serverId: string): boolean {
   const cache = cacheFor(serverId)
   if (cache.tokens?.access_token) return true
-  const legacy = loadLegacy(serverId)
-  if (legacy.tokens?.access_token) {
-    cache.tokens = legacy.tokens
-    return true
-  }
   return false
 }
 

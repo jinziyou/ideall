@@ -26,7 +26,7 @@ type OverviewData = { counts: Counts; flow: FlowItem[] }
 function buildFlow(
   subs: Subscription[],
   bookmarks: { id: string; title: string; createdAt: number }[],
-  files: { id: string; name: string; createdAt: number }[],
+  files: { id: string; name: string; type: string; createdAt: number }[],
   notes: { id: string; title: string; createdAt: number }[],
 ): FlowItem[] {
   const items: FlowItem[] = []
@@ -70,6 +70,7 @@ function buildFlow(
       label: "添加资源",
       title: f.name,
       href: "/home/resources",
+      fileType: { name: f.name, type: f.type },
     })
   }
   return items.sort((a, b) => b.ts - a.ts).slice(0, 12)

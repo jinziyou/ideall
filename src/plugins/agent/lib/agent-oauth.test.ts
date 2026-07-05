@@ -8,8 +8,8 @@ import {
   clearMcpAuth,
   hydrateMcpOAuthSecure,
   revokeMcpAuth,
+  mcpOAuthSecuritySnapshot,
 } from "./agent-oauth"
-import { secureFallbackStorageKey } from "@/lib/secure-store"
 
 // node 无 localStorage → 内存 polyfill。agent-oauth 顶层不读 localStorage (load 在函数内), 故 import 后再装即可。
 const mem = new Map<string, string>()
@@ -60,27 +60,33 @@ test("revokeMcpAuth: 服务端撤销失败 (不可达) 仍清本机 token", asyn
   assert.equal(isMcpAuthorized("srv-rev"), false)
 })
 
-test("hydrateMcpOAuthSecure: 迁移旧 localStorage token/verifier 并清理公开状态", async () => {
+test("hydrateMcpOAuthSecure: 不再接受公开 token/verifier, 只清理 public state", async () => {
   mem.clear()
   mem.set(
-    "ideall:agent:oauth:legacy",
+    "ideall:agent:oauth:public",
     JSON.stringify({
       clientInfo: { client_id: "cid" },
-      tokens: { access_token: "legacy-token", token_type: "Bearer" },
-      codeVerifier: "legacy-verifier",
+      tokens: { access_token: "public-token", token_type: "Bearer" },
+      codeVerifier: "public-verifier",
       state: "s1",
     }),
   )
 
-  await hydrateMcpOAuthSecure("legacy")
-  assert.equal(isMcpAuthorized("legacy"), true)
-  assert.equal((await mcpOAuthProvider("legacy").tokens())?.access_token, "legacy-token")
-  assert.equal(await mcpOAuthProvider("legacy").codeVerifier(), "legacy-verifier")
+  assert.equal(mcpOAuthSecuritySnapshot().localTokenCount, 1)
+  assert.equal(mcpOAuthSecuritySnapshot().localVerifierCount, 1)
 
-  const publicState = mem.get("ideall:agent:oauth:legacy") ?? ""
-  assert.ok(!publicState.includes("legacy-token"))
-  assert.ok(!publicState.includes("legacy-verifier"))
-  assert.ok(
-    mem.get(secureFallbackStorageKey("ideall:agent:oauth:legacy:tokens"))?.includes("legacy-token"),
+  await hydrateMcpOAuthSecure("public")
+  assert.equal(isMcpAuthorized("public"), false)
+  assert.equal(await mcpOAuthProvider("public").tokens(), undefined)
+  await assert.rejects(
+    Promise.resolve(mcpOAuthProvider("public").codeVerifier()),
+    /缺少 code verifier/,
   )
+
+  const publicState = mem.get("ideall:agent:oauth:public") ?? ""
+  assert.ok(publicState.includes("cid"))
+  assert.ok(!publicState.includes("public-token"))
+  assert.ok(!publicState.includes("public-verifier"))
+  assert.equal(mcpOAuthSecuritySnapshot().localTokenCount, 0)
+  assert.equal(mcpOAuthSecuritySnapshot().localVerifierCount, 0)
 })

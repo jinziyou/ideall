@@ -59,6 +59,7 @@ import {
 import { refreshSidebarTree } from "@/workspace/tree/sidebar-tree-bus"
 import { addNote } from "@/files/stores/notes-store"
 import { useShortcutLabel } from "@/lib/shortcuts"
+import { FileTypeIcon } from "@/shared/file-type-icon"
 
 // openCommandPalette / CMDK_OPEN 已抽到 @/lib/command-palette-bus (纯事件总线),
 // 使 components 的触发器无需反向 import app/shell; 此处 re-export 维持既有 ./command-palette 导入点。
@@ -396,7 +397,15 @@ export default function CommandPalette() {
                           setOpen(false)
                         }}
                       >
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        {i.fileType ? (
+                          <FileTypeIcon
+                            name={i.fileType.name}
+                            type={i.fileType.type}
+                            className="h-4 w-4 shrink-0"
+                          />
+                        ) : (
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
                         <span className="truncate">{i.label}</span>
                       </CommandItem>
                     ))}
