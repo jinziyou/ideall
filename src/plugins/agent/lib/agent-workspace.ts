@@ -304,6 +304,12 @@ export function renameWorkspace(id: string, name: string) {
   if (ws) saveWorkspace({ ...ws, name: name.trim() || ws.name })
 }
 
+export function setActiveWorkspace(id: string): void {
+  const s = ensure()
+  if (s.activeId === id || !s.workspaces.some((w) => w.id === id)) return
+  commit({ ...s, activeId: id })
+}
+
 // —— 派生 (供 panel / composer / precise-mode) ——
 
 /** 解析本工作区实际使用的模型连接 (全局 或 覆盖)。 */

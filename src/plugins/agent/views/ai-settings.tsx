@@ -125,9 +125,16 @@ export default function AiSettings() {
           </div>
         </Panel>
 
-        {/* 3) 工具审批 */}
-        <Panel title="工具审批">
+        {/* 3) 智能体能力 */}
+        <Panel title="智能体能力">
           <div className="divide-y">
+            <SettingRow label="默认开启智能体模式">
+              <Switch
+                checked={settings.defaultAgentMode}
+                onChange={(v) => update({ defaultAgentMode: v })}
+                label="默认开启智能体模式"
+              />
+            </SettingRow>
             <SettingRow label="工具调用审批">
               <Select
                 value={settings.approvalPolicy}
@@ -138,7 +145,7 @@ export default function AiSettings() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="confirm">逐次确认（安全）</SelectItem>
-                  <SelectItem value="auto">自动允许已授权工具</SelectItem>
+                  <SelectItem value="auto">自动允许低风险工具</SelectItem>
                 </SelectContent>
               </Select>
             </SettingRow>

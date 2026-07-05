@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { registerFilesPort, type FilesPort } from "@protocol/files"
 import type { Node } from "@protocol/node"
 import { registerActiveNode } from "@/lib/active-node"
-import { gatherReferencedContext } from "./agent-context"
+import { gatherHomeContext, gatherReferencedContext } from "./agent-context"
 
 function mockGetNode(nodes: Record<string, Node>) {
   registerFilesPort({
@@ -66,4 +66,20 @@ test("激活 thread → 注入近期会话", async () => {
   registerActiveNode(() => ({ kind: "thread", id: "t1" }))
   const ctx = await gatherReferencedContext()
   assert.ok(ctx.includes("先这样"), "应含会话内容")
+})
+
+test("home 上下文: 分项读取失败时标记失败来源, 不伪装为空", async () => {
+  registerFilesPort({
+    listSubscriptions: async () => [],
+    listBookmarks: async () => [],
+    listFolders: async () => [],
+    listFiles: async () => [],
+    listNotes: async () => {
+      throw new Error("blocked")
+    },
+  } as unknown as FilesPort)
+  const ctx = await gatherHomeContext()
+  assert.ok(ctx.includes("上下文读取状态"), "应包含上下文状态")
+  assert.ok(ctx.includes("我的笔记"), "应指出失败来源")
+  assert.ok(ctx.includes("不能据此判断为空"), "应避免误判为空数据")
 })

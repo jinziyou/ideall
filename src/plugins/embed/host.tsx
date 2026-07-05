@@ -44,8 +44,10 @@ function currentTheme(): ThemeTokens {
  *  - 失败兜底 (M-1): 加载超时 / iframe onError / 源校验失败 → failed 态, 渲染「重试」卡片
  *    (零后端 / 断网 / 服务不可达时不再永久转圈); 重试经 reloadKey 重建 iframe。
  */
-// 加载超时: iframe 内 portal 完成 hello→init→ready 握手后撤 loading; 从 iframe onLoad 起算
-// (勿从宿主 effect 起算 —— 外网/WSL 下 wonita.link 常 >12s 才进 JS, 会误报「加载失败」)。
+// 加载超时分两段:
+// 1. 导航阶段: iframe 长时间不触发 load/onError → 失败, 避免永久转圈。
+// 2. 握手阶段: iframe load 后 portal 完成 hello→init→ready; 从 onLoad 起算, 避免外网/WSL 慢加载误报。
+const INITIAL_LOAD_TIMEOUT_MS = 60_000
 const LOAD_TIMEOUT_MS = 30_000
 
 type EmbedStatus = "loading" | "ready" | "failed" | "revoked"
@@ -54,6 +56,7 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null)
   // 浏览器 setTimeout 回 number (非 NodeJS.Timeout); 显式钉 number 避免 @types/node 全局串味致类型不符。
   const failTimerRef = React.useRef<number | null>(null)
+  const initialLoadTimerRef = React.useRef<number | null>(null)
   const uiPortRef = React.useRef<MessagePort | null>(null) // 建桥后持 uiPort, 供 visibility 推送
   const containerRef = React.useRef<HTMLDivElement | null>(null) // 观测自身可见性 (页签 display:none 判定)
   const visibleRef = React.useRef(true)
@@ -121,10 +124,27 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     }
   }, [])
 
+  const disarmInitialLoadTimer = React.useCallback(() => {
+    if (initialLoadTimerRef.current != null) {
+      window.clearTimeout(initialLoadTimerRef.current)
+      initialLoadTimerRef.current = null
+    }
+  }, [])
+
   const armFailTimer = React.useCallback(() => {
     disarmFailTimer()
     failTimerRef.current = window.setTimeout(() => setStatus("failed"), LOAD_TIMEOUT_MS)
   }, [disarmFailTimer])
+
+  React.useEffect(() => {
+    if (configError || status !== "loading" || !embedSrc) return
+    disarmInitialLoadTimer()
+    initialLoadTimerRef.current = window.setTimeout(
+      () => setStatus("failed"),
+      INITIAL_LOAD_TIMEOUT_MS,
+    )
+    return disarmInitialLoadTimer
+  }, [configError, status, embedSrc, reloadKey, disarmInitialLoadTimer])
 
   React.useEffect(() => {
     if (configError) {
@@ -237,11 +257,22 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
     window.addEventListener("message", onHello)
 
     return () => {
+      disarmInitialLoadTimer()
       disarmFailTimer()
       window.removeEventListener("message", onHello)
       cleanups.forEach((f) => f())
     }
-  }, [manifest, router, reloadKey, configError, entryOrigin, connId, armFailTimer, disarmFailTimer])
+  }, [
+    manifest,
+    router,
+    reloadKey,
+    configError,
+    entryOrigin,
+    connId,
+    armFailTimer,
+    disarmFailTimer,
+    disarmInitialLoadTimer,
+  ])
 
   // 宿主页签激活态 → uiPort visibility (§8): ideall 用 display:none 让非激活嵌入标签保持后台运行, iframe 自身
   // visibilityState 不随之变。若不下发, 隐藏页签的 portal 仍按「可见」续心跳 → presence 在线数虚高。
@@ -319,7 +350,8 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
         src={embedSrc ?? manifest.entry}
         title={manifest.name}
         onLoad={() => {
-          // 外网 portal 进 JS 前可能很久; 超时从 load 起算, 避免 effect 挂载即倒计时。
+          disarmInitialLoadTimer()
+          // 外网 portal 进 JS 前可能很久; 握手超时从 load 起算。
           if (effectiveStatus === "loading") armFailTimer()
         }}
         onError={() => setStatus("failed")}

@@ -1,4 +1,4 @@
-// AI 助手的模型接入设置 —— 本地优先。API Key 走 secure-store;
+// AI 智能体的模型接入设置 —— 本地优先。API Key 走 secure-store;
 // 桌面 App 用系统凭据后端, Web 形态降级到命名 fallback。key 不进公开配置,
 // 发送时随请求带 Authorization 头直连厂商端点
 // (不经服务端代理; App 经 Tauri HTTP 插件绕 CORS, 见 agent-chat.ts)。
@@ -25,7 +25,9 @@ export interface AgentSettings {
   apiKey: string
   /** 是否把 home 数据 (关注/书签/资源) 作上下文一并发送 */
   includeHomeContext: boolean
-  /** 工具调用审批默认策略: confirm=逐次确认 (默认, 安全); auto=自动允许已授权工具。 */
+  /** 新对话是否默认启用智能体工具循环。 */
+  defaultAgentMode: boolean
+  /** 工具调用审批默认策略: confirm=逐次确认 (默认, 安全); auto=自动允许低风险工具, 危险/外部工具仍确认。 */
   approvalPolicy: "confirm" | "auto"
 }
 
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   model: PROVIDER_PRESETS[0].model,
   apiKey: "",
   includeHomeContext: true,
+  defaultAgentMode: true,
   approvalPolicy: "confirm",
 }
 

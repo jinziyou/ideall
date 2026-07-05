@@ -200,7 +200,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
   },
   {
     id: "agent.settings",
-    label: "AI 助手全局设置",
+    label: "AI 智能体全局设置",
     owner: "agent",
     storage: "localStorage",
     key: AGENT_SETTINGS_STORAGE_KEY,

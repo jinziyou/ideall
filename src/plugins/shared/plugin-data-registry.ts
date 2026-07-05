@@ -107,7 +107,7 @@ export const PLUGIN_DATA_PORTS: PluginDataPort[] = [
     ...AGENT_DATA_SPEC,
     filenamePrefix: "ideall-agent",
     importMode: "merge",
-    importDescription: "导入会写入 AI 助手配置, 但不会导入 API Key 或密钥值。",
+    importDescription: "导入会写入 AI 智能体配置, 但不会导入 API Key 或密钥值。",
     exportJson: exportAgentConfigJson,
     importJson: importAgentConfigJson,
     inspect: async () => {

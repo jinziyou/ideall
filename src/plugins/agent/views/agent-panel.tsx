@@ -62,6 +62,7 @@ export interface AgentPanelProps {
   onThreadCreated?: (id: string) => void
   newLabel?: string
   emptyLabel?: string
+  defaultAgentMode?: boolean
 }
 
 const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function AgentPanel(
@@ -76,6 +77,7 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
     onThreadCreated,
     newLabel = "新对话",
     emptyLabel = "还没有对话",
+    defaultAgentMode,
   }: AgentPanelProps = {},
   ref,
 ) {
@@ -94,7 +96,9 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
   const [sending, setSending] = React.useState(false)
   const [streamingId, setStreamingId] = React.useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
-  const [agentMode, setAgentMode] = React.useState(false)
+  const [agentMode, setAgentMode] = React.useState(
+    () => defaultAgentMode ?? settings.defaultAgentMode,
+  )
   const [pendingApproval, setPendingApproval] = React.useState<{
     name: string
     argsText: string
@@ -115,6 +119,10 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
   React.useEffect(() => {
     void hydrateAgentSettingsSecure()
   }, [])
+
+  React.useEffect(() => {
+    if (!sendingRef.current) setAgentMode(defaultAgentMode ?? settings.defaultAgentMode)
+  }, [defaultAgentMode, settings.defaultAgentMode])
 
   function openSettings() {
     if (onOpenSettings) onOpenSettings()
@@ -307,6 +315,7 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
 
     let acc = ""
     let toolEvents: AgentToolEvent[] = []
+    let canceled = false
     try {
       if (useAgent) {
         const res = await runAgent({
@@ -316,12 +325,14 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
           messages: apiMessages,
           signal: controller.signal,
           mcp: runCfg.mcp,
-          onApprove: settings.approvalPolicy === "confirm" ? approveTool : undefined,
+          approvalPolicy: settings.approvalPolicy,
+          onApprove: approveTool,
           onToolEvent: (ev) => {
             toolEvents = [...toolEvents, ev]
             setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, toolEvents } : m)))
           },
         })
+        canceled = res.canceled === true
         acc = res.content
         toolEvents = res.toolEvents
       } else {
@@ -336,25 +347,42 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
             setMessages((prev) => prev.map((m) => (m.id === asst.id ? { ...m, content: acc } : m)))
           },
         })
+        canceled = controller.signal.aborted
       }
     } catch (e) {
-      if (!(e instanceof DOMException && e.name === "AbortError") && !controller.signal.aborted) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        canceled = true
+      } else if (controller.signal.aborted) {
+        canceled = true
+      } else {
         const msg = e instanceof Error ? e.message : String(e)
         toast.error(useAgent ? "智能体出错" : "对话出错", { description: msg })
         if (!acc) acc = `（请求出错：${msg}）`
       }
     } finally {
-      if (useAgent && !acc.trim()) {
-        acc = toolEvents.length
-          ? `已执行 ${toolEvents.length} 个操作：${toolEvents.map((t) => t.summary).join("；")}`
-          : "（助手没有返回内容）"
+      if (canceled) {
+        setMessages((prev) => prev.filter((m) => m.id !== asst.id))
+      } else if (useAgent && !acc.trim()) {
+        const operationEvents = toolEvents.filter((t) => !t.name.startsWith("mcp:"))
+        acc = operationEvents.length
+          ? `已执行 ${operationEvents.length} 个操作：${operationEvents.map((t) => t.summary).join("；")}`
+          : toolEvents.length
+            ? toolEvents.map((t) => t.summary).join("；")
+            : "（智能体没有返回内容）"
       }
-      setMessages((prev) =>
-        prev.map((m) => (m.id === asst.id ? { ...m, content: acc, toolEvents } : m)),
-      )
+      if (!canceled) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === asst.id ? { ...m, content: acc, toolEvents } : m)),
+        )
+      }
       setSending(false)
       setStreamingId(null)
       abortRef.current = null
+    }
+
+    if (canceled) {
+      sendingRef.current = false
+      return
     }
 
     try {
@@ -416,7 +444,7 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
         {showHeader && (
           <header className="mb-6 flex shrink-0 items-center justify-between gap-3 px-1">
             <div className="min-w-0">
-              <h1 className="text-[15px] font-semibold leading-tight">AI 助手</h1>
+              <h1 className="text-[15px] font-semibold leading-tight">AI 智能体</h1>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Chip tone={configured ? "ok" : "warn"}>{statusLabel}</Chip>

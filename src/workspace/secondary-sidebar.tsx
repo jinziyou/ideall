@@ -8,13 +8,21 @@ import { cn } from "@/lib/utils"
 import SidebarTree from "./tree/sidebar-tree"
 import { moduleById } from "./modules"
 import { isPluginModule } from "./plugin-entries"
-import { useActiveModule, setSidebarCollapsed } from "./store"
+import { useActiveModule, useMode, setSidebarCollapsed } from "./store"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
   const activeModule = useActiveModule()
+  const mode = useMode()
   const mod = moduleById(activeModule)
   const isPlugins = activeModule === "plugins" || isPluginModule(activeModule)
-  const title = activeModule === "agent" ? "工作区" : isPlugins ? "插件" : mod.sidebarTitle
+  const title =
+    activeModule === "agent"
+      ? mode === "local"
+        ? "工作区"
+        : "AI"
+      : isPlugins
+        ? "插件"
+        : mod.sidebarTitle
 
   return (
     <aside

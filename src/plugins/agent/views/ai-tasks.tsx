@@ -37,9 +37,14 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
   )
   const tasks = React.useSyncExternalStore(subscribeTasks, getTasks, getServerTasks)
   const ws = wsState.workspaces.find((w) => w.id === workspaceId) ?? null
+  const configured = ws ? isWorkspaceConfigured(ws) : false
 
   const [view, setView] = React.useState<"tasks" | "config">("tasks")
   const [configView, setConfigView] = React.useState<"compose" | "precise">("compose")
+
+  React.useEffect(() => {
+    if (!configured) setView("config")
+  }, [configured, workspaceId])
 
   // 发送时读最新工作空间 (组合器改动即时生效)。
   const resolveRun = React.useCallback(
@@ -60,7 +65,6 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
 
   const scopeIds = tasks.filter((t) => t.workspaceId === workspaceId).map((t) => t.id)
   const skills = resolveSkills(ws.capabilities.skillIds)
-  const configured = isWorkspaceConfigured(ws)
   const modelLabel = ws.model.useGlobal
     ? `${resolveModel(ws).model}（全局）`
     : resolveModel(ws).model

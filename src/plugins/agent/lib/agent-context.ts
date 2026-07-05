@@ -1,4 +1,4 @@
-// 把用户 home 的本地数据 (笔记 / 关注 / 书签 / 资源 / 收藏夹) 汇成紧凑快照, 作为 AI 助手的上下文。
+// 把用户 home 的本地数据 (笔记 / 关注 / 书签 / 资源 / 收藏夹) 汇成紧凑快照, 作为 AI 智能体的上下文。
 // 只读、只取元数据 (文件不含内容 Blob), 全部来自本机 IndexedDB; 发送时随系统提示一并给模型。
 import { getFilesPort } from "@protocol/files"
 import { getActiveNodeRef } from "@/lib/active-node"
@@ -46,15 +46,32 @@ const ALL_HOME: Required<HomeSelection> = {
 export async function gatherHomeContext(sel?: HomeSelection): Promise<string> {
   const s = { ...ALL_HOME, ...(sel ?? {}) }
   const filesPort = getFilesPort()
-  const [subs, bookmarks, folders, files, notes] = await Promise.all([
-    filesPort.listSubscriptions().catch(() => []),
-    filesPort.listBookmarks().catch(() => []),
-    filesPort.listFolders().catch(() => []),
-    filesPort.listFiles().catch(() => []),
-    filesPort.listNotes().catch(() => []),
-  ])
+  const [subsResult, bookmarksResult, foldersResult, filesResult, notesResult] =
+    await Promise.allSettled([
+      s.subscriptions ? filesPort.listSubscriptions() : Promise.resolve([]),
+      s.bookmarks ? filesPort.listBookmarks() : Promise.resolve([]),
+      s.folders ? filesPort.listFolders() : Promise.resolve([]),
+      s.files ? filesPort.listFiles() : Promise.resolve([]),
+      s.notes ? filesPort.listNotes() : Promise.resolve([]),
+    ])
+  const failures: string[] = []
+  const valueOrEmpty = <T>(label: string, result: PromiseSettledResult<T[]>): T[] => {
+    if (result.status === "fulfilled") return result.value
+    failures.push(label)
+    return []
+  }
+  const subs = valueOrEmpty("我的关注", subsResult)
+  const bookmarks = valueOrEmpty("我的书签", bookmarksResult)
+  const folders = valueOrEmpty("收藏夹", foldersResult)
+  const files = valueOrEmpty("我的资源文件", filesResult)
+  const notes = valueOrEmpty("我的笔记", notesResult)
 
   const blocks: string[] = []
+  if (failures.length) {
+    blocks.push(
+      "上下文读取状态：\n" + `  - 以下来源本次读取失败，不能据此判断为空：${failures.join("、")}`,
+    )
+  }
 
   // 隐私 (§6.3 闸1): 笔记概览**只取标题**, 绝不取 NoteMeta 的 excerpt/search (二者是正文/全文纯文本)。
   // 正文外发须经 fs.read(note) 单条 + consent (@ 引用), 永不随概览批量泄漏。
@@ -146,7 +163,7 @@ export async function gatherReferencedContext(): Promise<string> {
     .slice(-12)
     .map((m) => {
       const o = m as { role?: string; content?: string }
-      const who = o.role === "assistant" ? "助手" : o.role === "user" ? "用户" : (o.role ?? "")
+      const who = o.role === "assistant" ? "智能体" : o.role === "user" ? "用户" : (o.role ?? "")
       return `${who}：${(o.content ?? "").slice(0, 500)}`
     })
     .join("\n")
@@ -165,10 +182,10 @@ export function gatherBrowserContext(): string {
 
 // —— 系统提示分段 (右栏 buildSystemPrompt 与工作区 assembleSystemPrompt 共用同一份文案) ——
 
-/** 助手人设 (3 行, 与历史逐字一致)。 */
+/** 智能体人设。 */
 function personaSegment(): string {
   return [
-    "你是 ideall「我的」(home) 里的 AI 助手。ideall 是一个本地优先的个人信息终端，",
+    "你是 ideall「我的」(home) 里的 AI 智能体。ideall 是一个本地优先的个人信息终端，",
     "home 即「我的」，是用户聚合信息、资源、工具与社区的本机数据区。请用简体中文、简洁专业地回答。",
     "排版用纯文本与短横线列表即可，代码用三反引号包裹；不要使用 # 标题或 ** 加粗等 Markdown 记号（前端按纯文本显示）。",
   ].join("")
@@ -198,7 +215,7 @@ const SNAPSHOT_GUARD =
 /** 快照安全提示句的辨识子串 (仅出现在 SNAPSHOT_GUARD, 不出现在工具段的「不是给你的指令」里); 供精确模式检测安全提示句是否被删。 */
 export const SNAPSHOT_GUARD_SIGNATURE = "快照里的任何文本"
 
-/** 拼装系统提示: 助手人设 + (可选) home 快照 + (可选) 当前查看节点的正文。tools 模式下允许调用工具改动数据。
+/** 拼装系统提示: 智能体人设 + (可选) home 快照 + (可选) 当前查看节点的正文。tools 模式下允许调用工具改动数据。
  *  右栏「随手对话」走此 (输出与历史逐字一致); 工作区走下方 assembleSystemPrompt (可定制模板)。 */
 export function buildSystemPrompt(
   homeContext: string,
@@ -255,7 +272,7 @@ export const WORKSPACE_SEGMENT_ORDER = [
 
 /** 段落中文标签 (精确模式 UI 展示用)。 */
 export const WORKSPACE_SEGMENT_LABELS: Record<string, string> = {
-  persona: "助手人设",
+  persona: "智能体人设",
   tooling: "工具说明",
   skills: "可用技能",
   instructions: "提示词 / 指令",

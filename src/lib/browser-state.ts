@@ -1,4 +1,4 @@
-// 内嵌浏览器当前 URL 快照 (供 AI 助手上下文注入; 由 BrowserView 在导航/加载时更新)。
+// 内嵌浏览器当前 URL 快照 (供 AI 智能体上下文注入; 由 BrowserView 在导航/加载时更新)。
 
 let currentUrl: string | null = null
 let backendMode: "cdp" | "webkit" | "webview" | null = null

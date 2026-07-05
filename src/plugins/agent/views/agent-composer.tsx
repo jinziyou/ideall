@@ -112,7 +112,7 @@ export default function AgentComposer({
             type="button"
             onClick={onToggleAgentMode}
             disabled={sending}
-            title="开启后助手可读写「我的」的数据"
+            title="开启后智能体可读写「我的」的数据"
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors disabled:opacity-50",
               agentMode
@@ -163,7 +163,7 @@ export default function AgentComposer({
               !configured && compact
                 ? "配置 API Key 后即可对话…"
                 : agentMode
-                  ? "让助手整理本机的关注、书签、资源…"
+                  ? "让智能体整理本机的关注、书签、资源…"
                   : "输入消息，Enter 发送，Shift+Enter 换行"
             }
             className="min-h-[2.75rem] max-h-40 flex-1 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"

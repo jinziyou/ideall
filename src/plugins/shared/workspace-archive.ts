@@ -1,4 +1,5 @@
-import type { Node } from "@protocol/node"
+import { isNodeKind, type Node } from "@protocol/node"
+import type { SubscriptionType } from "@protocol/subscription"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import {
   idbGetAll,
@@ -91,6 +92,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error(`${label} 格式无效`)
+  return value
+}
+
 function bytesOf(raw: string): number {
   return new TextEncoder().encode(raw).byteLength
 }
@@ -100,9 +106,44 @@ function requireString(value: unknown, label: string): string {
   return value
 }
 
+function requireStringValue(value: unknown, label: string): string {
+  if (typeof value !== "string") throw new Error(`${label} 格式无效`)
+  return value
+}
+
 function requireNumber(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} 格式无效`)
   return value
+}
+
+function requireNonNegativeNumber(value: unknown, label: string): number {
+  const n = requireNumber(value, label)
+  if (n < 0) throw new Error(`${label} 格式无效`)
+  return n
+}
+
+function optionalNumber(value: unknown, label: string): number | undefined {
+  return value === undefined ? undefined : requireNumber(value, label)
+}
+
+function optionalString(value: unknown, label: string): string | undefined {
+  return value === undefined ? undefined : requireString(value, label)
+}
+
+function requireNullableString(value: unknown, label: string): string | null {
+  if (value === null) return null
+  return requireString(value, label)
+}
+
+function requireStringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${label} 格式无效`)
+  }
+  return [...value]
+}
+
+function normalizeMeta(value: unknown, label: string): Record<string, unknown> {
+  return { ...requireRecord(value, label) }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -116,6 +157,9 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 function base64ToBytes(value: string): Uint8Array {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 !== 0) {
+    throw new Error("base64 格式无效")
+  }
   const maybeBuffer = (globalThis as unknown as { Buffer?: BufferLike }).Buffer
   if (maybeBuffer) {
     const binary = maybeBuffer.from(value, "base64").toString("binary")
@@ -143,19 +187,103 @@ function serializedToBlob(record: SerializedBlobRecord): BlobRecord {
 
 function normalizeSerializedBlob(value: unknown, label: string): SerializedBlobRecord {
   if (!isRecord(value)) throw new Error(`${label} 格式无效`)
+  const size = requireNonNegativeNumber(value.size, `${label}.size`)
+  const dataBase64 = requireStringValue(value.dataBase64, `${label}.dataBase64`)
+  const bytes = base64ToBytes(dataBase64)
+  if (bytes.byteLength !== size) throw new Error(`${label}.size 与 dataBase64 不一致`)
   return {
     key: requireString(value.key, `${label}.key`),
     mime: typeof value.mime === "string" ? value.mime : "",
-    size: requireNumber(value.size, `${label}.size`),
-    dataBase64: requireString(value.dataBase64, `${label}.dataBase64`),
+    size,
+    dataBase64,
   }
 }
 
 function normalizeNode(value: unknown, label: string): Node {
   if (!isRecord(value)) throw new Error(`${label} 格式无效`)
-  requireString(value.id, `${label}.id`)
-  requireString(value.kind, `${label}.kind`)
-  return value as unknown as Node
+  const kind = requireString(value.kind, `${label}.kind`)
+  if (!isNodeKind(kind)) throw new Error(`${label}.kind 格式无效`)
+  const deletedAt = optionalNumber(value.deletedAt, `${label}.deletedAt`)
+  const meta = value.meta === undefined ? undefined : normalizeMeta(value.meta, `${label}.meta`)
+  const base = {
+    id: requireString(value.id, `${label}.id`),
+    parentId: requireNullableString(value.parentId, `${label}.parentId`),
+    sortKey: requireString(value.sortKey, `${label}.sortKey`),
+    title: typeof value.title === "string" ? value.title : "",
+    tags: requireStringArray(value.tags, `${label}.tags`),
+    createdAt: requireNumber(value.createdAt, `${label}.createdAt`),
+    updatedAt: requireNumber(value.updatedAt, `${label}.updatedAt`),
+    ...(deletedAt === undefined ? {} : { deletedAt }),
+    ...(meta === undefined ? {} : { meta }),
+  }
+  switch (kind) {
+    case "folder":
+      if (value.content !== undefined && value.content !== null) {
+        throw new Error(`${label}.content 格式无效`)
+      }
+      return { ...base, kind, content: null }
+    case "note":
+      if (!Array.isArray(value.content)) throw new Error(`${label}.content 格式无效`)
+      return { ...base, kind, content: value.content }
+    case "bookmark": {
+      const content = requireRecord(value.content, `${label}.content`)
+      return {
+        ...base,
+        kind,
+        content: {
+          url: requireString(content.url, `${label}.content.url`),
+          description: typeof content.description === "string" ? content.description : "",
+          favicon: typeof content.favicon === "string" ? content.favicon : "",
+        },
+      }
+    }
+    case "file": {
+      const blobRef = requireRecord(value.blobRef, `${label}.blobRef`)
+      if (value.content !== undefined && value.content !== null) {
+        throw new Error(`${label}.content 格式无效`)
+      }
+      return {
+        ...base,
+        kind,
+        blobRef: {
+          store: blobRef.store === "blobs" ? "blobs" : invalidBlobStore(`${label}.blobRef.store`),
+          key: requireString(blobRef.key, `${label}.blobRef.key`),
+          size: requireNonNegativeNumber(blobRef.size, `${label}.blobRef.size`),
+          mime: typeof blobRef.mime === "string" ? blobRef.mime : "",
+        },
+        content: null,
+      }
+    }
+    case "feed": {
+      const content = requireRecord(value.content, `${label}.content`)
+      const type = requireString(content.type, `${label}.content.type`)
+      if (!["publisher", "entity", "tool", "search", "peer"].includes(type)) {
+        throw new Error(`${label}.content.type 格式无效`)
+      }
+      const entityLabel = optionalString(content.entityLabel, `${label}.content.entityLabel`)
+      const entityName = optionalString(content.entityName, `${label}.content.entityName`)
+      const searchKeyword = optionalString(content.searchKeyword, `${label}.content.searchKeyword`)
+      const searchDomain = optionalString(content.searchDomain, `${label}.content.searchDomain`)
+      return {
+        ...base,
+        kind,
+        content: {
+          type: type as SubscriptionType,
+          key: requireString(content.key, `${label}.content.key`),
+          favicon: typeof content.favicon === "string" ? content.favicon : "",
+          ...(entityLabel === undefined ? {} : { entityLabel }),
+          ...(entityName === undefined ? {} : { entityName }),
+          ...(searchKeyword === undefined ? {} : { searchKeyword }),
+          ...(searchDomain === undefined ? {} : { searchDomain }),
+        },
+      }
+    }
+    case "thread": {
+      const content = requireRecord(value.content, `${label}.content`)
+      if (!Array.isArray(content.messages)) throw new Error(`${label}.content.messages 格式无效`)
+      return { ...base, kind, content: { messages: content.messages } }
+    }
+  }
 }
 
 function normalizeTrashSnapshot(value: unknown, index: number): SerializedTrashSnapshot {
@@ -172,7 +300,11 @@ function normalizeTrashSnapshot(value: unknown, index: number): SerializedTrashS
   }
 }
 
-function nullableString(value: unknown): string | null {
+function invalidBlobStore(label: string): never {
+  throw new Error(`${label} 格式无效`)
+}
+
+function nullableWorkspaceString(value: unknown): string | null {
   return typeof value === "string" ? value : null
 }
 
@@ -180,8 +312,8 @@ function normalizeWorkspaceSnapshot(value: unknown): PersistedWorkspaceSnapshot 
   if (!isRecord(value) || !Array.isArray(value.tabs)) return null
   return {
     tabs: value.tabs.filter(isRecord),
-    activeId: nullableString(value.activeId),
-    transientId: nullableString(value.transientId),
+    activeId: nullableWorkspaceString(value.activeId),
+    transientId: nullableWorkspaceString(value.transientId),
     activeModule: typeof value.activeModule === "string" ? value.activeModule : "home",
     mode: value.mode === "connected" ? "connected" : "local",
     sidebarCollapsed: value.sidebarCollapsed === true,

@@ -29,6 +29,7 @@ import {
   tabKey,
   useActiveId,
   useActiveModule,
+  useMode,
   useActiveTabKind,
   useActiveWorkspaceId,
   getTabs,
@@ -100,6 +101,7 @@ function isDescriptorActive(
 
 export default function SidebarTree() {
   const activeModule = useActiveModule()
+  const mode = useMode()
   const activeId = useActiveId()
   const activeKind = useActiveTabKind()
   const activeWorkspaceId = useActiveWorkspaceId()
@@ -208,13 +210,15 @@ export default function SidebarTree() {
 
   const roots = React.useMemo(() => {
     if (activeModule === "agent") {
-      const base = staticTreeRoots("agent")
+      const base = staticTreeRoots("agent").filter(
+        (n) => mode === "local" || n.id !== "section:workspaces",
+      )
       const wsSection = base.find((n) => n.id === "section:workspaces")
       if (wsSection) wsSection.hasChildren = wsState.workspaces.length > 0
       return base
     }
     return rootsForModule(activeModule)
-  }, [activeModule, wsState.workspaces.length])
+  }, [activeModule, mode, wsState.workspaces.length])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">

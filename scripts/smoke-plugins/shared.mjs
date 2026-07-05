@@ -80,6 +80,7 @@ export async function seedLegacySecurityData(page) {
           model: "smoke-model",
           apiKey: agentKey,
           includeHomeContext: true,
+          defaultAgentMode: true,
           approvalPolicy: "confirm",
         }),
       )

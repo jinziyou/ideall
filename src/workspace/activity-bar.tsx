@@ -44,7 +44,6 @@ export default function ActivityBar() {
     !listed.some((m) => m.id === activeModule)
       ? moduleById(activeModule)
       : null
-  const hasHome = topModules.some((m) => m.id === "home")
   const pluginsActive = activeModule === "plugins" || isPluginModule(activeModule)
 
   const workspaceButton = (
@@ -121,7 +120,6 @@ export default function ActivityBar() {
             {m.id === "home" && workspaceButton}
           </Fragment>
         ))}
-        {!hasHome && workspaceButton}
         {pluginsMod && (
           <>
             <BarDivider />

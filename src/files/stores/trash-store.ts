@@ -4,7 +4,6 @@ import type { Node, NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import {
   idbBulkPut,
-  idbCountFromIndex,
   idbDelete,
   idbGet,
   idbGetAll,
@@ -133,7 +132,8 @@ export async function listTrashItems(): Promise<TrashItem[]> {
 }
 
 export async function countTrashItems(): Promise<number> {
-  return idbCountFromIndex(STORE_NODES, INDEX_NODES_DELETED_AT)
+  const nodes = await idbGetAllFromIndex<Node>(STORE_NODES, INDEX_NODES_DELETED_AT)
+  return nodes.filter((node) => node.deletedAt != null && isTrashKind(node.kind)).length
 }
 
 export async function restoreTrashItem(id: string): Promise<void> {

@@ -1,4 +1,4 @@
-// AI 助手对话的存储外观 (agent 插件) —— 折叠步 D 后线程归 core 拥有 (nodes 仓库 kind:"thread"),
+// AI 智能体对话的存储外观 (agent 插件) —— 折叠步 D 后线程归 core 拥有 (nodes 仓库 kind:"thread"),
 // 本模块改经 @protocol/files 的 FilesPort 消费 (依赖反转: 插件不直接碰 IndexedDB / core 存储)。
 // 消息语义 (AgentMessage) 属本插件域; 端口以 Thread.messages: unknown[] 透传, 本边界断言为 AgentMessage[]。
 import { getFilesPort } from "@protocol/files"

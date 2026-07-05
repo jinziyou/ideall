@@ -13,6 +13,7 @@ import { isTauri, browserHide } from "@/lib/tauri"
 import { store, useAppSelector } from "@/lib/store"
 import { workspaceActions, type ActiveSource, type WorkspaceState } from "./workspace-slice"
 import { WORKSPACE_STORAGE_KEY } from "./workspace-persist"
+import { setActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
 
 export type { ActiveSource }
 
@@ -345,6 +346,7 @@ export function openAiSection(kind: "ai-mcp" | "ai-skills" | "ai-rules", opts?: 
 
 /** 打开某工作区的任务标签 (params.workspaceId 区分实例; 不设 path → 不参与 URL 同步)。 */
 export function openAiTasks(workspaceId: string, title: string, opts?: OpenTabOpts) {
+  setActiveWorkspace(workspaceId)
   openAgentTab({ kind: "ai-tasks", module: "agent", title, params: { workspaceId } }, opts)
 }
 

@@ -1,7 +1,7 @@
-// AI 助手 (agent) 插件域类型 —— 对话线程 / 消息 / 工具事件。
+// AI 智能体 (agent) 插件域类型 —— 对话线程 / 消息 / 工具事件。
 // 本地优先: 线程存于浏览器 IndexedDB 的 agentThreads 仓库 (消息内联于线程文档)。
 
-/** AI 助手消息角色 (与 OpenAI 兼容接口一致) */
+/** AI 智能体消息角色 (与 OpenAI 兼容接口一致) */
 export type AgentRole = "system" | "user" | "assistant"
 
 /** 智能体一次工具调用的展示记录 (仅前端展示与存档, 不回传给模型) */
@@ -22,12 +22,12 @@ export interface AgentMessage {
   role: AgentRole
   content: string
   createdAt: number
-  /** 智能体模式下该条助手消息执行过的工具调用 (展示用, 不回传模型) */
+  /** 智能体模式下该条消息执行过的工具调用 (展示用, 不回传模型) */
   toolEvents?: AgentToolEvent[]
 }
 
 /**
- * AI 助手对话线程 —— 本地优先, 消息内联存于线程文档 (IndexedDB agentThreads 仓库)。
+ * AI 智能体对话线程 —— 本地优先, 消息内联存于线程文档 (IndexedDB agentThreads 仓库)。
  * 对话内容只存本机浏览器; 发送时才把消息 + home 上下文直连发给模型厂商 (不经服务端代理; 见 agent-chat.ts)。
  */
 export interface AgentThread {

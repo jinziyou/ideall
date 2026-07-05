@@ -5,8 +5,24 @@
 import { requestCompletion } from "./agent-chat"
 import { connectAgentMcp, summarizeTool, type ConnectAgentOpts } from "./agent-mcp"
 import type { AgentToolEvent } from "./model"
+import { TOOL } from "@/plugins/embed/protocol"
 
 const MAX_ROUNDS = 8
+
+const FORCE_APPROVAL_TOOLS = new Set<string>([
+  TOOL.fsCreate,
+  TOOL.fsWrite,
+  TOOL.fsMove,
+  TOOL.fsDelete,
+  TOOL.uiOpenTab,
+  TOOL.uiCloseTab,
+  TOOL.browserNavigate,
+  TOOL.browserClick,
+  TOOL.browserFill,
+  TOOL.browserPress,
+  TOOL.browserWait,
+  TOOL.browserWaitForSelector,
+])
 
 export interface RunAgentOptions {
   baseURL: string
@@ -21,16 +37,32 @@ export interface RunAgentOptions {
   mcp?: ConnectAgentOpts
   /** 工具审批 (approvalPolicy==="confirm" 时由 UI 提供): 每次执行工具前征询, 返回 false → 跳过该工具。 */
   onApprove?: (name: string, argsText: string) => Promise<boolean>
+  /** confirm=全部工具确认; auto=仅危险/外部工具强制确认。缺省保持旧行为: 传了 onApprove 就全部确认。 */
+  approvalPolicy?: "confirm" | "auto"
 }
 
 export interface RunAgentResult {
   content: string
   toolEvents: AgentToolEvent[]
+  canceled?: boolean
 }
 
 function shorten(raw: string): string {
   const s = (raw ?? "").trim()
   return s.length > 120 ? s.slice(0, 120) + "…" : s
+}
+
+function requiresApproval(name: string): boolean {
+  return FORCE_APPROVAL_TOOLS.has(name) || /^m\d+_/.test(name)
+}
+
+function pushToolEvent(
+  events: AgentToolEvent[],
+  ev: AgentToolEvent,
+  onToolEvent?: (ev: AgentToolEvent) => void,
+): void {
+  events.push(ev)
+  onToolEvent?.(ev)
 }
 
 /** 运行一轮智能体 (可含多次工具调用), 返回最终文本与工具事件。出错抛异常 (abort 抛 AbortError)。 */
@@ -41,8 +73,23 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
   // 起 loopback MCP 会话 (与 iframe 同一能力层); finally 释放端口。
   const mcp = await connectAgentMcp(opts.mcp)
   try {
+    for (const d of mcp.diagnostics) {
+      pushToolEvent(
+        toolEvents,
+        {
+          name: `mcp:${d.serverName}`,
+          argsText: "",
+          ok: d.ok,
+          summary: d.ok
+            ? `MCP 已连接：${d.serverName}`
+            : `MCP 不可用：${d.serverName}（${shorten(d.message)}）`,
+        },
+        opts.onToolEvent,
+      )
+    }
+
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      if (opts.signal?.aborted) return { content: "", toolEvents }
+      if (opts.signal?.aborted) return { content: "", toolEvents, canceled: true }
       const msg = await requestCompletion({
         baseURL: opts.baseURL,
         model: opts.model,
@@ -62,16 +109,30 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
       for (const tc of toolCalls) {
         // 用户中途「停止」: 不再执行后续工具, 把副作用限制在已发起的这一个之内
-        if (opts.signal?.aborted) return { content: "", toolEvents }
-        let args: Record<string, unknown> = {}
+        if (opts.signal?.aborted) return { content: "", toolEvents, canceled: true }
+        let args: Record<string, unknown>
         try {
           args = JSON.parse(tc.function.arguments || "{}")
         } catch {
-          args = {}
+          const ev: AgentToolEvent = {
+            name: tc.function.name,
+            argsText: shorten(tc.function.arguments),
+            ok: false,
+            summary: "工具参数不是合法 JSON，已跳过执行",
+          }
+          pushToolEvent(toolEvents, ev, opts.onToolEvent)
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, summary: ev.summary }),
+          })
+          continue
         }
         // 工具审批 (confirm 策略): 执行前征询用户; 拒绝 → 把「已拒绝」喂回模型, 不执行副作用。
         if (
           opts.onApprove &&
+          ((opts.approvalPolicy ?? "confirm") === "confirm" ||
+            requiresApproval(tc.function.name)) &&
           !(await opts.onApprove(tc.function.name, tc.function.arguments || ""))
         ) {
           const ev: AgentToolEvent = {
@@ -80,8 +141,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
             ok: false,
             summary: "已拒绝执行",
           }
-          toolEvents.push(ev)
-          opts.onToolEvent?.(ev)
+          pushToolEvent(toolEvents, ev, opts.onToolEvent)
           messages.push({
             role: "tool",
             tool_call_id: tc.id,
@@ -97,8 +157,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
           ok,
           summary,
         }
-        toolEvents.push(ev)
-        opts.onToolEvent?.(ev)
+        pushToolEvent(toolEvents, ev, opts.onToolEvent)
         messages.push({
           role: "tool",
           tool_call_id: tc.id,
@@ -109,7 +168,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
 
     // 触及工具调用上限: 不再带 tools, 让模型基于已有结果给最终答复。
     // 但若用户恰在最后一轮结束时「停止」, 不应再发起这次收尾请求 (与循环内 abort 守卫一致)。
-    if (opts.signal?.aborted) return { content: "", toolEvents }
+    if (opts.signal?.aborted) return { content: "", toolEvents, canceled: true }
     const final = await requestCompletion({
       baseURL: opts.baseURL,
       model: opts.model,

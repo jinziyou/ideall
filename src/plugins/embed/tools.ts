@@ -404,11 +404,13 @@ export function registerGrantedTools(
       "在内嵌浏览器中导航到指定 https 网址（会打开或切换到浏览器标签）。",
       { url: z.string() },
       async (a) => {
-        if (!safeHref(a.url)) return fail(-32602, "blocked-protocol")
+        const href = safeHref(a.url)
+        if (!href) return fail(-32602, "blocked-protocol")
+        if (new URL(href).protocol !== "https:") return fail(-32602, "blocked-protocol")
         if (!isTauri()) return fail(-32000, "browser-not-available")
         const open = getUiActions()?.openExternal
         if (!open) return fail(-32000, "browser-not-available")
-        await open(a.url)
+        await open(href)
         return ok({ ok: true })
       },
     )

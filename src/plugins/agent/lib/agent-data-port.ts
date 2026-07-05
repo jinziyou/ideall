@@ -18,7 +18,7 @@ import { AGENT_WORKSPACES_STORAGE_KEY, type WorkspacesState } from "./agent-work
 import { ACP_SETTINGS_STORAGE_KEY } from "./acp/acp-settings"
 
 export const AGENT_PLUGIN_ID = "agent"
-export const AGENT_PLUGIN_LABEL = "AI 助手"
+export const AGENT_PLUGIN_LABEL = "AI 智能体"
 export const AGENT_EXPORT_KIND = "ideall.agent.config"
 export const AGENT_EXPORT_VERSION = 1
 export const AGENT_DATA_SPEC = {

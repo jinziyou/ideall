@@ -110,7 +110,7 @@ export default function BottomTabBar() {
       <TabItem tab={TABS[1]} pathname={pathname} />
       <Link
         href={AGENT_HREF}
-        aria-label="AI 助手"
+        aria-label="AI 智能体"
         aria-current={agentActive ? "page" : undefined}
         className="flex shrink-0 flex-col items-center justify-end gap-0.5 self-stretch px-1"
       >

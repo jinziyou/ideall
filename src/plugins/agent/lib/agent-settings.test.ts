@@ -49,6 +49,7 @@ test("agent settings: Web 降级路径把 API Key 写入 secure-store fallback",
     model: "m",
     apiKey: "sk-test",
     includeHomeContext: false,
+    defaultAgentMode: true,
     approvalPolicy: "auto",
   })
   assert.equal(getAgentSettings().apiKey, "sk-test")

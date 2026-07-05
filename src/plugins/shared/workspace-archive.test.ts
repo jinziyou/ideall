@@ -90,3 +90,40 @@ test("workspace archive: 拒绝非归档格式", () => {
     /不支持/,
   )
 })
+
+test("workspace archive: 拒绝畸形核心节点与 Blob", () => {
+  const base = createWorkspaceArchivePackage(
+    {
+      core: {
+        nodes: [noteNode],
+        blobs: [],
+        trashSnapshots: [],
+        workspace: null,
+      },
+      plugins: createWorkspaceBackupPackage([], "2026-01-01T00:00:00.000Z"),
+    },
+    "2026-01-01T00:00:00.000Z",
+  )
+
+  assert.throws(
+    () =>
+      parseWorkspaceArchivePackage(
+        JSON.stringify({
+          ...base,
+          core: { ...base.core, nodes: [{ id: "bad", kind: "note", parentId: null }] },
+        }),
+      ),
+    /nodes\[0\]\.sortKey/,
+  )
+
+  assert.throws(
+    () =>
+      parseWorkspaceArchivePackage(
+        JSON.stringify({
+          ...base,
+          core: { ...base.core, blobs: [{ key: "b1", mime: "", size: 4, dataBase64: "YQ==" }] },
+        }),
+      ),
+    /size 与 dataBase64 不一致/,
+  )
+})

@@ -115,6 +115,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
       model: form.model.trim(),
       apiKey: form.apiKey.trim(),
       includeHomeContext: form.includeHomeContext,
+      defaultAgentMode: form.defaultAgentMode,
       approvalPolicy: form.approvalPolicy ?? DEFAULT_SETTINGS.approvalPolicy,
     }
     if (!next.apiKey) {
@@ -149,7 +150,7 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle>AI 助手设置</DialogTitle>
+        <DialogTitle>AI 智能体设置</DialogTitle>
         <DialogDescription>配置模型端点、密钥、本机上下文和外部 ACP 接入。</DialogDescription>
       </DialogHeader>
 
@@ -214,6 +215,16 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
             onChange={(e) => setForm((f) => ({ ...f, includeHomeContext: e.target.checked }))}
           />
           <span>把本机的关注、书签、资源作为上下文发送</span>
+        </label>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-primary"
+            checked={form.defaultAgentMode}
+            onChange={(e) => setForm((f) => ({ ...f, defaultAgentMode: e.target.checked }))}
+          />
+          <span>新对话默认开启智能体工具能力</span>
         </label>
 
         <div className="grid gap-1.5 border-t pt-3">

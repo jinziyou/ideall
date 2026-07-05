@@ -1,6 +1,6 @@
 "use client"
 
-// 右侧 AI 对话栏 (AI 原生): 宽屏 (lg+) 右停靠列; md–lg 右侧浮层; 移动 (<md) 全屏覆盖。
+// 右侧 AI 智能体栏 (AI 原生): 宽屏 (lg+) 右停靠列; md–lg 右侧浮层; 移动 (<md) 全屏覆盖。
 //
 // keep-alive: 首次打开后保持挂载, 关闭 = 隐藏, 与 tab-host 同一哲学。
 // 关闭时 (<lg) 完全 hidden, 避免 fixed + opacity-0 仍挡点击; 打开时 md+ 仅占右侧 25rem。
@@ -9,7 +9,16 @@ import { Bot, Maximize2, Plus, Settings, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/lib/use-media-query"
 import AgentPanel, { type AgentPanelHandle } from "@/plugins/agent/views/agent-panel"
-import { getActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
+import { resolveWorkspaceRun } from "@/plugins/agent/lib/agent-resolve"
+import { resolveSkills } from "@/plugins/agent/lib/agent-skills"
+import {
+  getServerWorkspacesState,
+  getWorkspace,
+  getWorkspacesState,
+  isWorkspaceConfigured,
+  resolveModel,
+  subscribeWorkspaces,
+} from "@/plugins/agent/lib/agent-workspace"
 import {
   getAgentSettings,
   isConfigured,
@@ -17,10 +26,11 @@ import {
 } from "@/plugins/agent/lib/agent-settings"
 import { SurfacePanel } from "@/ui/panel"
 import { IconButton } from "@/ui/icon-button"
-import { useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings } from "./store"
+import { useMode, useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings } from "./store"
 
 export default function RightAiPanel() {
   const open = useRightPanelOpen()
+  const mode = useMode()
   const isMdUp = useMediaQuery("(min-width: 768px)")
   const isLg = useMediaQuery("(min-width: 1024px)")
   const panelRef = React.useRef<AgentPanelHandle>(null)
@@ -30,7 +40,45 @@ export default function RightAiPanel() {
     getAgentSettings,
     getAgentSettings,
   )
+  const wsState = React.useSyncExternalStore(
+    subscribeWorkspaces,
+    getWorkspacesState,
+    getServerWorkspacesState,
+  )
   const configured = isConfigured(settings)
+  const panelWorkspace =
+    mode === "local"
+      ? (wsState.workspaces.find((w) => w.id === wsState.activeId) ?? wsState.workspaces[0] ?? null)
+      : null
+  const activeModel = panelWorkspace ? resolveModel(panelWorkspace) : null
+  const panelConfigured = panelWorkspace ? isWorkspaceConfigured(panelWorkspace) : configured
+  const panelModelLabel = panelWorkspace
+    ? panelWorkspace.model.useGlobal
+      ? `${activeModel?.model ?? ""}（全局）`
+      : (activeModel?.model ?? "")
+    : settings.model
+  const panelSkills = React.useMemo(
+    () => (panelWorkspace ? resolveSkills(panelWorkspace.capabilities.skillIds) : undefined),
+    [panelWorkspace],
+  )
+
+  const resolveRun = React.useCallback(
+    async (useAgent: boolean) => {
+      if (!panelWorkspace) return null
+      const ws = getWorkspace(panelWorkspace.id)
+      return ws ? resolveWorkspaceRun(ws, useAgent) : null
+    },
+    [panelWorkspace],
+  )
+
+  const openPanelSettings = React.useCallback(() => {
+    if (panelWorkspace && !panelWorkspace.model.useGlobal) {
+      openAiTasks(panelWorkspace.id, panelWorkspace.name)
+      setRightPanel(false)
+      return
+    }
+    openAiSettings()
+  }, [panelWorkspace])
 
   const [everOpened, setEverOpened] = React.useState(false)
   React.useEffect(() => {
@@ -74,7 +122,7 @@ export default function RightAiPanel() {
       tabIndex={showFixed ? -1 : undefined}
       role={showFixed ? "dialog" : undefined}
       aria-modal={showFixed ? true : undefined}
-      aria-label="AI 助手"
+      aria-label="AI 智能体"
       aria-hidden={!open}
       onKeyDown={(e) => {
         if (e.key === "Escape") setRightPanel(false)
@@ -111,9 +159,11 @@ export default function RightAiPanel() {
                 <Bot className="h-4 w-4 text-muted-foreground" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold leading-tight">AI 助手</span>
+                <span className="block truncate text-sm font-semibold leading-tight">
+                  AI 智能体
+                </span>
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {configured ? settings.model : "未配置模型"}
+                  {panelConfigured ? panelModelLabel : "未配置模型"}
                 </span>
               </span>
             </span>
@@ -127,22 +177,21 @@ export default function RightAiPanel() {
               </IconButton>
               <IconButton
                 onClick={() => {
-                  const ws = getActiveWorkspace()
-                  if (ws) openAiTasks(ws.id, ws.name)
+                  if (panelWorkspace) openAiTasks(panelWorkspace.id, panelWorkspace.name)
                   else openAiSettings()
                   setRightPanel(false)
                 }}
-                aria-label="展开为工作区任务"
-                title="展开为任务"
+                aria-label={panelWorkspace ? "展开为工作区任务" : "打开 AI 设置"}
+                title={panelWorkspace ? "展开为任务" : "打开设置"}
               >
                 <Maximize2 className="h-4 w-4" />
               </IconButton>
-              <IconButton onClick={() => openAiSettings()} aria-label="AI 设置" title="设置">
+              <IconButton onClick={openPanelSettings} aria-label="AI 设置" title="设置">
                 <Settings className="h-4 w-4" />
               </IconButton>
               <IconButton
                 onClick={() => setRightPanel(false)}
-                aria-label="关闭 AI 对话栏"
+                aria-label="关闭 AI 智能体栏"
                 title="关闭"
               >
                 <X className="h-4 w-4" />
@@ -150,7 +199,16 @@ export default function RightAiPanel() {
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
-            <AgentPanel ref={panelRef} compact />
+            <AgentPanel
+              ref={panelRef}
+              compact
+              resolveRun={panelWorkspace ? resolveRun : undefined}
+              configured={panelConfigured}
+              modelLabel={panelModelLabel}
+              skills={panelSkills}
+              onOpenSettings={openPanelSettings}
+              defaultAgentMode={settings.defaultAgentMode}
+            />
           </div>
         </SurfacePanel>
       </div>
