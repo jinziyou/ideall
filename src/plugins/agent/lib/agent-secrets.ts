@@ -1,9 +1,10 @@
 // 本机密钥表 —— 配置里用 ${NAME} 占位引用密钥, 避免把明文 secret 内嵌进 server 配置 (便于分享/导出配置而不泄漏)。
-// 桌面 App 的密钥本体写系统凭据后端; Web 形态降级到本机 localStorage。
+// 密钥本体写 secure-store: 桌面 App 走系统凭据后端, Web 形态降级到命名 fallback。
+// localStorage 中的索引只保留密钥名, 不再保留 value。
 // 纯 store + subscribe/get (复用 agent-collection)。
 
+import { secureDelete, secureFallbackGet, secureGet, secureSet } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
-import { secureDelete, secureGet, secureSet } from "@/lib/secure-store"
 import { createCollection } from "./agent-collection"
 
 /** 一条密钥 (id = 密钥名, 供 ${NAME} 引用)。 */
@@ -24,7 +25,10 @@ function secureKey(id: string): string {
 }
 
 function materialized(secret: Secret): Secret {
-  return { ...secret, value: secretCache.get(secret.id) ?? (isTauri() ? "" : secret.value) ?? "" }
+  return {
+    ...secret,
+    value: secretCache.get(secret.id) ?? secureFallbackGet(secureKey(secret.id)) ?? "",
+  }
 }
 
 export const subscribeSecrets = store.subscribe
@@ -40,18 +44,14 @@ export function setSecret(name: string, value: string): void {
   const id = name.trim()
   if (!isValidSecretName(id)) return
   secretCache.set(id, value)
-  if (isTauri()) {
-    store.upsert({ id, value: "", secure: true })
-    void secureSet(secureKey(id), value)
-  } else {
-    store.upsert({ id, value })
-  }
+  store.upsert({ id, value: "", secure: true })
+  void secureSet(secureKey(id), value)
 }
 
 export function deleteSecret(name: string): void {
   secretCache.delete(name)
   store.remove(name)
-  if (isTauri()) void secureDelete(secureKey(name))
+  void secureDelete(secureKey(name))
 }
 
 // 安全: 密钥仅在 buildHeaders 解析后发往用户自己配置的 server URL; 当前无配置导入/分享路径,
@@ -59,11 +59,14 @@ export function deleteSecret(name: string): void {
 // 将来若加配置导入/分享, 须对 ${NAME} 解析做 host 绑定或用户确认 (防被构造的 server 套出密钥)。
 /** 解析文本里的 ${NAME} 占位为密钥值; 未知名原样保留 (便于发现拼写错, 不静默清空)。 */
 export function resolveSecrets(text: string): string {
-  if (isTauri() && !hydrated) void hydrateAgentSecretsSecure()
+  if (!hydrated) void hydrateAgentSecretsSecure()
   return text.replace(
     /\$\{(\w+)\}/g,
     (m, name: string) =>
-      secretCache.get(name) ?? (isTauri() ? undefined : store.byId(name)?.value) ?? m,
+      secretCache.get(name) ??
+      secureFallbackGet(secureKey(name)) ??
+      (isTauri() ? undefined : store.byId(name)?.value) ??
+      m,
   )
 }
 
@@ -73,20 +76,18 @@ export function hasSecretRef(text: string): boolean {
 }
 
 export async function hydrateAgentSecretsSecure(): Promise<void> {
-  if (!isTauri()) {
-    for (const secret of store.get()) {
-      if (secret.value) secretCache.set(secret.id, secret.value)
-    }
-    hydrated = true
-    return
-  }
   if (hydrating) return hydrating
   hydrating = (async () => {
     const current = store.get()
     let changed = false
     for (const secret of current) {
       const secureValue = await secureGet(secureKey(secret.id))
-      if (secureValue) secretCache.set(secret.id, secureValue)
+      if (secureValue) {
+        secretCache.set(secret.id, secureValue)
+      } else if (!isTauri() && secret.value) {
+        secretCache.set(secret.id, secret.value)
+        await secureSet(secureKey(secret.id), secret.value)
+      }
       if (secret.value || !secret.secure) changed = true
     }
     if (changed) {

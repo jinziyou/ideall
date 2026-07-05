@@ -1,5 +1,6 @@
 // AI 智能体「工作区」模型与存储 —— 把 (数据 + 能力 + 规则 + 提示词 + 模型) 收敛为一个可复用、可命名的工作区。
-// 本地优先: 仅存本机浏览器 localStorage (与 agent-settings 同范式; 不入 IndexedDB / 不跨端同步 —— MVP)。
+// 本地优先: 工作区索引存 localStorage (不入 IndexedDB / 不跨端同步 —— MVP);
+// 工作区模型覆盖 API Key 走 secure-store, 索引 JSON 只保留非敏感字段。
 // 纯 store + subscribe/get (不引 React): 组件侧自行 useSyncExternalStore (与 agent-settings.ts 一致)。
 //
 // 安全不变量 (见 agent-context.ts / embed/grant.ts):
@@ -7,6 +8,8 @@
 //   - 「我的」数据默认只取标题概览; 正文仍须 @ 引用单条 consent (工作区不绕过隐私三闸)。
 
 import { genId } from "@/lib/id"
+import { secureDelete, secureFallbackGet, secureGet, secureSet } from "@/lib/secure-store"
+import { isTauri } from "@/lib/tauri"
 import type { Permission } from "@/plugins/embed/protocol"
 import { AGENT_PERMISSIONS } from "@/plugins/embed/grant"
 import type { HomeSelection } from "./agent-context"
@@ -140,6 +143,57 @@ function migrate(w: Partial<AgentWorkspace>): AgentWorkspace {
 const SERVER_STATE: WorkspacesState = { workspaces: [], activeId: "" }
 let state: WorkspacesState | null = null
 const listeners = new Set<() => void>()
+const workspaceApiKeyCache = new Map<string, string>()
+let secureHydrated = false
+let secureHydrating: Promise<void> | null = null
+
+function workspaceApiKeySecureKey(id: string): string {
+  return `ideall:agent:workspace:${id}:apiKey`
+}
+
+function publicWorkspace(ws: AgentWorkspace): AgentWorkspace {
+  return { ...ws, model: { ...ws.model, apiKey: "" } }
+}
+
+function publicState(s: WorkspacesState): WorkspacesState {
+  return { ...s, workspaces: s.workspaces.map(publicWorkspace) }
+}
+
+function materializeWorkspaceApiKey(ws: AgentWorkspace): AgentWorkspace {
+  const key = workspaceApiKeySecureKey(ws.id)
+  const fallback = secureFallbackGet(key)
+  if (fallback) workspaceApiKeyCache.set(ws.id, fallback)
+  else if (!isTauri() && ws.model.apiKey) {
+    workspaceApiKeyCache.set(ws.id, ws.model.apiKey)
+    void secureSet(key, ws.model.apiKey)
+  }
+  return {
+    ...ws,
+    model: {
+      ...ws.model,
+      apiKey: workspaceApiKeyCache.get(ws.id) ?? (isTauri() ? "" : ws.model.apiKey) ?? "",
+    },
+  }
+}
+
+function persistWorkspaceApiKey(ws: AgentWorkspace): void {
+  const key = workspaceApiKeySecureKey(ws.id)
+  if (ws.model.useGlobal) {
+    workspaceApiKeyCache.delete(ws.id)
+    void secureDelete(key)
+    return
+  }
+  if (ws.model.apiKey) {
+    workspaceApiKeyCache.set(ws.id, ws.model.apiKey)
+    void secureSet(key, ws.model.apiKey)
+    return
+  }
+  if (!secureHydrated && !workspaceApiKeyCache.has(ws.id) && !secureFallbackGet(key)) {
+    return
+  }
+  workspaceApiKeyCache.delete(ws.id)
+  void secureDelete(key)
+}
 
 function load(): WorkspacesState {
   if (typeof localStorage === "undefined") return SERVER_STATE
@@ -148,10 +202,14 @@ function load(): WorkspacesState {
     if (raw) {
       const p = JSON.parse(raw) as Partial<WorkspacesState>
       if (Array.isArray(p.workspaces) && p.workspaces.length) {
-        const workspaces = p.workspaces.map(migrate)
+        const migrated = p.workspaces.map(migrate)
+        const hasLegacyApiKey = migrated.some((w) => Boolean(w.model.apiKey))
+        const workspaces = migrated.map(materializeWorkspaceApiKey)
         const activeId =
           p.activeId && workspaces.some((w) => w.id === p.activeId) ? p.activeId : workspaces[0].id
-        return { workspaces, activeId }
+        const next = { workspaces, activeId }
+        if (hasLegacyApiKey) persist(next)
+        return next
       }
     }
   } catch {
@@ -170,7 +228,7 @@ function ensure(): WorkspacesState {
 function persist(s: WorkspacesState) {
   if (typeof localStorage === "undefined") return
   try {
-    localStorage.setItem(AGENT_WORKSPACES_STORAGE_KEY, JSON.stringify(s))
+    localStorage.setItem(AGENT_WORKSPACES_STORAGE_KEY, JSON.stringify(publicState(s)))
   } catch {
     /* 隐私模式 / 配额满 → 放弃持久化 */
   }
@@ -218,6 +276,7 @@ export function getWorkspace(id: string): AgentWorkspace | undefined {
 export function saveWorkspace(ws: AgentWorkspace) {
   const s = ensure()
   const updated = { ...ws, updatedAt: Date.now() }
+  persistWorkspaceApiKey(updated)
   const workspaces = s.workspaces.some((w) => w.id === ws.id)
     ? s.workspaces.map((w) => (w.id === ws.id ? updated : w))
     : [...s.workspaces, updated]
@@ -232,6 +291,8 @@ export function createWorkspace(name?: string): AgentWorkspace {
 }
 
 export function deleteWorkspace(id: string) {
+  workspaceApiKeyCache.delete(id)
+  void secureDelete(workspaceApiKeySecureKey(id))
   const s = ensure()
   const workspaces = s.workspaces.filter((w) => w.id !== id)
   if (!workspaces.length) {
@@ -260,7 +321,75 @@ export function resolveModel(ws: AgentWorkspace): {
     const g = getAgentSettings()
     return { baseURL: g.baseURL, model: g.model, apiKey: g.apiKey }
   }
-  return { baseURL: ws.model.baseURL, model: ws.model.model, apiKey: ws.model.apiKey }
+  return {
+    baseURL: ws.model.baseURL,
+    model: ws.model.model,
+    apiKey:
+      ws.model.apiKey ||
+      workspaceApiKeyCache.get(ws.id) ||
+      secureFallbackGet(workspaceApiKeySecureKey(ws.id)) ||
+      "",
+  }
+}
+
+export async function hydrateAgentWorkspaceSecretsSecure(): Promise<void> {
+  if (secureHydrated) return
+  if (secureHydrating) return secureHydrating
+  secureHydrating = (async () => {
+    const s = ensure()
+    const workspaces = await Promise.all(
+      s.workspaces.map(async (ws) => {
+        const secureValue = await secureGet(workspaceApiKeySecureKey(ws.id))
+        if (secureValue) workspaceApiKeyCache.set(ws.id, secureValue)
+        else if (!isTauri() && ws.model.apiKey) {
+          workspaceApiKeyCache.set(ws.id, ws.model.apiKey)
+          await secureSet(workspaceApiKeySecureKey(ws.id), ws.model.apiKey)
+        }
+        return {
+          ...ws,
+          model: {
+            ...ws.model,
+            apiKey: workspaceApiKeyCache.get(ws.id) ?? "",
+          },
+        }
+      }),
+    )
+    state = { ...s, workspaces }
+    persist(state)
+    secureHydrated = true
+    for (const l of listeners) l()
+  })().finally(() => {
+    secureHydrating = null
+  })
+  return secureHydrating
+}
+
+export function agentWorkspacesSecuritySnapshot(): {
+  total: number
+  localApiKeyCount: number
+  secureCachedCount: number
+  secureHydrated: boolean
+} {
+  let localApiKeyCount = 0
+  try {
+    const raw =
+      typeof localStorage === "undefined"
+        ? null
+        : localStorage.getItem(AGENT_WORKSPACES_STORAGE_KEY)
+    const parsed = raw ? (JSON.parse(raw) as Partial<WorkspacesState>) : null
+    const workspaces = Array.isArray(parsed?.workspaces) ? parsed.workspaces : []
+    localApiKeyCount = workspaces.filter(
+      (workspace) => typeof workspace?.model?.apiKey === "string" && workspace.model.apiKey.trim(),
+    ).length
+  } catch {
+    localApiKeyCount = 0
+  }
+  return {
+    total: ensure().workspaces.length,
+    localApiKeyCount,
+    secureCachedCount: workspaceApiKeyCache.size,
+    secureHydrated,
+  }
 }
 
 /** 模型是否可用 (有 baseURL/model/key)。 */

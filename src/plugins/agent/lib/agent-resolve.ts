@@ -4,7 +4,12 @@
 
 import { toExternalServer, type ConnectAgentOpts } from "./agent-mcp"
 import type { AgentWorkspace } from "./agent-workspace"
-import { homeSelectionOf, resolveModel, workspaceRulesText } from "./agent-workspace"
+import {
+  homeSelectionOf,
+  hydrateAgentWorkspaceSecretsSecure,
+  resolveModel,
+  workspaceRulesText,
+} from "./agent-workspace"
 import { getMcpServers, LOOPBACK_ID } from "./agent-mcp-registry"
 import { resolveSkills } from "./agent-skills"
 import {
@@ -31,6 +36,7 @@ export async function resolveWorkspaceRun(
   ws: AgentWorkspace,
   useAgent: boolean,
 ): Promise<ResolvedRun | null> {
+  await hydrateAgentWorkspaceSecretsSecure()
   const m = resolveModel(ws)
   if (!m.apiKey.trim() || !m.baseURL.trim() || !m.model.trim()) return null
 

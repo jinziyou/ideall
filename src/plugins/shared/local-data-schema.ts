@@ -1,4 +1,6 @@
-import { SYNC_CODE_STORAGE_KEY } from "@/lib/sync-code"
+import { AUTH_TOKEN_SECURE_KEY } from "@/lib/auth/auth-store"
+import { SYNC_CODE_SECURE_KEY } from "@/lib/sync-code"
+import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 import { AUDIO_DB_NAME, AUDIO_DB_VERSION } from "@/plugins/audio/audio-store"
 import { DATABASE_DB_NAME, DATABASE_DB_VERSION } from "@/plugins/database/database-store"
@@ -299,11 +301,22 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     label: "同步码",
     owner: "sync",
     storage: "localStorage",
-    key: SYNC_CODE_STORAGE_KEY,
+    key: secureFallbackStorageKey(SYNC_CODE_SECURE_KEY),
     currentVersion: 1,
     sensitive: true,
     parseAs: "text",
     validate: (_value, raw) => (raw.trim() ? ["同步码是本机能力凭证, 不进入插件数据导出"] : []),
+  },
+  {
+    id: "auth.token",
+    label: "登录令牌",
+    owner: "auth",
+    storage: "localStorage",
+    key: secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY),
+    currentVersion: 1,
+    sensitive: true,
+    parseAs: "text",
+    validate: (_value, raw) => (raw.trim() ? ["登录令牌是本机能力凭证, 不进入插件数据导出"] : []),
   },
 ]
 

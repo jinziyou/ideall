@@ -17,11 +17,20 @@ import {
 import { toast } from "sonner"
 import { downloadTextFile } from "@/lib/browser-download"
 import { formatBytes, formatTimestamp } from "@/lib/format"
-import { secureStoreStatus, type SecureStoreStatus } from "@/lib/secure-store"
+import {
+  secureStoreSecuritySnapshot,
+  secureStoreStatus,
+  type SecureStoreSecuritySnapshot,
+  type SecureStoreStatus,
+} from "@/lib/secure-store"
 import {
   agentSettingsSecuritySnapshot,
   hydrateAgentSettingsSecure,
 } from "@/plugins/agent/lib/agent-settings"
+import {
+  agentWorkspacesSecuritySnapshot,
+  hydrateAgentWorkspaceSecretsSecure,
+} from "@/plugins/agent/lib/agent-workspace"
 import {
   agentSecretsSecuritySnapshot,
   hydrateAgentSecretsSecure,
@@ -180,6 +189,7 @@ export default function CodePage() {
   const migrateSensitiveDataOnly = async () => {
     await Promise.all([
       hydrateAgentSettingsSecure(),
+      hydrateAgentWorkspaceSecretsSecure(),
       hydrateAgentSecretsSecure(),
       hydrateMcpOAuthSecureForServers(getMcpServers().map((server) => server.id)),
     ])
@@ -324,7 +334,9 @@ export default function CodePage() {
 
 type SecurityDiagnostics = {
   secureStore: SecureStoreStatus
+  secureInventory: SecureStoreSecuritySnapshot
   agentSettings: ReturnType<typeof agentSettingsSecuritySnapshot>
+  agentWorkspaces: ReturnType<typeof agentWorkspacesSecuritySnapshot>
   agentSecrets: ReturnType<typeof agentSecretsSecuritySnapshot>
   mcpOAuth: ReturnType<typeof mcpOAuthSecuritySnapshot>
   issues: string[]
@@ -332,12 +344,20 @@ type SecurityDiagnostics = {
 
 async function readSecurityDiagnostics(): Promise<SecurityDiagnostics> {
   const secureStore = await secureStoreStatus()
+  const secureInventory = secureStoreSecuritySnapshot()
   const agentSettings = agentSettingsSecuritySnapshot()
+  const agentWorkspaces = agentWorkspacesSecuritySnapshot()
   const agentSecrets = agentSecretsSecuritySnapshot()
   const mcpOAuth = mcpOAuthSecuritySnapshot()
   const issues = [
     !secureStore.native ? "当前环境未使用系统凭据后端" : "",
+    secureInventory.legacyValueCount
+      ? `${secureInventory.legacyValueCount} 个旧公开敏感键可迁移`
+      : "",
     agentSettings.localApiKeyPresent ? "全局 AI API Key 仍存在于 localStorage" : "",
+    agentWorkspaces.localApiKeyCount
+      ? `${agentWorkspaces.localApiKeyCount} 个工作区模型覆盖 API Key 仍存在于 localStorage`
+      : "",
     agentSecrets.localValueCount
       ? `${agentSecrets.localValueCount} 个 MCP 密钥值仍存在于 localStorage`
       : "",
@@ -348,7 +368,15 @@ async function readSecurityDiagnostics(): Promise<SecurityDiagnostics> {
       ? `${mcpOAuth.localVerifierCount} 个旧 MCP OAuth verifier 仍存在于公开 localStorage`
       : "",
   ].filter((issue): issue is string => Boolean(issue))
-  return { secureStore, agentSettings, agentSecrets, mcpOAuth, issues }
+  return {
+    secureStore,
+    secureInventory,
+    agentSettings,
+    agentWorkspaces,
+    agentSecrets,
+    mcpOAuth,
+    issues,
+  }
 }
 
 function createCodeBundle(
@@ -400,6 +428,12 @@ function SecurityPanel({
             <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
               <dt className="text-muted-foreground">AI Key</dt>
               <dd>{diagnostics.agentSettings.localApiKeyPresent ? "需清理" : "未见明文本地值"}</dd>
+              <dt className="text-muted-foreground">工作区 Key</dt>
+              <dd>
+                {diagnostics.agentWorkspaces.localApiKeyCount
+                  ? `${diagnostics.agentWorkspaces.localApiKeyCount} 个需清理`
+                  : `${diagnostics.agentWorkspaces.total} 个工作区 / 未见明文本地值`}
+              </dd>
               <dt className="text-muted-foreground">MCP 密钥</dt>
               <dd>
                 {diagnostics.agentSecrets.localValueCount
@@ -411,6 +445,11 @@ function SecurityPanel({
                 {diagnostics.mcpOAuth.localTokenCount || diagnostics.mcpOAuth.localVerifierCount
                   ? `${diagnostics.mcpOAuth.localTokenCount} token / ${diagnostics.mcpOAuth.localVerifierCount} verifier 需清理`
                   : `${diagnostics.mcpOAuth.cachedTokenCount} 个 token 已载入安全缓存`}
+              </dd>
+              <dt className="text-muted-foreground">统一端口</dt>
+              <dd>
+                {diagnostics.secureInventory.fallbackValueCount} /{" "}
+                {diagnostics.secureInventory.registeredCount} 个注册项有 fallback 值
               </dd>
             </dl>
             {issueCount > 0 ? (

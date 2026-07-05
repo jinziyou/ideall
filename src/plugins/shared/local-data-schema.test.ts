@@ -1,6 +1,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { SYNC_CODE_STORAGE_KEY } from "@/lib/sync-code"
+import { AUTH_TOKEN_SECURE_KEY } from "@/lib/auth/auth-store"
+import { SYNC_CODE_SECURE_KEY } from "@/lib/sync-code"
+import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { AUDIO_DB_NAME, AUDIO_DB_VERSION } from "@/plugins/audio/audio-store"
 import { AGENT_SECRETS_STORAGE_KEY } from "@/plugins/agent/lib/agent-secrets"
 import { AGENT_SETTINGS_STORAGE_KEY } from "@/plugins/agent/lib/agent-settings"
@@ -32,7 +34,8 @@ test("inspectLocalDataSchemas: 识别 JSON 正常、损坏和旧明文敏感值"
     [GIT_REPOS_STORAGE_KEY]: JSON.stringify(["/repo/a"]),
     [AGENT_SETTINGS_STORAGE_KEY]: JSON.stringify({ apiKey: "sk-legacy" }),
     [AGENT_SECRETS_STORAGE_KEY]: JSON.stringify([{ id: "TOK", value: "secret" }]),
-    [SYNC_CODE_STORAGE_KEY]: "abc",
+    [secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)]: "abc",
+    [secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)]: "token",
   })
   const sessionStorage = memoryStorage({
     "ideall:workspace:v1": "{bad",
@@ -51,6 +54,7 @@ test("inspectLocalDataSchemas: 识别 JSON 正常、损坏和旧明文敏感值"
   assert.match(byId.get("agent.secrets")?.detail ?? "", /明文/)
   assert.equal(byId.get("sync.code")?.status, "warning")
   assert.equal(byId.get("sync.code")?.repairable, false)
+  assert.equal(byId.get("auth.token")?.status, "warning")
   assert.equal(byId.get("audio.db")?.status, "ok")
   assert.equal(byId.get("database.db")?.status, "missing")
 })

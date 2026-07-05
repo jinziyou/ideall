@@ -1,6 +1,7 @@
 // 单元: ${NAME} 占位解析 (密钥表)。
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { secureFallbackStorageKey } from "@/lib/secure-store"
 import {
   AGENT_SECRETS_STORAGE_KEY,
   setSecret,
@@ -45,6 +46,10 @@ test("${NAME} 解析: 命中替换, 未知名原样保留 (便于发现拼写错
   assert.equal(resolveSecrets("${UNKNOWN}"), "${UNKNOWN}")
   assert.equal(hasSecretRef("${TOK}"), true)
   assert.equal(hasSecretRef("纯文本"), false)
+  assert.deepEqual(JSON.parse(mem.get(AGENT_SECRETS_STORAGE_KEY) ?? "[]"), [
+    { id: "TOK", value: "", secure: true },
+  ])
+  assert.equal(mem.get(secureFallbackStorageKey("ideall:agent:secret:TOK")), "Bearer xyz")
   deleteSecret("TOK")
   assert.equal(resolveSecrets("${TOK}"), "${TOK}")
 })

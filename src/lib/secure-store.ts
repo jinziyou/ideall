@@ -8,6 +8,64 @@ export type SecureStoreStatus = {
   error?: string
 }
 
+export const SECURE_STORE_KEYS = {
+  AUTH_TOKEN: "ideall:auth:token",
+  SYNC_CODE: "ideall:sync:code",
+  AGENT_SETTINGS_API_KEY: "ideall:agent:settings:apiKey",
+} as const
+
+export const LEGACY_PUBLIC_STORAGE_KEYS = {
+  AUTH_TOKEN: "wonita:auth:token",
+  SYNC_CODE: "wonita:sync:code",
+} as const
+
+export type SecureStoreKnownItem = {
+  id: string
+  label: string
+  owner: string
+  key: string
+  legacyKey?: string
+}
+
+export const SECURE_STORE_KNOWN_ITEMS: SecureStoreKnownItem[] = [
+  {
+    id: "auth.token",
+    label: "登录令牌",
+    owner: "auth",
+    key: SECURE_STORE_KEYS.AUTH_TOKEN,
+    legacyKey: LEGACY_PUBLIC_STORAGE_KEYS.AUTH_TOKEN,
+  },
+  {
+    id: "sync.code",
+    label: "同步码",
+    owner: "sync",
+    key: SECURE_STORE_KEYS.SYNC_CODE,
+    legacyKey: LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE,
+  },
+  {
+    id: "agent.settings.apiKey",
+    label: "全局 AI API Key",
+    owner: "agent",
+    key: SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY,
+  },
+]
+
+export type SecureStoreSecuritySnapshot = {
+  registeredCount: number
+  fallbackValueCount: number
+  legacyValueCount: number
+  items: {
+    id: string
+    label: string
+    owner: string
+    key: string
+    fallbackKey: string
+    fallbackPresent: boolean
+    legacyKey?: string
+    legacyPresent: boolean
+  }[]
+}
+
 const FALLBACK_PREFIX = "ideall:secure-fallback:"
 
 function fallbackKey(key: string): string {
@@ -33,6 +91,86 @@ export function secureFallbackStorageKey(key: string): string {
 
 export function isSecureFallbackKey(key: string): boolean {
   return key.startsWith(FALLBACK_PREFIX)
+}
+
+export function secureFallbackGet(key: string): string | null {
+  try {
+    return storage()?.getItem(fallbackKey(key)) ?? null
+  } catch {
+    return null
+  }
+}
+
+export function publicStorageGet(key: string): string | null {
+  try {
+    return storage()?.getItem(key) ?? null
+  } catch {
+    return null
+  }
+}
+
+export function publicStorageRemove(key: string): void {
+  try {
+    storage()?.removeItem(key)
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function secureGetWithLegacy(key: string, legacyKey: string): Promise<string | null> {
+  const value = await secureGet(key)
+  const legacyValue = publicStorageGet(legacyKey)
+  if (value !== null) {
+    if (legacyValue !== null) publicStorageRemove(legacyKey)
+    return value
+  }
+  if (legacyValue !== null) {
+    await secureSet(key, legacyValue)
+    publicStorageRemove(legacyKey)
+    return legacyValue
+  }
+  return null
+}
+
+export function secureMigrateLegacyValueSync(key: string, legacyKey: string): string | null {
+  const fallbackValue = secureFallbackGet(key)
+  const legacyValue = publicStorageGet(legacyKey)
+  if (fallbackValue !== null) {
+    if (legacyValue !== null) publicStorageRemove(legacyKey)
+    return fallbackValue
+  }
+  if (legacyValue !== null) {
+    void secureSet(key, legacyValue)
+    publicStorageRemove(legacyKey)
+    return legacyValue
+  }
+  return null
+}
+
+export function secureStoreSecuritySnapshot(
+  items = SECURE_STORE_KNOWN_ITEMS,
+): SecureStoreSecuritySnapshot {
+  const inspected = items.map((item) => {
+    const fallbackStorageKey = fallbackKey(item.key)
+    const fallbackPresent = secureFallbackGet(item.key) !== null
+    const legacyPresent = item.legacyKey ? publicStorageGet(item.legacyKey) !== null : false
+    return {
+      id: item.id,
+      label: item.label,
+      owner: item.owner,
+      key: item.key,
+      fallbackKey: fallbackStorageKey,
+      fallbackPresent,
+      legacyKey: item.legacyKey,
+      legacyPresent,
+    }
+  })
+  return {
+    registeredCount: inspected.length,
+    fallbackValueCount: inspected.filter((item) => item.fallbackPresent).length,
+    legacyValueCount: inspected.filter((item) => item.legacyPresent).length,
+    items: inspected,
+  }
 }
 
 export async function secureStoreStatus(): Promise<SecureStoreStatus> {

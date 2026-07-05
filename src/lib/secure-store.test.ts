@@ -1,10 +1,15 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
+  LEGACY_PUBLIC_STORAGE_KEYS,
+  SECURE_STORE_KEYS,
   isSecureFallbackKey,
+  publicStorageGet,
   secureDelete,
   secureFallbackStorageKey,
   secureGet,
+  secureGetWithLegacy,
+  secureStoreSecuritySnapshot,
   secureSet,
   secureStoreStatus,
 } from "./secure-store"
@@ -28,4 +33,29 @@ test("secure-store: Web 形态使用命名 fallback key", async () => {
   assert.equal(await secureGet("ideall:test"), "secret")
   await secureDelete("ideall:test")
   assert.equal(await secureGet("ideall:test"), null)
+})
+
+test("secure-store: 旧公开键可迁移到统一 fallback key", async () => {
+  mem.clear()
+  mem.set(LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE, "sync-secret")
+
+  assert.equal(
+    await secureGetWithLegacy(SECURE_STORE_KEYS.SYNC_CODE, LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE),
+    "sync-secret",
+  )
+  assert.equal(mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.SYNC_CODE)), "sync-secret")
+  assert.equal(publicStorageGet(LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE), null)
+})
+
+test("secure-store: 安全快照识别 fallback 与旧公开键", async () => {
+  mem.clear()
+  await secureSet(SECURE_STORE_KEYS.AUTH_TOKEN, "token")
+  mem.set(LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE, "sync-secret")
+
+  const snapshot = secureStoreSecuritySnapshot()
+  assert.equal(snapshot.registeredCount >= 3, true)
+  assert.equal(snapshot.fallbackValueCount, 1)
+  assert.equal(snapshot.legacyValueCount, 1)
+  assert.equal(snapshot.items.find((item) => item.id === "auth.token")?.fallbackPresent, true)
+  assert.equal(snapshot.items.find((item) => item.id === "sync.code")?.legacyPresent, true)
 })

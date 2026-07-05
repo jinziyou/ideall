@@ -1,5 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { SECURE_STORE_KEYS, secureFallbackStorageKey } from "@/lib/secure-store"
 import {
   AGENT_SETTINGS_STORAGE_KEY,
   agentSettingsSecuritySnapshot,
@@ -41,7 +42,7 @@ test("agent settings: 桌面安全水合不再接受 localStorage 明文 API Key
   delete (globalThis as unknown as { window?: Window }).window
 })
 
-test("agent settings: Web 降级路径仍保存 API Key", () => {
+test("agent settings: Web 降级路径把 API Key 写入 secure-store fallback", () => {
   mem.clear()
   setAgentSettings({
     baseURL: "https://api.example.test/v1",
@@ -51,7 +52,11 @@ test("agent settings: Web 降级路径仍保存 API Key", () => {
     approvalPolicy: "auto",
   })
   assert.equal(getAgentSettings().apiKey, "sk-test")
-  assert.equal(JSON.parse(mem.get(AGENT_SETTINGS_STORAGE_KEY) ?? "{}").apiKey, "sk-test")
+  assert.equal(JSON.parse(mem.get(AGENT_SETTINGS_STORAGE_KEY) ?? "{}").apiKey, undefined)
+  assert.equal(
+    mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY)),
+    "sk-test",
+  )
 })
 
 test("agentSettingsSecuritySnapshot: 能识别 localStorage 中的旧明文 key", () => {

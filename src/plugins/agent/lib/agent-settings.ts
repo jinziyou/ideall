@@ -1,13 +1,20 @@
-// AI 助手的模型接入设置 —— 本地优先。桌面 App 的 API Key 走系统凭据后端;
-// Web 形态降级到本机 localStorage。key 不进任何服务端配置, 发送时随请求带 Authorization 头直连厂商端点
+// AI 助手的模型接入设置 —— 本地优先。API Key 走 secure-store;
+// 桌面 App 用系统凭据后端, Web 形态降级到命名 fallback。key 不进公开配置,
+// 发送时随请求带 Authorization 头直连厂商端点
 // (不经服务端代理; App 经 Tauri HTTP 插件绕 CORS, 见 agent-chat.ts)。
 // 默认 DeepSeek (OpenAI 兼容); 改 baseURL / model 即可切到 OpenAI、本地 vLLM 等兼容端点。
 
+import {
+  SECURE_STORE_KEYS,
+  secureDelete,
+  secureFallbackGet,
+  secureGet,
+  secureSet,
+} from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
-import { secureDelete, secureGet, secureSet } from "@/lib/secure-store"
 
 export const AGENT_SETTINGS_STORAGE_KEY = "wonita:agent:settings"
-const API_KEY_SECURE_KEY = "ideall:agent:settings:apiKey"
+const API_KEY_SECURE_KEY = SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY
 
 export interface AgentSettings {
   /** OpenAI 兼容 API base (不含 /chat/completions) */
@@ -72,7 +79,6 @@ function parseSettings(raw: string | null): AgentSettings {
 }
 
 function publicSettings(next: AgentSettings): Omit<AgentSettings, "apiKey"> & { apiKey?: string } {
-  if (!isTauri()) return next
   const { apiKey: _apiKey, ...rest } = next
   return rest
 }
@@ -95,19 +101,27 @@ export function getAgentSettings(): AgentSettings {
     return DEFAULT_SETTINGS
   }
   if (raw === lastRaw) {
-    if (isTauri() && !secureHydrated) void hydrateAgentSettingsSecure()
+    if (!secureHydrated) void hydrateAgentSettingsSecure()
     return lastParsed
   }
   lastRaw = raw
   if (!raw) {
+    cachedApiKey = secureFallbackGet(API_KEY_SECURE_KEY) ?? cachedApiKey
     lastParsed = { ...DEFAULT_SETTINGS, apiKey: cachedApiKey }
-    if (isTauri() && !secureHydrated) void hydrateAgentSettingsSecure()
+    if (!secureHydrated) void hydrateAgentSettingsSecure()
     return lastParsed
   }
   const parsed = parseSettings(raw)
-  if (!isTauri() && parsed.apiKey) cachedApiKey = parsed.apiKey
-  lastParsed = { ...parsed, apiKey: isTauri() ? cachedApiKey : cachedApiKey || parsed.apiKey }
-  if (isTauri() && !secureHydrated) void hydrateAgentSettingsSecure()
+  const secureFallback = secureFallbackGet(API_KEY_SECURE_KEY)
+  if (secureFallback) {
+    cachedApiKey = secureFallback
+  } else if (!isTauri() && parsed.apiKey) {
+    cachedApiKey = parsed.apiKey
+    void secureSet(API_KEY_SECURE_KEY, parsed.apiKey)
+    persistSettings({ ...parsed, apiKey: cachedApiKey })
+  }
+  lastParsed = { ...parsed, apiKey: cachedApiKey }
+  if (!secureHydrated) void hydrateAgentSettingsSecure()
   return lastParsed
 }
 
@@ -116,10 +130,8 @@ export function setAgentSettings(next: AgentSettings): void {
   lastParsed = { ...next }
   lastRaw = null
   persistSettings(next)
-  if (isTauri()) {
-    if (next.apiKey) void secureSet(API_KEY_SECURE_KEY, next.apiKey)
-    else void secureDelete(API_KEY_SECURE_KEY)
-  }
+  if (next.apiKey) void secureSet(API_KEY_SECURE_KEY, next.apiKey)
+  else void secureDelete(API_KEY_SECURE_KEY)
   notify()
 }
 
@@ -129,17 +141,18 @@ export function subscribeAgentSettings(cb: () => void): () => void {
 }
 
 export async function hydrateAgentSettingsSecure(): Promise<AgentSettings> {
-  if (!isTauri()) {
-    secureHydrated = true
-    return getAgentSettings()
-  }
   if (secureHydrating) return secureHydrating
   secureHydrating = (async () => {
     const s = storage()
     const raw = s?.getItem(AGENT_SETTINGS_STORAGE_KEY) ?? null
     const parsed = parseSettings(raw)
     const secureKey = await secureGet(API_KEY_SECURE_KEY)
-    if (secureKey) cachedApiKey = secureKey
+    if (secureKey) {
+      cachedApiKey = secureKey
+    } else if (!isTauri() && parsed.apiKey) {
+      cachedApiKey = parsed.apiKey
+      await secureSet(API_KEY_SECURE_KEY, parsed.apiKey)
+    }
     const next = { ...parsed, apiKey: cachedApiKey }
     persistSettings(next)
     lastRaw = null
