@@ -11,6 +11,18 @@ const RUN_ID = Date.now()
 const AUDIO_TITLE = `ideall-plugin-audio-${RUN_ID}`
 const TABLE_NAME = `ideall_plugin_table_${RUN_ID}`
 const SECRET_TOKEN = `code-secret-${RUN_ID}`
+const LEGACY_SYNC_CODE = "0123456789abcdef0123456789abcdef"
+const LEGACY_AUTH_TOKEN = `legacy-auth-token-${RUN_ID}`
+const LEGACY_AGENT_KEY = `sk-legacy-agent-${RUN_ID}`
+const LEGACY_MCP_SECRET = `legacy-mcp-secret-${RUN_ID}`
+const LEGACY_WORKSPACE_KEY = `legacy-workspace-key-${RUN_ID}`
+const LEGACY_WORKSPACE_ID = `smoke-ws-${RUN_ID}`
+const AGENT_SETTINGS_KEY = "wonita:agent:settings"
+const AGENT_SECRETS_KEY = "ideall:agent:secrets:v1"
+const AGENT_WORKSPACES_KEY = "ideall:agent:workspaces:v1"
+const LEGACY_AUTH_TOKEN_KEY = "wonita:auth:token"
+const LEGACY_AUTH_USER_KEY = "wonita:auth:user"
+const LEGACY_SYNC_CODE_KEY = "wonita:sync:code"
 const WORKSPACE_KEY = "ideall:workspace:v1"
 const GIT_REPOS_KEY = "ideall:git:repos"
 const CODE_IMPORT_REPO = `/tmp/ideall-code-import-${RUN_ID}`
@@ -38,6 +50,138 @@ async function resetWorkspace(page) {
 async function openPluginPage(page, path) {
   await resetWorkspace(page).catch(() => {})
   await page.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded", timeout: 30000 })
+}
+
+async function seedLegacySecurityData(page) {
+  await page.evaluate(
+    ({
+      authToken,
+      authTokenKey,
+      authUserKey,
+      syncCode,
+      syncCodeKey,
+      agentSettingsKey,
+      agentKey,
+      agentSecretsKey,
+      mcpSecret,
+      agentWorkspacesKey,
+      workspaceId,
+      workspaceKey,
+    }) => {
+      localStorage.setItem(syncCodeKey, syncCode)
+      localStorage.setItem(authTokenKey, authToken)
+      localStorage.setItem(
+        authUserKey,
+        JSON.stringify({
+          id: 1,
+          email: "smoke@example.test",
+          name: "Smoke",
+          avatar: null,
+        }),
+      )
+      localStorage.setItem(
+        agentSettingsKey,
+        JSON.stringify({
+          baseURL: "https://api.example.test/v1",
+          model: "smoke-model",
+          apiKey: agentKey,
+          includeHomeContext: true,
+          approvalPolicy: "confirm",
+        }),
+      )
+      localStorage.setItem(
+        agentSecretsKey,
+        JSON.stringify([{ id: "SMOKE_SECRET", value: mcpSecret }]),
+      )
+      localStorage.setItem(
+        agentWorkspacesKey,
+        JSON.stringify({
+          workspaces: [
+            {
+              id: workspaceId,
+              name: "Smoke Workspace",
+              model: {
+                useGlobal: false,
+                baseURL: "https://api.example.test/v1",
+                model: "smoke-workspace",
+                apiKey: workspaceKey,
+              },
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ],
+          activeId: workspaceId,
+        }),
+      )
+    },
+    {
+      authToken: LEGACY_AUTH_TOKEN,
+      authTokenKey: LEGACY_AUTH_TOKEN_KEY,
+      authUserKey: LEGACY_AUTH_USER_KEY,
+      syncCode: LEGACY_SYNC_CODE,
+      syncCodeKey: LEGACY_SYNC_CODE_KEY,
+      agentSettingsKey: AGENT_SETTINGS_KEY,
+      agentKey: LEGACY_AGENT_KEY,
+      agentSecretsKey: AGENT_SECRETS_KEY,
+      mcpSecret: LEGACY_MCP_SECRET,
+      agentWorkspacesKey: AGENT_WORKSPACES_KEY,
+      workspaceId: LEGACY_WORKSPACE_ID,
+      workspaceKey: LEGACY_WORKSPACE_KEY,
+    },
+  )
+}
+
+async function readSecurityMigrationState(page) {
+  return page.evaluate(
+    ({
+      authTokenKey,
+      authSecureKey,
+      syncCodeKey,
+      syncSecureKey,
+      agentSettingsKey,
+      agentSecureKey,
+      agentSecretsKey,
+      secretSecureKey,
+      agentWorkspacesKey,
+      workspaceSecureKey,
+    }) => {
+      const fallbackKey = (key) => `ideall:secure-fallback:${key}`
+      const readJson = (key, fallback) => {
+        try {
+          return JSON.parse(localStorage.getItem(key) || fallback)
+        } catch {
+          return null
+        }
+      }
+      const settings = readJson(agentSettingsKey, "{}")
+      const secrets = readJson(agentSecretsKey, "[]")
+      const workspaces = readJson(agentWorkspacesKey, "{}")
+      return {
+        legacyAuthToken: localStorage.getItem(authTokenKey),
+        legacySyncCode: localStorage.getItem(syncCodeKey),
+        fallbackAuthToken: localStorage.getItem(fallbackKey(authSecureKey)),
+        fallbackSyncCode: localStorage.getItem(fallbackKey(syncSecureKey)),
+        fallbackAgentKey: localStorage.getItem(fallbackKey(agentSecureKey)),
+        fallbackSecret: localStorage.getItem(fallbackKey(secretSecureKey)),
+        fallbackWorkspaceKey: localStorage.getItem(fallbackKey(workspaceSecureKey)),
+        publicAgentApiKey: settings?.apiKey,
+        publicSecretValue: Array.isArray(secrets) ? secrets[0]?.value : undefined,
+        publicWorkspaceDump: JSON.stringify(workspaces),
+      }
+    },
+    {
+      authTokenKey: LEGACY_AUTH_TOKEN_KEY,
+      authSecureKey: "ideall:auth:token",
+      syncCodeKey: LEGACY_SYNC_CODE_KEY,
+      syncSecureKey: "ideall:sync:code",
+      agentSettingsKey: AGENT_SETTINGS_KEY,
+      agentSecureKey: "ideall:agent:settings:apiKey",
+      agentSecretsKey: AGENT_SECRETS_KEY,
+      secretSecureKey: "ideall:agent:secret:SMOKE_SECRET",
+      agentWorkspacesKey: AGENT_WORKSPACES_KEY,
+      workspaceSecureKey: `ideall:agent:workspace:${LEGACY_WORKSPACE_ID}:apiKey`,
+    },
+  )
 }
 
 const run = await createSmokeRun({ shotDir: SHOT_DIR })
@@ -134,6 +278,7 @@ try {
   markStage("code")
   await openPluginPage(page, "/code")
   await page.evaluate((secret) => localStorage.setItem("ideall-smoke-token", secret), SECRET_TOKEN)
+  await seedLegacySecurityData(page)
   await page.getByRole("button", { name: "刷新", exact: true }).click()
   await page.getByText("ideall-smoke-token", { exact: true }).waitFor({
     state: "visible",
@@ -142,7 +287,13 @@ try {
   const codeText = (await page.locator("body").textContent()) ?? ""
   record(
     "Code 插件展示诊断且敏感存储脱敏",
-    codeText.includes("已脱敏") && !codeText.includes(SECRET_TOKEN),
+    codeText.includes("已脱敏") &&
+      !codeText.includes(SECRET_TOKEN) &&
+      !codeText.includes(LEGACY_AUTH_TOKEN) &&
+      !codeText.includes(LEGACY_SYNC_CODE) &&
+      !codeText.includes(LEGACY_AGENT_KEY) &&
+      !codeText.includes(LEGACY_MCP_SECRET) &&
+      !codeText.includes(LEGACY_WORKSPACE_KEY),
   )
   record(
     "Code 插件展示插件数据端口",
@@ -155,6 +306,54 @@ try {
   record(
     "Code 插件展示安全存储诊断",
     codeText.includes("安全存储") && codeText.includes("迁移/清理敏感值"),
+  )
+  const legacySecurity = await readSecurityMigrationState(page)
+  record(
+    "Code 插件可识别旧敏感存储",
+    (legacySecurity.legacyAuthToken === LEGACY_AUTH_TOKEN ||
+      legacySecurity.fallbackAuthToken === LEGACY_AUTH_TOKEN) &&
+      (legacySecurity.legacySyncCode === LEGACY_SYNC_CODE ||
+        legacySecurity.fallbackSyncCode === LEGACY_SYNC_CODE) &&
+      (legacySecurity.publicAgentApiKey === LEGACY_AGENT_KEY ||
+        legacySecurity.fallbackAgentKey === LEGACY_AGENT_KEY) &&
+      (legacySecurity.publicSecretValue === LEGACY_MCP_SECRET ||
+        legacySecurity.fallbackSecret === LEGACY_MCP_SECRET) &&
+      (legacySecurity.publicWorkspaceDump.includes(LEGACY_WORKSPACE_KEY) ||
+        legacySecurity.fallbackWorkspaceKey === LEGACY_WORKSPACE_KEY),
+  )
+  await page.getByRole("button", { name: "迁移/清理敏感值", exact: true }).click()
+  await page.waitForFunction(
+    ({ authToken, syncCode, agentKey, secret, workspaceKey, workspaceFallbackKey }) =>
+      localStorage.getItem("wonita:auth:token") === null &&
+      localStorage.getItem("wonita:sync:code") === null &&
+      localStorage.getItem("ideall:secure-fallback:ideall:auth:token") === authToken &&
+      localStorage.getItem("ideall:secure-fallback:ideall:sync:code") === syncCode &&
+      localStorage.getItem("ideall:secure-fallback:ideall:agent:settings:apiKey") === agentKey &&
+      localStorage.getItem("ideall:secure-fallback:ideall:agent:secret:SMOKE_SECRET") === secret &&
+      localStorage.getItem(workspaceFallbackKey) === workspaceKey,
+    {
+      authToken: LEGACY_AUTH_TOKEN,
+      syncCode: LEGACY_SYNC_CODE,
+      agentKey: LEGACY_AGENT_KEY,
+      secret: LEGACY_MCP_SECRET,
+      workspaceKey: LEGACY_WORKSPACE_KEY,
+      workspaceFallbackKey: `ideall:secure-fallback:ideall:agent:workspace:${LEGACY_WORKSPACE_ID}:apiKey`,
+    },
+    { timeout: 15000 },
+  )
+  const migratedSecurity = await readSecurityMigrationState(page)
+  record(
+    "Code 插件可迁移旧敏感存储到 secure-store",
+    migratedSecurity.legacyAuthToken === null &&
+      migratedSecurity.legacySyncCode === null &&
+      migratedSecurity.fallbackAuthToken === LEGACY_AUTH_TOKEN &&
+      migratedSecurity.fallbackSyncCode === LEGACY_SYNC_CODE &&
+      migratedSecurity.fallbackAgentKey === LEGACY_AGENT_KEY &&
+      migratedSecurity.fallbackSecret === LEGACY_MCP_SECRET &&
+      migratedSecurity.fallbackWorkspaceKey === LEGACY_WORKSPACE_KEY &&
+      migratedSecurity.publicAgentApiKey === undefined &&
+      migratedSecurity.publicSecretValue === "" &&
+      !migratedSecurity.publicWorkspaceDump.includes(LEGACY_WORKSPACE_KEY),
   )
   record(
     "Code 插件展示导入入口和数据 Schema",
@@ -230,6 +429,26 @@ try {
     await deleteDb(page, "ideall:database")
     await page.evaluate(() => localStorage.removeItem("ideall-smoke-token")).catch(() => {})
     await page.evaluate((key) => localStorage.removeItem(key), GIT_REPOS_KEY).catch(() => {})
+    await page
+      .evaluate(
+        (keys) => {
+          for (const key of keys) localStorage.removeItem(key)
+        },
+        [
+          LEGACY_AUTH_TOKEN_KEY,
+          LEGACY_AUTH_USER_KEY,
+          LEGACY_SYNC_CODE_KEY,
+          AGENT_SETTINGS_KEY,
+          AGENT_SECRETS_KEY,
+          AGENT_WORKSPACES_KEY,
+          "ideall:secure-fallback:ideall:auth:token",
+          "ideall:secure-fallback:ideall:sync:code",
+          "ideall:secure-fallback:ideall:agent:settings:apiKey",
+          "ideall:secure-fallback:ideall:agent:secret:SMOKE_SECRET",
+          `ideall:secure-fallback:ideall:agent:workspace:${LEGACY_WORKSPACE_ID}:apiKey`,
+        ],
+      )
+      .catch(() => {})
   } catch (e) {
     console.log(`cleanup skipped: ${String(e.message).split("\n")[0]}`)
   }

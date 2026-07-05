@@ -11,10 +11,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: base verification
+  checks:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: format
+            command: pnpm format:check
+          - name: lint
+            command: pnpm lint
+          - name: typecheck
+            command: pnpm typecheck
+          - name: test
+            command: pnpm test
+          - name: api drift
+            command: pnpm gen:api:check
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -26,9 +40,35 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Verify base
-        run: pnpm verify:base
+      - name: Run ${{ matrix.name }}
+        run: ${{ matrix.command }}
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Restore Next cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'next.config.ts', 'tsconfig.json', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
+            ${{ runner.os }}-next-
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
 
 # 另两道门拆在独立工作流 (带 paths 过滤, 省 CI 分钟数):
 #   rust.yml  — clippy 零警告 + cargo test (仅 src-tauri/** 改动时跑)
-#   smoke.yml — 笔记链路真浏览器冒烟, 测静态导出生产形态 (仅应用面改动时跑)
+#   smoke.yml — 真浏览器冒烟, 测静态导出生产形态 (仅应用面改动时跑)

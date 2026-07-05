@@ -1,5 +1,5 @@
 const SENSITIVE_RE =
-  /(token|secret|api[-_]?key|authorization|auth|cookie|password|session|jwt|bearer|credential|refresh)/i
+  /(token|secret|api[-_]?key|authorization|auth|cookie|password|session|jwt|bearer|credential|refresh|sync[:_-]?code)/i
 
 export type RedactedPreview = {
   value: string

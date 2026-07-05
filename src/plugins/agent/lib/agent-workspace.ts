@@ -165,7 +165,6 @@ function materializeWorkspaceApiKey(ws: AgentWorkspace): AgentWorkspace {
   if (fallback) workspaceApiKeyCache.set(ws.id, fallback)
   else if (!isTauri() && ws.model.apiKey) {
     workspaceApiKeyCache.set(ws.id, ws.model.apiKey)
-    void secureSet(key, ws.model.apiKey)
   }
   return {
     ...ws,
@@ -202,14 +201,10 @@ function load(): WorkspacesState {
     if (raw) {
       const p = JSON.parse(raw) as Partial<WorkspacesState>
       if (Array.isArray(p.workspaces) && p.workspaces.length) {
-        const migrated = p.workspaces.map(migrate)
-        const hasLegacyApiKey = migrated.some((w) => Boolean(w.model.apiKey))
-        const workspaces = migrated.map(materializeWorkspaceApiKey)
+        const workspaces = p.workspaces.map(migrate).map(materializeWorkspaceApiKey)
         const activeId =
           p.activeId && workspaces.some((w) => w.id === p.activeId) ? p.activeId : workspaces[0].id
-        const next = { workspaces, activeId }
-        if (hasLegacyApiKey) persist(next)
-        return next
+        return { workspaces, activeId }
       }
     }
   } catch {

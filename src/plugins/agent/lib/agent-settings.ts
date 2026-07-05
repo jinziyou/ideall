@@ -117,8 +117,6 @@ export function getAgentSettings(): AgentSettings {
     cachedApiKey = secureFallback
   } else if (!isTauri() && parsed.apiKey) {
     cachedApiKey = parsed.apiKey
-    void secureSet(API_KEY_SECURE_KEY, parsed.apiKey)
-    persistSettings({ ...parsed, apiKey: cachedApiKey })
   }
   lastParsed = { ...parsed, apiKey: cachedApiKey }
   if (!secureHydrated) void hydrateAgentSettingsSecure()

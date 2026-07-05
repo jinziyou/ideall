@@ -16,7 +16,9 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { downloadTextFile } from "@/lib/browser-download"
+import { hydrateSessionTokenSecure } from "@/lib/auth/auth-store"
 import { formatBytes, formatTimestamp } from "@/lib/format"
+import { hydrateSyncCodeSecure } from "@/lib/sync-code"
 import {
   secureStoreSecuritySnapshot,
   secureStoreStatus,
@@ -188,6 +190,8 @@ export default function CodePage() {
 
   const migrateSensitiveDataOnly = async () => {
     await Promise.all([
+      hydrateSessionTokenSecure(),
+      hydrateSyncCodeSecure(),
       hydrateAgentSettingsSecure(),
       hydrateAgentWorkspaceSecretsSecure(),
       hydrateAgentSecretsSecure(),
