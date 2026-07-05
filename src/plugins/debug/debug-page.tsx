@@ -36,6 +36,8 @@ import {
   formatPluginImportResult,
   importPluginDataPackage,
   previewPluginDataImport,
+  restorePluginDataBackup,
+  type PluginDataImportBackup,
   type PluginDataImportPreview,
 } from "@/plugins/shared/plugin-data-manager"
 import {
@@ -52,9 +54,11 @@ export default function DebugPage() {
   const [schemaData, setSchemaData] = React.useState<LocalDataSchemaInspection[]>([])
   const [security, setSecurity] = React.useState<SecurityDiagnostics | null>(null)
   const [importPreview, setImportPreview] = React.useState<PluginDataImportPreview | null>(null)
+  const [importBackup, setImportBackup] = React.useState<PluginDataImportBackup | null>(null)
   const [importRaw, setImportRaw] = React.useState<string | null>(null)
   const [pluginLoading, setPluginLoading] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
+  const [restoringBackup, setRestoringBackup] = React.useState(false)
   const importInputRef = React.useRef<HTMLInputElement | null>(null)
 
   const refresh = React.useCallback(() => {
@@ -116,9 +120,11 @@ export default function DebugPage() {
     try {
       const raw = await file.text()
       setImportRaw(raw)
+      setImportBackup(null)
       setImportPreview(await previewPluginDataImport(raw, file.name))
     } catch (e) {
       setImportRaw(null)
+      setImportBackup(null)
       setImportPreview({
         ok: false,
         filename: file.name,
@@ -132,7 +138,12 @@ export default function DebugPage() {
     setImporting(true)
     try {
       const result = await importPluginDataPackage(importRaw, importPreview.filename)
-      toast("插件数据已导入", { description: formatPluginImportResult(result.result) })
+      setImportBackup(result.backup)
+      toast("插件数据已导入", {
+        description: result.backup
+          ? `${formatPluginImportResult(result.result)} / 已创建导入前备份`
+          : formatPluginImportResult(result.result),
+      })
       setImportRaw(null)
       setImportPreview(null)
       refresh()
@@ -140,6 +151,21 @@ export default function DebugPage() {
       toast.error("导入失败", { description: e instanceof Error ? e.message : String(e) })
     } finally {
       setImporting(false)
+    }
+  }
+
+  const restoreImportBackup = async () => {
+    if (!importBackup) return
+    setRestoringBackup(true)
+    try {
+      const result = await restorePluginDataBackup(importBackup)
+      toast("已恢复导入前备份", { description: formatPluginImportResult(result.result) })
+      setImportBackup(null)
+      refresh()
+    } catch (e) {
+      toast.error("恢复失败", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setRestoringBackup(false)
     }
   }
 
@@ -218,12 +244,16 @@ export default function DebugPage() {
           onExport={(pluginId) => void exportPluginData(pluginId)}
           onImportSelect={selectImportFile}
           importPreview={importPreview}
+          importBackup={importBackup}
           importing={importing}
+          restoringBackup={restoringBackup}
           onImportConfirm={() => void executePluginImport()}
           onImportCancel={() => {
             setImportRaw(null)
             setImportPreview(null)
           }}
+          onBackupRestore={() => void restoreImportBackup()}
+          onBackupDismiss={() => setImportBackup(null)}
         />
       </div>
 
@@ -341,18 +371,26 @@ function PluginDataPanel({
   onExport,
   onImportSelect,
   importPreview,
+  importBackup,
   importing,
+  restoringBackup,
   onImportConfirm,
   onImportCancel,
+  onBackupRestore,
+  onBackupDismiss,
 }: {
   entries: PluginDataInspection[]
   loading: boolean
   onExport: (pluginId: string) => void
   onImportSelect: () => void
   importPreview: PluginDataImportPreview | null
+  importBackup: PluginDataImportBackup | null
   importing: boolean
+  restoringBackup: boolean
   onImportConfirm: () => void
   onImportCancel: () => void
+  onBackupRestore: () => void
+  onBackupDismiss: () => void
 }) {
   return (
     <section className="rounded-lg border border-border/60 bg-card">
@@ -379,6 +417,14 @@ function PluginDataPanel({
             importing={importing}
             onConfirm={onImportConfirm}
             onCancel={onImportCancel}
+          />
+        )}
+        {importBackup && (
+          <ImportBackupCard
+            backup={importBackup}
+            restoring={restoringBackup}
+            onRestore={onBackupRestore}
+            onDismiss={onBackupDismiss}
           />
         )}
         {loading && entries.length === 0 ? (
@@ -498,6 +544,50 @@ function ImportPreviewCard({
       ) : (
         <div className="mt-3 text-xs text-destructive">{preview.error ?? "无法导入"}</div>
       )}
+    </div>
+  )
+}
+
+function ImportBackupCard({
+  backup,
+  restoring,
+  onRestore,
+  onDismiss,
+}: {
+  backup: PluginDataImportBackup
+  restoring: boolean
+  onRestore: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-emerald-700" />
+            <p className="truncate text-sm font-medium">导入前备份已创建</p>
+          </div>
+          <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+            {backup.dataKind} v{backup.dataVersion}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
+            关闭
+          </Button>
+          <Button type="button" size="sm" disabled={restoring} onClick={onRestore}>
+            {restoring ? "恢复中" : "恢复导入前备份"}
+          </Button>
+        </div>
+      </div>
+      <dl className="mt-3 grid grid-cols-[80px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+        <dt className="text-muted-foreground">插件</dt>
+        <dd>{backup.pluginLabel}</dd>
+        <dt className="text-muted-foreground">大小</dt>
+        <dd>{formatBytes(backup.bytes)}</dd>
+        <dt className="text-muted-foreground">创建</dt>
+        <dd>{formatTimestamp(Date.parse(backup.createdAt))}</dd>
+      </dl>
     </div>
   )
 }

@@ -5,7 +5,10 @@ import {
   formatPluginImportResult,
   importPluginDataPackage,
   previewPluginDataImport,
+  restorePluginDataBackup,
 } from "./plugin-data-manager"
+
+let importedRaw = ""
 
 const demoPort: PluginDataPort<{ items: number }> = {
   pluginId: "demo",
@@ -15,8 +18,11 @@ const demoPort: PluginDataPort<{ items: number }> = {
   filenamePrefix: "ideall-demo",
   importMode: "replace",
   importDescription: "replace demo data",
-  exportJson: async () => "{}",
-  importJson: async () => ({ items: 2 }),
+  exportJson: async () => JSON.stringify(createPluginDataPackage(demoPort, { items: ["current"] })),
+  importJson: async (raw) => {
+    importedRaw = raw
+    return { items: 2 }
+  },
   inspect: async () => ({
     pluginId: "demo",
     label: "Demo",
@@ -57,8 +63,38 @@ test("previewPluginDataImport: 拒绝未知插件与版本不匹配", async () =
 })
 
 test("importPluginDataPackage: 执行导入并格式化结果", async () => {
+  importedRaw = ""
   const raw = JSON.stringify(createPluginDataPackage(demoPort, { items: [1, 2] }, "now"))
   const result = await importPluginDataPackage(raw, "demo.json", [demoPort])
   assert.deepEqual(result.result, { items: 2 })
+  assert.equal(result.backup?.pluginId, "demo")
+  assert.match(result.backup?.raw ?? "", /current/)
   assert.equal(formatPluginImportResult(result.result), "items: 2")
+})
+
+test("restorePluginDataBackup: 可恢复导入前备份", async () => {
+  const raw = JSON.stringify(createPluginDataPackage(demoPort, { items: [1, 2] }, "now"))
+  const result = await importPluginDataPackage(raw, "demo.json", [demoPort])
+  assert.ok(result.backup)
+  await restorePluginDataBackup(result.backup, [demoPort])
+  assert.match(importedRaw, /current/)
+})
+
+test("importPluginDataPackage: 导入失败后尝试恢复备份", async () => {
+  let calls = 0
+  const recoveringPort: PluginDataPort<{ calls: number }> = {
+    ...demoPort,
+    exportJson: async () =>
+      JSON.stringify(createPluginDataPackage(demoPort, { items: ["before-failure"] })),
+    importJson: async (raw) => {
+      calls += 1
+      importedRaw = raw
+      if (calls === 1) throw new Error("boom")
+      return { calls }
+    },
+  }
+  const raw = JSON.stringify(createPluginDataPackage(demoPort, { items: ["broken"] }, "now"))
+  await assert.rejects(() => importPluginDataPackage(raw, "demo.json", [recoveringPort]), /boom/)
+  assert.equal(calls, 2)
+  assert.match(importedRaw, /before-failure/)
 })

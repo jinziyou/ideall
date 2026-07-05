@@ -32,8 +32,28 @@ export type PluginDataImportPreview = {
 
 export type PluginDataImportExecution = {
   preview: PluginDataImportPreview
+  backup: PluginDataImportBackup | null
   result: PluginImportResult
   after: PluginDataInspection
+}
+
+export type PluginDataImportBackup = {
+  pluginId: string
+  pluginLabel: string
+  dataKind: string
+  dataVersion: number
+  createdAt: string
+  raw: string
+  bytes: number
+}
+
+export type PluginDataRestoreExecution = {
+  result: PluginImportResult
+  after: PluginDataInspection
+}
+
+function bytesOf(raw: string): number {
+  return new TextEncoder().encode(raw).byteLength
 }
 
 function packageSummary(pack: PluginDataPackage): NonNullable<PluginDataImportPreview["package"]> {
@@ -54,6 +74,28 @@ function portSummary(port: PluginDataPort): NonNullable<PluginDataImportPreview[
     dataVersion: port.dataVersion,
     importMode: port.importMode ?? "replace",
     importDescription: port.importDescription ?? "导入后按插件默认策略写入本地数据。",
+  }
+}
+
+async function inspectPort(port: PluginDataPort): Promise<PluginDataInspection> {
+  try {
+    return await port.inspect()
+  } catch (error) {
+    return pluginDataErrorInspection(port, error)
+  }
+}
+
+async function createImportBackup(port: PluginDataPort): Promise<PluginDataImportBackup | null> {
+  if ((port.importMode ?? "replace") === "noop") return null
+  const raw = await port.exportJson()
+  return {
+    pluginId: port.pluginId,
+    pluginLabel: port.pluginLabel,
+    dataKind: port.dataKind,
+    dataVersion: port.dataVersion,
+    createdAt: new Date().toISOString(),
+    raw,
+    bytes: bytesOf(raw),
   }
 }
 
@@ -98,19 +140,12 @@ export async function previewPluginDataImport(
     }
   }
 
-  let current: PluginDataInspection
-  try {
-    current = await port.inspect()
-  } catch (error) {
-    current = pluginDataErrorInspection(port, error)
-  }
-
   return {
     ok: true,
     filename,
     package: packageSummary(pack),
     target: portSummary(port),
-    current,
+    current: await inspectPort(port),
   }
 }
 
@@ -126,14 +161,32 @@ export async function importPluginDataPackage(
   const pack = parsePluginDataPackage(raw)
   const port = pluginDataPortForPackage(pack, ports)
   if (!port) throw new Error(preview.error ?? "插件数据端口不存在")
-  const result = await port.importJson(raw)
-  let after: PluginDataInspection
+  const backup = await createImportBackup(port)
+  let result: PluginImportResult
   try {
-    after = await port.inspect()
+    result = await port.importJson(raw)
   } catch (error) {
-    after = pluginDataErrorInspection(port, error)
+    if (backup) {
+      try {
+        await restorePluginDataBackup(backup, ports)
+      } catch {
+        /* 保留原始导入错误; 恢复失败可从后续诊断继续处理。 */
+      }
+    }
+    throw error
   }
-  return { preview, result, after }
+  return { preview, backup, result, after: await inspectPort(port) }
+}
+
+export async function restorePluginDataBackup(
+  backup: PluginDataImportBackup,
+  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+): Promise<PluginDataRestoreExecution> {
+  const pack = parsePluginDataPackage(backup.raw)
+  const port = pluginDataPortForPackage(pack, ports)
+  if (!port) throw new Error(`备份对应的插件数据端口不存在: ${backup.pluginId}`)
+  const result = await port.importJson(backup.raw)
+  return { result, after: await inspectPort(port) }
 }
 
 export function formatPluginImportResult(result: PluginImportResult): string {

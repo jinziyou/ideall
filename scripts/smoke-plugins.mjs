@@ -12,6 +12,8 @@ const AUDIO_TITLE = `ideall-plugin-audio-${RUN_ID}`
 const TABLE_NAME = `ideall_plugin_table_${RUN_ID}`
 const SECRET_TOKEN = `debug-secret-${RUN_ID}`
 const WORKSPACE_KEY = "ideall:workspace:v1"
+const GIT_REPOS_KEY = "ideall:git:repos"
+const DEBUG_IMPORT_REPO = `/tmp/ideall-debug-import-${RUN_ID}`
 
 async function deleteDb(page, name) {
   await page.evaluate(
@@ -151,6 +153,50 @@ try {
       debugText.includes("数据 Schema") &&
       debugText.includes("Git 仓库列表"),
   )
+  await page
+    .locator('input[type="file"][accept="application/json,.json"]')
+    .last()
+    .setInputFiles({
+      name: `ideall-git-debug-import-${RUN_ID}.json`,
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          kind: "ideall.plugin-data",
+          version: 1,
+          plugin: {
+            id: "git",
+            label: "Git",
+            dataKind: "ideall.git.repos",
+            dataVersion: 1,
+          },
+          exportedAt: new Date(RUN_ID).toISOString(),
+          payload: { repos: [DEBUG_IMPORT_REPO] },
+        }),
+      ),
+    })
+  await page.getByText("导入会替换 Git 插件保存的仓库路径列表。", { exact: true }).waitFor({
+    state: "visible",
+    timeout: 15000,
+  })
+  await page.getByRole("button", { name: "执行导入", exact: true }).click()
+  await page.getByText("导入前备份已创建", { exact: true }).waitFor({
+    state: "visible",
+    timeout: 15000,
+  })
+  const importedRepos = await page.evaluate((key) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || "[]")
+    } catch {
+      return []
+    }
+  }, GIT_REPOS_KEY)
+  record(
+    "Debug 插件可预检并导入插件数据",
+    Array.isArray(importedRepos) && importedRepos.includes(DEBUG_IMPORT_REPO),
+  )
+  await page.getByRole("button", { name: "恢复导入前备份", exact: true }).click()
+  await page.waitForFunction((key) => localStorage.getItem(key) === "[]", GIT_REPOS_KEY)
+  record("Debug 插件可恢复导入前备份", true)
   await page.screenshot({ path: `${SHOT_DIR}/3-debug.png` })
 
   markStage("git")
@@ -175,6 +221,7 @@ try {
     await deleteDb(page, "ideall:audio")
     await deleteDb(page, "ideall:database")
     await page.evaluate(() => localStorage.removeItem("ideall-smoke-token")).catch(() => {})
+    await page.evaluate((key) => localStorage.removeItem(key), GIT_REPOS_KEY).catch(() => {})
   } catch (e) {
     console.log(`cleanup skipped: ${String(e.message).split("\n")[0]}`)
   }
