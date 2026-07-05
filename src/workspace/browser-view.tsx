@@ -21,8 +21,8 @@ import {
   type BrowserBounds,
   type BrowserBackendInfo,
 } from "@/lib/tauri"
+import { setBrowserUrl, setBrowserBackend } from "@/lib/browser-state"
 import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-open"
-import { setBrowserUrl, setBrowserBackend } from "./browser-state"
 import { useTabActive } from "./tab-active-context"
 
 const START_URL = "https://www.google.com"
@@ -74,7 +74,10 @@ export default function BrowserView() {
   }, [])
 
   const tabActiveRef = React.useRef(tabActive)
-  tabActiveRef.current = tabActive
+
+  React.useEffect(() => {
+    tabActiveRef.current = tabActive
+  }, [tabActive])
 
   React.useEffect(() => {
     if (!isTauri()) return
@@ -91,7 +94,11 @@ export default function BrowserView() {
       if (!openedRef.current) {
         openedRef.current = true
         openBrowserView(currentUrlRef.current, b)
-          .then(() => browserGetBackend().then((info) => setBackend(info)).catch(() => {}))
+          .then(() =>
+            browserGetBackend()
+              .then((info) => setBackend(info))
+              .catch(() => {}),
+          )
           .catch(() => {
             openedRef.current = false
             toast.error("打开内嵌浏览器失败")
@@ -131,7 +138,11 @@ export default function BrowserView() {
       if (!openedRef.current) {
         openedRef.current = true
         openBrowserView(currentUrlRef.current, b)
-          .then(() => browserGetBackend().then((info) => setBackend(info)).catch(() => {}))
+          .then(() =>
+            browserGetBackend()
+              .then((info) => setBackend(info))
+              .catch(() => {}),
+          )
           .catch(() => {
             openedRef.current = false
             toast.error("打开内嵌浏览器失败")
@@ -209,9 +220,7 @@ export default function BrowserView() {
           {backendLabel ? (
             <span
               title={
-                backend?.mode === "cdp"
-                  ? backend.chromePath ?? "Chrome CDP 模式"
-                  : undefined
+                backend?.mode === "cdp" ? (backend.chromePath ?? "Chrome CDP 模式") : undefined
               }
               className="shrink-0 rounded-md border bg-muted/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
             >

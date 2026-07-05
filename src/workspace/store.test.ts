@@ -175,7 +175,7 @@ test("dirty 标签: 受保护关闭会询问, 拒绝时保留标签与 dirty 状
     assert.equal(isTabDirty(id), false, "关闭后 dirty 标记同步清理")
   } finally {
     if (prevConfirm) g.confirm = prevConfirm
-    else delete g.confirm
+    else Reflect.deleteProperty(g, "confirm")
   }
 })
 
