@@ -30,15 +30,11 @@ const authFlowMachine = setup({
   actors: {
     handshake: fromPromise(async ({ input }: { input: AuthFlowInput }) => runAuthHandshake(input)),
     submit: fromPromise(
-      async ({
-        input,
-      }: {
-        input: { mode: AuthFlowInput["mode"]; payload: AuthPayload }
-      }) => runAuthSubmit(input.mode, input.payload),
+      async ({ input }: { input: { mode: AuthFlowInput["mode"]; payload: AuthPayload } }) =>
+        runAuthSubmit(input.mode, input.payload),
     ),
-    profile: fromPromise(
-      async ({ input }: { input: { token: string; email: string } }) =>
-        runAuthProfile(input.token, input.email),
+    profile: fromPromise(async ({ input }: { input: { token: string; email: string } }) =>
+      runAuthProfile(input.token, input.email),
     ),
   },
 }).createMachine({

@@ -59,8 +59,7 @@ test("runAuthFlow: 握手失败 → 可展示错误", async () => {
     getServerPublicKey: async () => ({ ok: false, message: "服务不可用" }),
   })
   await assert.rejects(
-    () =>
-      runAuthFlow({ mode: "login", email: "u@test.com", password: "secret" }),
+    () => runAuthFlow({ mode: "login", email: "u@test.com", password: "secret" }),
     /服务不可用/,
   )
 })

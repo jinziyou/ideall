@@ -62,15 +62,14 @@ export default function ActivityBar() {
       {workspaceActive && (
         <span className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
       )}
-      <Boxes className={cn("h-[1.2rem] w-[1.2rem]", workspaceActive ? "text-primary" : undefined)} />
+      <Boxes
+        className={cn("h-[1.2rem] w-[1.2rem]", workspaceActive ? "text-primary" : undefined)}
+      />
       <span className="leading-none">工作区</span>
     </button>
   )
 
-  const moduleButton = (
-    m: ReturnType<typeof moduleById>,
-    opts?: { forceActive?: boolean },
-  ) => {
+  const moduleButton = (m: ReturnType<typeof moduleById>, opts?: { forceActive?: boolean }) => {
     const Icon = m.icon
     const active = opts?.forceActive ?? activeModule === m.id
     const badge = m.id === "home" ? count : undefined

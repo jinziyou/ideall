@@ -6,10 +6,7 @@ import { flowProgressSlice } from "@/lib/flow-progress-slice"
 
 const workspacePersistMiddleware: Middleware = (api) => (next) => (action) => {
   const result = next(action)
-  if (
-    workspaceSlice.actions.patch.match(action) ||
-    workspaceSlice.actions.hydrate.match(action)
-  ) {
+  if (workspaceSlice.actions.patch.match(action) || workspaceSlice.actions.hydrate.match(action)) {
     const ws = api.getState().workspace
     persistWorkspaceSnapshot(ws, ws.hydrated)
   }

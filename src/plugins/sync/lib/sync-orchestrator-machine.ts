@@ -113,11 +113,15 @@ const syncOrchestratorMachine = setup({
 
 /** SyncPort.syncNow 入口 —— 经 XState 并发编排两域。 */
 export async function runSyncOrchestrator(code: string): Promise<SyncResult> {
-  return runActorWithProgress(syncOrchestratorMachine, { code }, {
-    mapProgress: syncProgressFromSnapshot,
-    getError: (s) => (s.context as OrchestratorContext).error,
-    fallbackError: "同步失败",
-  })
+  return runActorWithProgress(
+    syncOrchestratorMachine,
+    { code },
+    {
+      mapProgress: syncProgressFromSnapshot,
+      getError: (s) => (s.context as OrchestratorContext).error,
+      fallbackError: "同步失败",
+    },
+  )
 }
 
 export { syncOrchestratorMachine }

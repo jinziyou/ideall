@@ -185,10 +185,7 @@ export async function browserWait(ms: number): Promise<void> {
 }
 
 /** 等待页面出现匹配选择器的元素。 */
-export async function browserWaitForSelector(
-  selector: string,
-  timeoutMs?: number,
-): Promise<void> {
+export async function browserWaitForSelector(selector: string, timeoutMs?: number): Promise<void> {
   if (!isTauri()) throw new Error("仅桌面 App 可用")
   const { invoke } = await import("@tauri-apps/api/core")
   await invoke("browser_wait_for_selector", { selector, timeoutMs })

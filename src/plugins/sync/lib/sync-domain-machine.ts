@@ -112,8 +112,7 @@ const domainSyncMachine = setup({
             reenter: true,
             actions: assign({
               attempt: ({ context }) => context.attempt + 1,
-              merged: ({ event }) =>
-                event.output.type === "retry" ? event.output.merged : [],
+              merged: ({ event }) => (event.output.type === "retry" ? event.output.merged : []),
             }),
           },
           {

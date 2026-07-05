@@ -29,7 +29,9 @@ export function authProgressFromSnapshot(
 }
 
 /** 并行 sync 编排: 根据 subscriptions / notes 子状态拼进度文案。 */
-export function syncProgressFromSnapshot(snapshot: SnapshotFrom<AnyStateMachine>): FlowProgress | null {
+export function syncProgressFromSnapshot(
+  snapshot: SnapshotFrom<AnyStateMachine>,
+): FlowProgress | null {
   if (!snapshot.matches("syncing")) return null
   const v = snapshot.value
   const parts: string[] = []
@@ -41,7 +43,8 @@ export function syncProgressFromSnapshot(snapshot: SnapshotFrom<AnyStateMachine>
   return {
     kind: "sync",
     phase: "syncing",
-    label: parts.length === 2 ? "同步关注与笔记…" : parts.length === 1 ? `同步${parts[0]}…` : "同步中…",
+    label:
+      parts.length === 2 ? "同步关注与笔记…" : parts.length === 1 ? `同步${parts[0]}…` : "同步中…",
     detail: parts.length ? parts.join("、") : undefined,
   }
 }
