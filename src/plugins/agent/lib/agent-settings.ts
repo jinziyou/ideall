@@ -106,8 +106,7 @@ export function getAgentSettings(): AgentSettings {
   }
   const parsed = parseSettings(raw)
   if (!isTauri() && parsed.apiKey) cachedApiKey = parsed.apiKey
-  if (isTauri() && parsed.apiKey && !cachedApiKey) cachedApiKey = parsed.apiKey
-  lastParsed = { ...parsed, apiKey: cachedApiKey || parsed.apiKey }
+  lastParsed = { ...parsed, apiKey: isTauri() ? cachedApiKey : cachedApiKey || parsed.apiKey }
   if (isTauri() && !secureHydrated) void hydrateAgentSettingsSecure()
   return lastParsed
 }
@@ -140,11 +139,7 @@ export async function hydrateAgentSettingsSecure(): Promise<AgentSettings> {
     const raw = s?.getItem(AGENT_SETTINGS_STORAGE_KEY) ?? null
     const parsed = parseSettings(raw)
     const secureKey = await secureGet(API_KEY_SECURE_KEY)
-    const migratedKey = secureKey ?? parsed.apiKey
-    if (migratedKey) {
-      cachedApiKey = migratedKey
-      if (!secureKey) await secureSet(API_KEY_SECURE_KEY, migratedKey)
-    }
+    if (secureKey) cachedApiKey = secureKey
     const next = { ...parsed, apiKey: cachedApiKey }
     persistSettings(next)
     lastRaw = null

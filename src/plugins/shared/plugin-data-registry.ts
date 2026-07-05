@@ -123,7 +123,7 @@ export const PLUGIN_DATA_PORTS: PluginDataPort[] = [
         updatedAt: info.keys ? Date.now() : null,
         detail:
           info.localSensitiveValues > 0
-            ? `${info.keys} 组配置 / ${info.localSensitiveValues} 项待迁移敏感值`
+            ? `${info.keys} 组配置 / ${info.localSensitiveValues} 项需清理敏感值`
             : `${info.keys} 组配置`,
       }
     },

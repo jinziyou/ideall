@@ -24,7 +24,7 @@ function secureKey(id: string): string {
 }
 
 function materialized(secret: Secret): Secret {
-  return { ...secret, value: secretCache.get(secret.id) ?? secret.value ?? "" }
+  return { ...secret, value: secretCache.get(secret.id) ?? (isTauri() ? "" : secret.value) ?? "" }
 }
 
 export const subscribeSecrets = store.subscribe
@@ -62,7 +62,8 @@ export function resolveSecrets(text: string): string {
   if (isTauri() && !hydrated) void hydrateAgentSecretsSecure()
   return text.replace(
     /\$\{(\w+)\}/g,
-    (m, name: string) => secretCache.get(name) ?? store.byId(name)?.value ?? m,
+    (m, name: string) =>
+      secretCache.get(name) ?? (isTauri() ? undefined : store.byId(name)?.value) ?? m,
   )
 }
 
@@ -85,11 +86,7 @@ export async function hydrateAgentSecretsSecure(): Promise<void> {
     let changed = false
     for (const secret of current) {
       const secureValue = await secureGet(secureKey(secret.id))
-      const value = secureValue ?? secret.value
-      if (value) {
-        secretCache.set(secret.id, value)
-        if (!secureValue) await secureSet(secureKey(secret.id), value)
-      }
+      if (secureValue) secretCache.set(secret.id, secureValue)
       if (secret.value || !secret.secure) changed = true
     }
     if (changed) {

@@ -188,10 +188,10 @@ export default function CodePage() {
   const migrateSensitiveData = async () => {
     try {
       await migrateSensitiveDataOnly()
-      toast("已迁移可识别的敏感配置")
+      toast("已处理可识别的敏感配置")
       refresh()
     } catch (e) {
-      toast.error("迁移失败", { description: e instanceof Error ? e.message : String(e) })
+      toast.error("处理失败", { description: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -399,11 +399,11 @@ function SecurityPanel({
             </div>
             <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
               <dt className="text-muted-foreground">AI Key</dt>
-              <dd>{diagnostics.agentSettings.localApiKeyPresent ? "待迁移" : "未见明文本地值"}</dd>
+              <dd>{diagnostics.agentSettings.localApiKeyPresent ? "需清理" : "未见明文本地值"}</dd>
               <dt className="text-muted-foreground">MCP 密钥</dt>
               <dd>
                 {diagnostics.agentSecrets.localValueCount
-                  ? `${diagnostics.agentSecrets.localValueCount} 个待迁移`
+                  ? `${diagnostics.agentSecrets.localValueCount} 个需清理`
                   : `${diagnostics.agentSecrets.total} 个名称 / 未见明文本地值`}
               </dd>
               <dt className="text-muted-foreground">OAuth</dt>
