@@ -45,6 +45,8 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [draftSavedAt, setDraftSavedAt] = React.useState<number | null>(null)
   const restoredDraftRef = React.useRef<string | null>(null)
+  const draftRef = React.useRef("")
+  const draftFrameRef = React.useRef<number | null>(null)
   const displayName = metaOverride.name ?? file?.name ?? ""
   const displayTags = metaOverride.tags ?? file?.tags ?? []
   const displayFile = file ? { ...file, name: displayName, tags: displayTags } : null
@@ -67,14 +69,17 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
 
   React.useEffect(() => {
     if (!file || preview.text === null) {
+      draftRef.current = ""
       setDraft("")
       return
     }
     const savedDraft = readFileDraft(file.id)
     if (savedDraft && savedDraft.base === preview.text && savedDraft.draft !== preview.text) {
+      draftRef.current = savedDraft.draft
       setDraft(savedDraft.draft)
       setDraftSavedAt(savedDraft.updatedAt || Date.now())
       setMode("edit")
+      promoteActiveTab()
       if (restoredDraftRef.current !== file.id) {
         restoredDraftRef.current = file.id
         toast.info("已恢复未保存草稿", { description: file.name })
@@ -82,9 +87,17 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
       return
     }
     if (savedDraft && savedDraft.base !== preview.text) clearFileDraft(file.id)
+    draftRef.current = preview.text
     setDraft(preview.text)
     setDraftSavedAt(null)
   }, [file, preview.text])
+
+  React.useEffect(
+    () => () => {
+      if (draftFrameRef.current !== null) cancelAnimationFrame(draftFrameRef.current)
+    },
+    [],
+  )
 
   React.useEffect(() => {
     if (!editable && mode === "edit") setMode("preview")
@@ -140,19 +153,31 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload)
   }, [dirty])
 
-  const handleDraftChange = React.useCallback(
-    (next: string) => {
-      if (preview.text !== null && next !== preview.text) promoteActiveTab()
-      setDraft(next)
-    },
-    [preview.text],
-  )
+  const handleModeChange = React.useCallback((next: FileViewerMode) => {
+    if (next === "edit") promoteActiveTab()
+    setMode(next)
+  }, [])
+
+  const handleDraftChange = React.useCallback((next: string) => {
+    // CodeMirror 在 update listener 内触发 onChange; 延后一帧进 React state, 保存仍读 ref 中的最新文本。
+    draftRef.current = next
+    if (draftFrameRef.current !== null) return
+    draftFrameRef.current = requestAnimationFrame(() => {
+      draftFrameRef.current = null
+      setDraft(draftRef.current)
+    })
+  }, [])
 
   const handleSave = React.useCallback(async () => {
-    if (!file || !type || !editable || !dirty) return
+    const nextDraft = draftRef.current
+    if (!file || !type || !editable || preview.text === null || nextDraft === preview.text) return
     setSaving(true)
     try {
-      const saved = await updateFileContent(file.id, draft, mimeForSave(type.preview, file.type))
+      const saved = await updateFileContent(
+        file.id,
+        nextDraft,
+        mimeForSave(type.preview, file.type),
+      )
       if (!saved) {
         toast.error("文件不存在或已删除")
         return
@@ -166,7 +191,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     } finally {
       setSaving(false)
     }
-  }, [dirty, draft, editable, file, type])
+  }, [editable, file, preview.text, type])
 
   React.useEffect(() => {
     if (!active || !editable) return
@@ -203,6 +228,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
   function discardDraft() {
     if (!file || preview.text === null) return
     clearFileDraft(file.id)
+    draftRef.current = preview.text
     setDraft(preview.text)
     setDraftSavedAt(null)
     toast.success("已丢弃草稿")
@@ -225,7 +251,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
         dirty={dirty}
         saving={saving}
         draftSavedAt={draftSavedAt}
-        onModeChange={setMode}
+        onModeChange={handleModeChange}
         onSave={() => void handleSave()}
         onDownload={(target) => void fileActions.download(target)}
         onRename={() => setRenameOpen(true)}

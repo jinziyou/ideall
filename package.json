@@ -35,6 +35,7 @@
     "gen:api:check": "openapi-typescript openapi/server.json -o node_modules/.cache/ideall/server.gen.d.ts && node scripts/gen-api-check.mjs",
     "test": "node --import tsx scripts/run-tests.mjs",
     "smoke:notes": "node scripts/smoke-notes.mjs",
+    "smoke:files": "node scripts/smoke-files.mjs",
     "serve:out": "node scripts/serve-out.mjs",
     "bump": "node scripts/bump-version.mjs"
   },
