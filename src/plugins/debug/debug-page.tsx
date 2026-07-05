@@ -5,11 +5,14 @@ import {
   AlertTriangle,
   Bug,
   ClipboardCopy,
+  Database,
   Download,
+  FileJson,
   HardDrive,
   Info,
   RefreshCw,
   ShieldCheck,
+  Upload,
 } from "lucide-react"
 import { toast } from "sonner"
 import { downloadTextFile } from "@/lib/browser-download"
@@ -29,6 +32,16 @@ import {
   type PluginDataInspection,
 } from "@/plugins/shared/plugin-data-registry"
 import { pluginDataFilename } from "@/plugins/shared/plugin-data"
+import {
+  formatPluginImportResult,
+  importPluginDataPackage,
+  previewPluginDataImport,
+  type PluginDataImportPreview,
+} from "@/plugins/shared/plugin-data-manager"
+import {
+  inspectLocalDataSchemas,
+  type LocalDataSchemaInspection,
+} from "@/plugins/shared/local-data-schema"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { readBrowserDebugSnapshot, type DebugSnapshot, type StorageBucket } from "./debug-snapshot"
@@ -36,8 +49,13 @@ import { readBrowserDebugSnapshot, type DebugSnapshot, type StorageBucket } from
 export default function DebugPage() {
   const [snapshot, setSnapshot] = React.useState<DebugSnapshot | null>(null)
   const [pluginData, setPluginData] = React.useState<PluginDataInspection[]>([])
+  const [schemaData, setSchemaData] = React.useState<LocalDataSchemaInspection[]>([])
   const [security, setSecurity] = React.useState<SecurityDiagnostics | null>(null)
+  const [importPreview, setImportPreview] = React.useState<PluginDataImportPreview | null>(null)
+  const [importRaw, setImportRaw] = React.useState<string | null>(null)
   const [pluginLoading, setPluginLoading] = React.useState(false)
+  const [importing, setImporting] = React.useState(false)
+  const importInputRef = React.useRef<HTMLInputElement | null>(null)
 
   const refresh = React.useCallback(() => {
     setSnapshot(readBrowserDebugSnapshot())
@@ -48,6 +66,9 @@ export default function DebugPage() {
     readSecurityDiagnostics()
       .then(setSecurity)
       .catch(() => setSecurity(null))
+    inspectLocalDataSchemas()
+      .then(setSchemaData)
+      .catch(() => setSchemaData([]))
   }, [])
 
   React.useEffect(() => {
@@ -58,7 +79,7 @@ export default function DebugPage() {
     if (!snapshot) return
     try {
       await navigator.clipboard.writeText(
-        JSON.stringify(createDebugBundle(snapshot, pluginData, security), null, 2),
+        JSON.stringify(createDebugBundle(snapshot, pluginData, schemaData, security), null, 2),
       )
       toast("已复制诊断信息")
     } catch {
@@ -70,7 +91,7 @@ export default function DebugPage() {
     if (!snapshot) return
     downloadTextFile(
       pluginDataFilename("ideall-debug-bundle"),
-      JSON.stringify(createDebugBundle(snapshot, pluginData, security), null, 2),
+      JSON.stringify(createDebugBundle(snapshot, pluginData, schemaData, security), null, 2),
     )
     toast("已导出诊断包")
   }
@@ -83,6 +104,42 @@ export default function DebugPage() {
       toast(`已导出${port.pluginLabel}数据`)
     } catch (e) {
       toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const selectImportFile = () => {
+    if (importInputRef.current) importInputRef.current.value = ""
+    importInputRef.current?.click()
+  }
+
+  const readImportFile = async (file: File) => {
+    try {
+      const raw = await file.text()
+      setImportRaw(raw)
+      setImportPreview(await previewPluginDataImport(raw, file.name))
+    } catch (e) {
+      setImportRaw(null)
+      setImportPreview({
+        ok: false,
+        filename: file.name,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
+  const executePluginImport = async () => {
+    if (!importRaw || !importPreview?.filename) return
+    setImporting(true)
+    try {
+      const result = await importPluginDataPackage(importRaw, importPreview.filename)
+      toast("插件数据已导入", { description: formatPluginImportResult(result.result) })
+      setImportRaw(null)
+      setImportPreview(null)
+      refresh()
+    } catch (e) {
+      toast.error("导入失败", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -111,6 +168,16 @@ export default function DebugPage() {
         onRefresh={refresh}
         onCopy={() => void copySnapshot()}
         onDownload={downloadBundle}
+      />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0]
+          if (file) void readImportFile(file)
+        }}
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -149,8 +216,18 @@ export default function DebugPage() {
           entries={pluginData}
           loading={pluginLoading}
           onExport={(pluginId) => void exportPluginData(pluginId)}
+          onImportSelect={selectImportFile}
+          importPreview={importPreview}
+          importing={importing}
+          onImportConfirm={() => void executePluginImport()}
+          onImportCancel={() => {
+            setImportRaw(null)
+            setImportPreview(null)
+          }}
         />
       </div>
+
+      <SchemaPanel entries={schemaData} />
 
       <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
         <StoragePanel title="localStorage" bucket={snapshot.storage.localStorage} />
@@ -184,6 +261,7 @@ async function readSecurityDiagnostics(): Promise<SecurityDiagnostics> {
 function createDebugBundle(
   snapshot: DebugSnapshot,
   pluginData: PluginDataInspection[],
+  schemaData: LocalDataSchemaInspection[],
   security?: SecurityDiagnostics | null,
 ) {
   return {
@@ -192,6 +270,7 @@ function createDebugBundle(
     exportedAt: new Date().toISOString(),
     snapshot,
     pluginData,
+    schemaData,
     security,
   }
 }
@@ -260,15 +339,48 @@ function PluginDataPanel({
   entries,
   loading,
   onExport,
+  onImportSelect,
+  importPreview,
+  importing,
+  onImportConfirm,
+  onImportCancel,
 }: {
   entries: PluginDataInspection[]
   loading: boolean
   onExport: (pluginId: string) => void
+  onImportSelect: () => void
+  importPreview: PluginDataImportPreview | null
+  importing: boolean
+  onImportConfirm: () => void
+  onImportCancel: () => void
 }) {
   return (
     <section className="rounded-lg border border-border/60 bg-card">
-      <SectionTitle icon={HardDrive} title={`插件数据 · ${entries.length}`} />
-      <div className="overflow-auto p-2">
+      <SectionTitle
+        icon={HardDrive}
+        title={`插件数据 · ${entries.length}`}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 px-2"
+            onClick={onImportSelect}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            导入
+          </Button>
+        }
+      />
+      <div className="space-y-2 overflow-auto p-2">
+        {importPreview && (
+          <ImportPreviewCard
+            preview={importPreview}
+            importing={importing}
+            onConfirm={onImportConfirm}
+            onCancel={onImportCancel}
+          />
+        )}
         {loading && entries.length === 0 ? (
           <div className="px-2 py-8 text-center text-sm text-muted-foreground">
             正在读取插件数据
@@ -326,6 +438,172 @@ function PluginDataPanel({
         )}
       </div>
     </section>
+  )
+}
+
+function ImportPreviewCard({
+  preview,
+  importing,
+  onConfirm,
+  onCancel,
+}: {
+  preview: PluginDataImportPreview
+  importing: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const canImport = preview.ok && preview.target
+  return (
+    <div
+      className={`rounded-md border p-3 ${
+        canImport ? "border-primary/30 bg-primary/5" : "border-destructive/30 bg-destructive/10"
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <FileJson className="h-4 w-4 text-primary" />
+            <p className="truncate text-sm font-medium">{preview.filename ?? "插件数据 JSON"}</p>
+          </div>
+          {preview.package && (
+            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+              {preview.package.dataKind} v{preview.package.dataVersion}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+            取消
+          </Button>
+          <Button type="button" size="sm" disabled={!canImport || importing} onClick={onConfirm}>
+            {importing ? "导入中" : "执行导入"}
+          </Button>
+        </div>
+      </div>
+      {canImport ? (
+        <dl className="mt-3 grid grid-cols-[80px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-muted-foreground">插件</dt>
+          <dd>{preview.target!.pluginLabel}</dd>
+          <dt className="text-muted-foreground">策略</dt>
+          <dd>{importModeLabel(preview.target!.importMode)}</dd>
+          <dt className="text-muted-foreground">说明</dt>
+          <dd>{preview.target!.importDescription}</dd>
+          {preview.current && (
+            <>
+              <dt className="text-muted-foreground">当前</dt>
+              <dd>{preview.current.detail}</dd>
+            </>
+          )}
+        </dl>
+      ) : (
+        <div className="mt-3 text-xs text-destructive">{preview.error ?? "无法导入"}</div>
+      )}
+    </div>
+  )
+}
+
+function importModeLabel(mode: NonNullable<PluginDataImportPreview["target"]>["importMode"]) {
+  return mode === "replace" ? "覆盖" : mode === "merge" ? "合并" : "只校验"
+}
+
+function SchemaPanel({ entries }: { entries: LocalDataSchemaInspection[] }) {
+  const issueCount = entries.filter((entry) =>
+    ["warning", "error", "unknown"].includes(entry.status),
+  ).length
+  return (
+    <section className="rounded-lg border border-border/60 bg-card">
+      <SectionTitle icon={Database} title={`数据 Schema · ${entries.length}`} />
+      <div className="overflow-auto p-2">
+        {entries.length === 0 ? (
+          <div className="px-2 py-8 text-center text-sm text-muted-foreground">
+            正在读取 schema 状态
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 px-2 text-xs text-muted-foreground">
+              <span>
+                {issueCount ? `${issueCount} 项需要关注` : "全部已知 schema 正常或未创建"}
+              </span>
+              <span>·</span>
+              <span>{entries.filter((entry) => entry.portable).length} 项支持插件数据迁移</span>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {entries.map((entry) => (
+                <div key={entry.id} className="rounded-md border border-border/60 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-medium">{entry.label}</p>
+                        <SchemaStatusBadge status={entry.status} />
+                      </div>
+                      <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                        {entry.key} · v{entry.currentVersion}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {entry.bytes === null ? "未知" : formatBytes(entry.bytes)}
+                    </span>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+                    <dt className="text-muted-foreground">位置</dt>
+                    <dd>{entry.storage}</dd>
+                    <dt className="text-muted-foreground">归属</dt>
+                    <dd>{entry.owner}</dd>
+                    <dt className="text-muted-foreground">状态</dt>
+                    <dd className="min-w-0 break-words">{entry.detail}</dd>
+                    {(entry.sensitive || entry.portable) && (
+                      <>
+                        <dt className="text-muted-foreground">标记</dt>
+                        <dd className="flex flex-wrap gap-1">
+                          {entry.sensitive && (
+                            <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-700">
+                              敏感
+                            </span>
+                          )}
+                          {entry.portable && (
+                            <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700">
+                              可迁移
+                            </span>
+                          )}
+                        </dd>
+                      </>
+                    )}
+                  </dl>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function SchemaStatusBadge({ status }: { status: LocalDataSchemaInspection["status"] }) {
+  const label =
+    status === "ok"
+      ? "正常"
+      : status === "missing"
+        ? "未创建"
+        : status === "warning"
+          ? "关注"
+          : status === "error"
+            ? "异常"
+            : "未知"
+  const className =
+    status === "ok"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
+      : status === "missing"
+        ? "border-border bg-muted text-muted-foreground"
+        : status === "warning"
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
+          : status === "error"
+            ? "border-destructive/30 bg-destructive/10 text-destructive"
+            : "border-border bg-muted text-muted-foreground"
+  return (
+    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${className}`}>
+      {label}
+    </span>
   )
 }
 
@@ -387,14 +665,19 @@ function StoragePanel({ title, bucket }: { title: string; bucket: StorageBucket 
 function SectionTitle({
   icon: Icon,
   title,
+  actions,
 }: {
   icon: React.ComponentType<{ className?: string }>
   title: string
+  actions?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
-      <Icon className="h-4 w-4 text-primary" />
-      <h2 className="text-sm font-medium">{title}</h2>
+    <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon className="h-4 w-4 shrink-0 text-primary" />
+        <h2 className="truncate text-sm font-medium">{title}</h2>
+      </div>
+      {actions}
     </div>
   )
 }

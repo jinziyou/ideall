@@ -7,8 +7,8 @@ import {
 } from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
 
-const DB_NAME = "ideall:database"
-const DB_VERSION = 1
+export const DATABASE_DB_NAME = "ideall:database"
+export const DATABASE_DB_VERSION = 1
 const STORE_TABLES = "tables"
 const STORE_ROWS = "rows"
 
@@ -55,8 +55,8 @@ export type DatabaseExport = PluginDataPackage<
 >
 
 const databaseDb = createPluginDb({
-  name: DB_NAME,
-  version: DB_VERSION,
+  name: DATABASE_DB_NAME,
+  version: DATABASE_DB_VERSION,
   upgrade: (db) => {
     if (!db.objectStoreNames.contains(STORE_TABLES)) {
       db.createObjectStore(STORE_TABLES, { keyPath: "id" })

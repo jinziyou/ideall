@@ -12,6 +12,7 @@ import {
 import { AGENT_SECRETS_STORAGE_KEY, agentSecretsSecuritySnapshot } from "./agent-secrets"
 import { AGENT_MCP_STORAGE_KEY } from "./agent-mcp-registry"
 import { AGENT_RULES_STORAGE_KEY } from "./agent-rules"
+import { AGENT_SKILLS_STORAGE_KEY } from "./agent-skills"
 import { AGENT_TASKS_STORAGE_KEY } from "./agent-tasks"
 import { AGENT_WORKSPACES_STORAGE_KEY, type WorkspacesState } from "./agent-workspace"
 import { ACP_SETTINGS_STORAGE_KEY } from "./acp/acp-settings"
@@ -31,6 +32,7 @@ const KEYS = [
   AGENT_SETTINGS_STORAGE_KEY,
   AGENT_MCP_STORAGE_KEY,
   AGENT_RULES_STORAGE_KEY,
+  AGENT_SKILLS_STORAGE_KEY,
   AGENT_TASKS_STORAGE_KEY,
   AGENT_WORKSPACES_STORAGE_KEY,
   AGENT_SECRETS_STORAGE_KEY,

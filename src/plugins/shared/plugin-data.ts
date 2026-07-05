@@ -45,6 +45,8 @@ export type PluginDataInspection = {
 
 export type PluginDataPort<TImportResult = PluginImportResult> = PluginDataSpec & {
   filenamePrefix: string
+  importMode?: "replace" | "merge" | "noop"
+  importDescription?: string
   exportJson: () => Promise<string>
   importJson: (raw: string) => Promise<TImportResult>
   inspect: () => Promise<PluginDataInspection>

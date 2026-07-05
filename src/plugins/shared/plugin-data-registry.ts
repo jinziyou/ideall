@@ -40,6 +40,8 @@ export const PLUGIN_DATA_PORTS: PluginDataPort[] = [
   {
     ...AUDIO_DATA_SPEC,
     filenamePrefix: "ideall-audio",
+    importMode: "replace",
+    importDescription: "导入会替换当前音频播放列表和播放状态。",
     exportJson: exportAudioLibraryJson,
     importJson: importAudioLibraryJson,
     inspect: async () => {
@@ -60,6 +62,8 @@ export const PLUGIN_DATA_PORTS: PluginDataPort[] = [
   {
     ...DATABASE_DATA_SPEC,
     filenamePrefix: "ideall-database",
+    importMode: "replace",
+    importDescription: "导入会替换当前数据库插件的表和行。",
     exportJson: exportDatabaseJson,
     importJson: importDatabaseJson,
     inspect: async () => {
@@ -80,6 +84,8 @@ export const PLUGIN_DATA_PORTS: PluginDataPort[] = [
   {
     ...GIT_DATA_SPEC,
     filenamePrefix: "ideall-git",
+    importMode: "replace",
+    importDescription: "导入会替换 Git 插件保存的仓库路径列表。",
     exportJson: exportGitReposJson,
     importJson: importGitReposJson,
     inspect: async () => {
@@ -100,6 +106,8 @@ export const PLUGIN_DATA_PORTS: PluginDataPort[] = [
   {
     ...AGENT_DATA_SPEC,
     filenamePrefix: "ideall-agent",
+    importMode: "merge",
+    importDescription: "导入会写入 AI 助手配置, 但不会导入 API Key 或密钥值。",
     exportJson: exportAgentConfigJson,
     importJson: importAgentConfigJson,
     inspect: async () => {
@@ -123,6 +131,8 @@ export const PLUGIN_DATA_PORTS: PluginDataPort[] = [
   {
     ...SYNC_DATA_SPEC,
     filenamePrefix: "ideall-sync",
+    importMode: "noop",
+    importDescription: "导入只校验同步状态备份, 不写入同步码。",
     exportJson: exportSyncStatusJson,
     importJson: importSyncStatusJson,
     inspect: async () => {

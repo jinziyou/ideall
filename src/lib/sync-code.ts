@@ -1,12 +1,12 @@
 // 同步码本地存取 (localStorage) —— 纯叶子, 无领域逻辑。
 // 同步码即「跨端同步」的能力凭证; core (设备标签 / 同步面板) 与 sync 插件共用。
 
-const CODE_KEY = "wonita:sync:code"
+export const SYNC_CODE_STORAGE_KEY = "wonita:sync:code"
 const codeListeners = new Set<() => void>()
 
 export function getSyncCode(): string | null {
   try {
-    return localStorage.getItem(CODE_KEY)
+    return localStorage.getItem(SYNC_CODE_STORAGE_KEY)
   } catch {
     return null
   }
@@ -22,7 +22,7 @@ export function subscribeSyncCode(cb: () => void): () => void {
 
 export function setSyncCode(code: string): void {
   try {
-    localStorage.setItem(CODE_KEY, code)
+    localStorage.setItem(SYNC_CODE_STORAGE_KEY, code)
   } catch {
     /* 隐私模式 / 配额: 忽略 */
   }
@@ -31,7 +31,7 @@ export function setSyncCode(code: string): void {
 
 export function clearSyncCode(): void {
   try {
-    localStorage.removeItem(CODE_KEY)
+    localStorage.removeItem(SYNC_CODE_STORAGE_KEY)
   } catch {
     /* ignore */
   }
@@ -42,6 +42,6 @@ export function clearSyncCode(): void {
 // storage 事件只在其它标签页触发 (本页 set/clear 已手动 notify)。SSR 期无 window, 跳过。
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
-    if (e.key === null || e.key === CODE_KEY) codeListeners.forEach((l) => l())
+    if (e.key === null || e.key === SYNC_CODE_STORAGE_KEY) codeListeners.forEach((l) => l())
   })
 }

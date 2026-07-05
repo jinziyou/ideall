@@ -7,8 +7,8 @@ import {
 } from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
 
-const DB_NAME = "ideall:audio"
-const DB_VERSION = 1
+export const AUDIO_DB_NAME = "ideall:audio"
+export const AUDIO_DB_VERSION = 1
 const STORE_TRACKS = "tracks"
 const STORE_STATE = "state"
 const AUDIO_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"])
@@ -69,8 +69,8 @@ export const DEFAULT_AUDIO_PLAYBACK_STATE: AudioPlaybackState = {
 }
 
 const audioDb = createPluginDb({
-  name: DB_NAME,
-  version: DB_VERSION,
+  name: AUDIO_DB_NAME,
+  version: AUDIO_DB_VERSION,
   upgrade: (db) => {
     if (!db.objectStoreNames.contains(STORE_TRACKS)) {
       db.createObjectStore(STORE_TRACKS, { keyPath: "id" })

@@ -24,6 +24,8 @@ test("PLUGIN_DATA_PORTS: 核心插件暴露统一插件数据端口", () => {
   assert.deepEqual(pluginDataPortById("audio"), {
     ...AUDIO_DATA_SPEC,
     filenamePrefix: "ideall-audio",
+    importMode: "replace",
+    importDescription: "导入会替换当前音频播放列表和播放状态。",
     exportJson: pluginDataPortById("audio")?.exportJson,
     importJson: pluginDataPortById("audio")?.importJson,
     inspect: pluginDataPortById("audio")?.inspect,

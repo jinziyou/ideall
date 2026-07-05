@@ -1,6 +1,7 @@
 import type { ModuleId, Tab, WsMode } from "./types"
+import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 
-export const WORKSPACE_STORAGE_KEY = "ideall:workspace:v1"
+export { WORKSPACE_STORAGE_KEY }
 
 export type WorkspacePersistSnapshot = {
   tabs: Tab[]

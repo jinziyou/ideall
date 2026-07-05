@@ -145,6 +145,12 @@ try {
     "Debug 插件展示安全存储诊断",
     debugText.includes("安全存储") && debugText.includes("迁移敏感值"),
   )
+  record(
+    "Debug 插件展示导入入口和数据 Schema",
+    debugText.includes("导入") &&
+      debugText.includes("数据 Schema") &&
+      debugText.includes("Git 仓库列表"),
+  )
   await page.screenshot({ path: `${SHOT_DIR}/3-debug.png` })
 
   markStage("git")

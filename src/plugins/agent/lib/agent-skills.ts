@@ -70,8 +70,9 @@ function migrate(raw: Partial<AgentSkill>): AgentSkill {
   }
 }
 
+export const AGENT_SKILLS_STORAGE_KEY = "ideall:agent:skills:v1"
 const store = createCollection<AgentSkill>(
-  "ideall:agent:skills:v1",
+  AGENT_SKILLS_STORAGE_KEY,
   () => BUILTIN_SKILLS.map(migrate),
   migrate,
 )
