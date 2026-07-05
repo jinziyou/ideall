@@ -4,7 +4,7 @@
 // Usage: pnpm smoke:plugins
 // Optional: BASE=http://localhost:<port> pnpm smoke:plugins
 // Screenshots: /tmp/plugins-smoke/*.png
-import { BASE, createSmokeRun } from "./smoke-lib.mjs"
+import { BASE, createSmokeRun, recordNoPageErrors } from "./smoke-lib.mjs"
 
 const SHOT_DIR = "/tmp/plugins-smoke"
 const RUN_ID = Date.now()
@@ -42,15 +42,6 @@ async function openPluginPage(page, path) {
 
 const run = await createSmokeRun({ shotDir: SHOT_DIR })
 const { page, pageErrors, record, markStage } = run
-
-function significantPageErrors() {
-  const connectionClosed = pageErrors.some((error) => error.includes("net::ERR_CONNECTION_CLOSED"))
-  return pageErrors.filter(
-    (error) =>
-      !error.includes("net::ERR_CONNECTION_CLOSED") &&
-      !(connectionClosed && error.includes("TypeError: Failed to fetch")),
-  )
-}
 
 await page.addInitScript((key) => {
   try {
@@ -226,13 +217,7 @@ try {
   record("Git 插件在浏览器形态显示桌面 App 限定兜底", true)
   await page.screenshot({ path: `${SHOT_DIR}/4-git.png` })
 
-  const significantErrors = significantPageErrors()
-  pageErrors.splice(0, pageErrors.length, ...significantErrors)
-  record(
-    "运行期间无 page/console 错误",
-    significantErrors.length === 0,
-    significantErrors.slice(0, 4).join(" | "),
-  )
+  recordNoPageErrors(pageErrors, record, { ignoreFetchAfterConnectionClosed: true })
 } catch (e) {
   record("插件冒烟脚本异常", false, String(e.message).split("\n")[0])
   await page.screenshot({ path: `${SHOT_DIR}/error.png` }).catch(() => {})

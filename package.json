@@ -29,6 +29,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "verify": "pnpm format:check && pnpm lint && rm -rf .next && pnpm typecheck && pnpm test && pnpm build",
+    "verify:full": "node scripts/verify-full.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "sync:api": "node scripts/sync-server-openapi.mjs",

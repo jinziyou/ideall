@@ -4,7 +4,7 @@
 // Usage: pnpm smoke:trash
 // Optional: BASE=http://localhost:<port> pnpm smoke:trash
 // Screenshots: /tmp/trash-smoke/*.png
-import { BASE, createSmokeRun, sleep } from "./smoke-lib.mjs"
+import { BASE, createSmokeRun, recordNoPageErrors, sleep } from "./smoke-lib.mjs"
 
 const TRASH_URL = `${BASE}/trash`
 const SHOT_DIR = "/tmp/trash-smoke"
@@ -259,10 +259,6 @@ async function restoreItem(page, id) {
 const run = await createSmokeRun({ shotDir: SHOT_DIR })
 const { page, pageErrors, record, markStage } = run
 
-function significantPageErrors() {
-  return pageErrors.filter((error) => !error.includes("net::ERR_CONNECTION_CLOSED"))
-}
-
 await page.addInitScript((key) => {
   try {
     sessionStorage.removeItem(key)
@@ -328,13 +324,7 @@ try {
   record("回收站可永久删除文件删除项", await waitForMissingNode(page, IDS.filePurge))
   await page.screenshot({ path: `${SHOT_DIR}/2-cleared.png` })
 
-  const significantErrors = significantPageErrors()
-  pageErrors.splice(0, pageErrors.length, ...significantErrors)
-  record(
-    "运行期间无 page/console 错误",
-    significantErrors.length === 0,
-    significantErrors.slice(0, 4).join(" | "),
-  )
+  recordNoPageErrors(pageErrors, record)
 } catch (e) {
   record("回收站冒烟脚本异常", false, String(e.message).split("\n")[0])
   await page.screenshot({ path: `${SHOT_DIR}/error.png` }).catch(() => {})

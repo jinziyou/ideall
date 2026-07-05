@@ -130,6 +130,32 @@ export async function cleanupTestFiles(page, id, names) {
   )
 }
 
+export function significantSmokeErrors(
+  pageErrors,
+  { ignoreFetchAfterConnectionClosed = false } = {},
+) {
+  const connectionClosed = pageErrors.some((error) => error.includes("net::ERR_CONNECTION_CLOSED"))
+  return pageErrors.filter(
+    (error) =>
+      !error.includes("net::ERR_CONNECTION_CLOSED") &&
+      !(
+        ignoreFetchAfterConnectionClosed &&
+        connectionClosed &&
+        error.includes("TypeError: Failed to fetch")
+      ),
+  )
+}
+
+export function recordNoPageErrors(pageErrors, record, options) {
+  const significantErrors = significantSmokeErrors(pageErrors, options)
+  pageErrors.splice(0, pageErrors.length, ...significantErrors)
+  record(
+    "运行期间无 page/console 错误",
+    significantErrors.length === 0,
+    significantErrors.slice(0, 4).join(" | "),
+  )
+}
+
 export async function createSmokeRun({ shotDir, viewport = { width: 1280, height: 900 } }) {
   const checks = []
   const pageErrors = []

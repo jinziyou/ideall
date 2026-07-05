@@ -3,7 +3,7 @@
 // 用法: pnpm smoke:notes   (或 BASE=http://localhost:<端口> pnpm smoke:notes 指向其他服)
 // 前提: 先起一个服 —— 开发态 pnpm dev (5020), 或生产形态 pnpm build && pnpm serve:out (5030,
 // CI 冒烟用后者, 测的就是静态导出产物)。截图落 /tmp/notes-smoke/*.png; 退出码 0=全过, 1=有失败。
-import { BASE, createSmokeRun } from "./smoke-lib.mjs"
+import { BASE, createSmokeRun, recordNoPageErrors } from "./smoke-lib.mjs"
 
 const URL = `${BASE}/home/notes`
 const SHOT_DIR = "/tmp/notes-smoke"
@@ -94,11 +94,7 @@ try {
   record("重开后正文持久化回显", bodyPersisted)
   await page.screenshot({ path: `${SHOT_DIR}/4-reopened.png` })
 
-  record(
-    "运行期间无 page/console 错误",
-    pageErrors.length === 0,
-    pageErrors.slice(0, 4).join(" | "),
-  )
+  recordNoPageErrors(pageErrors, record)
 } catch (e) {
   record("冒烟脚本异常", false, String(e.message).split("\n")[0])
 } finally {

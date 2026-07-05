@@ -11,6 +11,7 @@ import {
   cleanupTestFiles,
   createSmokeRun,
   escapeRegex,
+  recordNoPageErrors,
   waitForLiveFileById,
   waitForLiveFileByName,
   waitForNoLiveFileByName,
@@ -292,11 +293,7 @@ try {
     console.log("  - 跳过主流预览类型矩阵 (SMOKE_LEVEL=core)")
   }
 
-  record(
-    "运行期间无 page/console 错误",
-    pageErrors.length === 0,
-    pageErrors.slice(0, 4).join(" | "),
-  )
+  recordNoPageErrors(pageErrors, record)
 } catch (e) {
   record("冒烟脚本异常", false, String(e.message).split("\n")[0])
   await page.screenshot({ path: `${SHOT_DIR}/error.png` }).catch(() => {})
