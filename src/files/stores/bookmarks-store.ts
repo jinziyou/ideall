@@ -13,6 +13,7 @@ import { sortKeyBetween } from "@/files/sort-key"
 import { computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
 import { idbBulkPut, idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
+import { captureTrashSnapshot } from "@/files/stores/trash-store"
 
 type BookmarkNode = NodeOfKind<"bookmark">
 type FolderNode = NodeOfKind<"folder">
@@ -124,6 +125,8 @@ export async function renameFolder(id: string, name: string): Promise<void> {
 /** 删除收藏夹 (软删标记); 夹内活跃书签移动到未分组 (parentId = null)。 */
 export async function deleteFolder(id: string): Promise<void> {
   const now = Date.now()
+  const folder = await idbGet<FolderNode>(STORE_NODES, id)
+  if (folder && folder.kind === "folder" && isLive(folder)) await captureTrashSnapshot(folder)
   const orphans = (await allBookmarkNodes())
     .filter(isLive)
     .filter((n) => n.parentId === id)
@@ -238,6 +241,10 @@ export async function updateBookmark(
 /** 删除书签 (软删标记; 撤销靠 restoreBookmark 恢复)。 */
 export async function deleteBookmark(id: string): Promise<void> {
   const now = Date.now()
+  const bookmark = await idbGet<BookmarkNode>(STORE_NODES, id)
+  if (bookmark && bookmark.kind === "bookmark" && isLive(bookmark)) {
+    await captureTrashSnapshot(bookmark)
+  }
   await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
     current && current.kind === "bookmark"
       ? { ...current, deletedAt: now, updatedAt: now }

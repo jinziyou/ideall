@@ -1,6 +1,7 @@
 // 外部 MCP server 的 OAuth (授权码 + PKCE + 动态注册 + 刷新) —— 手动粘贴授权码模式。
 // 用 SDK 的 auth() 驱动: 打开系统浏览器授权页, 用户把回调 URL/code 粘回换 token; 跨 web/桌面、不依赖 Rust 回调。
-// token / client / verifier 仅存本机 localStorage (per server id)。连接时把本 provider 传给 transport (authProvider),
+// token / verifier 写 secure-store (桌面=系统凭据; web=本机 fallback), client/state/url 仅存本机 localStorage。
+// 连接时把本 provider 传给 transport (authProvider),
 // SDK 自动带 Bearer 并在过期时刷新。
 //
 // redirect_uri 用 native loopback 占位: 授权后浏览器跳到它 (无监听 → 连接失败页, 但地址栏含 ?code=&state=),
@@ -18,6 +19,7 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 import { randomId } from "@/lib/id"
+import { secureDelete, secureGet, secureSet } from "@/lib/secure-store"
 import { isTauri, resolveFetch } from "@/lib/tauri"
 
 const CALLBACK_PORT = 7843
@@ -33,20 +35,45 @@ const CLIENT_METADATA: OAuthClientMetadata = {
 
 interface OAuthState {
   clientInfo?: OAuthClientInformationMixed
-  tokens?: OAuthTokens
-  codeVerifier?: string
   state?: string
   /** 上次发起授权打开的 URL (供 UI 在弹窗被拦时显示可点链接)。 */
   lastAuthUrl?: string
 }
 
+type LegacyOAuthState = OAuthState & {
+  tokens?: OAuthTokens
+  codeVerifier?: string
+}
+
+type OAuthSecretCache = {
+  tokens?: OAuthTokens
+  codeVerifier?: string
+  hydrated?: boolean
+}
+
 const keyOf = (serverId: string) => `ideall:agent:oauth:${serverId}`
+const secureTokensKey = (serverId: string) => `ideall:agent:oauth:${serverId}:tokens`
+const secureVerifierKey = (serverId: string) => `ideall:agent:oauth:${serverId}:codeVerifier`
+const secretCache = new Map<string, OAuthSecretCache>()
+
+function cacheFor(serverId: string): OAuthSecretCache {
+  const cached = secretCache.get(serverId)
+  if (cached) return cached
+  const next: OAuthSecretCache = {}
+  secretCache.set(serverId, next)
+  return next
+}
 
 function load(serverId: string): OAuthState {
   if (typeof localStorage === "undefined") return {}
   try {
     const raw = localStorage.getItem(keyOf(serverId))
-    return raw ? (JSON.parse(raw) as OAuthState) : {}
+    const parsed = raw ? (JSON.parse(raw) as LegacyOAuthState) : {}
+    return {
+      clientInfo: parsed.clientInfo,
+      state: parsed.state,
+      lastAuthUrl: parsed.lastAuthUrl,
+    }
   } catch {
     return {}
   }
@@ -63,6 +90,91 @@ function write(serverId: string, s: OAuthState): void {
 
 function patch(serverId: string, p: Partial<OAuthState>): void {
   write(serverId, { ...load(serverId), ...p })
+}
+
+function loadLegacy(serverId: string): LegacyOAuthState {
+  if (typeof localStorage === "undefined") return {}
+  try {
+    const raw = localStorage.getItem(keyOf(serverId))
+    return raw ? (JSON.parse(raw) as LegacyOAuthState) : {}
+  } catch {
+    return {}
+  }
+}
+
+function parseTokens(raw: string | null): OAuthTokens | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as OAuthTokens
+    return typeof parsed.access_token === "string" ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writePublicWithoutLegacySecrets(serverId: string, legacy: LegacyOAuthState): void {
+  write(serverId, {
+    clientInfo: legacy.clientInfo,
+    state: legacy.state,
+    lastAuthUrl: legacy.lastAuthUrl,
+  })
+}
+
+export async function hydrateMcpOAuthSecure(serverId: string): Promise<void> {
+  const cache = cacheFor(serverId)
+  if (cache.hydrated) return
+  const legacy = loadLegacy(serverId)
+  const [secureTokens, secureVerifier] = await Promise.all([
+    secureGet(secureTokensKey(serverId)).then(parseTokens),
+    secureGet(secureVerifierKey(serverId)),
+  ])
+  const tokens = secureTokens ?? legacy.tokens
+  const codeVerifier = secureVerifier ?? legacy.codeVerifier
+  if (tokens) {
+    cache.tokens = tokens
+    if (!secureTokens) await secureSet(secureTokensKey(serverId), JSON.stringify(tokens))
+  }
+  if (codeVerifier) {
+    cache.codeVerifier = codeVerifier
+    if (!secureVerifier) await secureSet(secureVerifierKey(serverId), codeVerifier)
+  }
+  if (legacy.tokens || legacy.codeVerifier) writePublicWithoutLegacySecrets(serverId, legacy)
+  cache.hydrated = true
+}
+
+export async function hydrateMcpOAuthSecureForServers(serverIds: string[]): Promise<void> {
+  await Promise.all([...new Set(serverIds)].map((serverId) => hydrateMcpOAuthSecure(serverId)))
+}
+
+export function mcpOAuthSecuritySnapshot(): {
+  localTokenCount: number
+  localVerifierCount: number
+  cachedTokenCount: number
+  hydratedCount: number
+} {
+  if (typeof localStorage === "undefined") {
+    return { localTokenCount: 0, localVerifierCount: 0, cachedTokenCount: 0, hydratedCount: 0 }
+  }
+  let localTokenCount = 0
+  let localVerifierCount = 0
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i)
+      if (!key?.startsWith("ideall:agent:oauth:")) continue
+      const legacy = loadLegacy(key.slice("ideall:agent:oauth:".length))
+      if (legacy.tokens?.access_token) localTokenCount += 1
+      if (legacy.codeVerifier) localVerifierCount += 1
+    }
+  } catch {
+    /* ignore diagnostics scan failures */
+  }
+  let cachedTokenCount = 0
+  let hydratedCount = 0
+  for (const cache of secretCache.values()) {
+    if (cache.tokens?.access_token) cachedTokenCount += 1
+    if (cache.hydrated) hydratedCount += 1
+  }
+  return { localTokenCount, localVerifierCount, cachedTokenCount, hydratedCount }
 }
 
 async function openExternal(url: string): Promise<void> {
@@ -99,17 +211,25 @@ class McpOAuthProvider implements OAuthClientProvider {
   saveClientInformation(info: OAuthClientInformationMixed): void {
     patch(this.serverId, { clientInfo: info })
   }
-  tokens(): OAuthTokens | undefined {
-    return load(this.serverId).tokens
+  async tokens(): Promise<OAuthTokens | undefined> {
+    await hydrateMcpOAuthSecure(this.serverId)
+    return cacheFor(this.serverId).tokens
   }
-  saveTokens(t: OAuthTokens): void {
-    patch(this.serverId, { tokens: t })
+  async saveTokens(t: OAuthTokens): Promise<void> {
+    const cache = cacheFor(this.serverId)
+    cache.tokens = t
+    cache.hydrated = true
+    await secureSet(secureTokensKey(this.serverId), JSON.stringify(t))
   }
-  saveCodeVerifier(v: string): void {
-    patch(this.serverId, { codeVerifier: v })
+  async saveCodeVerifier(v: string): Promise<void> {
+    const cache = cacheFor(this.serverId)
+    cache.codeVerifier = v
+    cache.hydrated = true
+    await secureSet(secureVerifierKey(this.serverId), v)
   }
-  codeVerifier(): string {
-    const v = load(this.serverId).codeVerifier
+  async codeVerifier(): Promise<string> {
+    await hydrateMcpOAuthSecure(this.serverId)
+    const v = cacheFor(this.serverId).codeVerifier
     if (!v) throw new Error("缺少 code verifier，请重新发起授权")
     return v
   }
@@ -123,9 +243,15 @@ class McpOAuthProvider implements OAuthClientProvider {
       return
     }
     const s = load(this.serverId)
-    if (scope === "tokens") delete s.tokens
+    if (scope === "tokens") {
+      delete cacheFor(this.serverId).tokens
+      void secureDelete(secureTokensKey(this.serverId))
+    }
     if (scope === "client") delete s.clientInfo
-    if (scope === "verifier") delete s.codeVerifier
+    if (scope === "verifier") {
+      delete cacheFor(this.serverId).codeVerifier
+      void secureDelete(secureVerifierKey(this.serverId))
+    }
     write(this.serverId, s)
   }
 }
@@ -153,7 +279,7 @@ export function startMcpAuth(
   serverId: string,
   serverUrl: string,
 ): Promise<"AUTHORIZED" | "REDIRECT"> {
-  return auth(mcpOAuthProvider(serverId), { serverUrl })
+  return hydrateMcpOAuthSecure(serverId).then(() => auth(mcpOAuthProvider(serverId), { serverUrl }))
 }
 
 /** 桌面: 起一次性 loopback 回调监听 (Rust oauth_callback_start), 等 oauth://callback 拿 code/state; 5 分钟超时。 */
@@ -214,6 +340,7 @@ export async function finishMcpAuth(
   callback: string,
   serverUrl: string,
 ): Promise<void> {
+  await hydrateMcpOAuthSecure(serverId)
   const { code, state } = parseAuthCallback(callback)
   if (!code) throw new Error("回调里没有 code")
   const saved = load(serverId).state
@@ -228,7 +355,14 @@ export async function finishMcpAuth(
 
 /** 是否已授权 (有 access token)。 */
 export function isMcpAuthorized(serverId: string): boolean {
-  return Boolean(load(serverId).tokens?.access_token)
+  const cache = cacheFor(serverId)
+  if (cache.tokens?.access_token) return true
+  const legacy = loadLegacy(serverId)
+  if (legacy.tokens?.access_token) {
+    cache.tokens = legacy.tokens
+    return true
+  }
+  return false
 }
 
 /** 上次发起授权打开的 URL (弹窗被拦时 UI 显示可点链接作回退)。 */
@@ -238,6 +372,9 @@ export function lastAuthUrl(serverId: string): string | undefined {
 
 /** 撤销本地保存的授权 (token/client/verifier)。 */
 export function clearMcpAuth(serverId: string): void {
+  secretCache.delete(serverId)
+  void secureDelete(secureTokensKey(serverId))
+  void secureDelete(secureVerifierKey(serverId))
   if (typeof localStorage !== "undefined") localStorage.removeItem(keyOf(serverId))
 }
 
@@ -274,7 +411,8 @@ async function revokeOne(
 /** 撤销授权: 尽力向授权服务器撤销 access/refresh token (RFC 7009), 再清本地。
  *  撤销失败 (无 endpoint / 网络 / 服务端拒) 仍清本地, 保证本机不再持有 token。 */
 export async function revokeMcpAuth(serverId: string, serverUrl: string): Promise<void> {
-  const s = load(serverId)
+  await hydrateMcpOAuthSecure(serverId)
+  const s = { ...load(serverId), tokens: cacheFor(serverId).tokens }
   const clientId = s.clientInfo?.client_id
   try {
     if (s.tokens?.access_token && clientId) {

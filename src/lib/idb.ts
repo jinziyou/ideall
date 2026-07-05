@@ -2,14 +2,16 @@
 // 不引入额外依赖, 用 Promise 包装原生 API。对象仓库:
 //   nodes —— 统一 Node 库 (一切皆文件), keyPath = id; 按 kind 收纳所有内容节点 (note/bookmark/folder/file/feed/thread)
 //   blobs —— 文件二进制旁存 ({key,blob}, keyPath = key); 文件节点存 blobRef 指向此处, Blob 不进同步
+//   trash_snapshots —— 回收站本机快照, 用于恢复会被同步删除标记压缩掉的正文 / Blob。
 
 const DB_NAME = "wonita-home"
 // 统一 Node 库 + Blob 旁存两仓; onupgradeneeded 只 createObjectStore, 零 I/O (报错会 abort DB open 且无恢复 UI)。
-// 版本号保持 10 (不下调, 否则既有库会 VersionError); onversionchange 让旧标签页主动让位避免 onblocked 冻结。
-const DB_VERSION = 10
+// 版本号只升不降, 否则既有库会 VersionError; onversionchange 让旧标签页主动让位避免 onblocked 冻结。
+const DB_VERSION = 11
 
 export const STORE_NODES = "nodes"
 export const STORE_BLOBS = "blobs"
+export const STORE_TRASH_SNAPSHOTS = "trash_snapshots"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -29,6 +31,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_BLOBS)) {
         db.createObjectStore(STORE_BLOBS, { keyPath: "key" })
+      }
+      if (!db.objectStoreNames.contains(STORE_TRASH_SNAPSHOTS)) {
+        db.createObjectStore(STORE_TRASH_SNAPSHOTS, { keyPath: "id" })
       }
     }
     req.onsuccess = () => {

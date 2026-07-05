@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { redactValue, safeStoragePreview } from "./debug-redact"
+import { redactValue, safeStoragePreview } from "./code-redact"
 
 test("safeStoragePreview: 敏感 key 整体脱敏", () => {
   const cases = ["authToken", "api_key", "session-cookie", "refreshToken", "password"]

@@ -128,6 +128,21 @@ export const MODULES: ModuleConfig[] = [
     sidebarTitle: "插件",
     entries: PLUGIN_ENTRIES.map(({ label, icon, descriptor }) => ({ label, icon, descriptor })),
   },
+  {
+    id: "trash",
+    mode: "local",
+    label: MODULE_META.trash.label,
+    icon: MODULE_META.trash.icon,
+    colorClass: MODULE_META.trash.tintClass,
+    sidebarTitle: "回收站",
+    entries: [
+      {
+        label: MODULE_META.trash.label,
+        icon: MODULE_META.trash.icon,
+        descriptor: { kind: "trash", module: "trash", title: "回收站", path: "/trash" },
+      },
+    ],
+  },
   // —— 连接 ——
   {
     id: "info",
@@ -273,8 +288,10 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
     return { kind: "database", module: "database", title: "数据库", path: "/database" }
   if (pathname.startsWith("/audio"))
     return { kind: "audio", module: "audio", title: "音频播放器", path: "/audio" }
-  if (pathname.startsWith("/debug"))
-    return { kind: "debug", module: "debug", title: "Debug", path: "/debug" }
+  if (pathname.startsWith("/code"))
+    return { kind: "code", module: "code", title: "Code", path: "/code" }
+  if (pathname.startsWith("/trash"))
+    return { kind: "trash", module: "trash", title: "回收站", path: "/trash" }
   if (pathname.startsWith("/tool"))
     return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
   return null

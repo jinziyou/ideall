@@ -2,11 +2,11 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   WORKSPACE_KEY,
-  readDebugSnapshot,
+  readCodeSnapshot,
   readStorage,
   readWorkspace,
   type StorageLike,
-} from "./debug-snapshot"
+} from "./code-snapshot"
 
 function storage(values: Record<string, string>, failingKeys = new Set<string>()): StorageLike {
   const keys = Object.keys(values)
@@ -43,7 +43,7 @@ test("readStorage: 存储整体不可用时返回错误桶", () => {
   assert.deepEqual(result, { entries: [], error: "sessionStorage 不可用" })
 })
 
-test("readDebugSnapshot: 工作区优先读 sessionStorage 且敏感值脱敏", () => {
+test("readCodeSnapshot: 工作区优先读 sessionStorage 且敏感值脱敏", () => {
   const local = storage({
     authToken: "secret-token",
     [WORKSPACE_KEY]: JSON.stringify({ tabs: [{ id: "a" }], activeId: "local" }),
@@ -56,11 +56,11 @@ test("readDebugSnapshot: 工作区优先读 sessionStorage 且敏感值脱敏", 
       mode: "local",
     }),
   })
-  const snapshot = readDebugSnapshot({
+  const snapshot = readCodeSnapshot({
     localStorage: local,
     sessionStorage: session,
     runtime: {
-      href: "http://localhost/debug",
+      href: "http://localhost/code",
       userAgent: "test",
       language: "zh-CN",
       online: true,

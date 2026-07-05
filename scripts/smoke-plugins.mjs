@@ -1,5 +1,5 @@
 // Plugin core smoke test (Playwright) against the real browser UI:
-//   audio import -> database create/write/delete -> debug redaction -> git fallback.
+//   audio import -> database create/write/delete -> code diagnostics -> git fallback.
 //
 // Usage: pnpm smoke:plugins
 // Optional: BASE=http://localhost:<port> pnpm smoke:plugins
@@ -10,10 +10,10 @@ const SHOT_DIR = "/tmp/plugins-smoke"
 const RUN_ID = Date.now()
 const AUDIO_TITLE = `ideall-plugin-audio-${RUN_ID}`
 const TABLE_NAME = `ideall_plugin_table_${RUN_ID}`
-const SECRET_TOKEN = `debug-secret-${RUN_ID}`
+const SECRET_TOKEN = `code-secret-${RUN_ID}`
 const WORKSPACE_KEY = "ideall:workspace:v1"
 const GIT_REPOS_KEY = "ideall:git:repos"
-const DEBUG_IMPORT_REPO = `/tmp/ideall-debug-import-${RUN_ID}`
+const CODE_IMPORT_REPO = `/tmp/ideall-code-import-${RUN_ID}`
 
 async function deleteDb(page, name) {
   await page.evaluate(
@@ -42,6 +42,15 @@ async function openPluginPage(page, path) {
 
 const run = await createSmokeRun({ shotDir: SHOT_DIR })
 const { page, pageErrors, record, markStage } = run
+
+await page.addInitScript((key) => {
+  try {
+    sessionStorage.removeItem(key)
+    localStorage.removeItem(key)
+  } catch {
+    /* ignore storage reset failures */
+  }
+}, WORKSPACE_KEY)
 
 try {
   console.log(`\n▶ 插件冒烟目标: ${BASE}\n`)
@@ -122,42 +131,42 @@ try {
   record("数据库插件可从 JSON 备份恢复", true)
   await page.screenshot({ path: `${SHOT_DIR}/2-database.png` })
 
-  markStage("debug")
-  await openPluginPage(page, "/debug")
+  markStage("code")
+  await openPluginPage(page, "/code")
   await page.evaluate((secret) => localStorage.setItem("ideall-smoke-token", secret), SECRET_TOKEN)
   await page.getByRole("button", { name: "刷新", exact: true }).click()
   await page.getByText("ideall-smoke-token", { exact: true }).waitFor({
     state: "visible",
     timeout: 15000,
   })
-  const debugText = (await page.locator("body").textContent()) ?? ""
+  const codeText = (await page.locator("body").textContent()) ?? ""
   record(
-    "Debug 插件展示诊断且敏感存储脱敏",
-    debugText.includes("已脱敏") && !debugText.includes(SECRET_TOKEN),
+    "Code 插件展示诊断且敏感存储脱敏",
+    codeText.includes("已脱敏") && !codeText.includes(SECRET_TOKEN),
   )
   record(
-    "Debug 插件展示插件数据端口",
-    debugText.includes("ideall.audio.library") &&
-      debugText.includes("ideall.database.workspace") &&
-      debugText.includes("ideall.git.repos") &&
-      debugText.includes("ideall.agent.config") &&
-      debugText.includes("ideall.sync.status"),
+    "Code 插件展示插件数据端口",
+    codeText.includes("ideall.audio.library") &&
+      codeText.includes("ideall.database.workspace") &&
+      codeText.includes("ideall.git.repos") &&
+      codeText.includes("ideall.agent.config") &&
+      codeText.includes("ideall.sync.status"),
   )
   record(
-    "Debug 插件展示安全存储诊断",
-    debugText.includes("安全存储") && debugText.includes("迁移敏感值"),
+    "Code 插件展示安全存储诊断",
+    codeText.includes("安全存储") && codeText.includes("迁移敏感值"),
   )
   record(
-    "Debug 插件展示导入入口和数据 Schema",
-    debugText.includes("导入") &&
-      debugText.includes("数据 Schema") &&
-      debugText.includes("Git 仓库列表"),
+    "Code 插件展示导入入口和数据 Schema",
+    codeText.includes("导入") &&
+      codeText.includes("数据 Schema") &&
+      codeText.includes("Git 仓库列表"),
   )
   await page
     .locator('input[type="file"][accept="application/json,.json"]')
     .last()
     .setInputFiles({
-      name: `ideall-git-debug-import-${RUN_ID}.json`,
+      name: `ideall-git-code-import-${RUN_ID}.json`,
       mimeType: "application/json",
       buffer: Buffer.from(
         JSON.stringify({
@@ -170,7 +179,7 @@ try {
             dataVersion: 1,
           },
           exportedAt: new Date(RUN_ID).toISOString(),
-          payload: { repos: [DEBUG_IMPORT_REPO] },
+          payload: { repos: [CODE_IMPORT_REPO] },
         }),
       ),
     })
@@ -191,13 +200,13 @@ try {
     }
   }, GIT_REPOS_KEY)
   record(
-    "Debug 插件可预检并导入插件数据",
-    Array.isArray(importedRepos) && importedRepos.includes(DEBUG_IMPORT_REPO),
+    "Code 插件可预检并导入插件数据",
+    Array.isArray(importedRepos) && importedRepos.includes(CODE_IMPORT_REPO),
   )
   await page.getByRole("button", { name: "恢复导入前备份", exact: true }).click()
   await page.waitForFunction((key) => localStorage.getItem(key) === "[]", GIT_REPOS_KEY)
-  record("Debug 插件可恢复导入前备份", true)
-  await page.screenshot({ path: `${SHOT_DIR}/3-debug.png` })
+  record("Code 插件可恢复导入前备份", true)
+  await page.screenshot({ path: `${SHOT_DIR}/3-code.png` })
 
   markStage("git")
   await openPluginPage(page, "/git")
@@ -228,4 +237,4 @@ try {
   await run.close()
 }
 
-run.finish("{1-audio,2-database,3-debug,4-git,error}.png")
+run.finish("{1-audio,2-database,3-code,4-git,error}.png")

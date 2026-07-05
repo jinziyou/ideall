@@ -26,6 +26,11 @@ import {
   agentSecretsSecuritySnapshot,
   hydrateAgentSecretsSecure,
 } from "@/plugins/agent/lib/agent-secrets"
+import { getMcpServers } from "@/plugins/agent/lib/agent-mcp-registry"
+import {
+  hydrateMcpOAuthSecureForServers,
+  mcpOAuthSecuritySnapshot,
+} from "@/plugins/agent/lib/agent-oauth"
 import {
   pluginDataPortById,
   inspectPluginDataPorts,
@@ -42,14 +47,16 @@ import {
 } from "@/plugins/shared/plugin-data-manager"
 import {
   inspectLocalDataSchemas,
+  repairLocalDataSchema,
+  repairLocalDataSchemas,
   type LocalDataSchemaInspection,
 } from "@/plugins/shared/local-data-schema"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
-import { readBrowserDebugSnapshot, type DebugSnapshot, type StorageBucket } from "./debug-snapshot"
+import { readBrowserCodeSnapshot, type CodeSnapshot, type StorageBucket } from "./code-snapshot"
 
-export default function DebugPage() {
-  const [snapshot, setSnapshot] = React.useState<DebugSnapshot | null>(null)
+export default function CodePage() {
+  const [snapshot, setSnapshot] = React.useState<CodeSnapshot | null>(null)
   const [pluginData, setPluginData] = React.useState<PluginDataInspection[]>([])
   const [schemaData, setSchemaData] = React.useState<LocalDataSchemaInspection[]>([])
   const [security, setSecurity] = React.useState<SecurityDiagnostics | null>(null)
@@ -59,10 +66,11 @@ export default function DebugPage() {
   const [pluginLoading, setPluginLoading] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
   const [restoringBackup, setRestoringBackup] = React.useState(false)
+  const [repairingSchema, setRepairingSchema] = React.useState<string | null>(null)
   const importInputRef = React.useRef<HTMLInputElement | null>(null)
 
   const refresh = React.useCallback(() => {
-    setSnapshot(readBrowserDebugSnapshot())
+    setSnapshot(readBrowserCodeSnapshot())
     setPluginLoading(true)
     inspectPluginDataPorts()
       .then(setPluginData)
@@ -83,7 +91,7 @@ export default function DebugPage() {
     if (!snapshot) return
     try {
       await navigator.clipboard.writeText(
-        JSON.stringify(createDebugBundle(snapshot, pluginData, schemaData, security), null, 2),
+        JSON.stringify(createCodeBundle(snapshot, pluginData, schemaData, security), null, 2),
       )
       toast("已复制诊断信息")
     } catch {
@@ -94,8 +102,8 @@ export default function DebugPage() {
   const downloadBundle = () => {
     if (!snapshot) return
     downloadTextFile(
-      pluginDataFilename("ideall-debug-bundle"),
-      JSON.stringify(createDebugBundle(snapshot, pluginData, schemaData, security), null, 2),
+      pluginDataFilename("ideall-code-bundle"),
+      JSON.stringify(createCodeBundle(snapshot, pluginData, schemaData, security), null, 2),
     )
     toast("已导出诊断包")
   }
@@ -169,13 +177,55 @@ export default function DebugPage() {
     }
   }
 
+  const migrateSensitiveDataOnly = async () => {
+    await Promise.all([
+      hydrateAgentSettingsSecure(),
+      hydrateAgentSecretsSecure(),
+      hydrateMcpOAuthSecureForServers(getMcpServers().map((server) => server.id)),
+    ])
+  }
+
   const migrateSensitiveData = async () => {
     try {
-      await Promise.all([hydrateAgentSettingsSecure(), hydrateAgentSecretsSecure()])
+      await migrateSensitiveDataOnly()
       toast("已迁移可识别的敏感配置")
       refresh()
     } catch (e) {
       toast.error("迁移失败", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const repairOneSchema = async (id: string) => {
+    setRepairingSchema(id)
+    try {
+      await migrateSensitiveDataOnly()
+      const result = await repairLocalDataSchema(id)
+      if (result.ok) toast.success(result.detail)
+      else toast.error(result.detail)
+      refresh()
+    } catch (e) {
+      toast.error("修复失败", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setRepairingSchema(null)
+    }
+  }
+
+  const repairAllSchemas = async () => {
+    const ids = schemaData
+      .filter((entry) => entry.repairable && ["warning", "error"].includes(entry.status))
+      .map((entry) => entry.id)
+    if (!ids.length) return
+    setRepairingSchema("*")
+    try {
+      await migrateSensitiveDataOnly()
+      const results = await repairLocalDataSchemas(ids)
+      const fixed = results.filter((result) => result.ok).length
+      toast.success(`已修复 ${fixed}/${results.length} 项`)
+      refresh()
+    } catch (e) {
+      toast.error("批量修复失败", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setRepairingSchema(null)
     }
   }
 
@@ -257,7 +307,12 @@ export default function DebugPage() {
         />
       </div>
 
-      <SchemaPanel entries={schemaData} />
+      <SchemaPanel
+        entries={schemaData}
+        repairing={repairingSchema}
+        onRepair={(id) => void repairOneSchema(id)}
+        onRepairAll={() => void repairAllSchemas()}
+      />
 
       <section className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
         <StoragePanel title="localStorage" bucket={snapshot.storage.localStorage} />
@@ -271,6 +326,7 @@ type SecurityDiagnostics = {
   secureStore: SecureStoreStatus
   agentSettings: ReturnType<typeof agentSettingsSecuritySnapshot>
   agentSecrets: ReturnType<typeof agentSecretsSecuritySnapshot>
+  mcpOAuth: ReturnType<typeof mcpOAuthSecuritySnapshot>
   issues: string[]
 }
 
@@ -278,24 +334,31 @@ async function readSecurityDiagnostics(): Promise<SecurityDiagnostics> {
   const secureStore = await secureStoreStatus()
   const agentSettings = agentSettingsSecuritySnapshot()
   const agentSecrets = agentSecretsSecuritySnapshot()
+  const mcpOAuth = mcpOAuthSecuritySnapshot()
   const issues = [
     !secureStore.native ? "当前环境未使用系统凭据后端" : "",
     agentSettings.localApiKeyPresent ? "全局 AI API Key 仍存在于 localStorage" : "",
     agentSecrets.localValueCount
       ? `${agentSecrets.localValueCount} 个 MCP 密钥值仍存在于 localStorage`
       : "",
+    mcpOAuth.localTokenCount
+      ? `${mcpOAuth.localTokenCount} 个 MCP OAuth token 仍存在于 localStorage`
+      : "",
+    mcpOAuth.localVerifierCount
+      ? `${mcpOAuth.localVerifierCount} 个 MCP OAuth verifier 仍存在于 localStorage`
+      : "",
   ].filter((issue): issue is string => Boolean(issue))
-  return { secureStore, agentSettings, agentSecrets, issues }
+  return { secureStore, agentSettings, agentSecrets, mcpOAuth, issues }
 }
 
-function createDebugBundle(
-  snapshot: DebugSnapshot,
+function createCodeBundle(
+  snapshot: CodeSnapshot,
   pluginData: PluginDataInspection[],
   schemaData: LocalDataSchemaInspection[],
   security?: SecurityDiagnostics | null,
 ) {
   return {
-    kind: "ideall.debug-bundle",
+    kind: "ideall.code-bundle",
     version: 1,
     exportedAt: new Date().toISOString(),
     snapshot,
@@ -342,6 +405,12 @@ function SecurityPanel({
                 {diagnostics.agentSecrets.localValueCount
                   ? `${diagnostics.agentSecrets.localValueCount} 个待迁移`
                   : `${diagnostics.agentSecrets.total} 个名称 / 未见明文本地值`}
+              </dd>
+              <dt className="text-muted-foreground">OAuth</dt>
+              <dd>
+                {diagnostics.mcpOAuth.localTokenCount || diagnostics.mcpOAuth.localVerifierCount
+                  ? `${diagnostics.mcpOAuth.localTokenCount} token / ${diagnostics.mcpOAuth.localVerifierCount} verifier 待迁移`
+                  : `${diagnostics.mcpOAuth.cachedTokenCount} 个 token 已载入安全缓存`}
               </dd>
             </dl>
             {issueCount > 0 ? (
@@ -596,13 +665,42 @@ function importModeLabel(mode: NonNullable<PluginDataImportPreview["target"]>["i
   return mode === "replace" ? "覆盖" : mode === "merge" ? "合并" : "只校验"
 }
 
-function SchemaPanel({ entries }: { entries: LocalDataSchemaInspection[] }) {
+function SchemaPanel({
+  entries,
+  repairing,
+  onRepair,
+  onRepairAll,
+}: {
+  entries: LocalDataSchemaInspection[]
+  repairing: string | null
+  onRepair: (id: string) => void
+  onRepairAll: () => void
+}) {
   const issueCount = entries.filter((entry) =>
     ["warning", "error", "unknown"].includes(entry.status),
   ).length
+  const repairableCount = entries.filter(
+    (entry) => entry.repairable && ["warning", "error"].includes(entry.status),
+  ).length
   return (
     <section className="rounded-lg border border-border/60 bg-card">
-      <SectionTitle icon={Database} title={`数据 Schema · ${entries.length}`} />
+      <SectionTitle
+        icon={Database}
+        title={`数据 Schema · ${entries.length}`}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 px-2"
+            disabled={!repairableCount || repairing !== null}
+            onClick={onRepairAll}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${repairing === "*" ? "animate-spin" : ""}`} />
+            修复全部
+          </Button>
+        }
+      />
       <div className="overflow-auto p-2">
         {entries.length === 0 ? (
           <div className="px-2 py-8 text-center text-sm text-muted-foreground">
@@ -616,6 +714,8 @@ function SchemaPanel({ entries }: { entries: LocalDataSchemaInspection[] }) {
               </span>
               <span>·</span>
               <span>{entries.filter((entry) => entry.portable).length} 项支持插件数据迁移</span>
+              <span>·</span>
+              <span>{repairableCount} 项可自动修复</span>
             </div>
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {entries.map((entry) => (
@@ -630,9 +730,23 @@ function SchemaPanel({ entries }: { entries: LocalDataSchemaInspection[] }) {
                         {entry.key} · v{entry.currentVersion}
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {entry.bytes === null ? "未知" : formatBytes(entry.bytes)}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {entry.bytes === null ? "未知" : formatBytes(entry.bytes)}
+                      </span>
+                      {entry.repairable && ["warning", "error"].includes(entry.status) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={repairing !== null}
+                          onClick={() => onRepair(entry.id)}
+                        >
+                          {repairing === entry.id ? "修复中" : "修复"}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <dl className="mt-3 grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
                     <dt className="text-muted-foreground">位置</dt>
@@ -785,7 +899,7 @@ function PageHeader({
     <div className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Debug</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Code</h1>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             本地运行态、工作区快照与浏览器存储诊断
           </p>

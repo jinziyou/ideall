@@ -26,6 +26,7 @@ import {
   STORE_NODES,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
+import { captureTrashSnapshots } from "@/files/stores/trash-store"
 
 /** 笔记的物理存储形态 = Note + kind 辨识位 (统一 nodes 仓库按 kind 收纳)。 */
 type NoteRow = Note & { kind: "note" }
@@ -364,6 +365,7 @@ export async function deleteNote(id: string): Promise<Note[]> {
   const captured = [...subtreeIds].map((i) => byId.get(i)).filter((n): n is NoteRow => n != null)
   if (!captured.length) return []
   const now = Date.now()
+  await captureTrashSnapshots(captured)
   // 删除标记: deletedAt 置位 + 正文清空 (删除标记只需进合并/传播删除; 撤销用 captured 内存快照)。
   const tombstones: NoteRow[] = captured.map((n) => ({
     ...n,

@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
   Bookmark,
-  Bug,
+  Braces,
   Copy,
   Database,
   DownloadCloud,
@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Shell,
   SunMoon,
+  Trash2,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -280,12 +281,17 @@ export default function CommandPalette() {
             </CommandItem>
           )}
           {isDesktop && (
-            <CommandItem value="> Debug debug 调试 diagnostics 诊断" onSelect={() => go("/debug")}>
-              <Bug className="h-4 w-4" />
-              Debug
-              <CommandShortcut className="font-mono">/debug</CommandShortcut>
+            <CommandItem value="> Code code 开发 diagnostics 诊断" onSelect={() => go("/code")}>
+              <Braces className="h-4 w-4" />
+              Code
+              <CommandShortcut className="font-mono">/code</CommandShortcut>
             </CommandItem>
           )}
+          <CommandItem value="> 回收站 trash deleted 删除 恢复" onSelect={() => go("/trash")}>
+            <Trash2 className="h-4 w-4" />
+            回收站
+            <CommandShortcut className="font-mono">/trash</CommandShortcut>
+          </CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="我的">

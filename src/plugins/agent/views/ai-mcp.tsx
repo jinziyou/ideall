@@ -43,6 +43,7 @@ import {
   startMcpAuthAuto,
   stopMcpAuthCallback,
   finishMcpAuth,
+  hydrateMcpOAuthSecure,
   isMcpAuthorized,
   clearMcpAuth,
   revokeMcpAuth,
@@ -397,6 +398,20 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
 
   // OAuth (手动粘贴授权码); forceAuthRefresh 在授权状态变化后强制重读 localStorage。
   const [, forceAuthRefresh] = React.useReducer((x: number) => x + 1, 0)
+  React.useEffect(() => {
+    if (server.auth !== "oauth") return
+    let alive = true
+    hydrateMcpOAuthSecure(server.id)
+      .then(() => {
+        if (alive) forceAuthRefresh()
+      })
+      .catch(() => {
+        /* 授权状态读取失败时保持未授权展示 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [server.auth, server.id])
   const authorized = isMcpAuthorized(server.id)
   const [oauthStep, setOauthStep] = React.useState<"idle" | "paste">("idle")
   const [pasted, setPasted] = React.useState("")

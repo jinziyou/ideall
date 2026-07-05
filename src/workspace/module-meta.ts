@@ -5,7 +5,7 @@
 //     Tailwind v4 按源码字面量扫描生成工具类, 不可用模板拼接 (拼接会被当成未用而不生成 → 掉色)。
 import {
   Bookmark,
-  Bug,
+  Braces,
   Database,
   FileAudio,
   FolderOpen,
@@ -19,6 +19,7 @@ import {
   NotebookPen,
   Rss,
   Shell,
+  Trash2,
   Wrench,
 } from "lucide-react"
 import type { ComponentType } from "react"
@@ -56,5 +57,6 @@ export const MODULE_META = {
   git: { label: "Git", icon: GitBranch, tintClass: "text-spoke-tool" },
   database: { label: "数据库", icon: Database, tintClass: "text-spoke-tool" },
   audio: { label: "音频", icon: FileAudio, tintClass: "text-spoke-tool" },
-  debug: { label: "Debug", icon: Bug, tintClass: "text-spoke-tool" },
+  code: { label: "Code", icon: Braces, tintClass: "text-spoke-tool" },
+  trash: { label: "回收站", icon: Trash2, tintClass: "text-destructive" },
 } satisfies Record<string, ModuleMeta>

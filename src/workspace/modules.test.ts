@@ -25,7 +25,8 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
   assert.equal(descriptorForPath("/git")?.kind, "git")
   assert.equal(descriptorForPath("/database")?.kind, "database")
   assert.equal(descriptorForPath("/audio")?.kind, "audio")
-  assert.equal(descriptorForPath("/debug")?.kind, "debug")
+  assert.equal(descriptorForPath("/code")?.kind, "code")
+  assert.equal(descriptorForPath("/trash")?.kind, "trash")
 })
 
 test("descriptorForPath: 前缀回退", () => {
@@ -54,7 +55,7 @@ test("descriptorForNode: ?node=kind:id 解析为 entity 级节点标签; 非法/
 test("modulesForMode: 本地/连接各自簇 + crossMode 工具两侧都在", () => {
   const local = modulesForMode("local").map((m) => m.id)
   const connected = modulesForMode("connected").map((m) => m.id)
-  assert.deepEqual(local, ["home", "subscriptions", "apps", "plugins", "tool"])
+  assert.deepEqual(local, ["home", "subscriptions", "apps", "plugins", "trash", "tool"])
   assert.deepEqual(connected, ["info", "community", "tool", "browser"])
 })
 

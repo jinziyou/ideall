@@ -1,5 +1,5 @@
 import { isTauri } from "@/lib/tauri"
-import { safeStoragePreview } from "./debug-redact"
+import { safeStoragePreview } from "./code-redact"
 
 export type StorageEntry = {
   key: string
@@ -14,7 +14,7 @@ export type StorageBucket = {
   error?: string
 }
 
-export type DebugSnapshot = {
+export type CodeSnapshot = {
   generatedAt: string
   runtime: {
     href: string
@@ -40,10 +40,10 @@ export type DebugSnapshot = {
 
 export type StorageLike = Pick<Storage, "length" | "key" | "getItem">
 
-export type DebugSnapshotInput = {
+export type CodeSnapshotInput = {
   localStorage?: StorageLike
   sessionStorage?: StorageLike
-  runtime: DebugSnapshot["runtime"]
+  runtime: CodeSnapshot["runtime"]
 }
 
 export const WORKSPACE_KEY = "ideall:workspace:v1"
@@ -106,7 +106,7 @@ export function readStorage(storage: StorageLike | undefined, label: string): St
 export function readWorkspace(
   raw: string | null,
   source: "localStorage" | "sessionStorage",
-): DebugSnapshot["workspace"] | undefined {
+): CodeSnapshot["workspace"] | undefined {
   if (!raw) return undefined
   try {
     const parsed = JSON.parse(raw) as {
@@ -133,7 +133,7 @@ export function readWorkspace(
   }
 }
 
-export function readDebugSnapshot(input: DebugSnapshotInput): DebugSnapshot {
+export function readCodeSnapshot(input: CodeSnapshotInput): CodeSnapshot {
   const localStorage = readStorage(input.localStorage, "localStorage")
   const sessionStorage = readStorage(input.sessionStorage, "sessionStorage")
 
@@ -150,8 +150,8 @@ export function readDebugSnapshot(input: DebugSnapshotInput): DebugSnapshot {
   }
 }
 
-export function readBrowserDebugSnapshot(): DebugSnapshot {
-  return readDebugSnapshot({
+export function readBrowserCodeSnapshot(): CodeSnapshot {
+  return readCodeSnapshot({
     localStorage: safeBrowserStorage("localStorage"),
     sessionStorage: safeBrowserStorage("sessionStorage"),
     runtime: {

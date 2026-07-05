@@ -26,7 +26,12 @@ export type LocalDataSchema = {
   portable?: boolean
   parseAs?: "json" | "text"
   validate?: (value: unknown, raw: string) => string[]
+  repair?: (value: unknown, raw: string) => LocalDataSchemaRepairPatch | null
 }
+
+export type LocalDataSchemaRepairPatch =
+  | { action: "remove"; detail: string }
+  | { action: "write"; value: unknown; detail: string }
 
 export type LocalDataSchemaInspection = {
   id: string
@@ -41,9 +46,11 @@ export type LocalDataSchemaInspection = {
   bytes: number | null
   detail: string
   issues: string[]
+  repairable: boolean
 }
 
 type StorageLike = Pick<Storage, "getItem">
+type MutableStorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">
 
 export type IndexedDbListing = { name?: string | null; version?: number | null }
 
@@ -70,12 +77,41 @@ function agentSettingsIssues(value: unknown): string[] {
   return typeof value.apiKey === "string" && value.apiKey.trim() ? ["仍包含旧版明文 API Key"] : []
 }
 
+function repairJsonObject(value: unknown): LocalDataSchemaRepairPatch {
+  return isRecord(value)
+    ? { action: "write", value, detail: "已规范化 JSON 对象" }
+    : { action: "write", value: {}, detail: "已重置为空对象" }
+}
+
+function repairJsonArray(value: unknown): LocalDataSchemaRepairPatch {
+  return Array.isArray(value)
+    ? { action: "write", value, detail: "已规范化 JSON 数组" }
+    : { action: "write", value: [], detail: "已重置为空数组" }
+}
+
+function repairAgentSettings(value: unknown): LocalDataSchemaRepairPatch {
+  if (!isRecord(value)) return { action: "write", value: {}, detail: "已重置为空设置对象" }
+  const next = { ...value }
+  delete next.apiKey
+  return { action: "write", value: next, detail: "已移除旧版明文 API Key 字段" }
+}
+
 function agentSecretsIssues(value: unknown): string[] {
   if (!Array.isArray(value)) return ["应为 JSON 数组"]
   const localValues = value.filter(
     (item) => isRecord(item) && typeof item.value === "string" && item.value.trim(),
   ).length
   return localValues ? [`${localValues} 个密钥仍含明文 value`] : []
+}
+
+function repairAgentSecrets(value: unknown): LocalDataSchemaRepairPatch {
+  if (!Array.isArray(value)) return { action: "write", value: [], detail: "已重置为空密钥索引" }
+  const next = value
+    .filter(
+      (item): item is Record<string, unknown> => isRecord(item) && typeof item.id === "string",
+    )
+    .map((item) => ({ ...item, value: "", secure: true }))
+  return { action: "write", value: next, detail: "已清理密钥索引中的明文 value" }
 }
 
 function agentWorkspacesIssues(value: unknown): string[] {
@@ -88,6 +124,25 @@ function agentWorkspacesIssues(value: unknown): string[] {
   return localKeys ? [`${localKeys} 个工作区模型覆盖仍含明文 API Key`] : []
 }
 
+function repairAgentWorkspaces(value: unknown): LocalDataSchemaRepairPatch {
+  if (!isRecord(value))
+    return { action: "write", value: { workspaces: [] }, detail: "已重置工作区配置" }
+  const workspaces = Array.isArray(value.workspaces) ? value.workspaces : []
+  return {
+    action: "write",
+    value: {
+      ...value,
+      workspaces: workspaces.map((workspace) => {
+        if (!isRecord(workspace) || !isRecord(workspace.model)) return workspace
+        const model = { ...workspace.model }
+        delete model.apiKey
+        return { ...workspace, model }
+      }),
+    },
+    detail: "已移除工作区模型覆盖中的明文 API Key",
+  }
+}
+
 export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
   {
     id: "workspace.session",
@@ -98,6 +153,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     currentVersion: 1,
     parseAs: "json",
     validate: isJsonObject,
+    repair: () => ({ action: "remove", detail: "已移除损坏的会话快照" }),
   },
   {
     id: "workspace.local",
@@ -108,6 +164,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     currentVersion: 1,
     parseAs: "json",
     validate: isJsonObject,
+    repair: () => ({ action: "remove", detail: "已移除损坏的恢复快照" }),
   },
   {
     id: "audio.db",
@@ -137,6 +194,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: isJsonArray,
+    repair: repairJsonArray,
   },
   {
     id: "agent.settings",
@@ -149,6 +207,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: agentSettingsIssues,
+    repair: repairAgentSettings,
   },
   {
     id: "agent.mcp",
@@ -160,6 +219,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: isJsonArray,
+    repair: repairJsonArray,
   },
   {
     id: "agent.rules",
@@ -171,6 +231,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: isJsonArray,
+    repair: repairJsonArray,
   },
   {
     id: "agent.skills",
@@ -182,6 +243,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: isJsonArray,
+    repair: repairJsonArray,
   },
   {
     id: "agent.tasks",
@@ -193,6 +255,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: isJsonArray,
+    repair: repairJsonArray,
   },
   {
     id: "agent.workspaces",
@@ -205,6 +268,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: agentWorkspacesIssues,
+    repair: repairAgentWorkspaces,
   },
   {
     id: "agent.secrets",
@@ -217,6 +281,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     portable: true,
     parseAs: "json",
     validate: agentSecretsIssues,
+    repair: repairAgentSecrets,
   },
   {
     id: "agent.acp",
@@ -227,6 +292,7 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     currentVersion: 1,
     parseAs: "json",
     validate: isJsonObject,
+    repair: repairJsonObject,
   },
   {
     id: "sync.code",
@@ -249,6 +315,16 @@ function safeStorage(name: "localStorage" | "sessionStorage"): StorageLike | und
   }
 }
 
+function safeMutableStorage(
+  name: "localStorage" | "sessionStorage",
+): MutableStorageLike | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window[name]
+  } catch {
+    return undefined
+  }
+}
+
 function storageForSchema(
   schema: LocalDataSchema,
   input: LocalDataSchemaInspectInput,
@@ -256,6 +332,19 @@ function storageForSchema(
   if (schema.storage === "localStorage") return input.localStorage ?? safeStorage("localStorage")
   if (schema.storage === "sessionStorage") {
     return input.sessionStorage ?? safeStorage("sessionStorage")
+  }
+  return undefined
+}
+
+function mutableStorageForSchema(
+  schema: LocalDataSchema,
+  input: LocalDataSchemaRepairInput,
+): MutableStorageLike | undefined {
+  if (schema.storage === "localStorage") {
+    return input.localStorage ?? safeMutableStorage("localStorage")
+  }
+  if (schema.storage === "sessionStorage") {
+    return input.sessionStorage ?? safeMutableStorage("sessionStorage")
   }
   return undefined
 }
@@ -335,6 +424,7 @@ function baseInspection(
     currentVersion: schema.currentVersion,
     sensitive: Boolean(schema.sensitive),
     portable: Boolean(schema.portable),
+    repairable: Boolean(schema.repair && schema.storage !== "indexedDB"),
   }
 }
 
@@ -398,4 +488,94 @@ export async function inspectLocalDataSchemas(
         : inspectStorageSchema(schema, input),
     ),
   )
+}
+
+export type LocalDataSchemaRepairInput = {
+  localStorage?: MutableStorageLike
+  sessionStorage?: MutableStorageLike
+}
+
+export type LocalDataSchemaRepairResult = {
+  id: string
+  label: string
+  ok: boolean
+  detail: string
+  before: LocalDataSchemaInspection
+  after?: LocalDataSchemaInspection
+}
+
+function encodeRepairValue(schema: LocalDataSchema, value: unknown): string {
+  return schema.parseAs === "text" && typeof value === "string" ? value : JSON.stringify(value)
+}
+
+export async function repairLocalDataSchema(
+  id: string,
+  input: LocalDataSchemaRepairInput = {},
+): Promise<LocalDataSchemaRepairResult> {
+  const schema = LOCAL_DATA_SCHEMAS.find((entry) => entry.id === id)
+  if (!schema) throw new Error(`未知 schema: ${id}`)
+  const before = await (schema.storage === "indexedDB"
+    ? inspectIndexedDbSchema(schema, {})
+    : Promise.resolve(inspectStorageSchema(schema, input)))
+  if (!schema.repair || schema.storage === "indexedDB") {
+    return {
+      id: schema.id,
+      label: schema.label,
+      ok: false,
+      detail: "此 schema 不支持自动修复",
+      before,
+    }
+  }
+  const storage = mutableStorageForSchema(schema, input)
+  if (!storage) {
+    return {
+      id: schema.id,
+      label: schema.label,
+      ok: false,
+      detail: `${schema.storage} 不可用`,
+      before,
+    }
+  }
+  if (!["warning", "error"].includes(before.status)) {
+    return {
+      id: schema.id,
+      label: schema.label,
+      ok: true,
+      detail: "无需修复",
+      before,
+      after: before,
+    }
+  }
+
+  const raw = storage.getItem(schema.key)
+  let parsed: unknown = raw ?? ""
+  if (schema.parseAs === "json" && raw) {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      parsed = undefined
+    }
+  }
+  const patch =
+    before.status === "error" && parsed === undefined
+      ? schema.repair(undefined, raw ?? "")
+      : schema.repair(parsed, raw ?? "")
+  if (!patch) {
+    return { id: schema.id, label: schema.label, ok: false, detail: "没有可执行修复", before }
+  }
+  if (patch.action === "remove") storage.removeItem(schema.key)
+  else storage.setItem(schema.key, encodeRepairValue(schema, patch.value))
+  const after = inspectStorageSchema(schema, input)
+  return { id: schema.id, label: schema.label, ok: true, detail: patch.detail, before, after }
+}
+
+export async function repairLocalDataSchemas(
+  ids: string[],
+  input: LocalDataSchemaRepairInput = {},
+): Promise<LocalDataSchemaRepairResult[]> {
+  const results: LocalDataSchemaRepairResult[] = []
+  for (const id of ids) {
+    results.push(await repairLocalDataSchema(id, input))
+  }
+  return results
 }

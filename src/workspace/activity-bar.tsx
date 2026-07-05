@@ -32,12 +32,14 @@ export default function ActivityBar() {
   const listed = modulesForMode(mode)
   const pluginsMod = listed.find((m) => m.id === "plugins")
   const appsMod = listed.find((m) => m.id === "apps")
-  const topModules = listed.filter((m) => m.id !== "plugins" && m.id !== "apps")
+  const trashMod = listed.find((m) => m.id === "trash")
+  const topModules = listed.filter((m) => m.id !== "plugins" && m.id !== "apps" && m.id !== "trash")
   const stray =
     activeModule !== "agent" &&
     !isPluginModule(activeModule) &&
     activeModule !== "plugins" &&
     activeModule !== "apps" &&
+    activeModule !== "trash" &&
     !listed.some((m) => m.id === activeModule)
       ? moduleById(activeModule)
       : null
@@ -132,10 +134,11 @@ export default function ActivityBar() {
           </>
         )}
       </div>
-      {stray && (
+      {(stray || trashMod) && (
         <div className="mt-auto flex w-full flex-col gap-1">
           <BarDivider />
-          {moduleButton(stray)}
+          {stray && moduleButton(stray)}
+          {trashMod && moduleButton(trashMod)}
         </div>
       )}
     </aside>

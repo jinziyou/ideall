@@ -8,7 +8,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import { StdioMcpTransport } from "./agent-mcp-stdio"
 import type { McpServer } from "./agent-mcp-registry"
 import { hydrateAgentSecretsSecure, resolveSecrets } from "./agent-secrets"
-import { mcpOAuthProvider, isMcpAuthorized } from "./agent-oauth"
+import { hydrateMcpOAuthSecure, mcpOAuthProvider, isMcpAuthorized } from "./agent-oauth"
 import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
 import { agentGrant } from "@/plugins/embed/grant"
 import type { Permission } from "@/plugins/embed/protocol"
@@ -150,6 +150,7 @@ export async function probeMcpServer(
   s: McpServer,
 ): Promise<{ ok: boolean; toolCount?: number; tools?: string[]; error?: string }> {
   await hydrateAgentSecretsSecure()
+  if (s.auth === "oauth") await hydrateMcpOAuthSecure(s.id)
   // 未授权的 oauth server 不发起连接 (否则 SDK 401 → 自动弹浏览器授权页, 还会覆盖手动授权态)。
   if (s.auth === "oauth" && !isMcpAuthorized(s.id)) {
     return { ok: false, error: "OAuth 未授权：请先在上方完成「授权」" }
@@ -234,6 +235,7 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
   const externals = opts?.externalServers ?? []
   for (let i = 0; i < externals.length; i++) {
     const s = externals[i]
+    if (s.auth === "oauth") await hydrateMcpOAuthSecure(s.id)
     // 未授权的 oauth server 跳过 (否则 SDK 401 → 后台运行期间突然弹浏览器授权页)。已授权但过期 (有 refresh) 仍走刷新。
     if (s.auth === "oauth" && !isMcpAuthorized(s.id)) continue
     try {

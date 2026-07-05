@@ -32,7 +32,8 @@ const ShellPage = React.lazy(() => import("@/plugins/shell/shell-page"))
 const GitPage = React.lazy(() => import("@/plugins/git/git-page"))
 const DatabasePage = React.lazy(() => import("@/plugins/database/database-page"))
 const AudioPage = React.lazy(() => import("@/plugins/audio/audio-page"))
-const DebugPage = React.lazy(() => import("@/plugins/debug/debug-page"))
+const CodePage = React.lazy(() => import("@/plugins/code/code-page"))
+const TrashPage = React.lazy(() => import("@/modules/home/trash/trash-page"))
 const BrowserView = React.lazy(() => import("./browser-view"))
 const AiSettings = React.lazy(() => import("@/plugins/agent/views/ai-settings"))
 const HomeSettings = React.lazy(() => import("@/modules/home/settings/settings-page"))
@@ -71,7 +72,8 @@ const REGISTRY: Record<string, Entry> = {
   git: { render: () => <GitPage />, layout: "padded" },
   database: { render: () => <DatabasePage />, layout: "padded" },
   audio: { render: () => <AudioPage />, layout: "padded" },
-  debug: { render: () => <DebugPage />, layout: "padded" },
+  code: { render: () => <CodePage />, layout: "padded" },
+  trash: { render: () => <TrashPage />, layout: "padded" },
   "browser-view": { render: () => <BrowserView />, layout: "fill" },
   // AI 区段标签 (module:"agent", mode-中性)。任务标签按 params.workspaceId 实例化。
   "ai-settings": { render: () => <AiSettings />, layout: "fill" },

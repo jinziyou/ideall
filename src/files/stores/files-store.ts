@@ -19,6 +19,7 @@ import {
   STORE_NODES,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
+import { captureTrashSnapshot } from "@/files/stores/trash-store"
 
 type FileNode = NodeOfKind<"file">
 type BlobRecord = { key: string; blob: Blob }
@@ -174,6 +175,11 @@ export async function updateFileContent(
 /** 删除文件 (软删标记 + 物理删 Blob; 撤销靠 restoreFile 从快照重放)。 */
 export async function deleteFile(id: string): Promise<void> {
   const now = Date.now()
+  const current = await idbGet<FileNode>(STORE_NODES, id)
+  if (current && current.kind === "file" && isLive(current)) {
+    const rec = await idbGet<BlobRecord>(STORE_BLOBS, current.blobRef.key)
+    if (rec) await captureTrashSnapshot(current, rec.blob)
+  }
   // 先给节点打删除标记 (隐藏该文件), 再删大 Blob (删除标记只留轻量节点)。
   const tomb = await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) =>
     current && current.kind === "file" ? { ...current, deletedAt: now, updatedAt: now } : undefined,

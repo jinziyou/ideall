@@ -12,6 +12,7 @@ import { sortKeyBetween } from "@/files/sort-key"
 import { feedNodeId, subToFeedNode, feedNodeToSub } from "@/files/feed-node"
 import { idbBulkPutDelete, idbGet, idbGetAll, idbPut, STORE_NODES } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
+import { captureTrashSnapshot } from "@/files/stores/trash-store"
 
 type FeedNode = NodeOfKind<"feed">
 
@@ -125,6 +126,7 @@ export async function removeSubscription(type: SubscriptionType, key: string): P
   const existing = await idbGet<FeedNode>(STORE_NODES, id)
   if (!existing || existing.kind !== "feed" || !isLive(existing)) return // 未关注 / 已删除标记 → 幂等
   const now = Date.now()
+  await captureTrashSnapshot(existing)
   await idbPut(STORE_NODES, { ...existing, deletedAt: now, updatedAt: now })
   notifyFilesUpdated()
 }
