@@ -8,7 +8,7 @@ use tauri::AppHandle;
 #[cfg(desktop)]
 use tauri::Manager;
 #[cfg(all(desktop, not(target_os = "linux")))]
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl};
+use tauri::{Emitter, LogicalPosition, LogicalSize, WebviewUrl};
 
 // ACP (Agent Client Protocol) 外部智能体传输 —— 子进程 stdin/stdout 哑管道 (NDJSON 行框定), 仅桌面。
 #[cfg(desktop)]
@@ -199,10 +199,8 @@ fn browser_eval_json(app: AppHandle, js: String) -> Result<serde_json::Value, St
             .get_webview(BROWSER_LABEL)
             .ok_or_else(|| "浏览器视图不存在".to_string())?;
         let (tx, rx) = mpsc::sync_channel(1);
-        wv.with_webview(move |platform| {
-            let _ = platform.evaluate_script_with_callback(&js, move |result| {
-                let _ = tx.send(result);
-            });
+        wv.eval_with_callback(js, move |result| {
+            let _ = tx.send(result);
         })
         .map_err(|e| e.to_string())?;
         let json_str = rx
@@ -447,10 +445,8 @@ fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
             .ok_or_else(|| "浏览器视图不存在".to_string())?;
         let url = wv.url().map_err(|e| e.to_string())?.to_string();
         let (tx, rx) = mpsc::sync_channel(1);
-        wv.with_webview(move |platform| {
-            let _ = platform.evaluate_script_with_callback(BROWSER_CONTENT_JS, move |result| {
-                let _ = tx.send(result);
-            });
+        wv.eval_with_callback(BROWSER_CONTENT_JS, move |result| {
+            let _ = tx.send(result);
         })
         .map_err(|e| e.to_string())?;
         let json_str = rx
