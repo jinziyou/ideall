@@ -93,19 +93,29 @@ class FakeIndex {
     private readonly keyPath: string,
   ) {}
 
-  getAll(): IDBRequest<unknown[]> {
+  getAll(query?: IDBValidKey | IDBKeyRange): IDBRequest<unknown[]> {
     return this.tx.track(() =>
       [...this.store.rows.values()]
-        .filter((row) => this.indexKey(row) !== undefined)
+        .filter((row) => this.matchesQuery(row, query))
         .sort((a, b) => this.compareIndexKeys(this.indexKey(a), this.indexKey(b)))
         .map(cloneValue),
     )
   }
 
-  count(): IDBRequest<number> {
+  count(query?: IDBValidKey | IDBKeyRange): IDBRequest<number> {
     return this.tx.track(
-      () => [...this.store.rows.values()].filter((row) => this.indexKey(row) !== undefined).length,
+      () => [...this.store.rows.values()].filter((row) => this.matchesQuery(row, query)).length,
     )
+  }
+
+  private matchesQuery(row: unknown, query?: IDBValidKey | IDBKeyRange): boolean {
+    const key = this.indexKey(row)
+    if (key === undefined) return false
+    if (query === undefined) return true
+    if (typeof query === "object" && "includes" in query && typeof query.includes === "function") {
+      return query.includes(key)
+    }
+    return this.compareIndexKeys(key, query as IDBValidKey) === 0
   }
 
   private indexKey(row: unknown): IDBValidKey | undefined {

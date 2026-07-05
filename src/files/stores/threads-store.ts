@@ -7,7 +7,14 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import { genId } from "@/lib/id"
 import { sortKeyBetween } from "@/files/sort-key"
-import { idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES } from "@/lib/idb"
+import {
+  idbGet,
+  idbGetAllFromIndex,
+  idbPut,
+  idbReadModifyWrite,
+  INDEX_NODES_KIND,
+  STORE_NODES,
+} from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshot } from "@/files/stores/trash-store"
 
@@ -42,7 +49,11 @@ function threadToNode(t: Thread, sortKey: string): ThreadNode {
 // ---- nodes 仓库内 kind 作用域读 + sortKey 追加 ----
 
 async function allThreadNodes(): Promise<ThreadNode[]> {
-  const all = await idbGetAll<{ id: string; kind?: NodeKind }>(STORE_NODES)
+  const all = await idbGetAllFromIndex<{ id: string; kind?: NodeKind }>(
+    STORE_NODES,
+    INDEX_NODES_KIND,
+    "thread",
+  )
   return all.filter((n): n is ThreadNode => n.kind === "thread")
 }
 

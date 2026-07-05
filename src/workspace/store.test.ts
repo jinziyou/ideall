@@ -16,6 +16,8 @@ import {
   closeActiveTab,
   requestCloseTab,
   setActiveTab,
+  subscribeDirtyTabCloseRequests,
+  type DirtyTabCloseRequest,
   activateAdjacentTab,
   activateTabAt,
   isTabDirty,
@@ -158,25 +160,24 @@ test("dirty 标签: 受保护关闭会询问, 拒绝时保留标签与 dirty 状
   setTabDirty(id, true)
   assert.equal(isTabDirty(id), true)
 
-  const g = globalThis as typeof globalThis & { confirm?: (message?: string) => boolean }
-  const prevConfirm = g.confirm
-  try {
-    g.confirm = () => false
-    assert.equal(requestCloseTab(id), false)
-    assert.ok(
-      getTabs().some((t) => t.id === id),
-      "拒绝关闭 → 标签仍在",
-    )
-    assert.equal(isTabDirty(id), true)
+  const closeRequests: DirtyTabCloseRequest[] = []
+  const unsubscribe = subscribeDirtyTabCloseRequests((request) => {
+    assert.equal(request.title, "关闭未保存的标签？")
+    assert.match(request.description, /dirty\.ts」 有未保存更改/)
+    closeRequests.push(request)
+  })
+  assert.equal(requestCloseTab(id), false)
+  assert.ok(
+    getTabs().some((t) => t.id === id),
+    "拒绝关闭 → 标签仍在",
+  )
+  assert.equal(isTabDirty(id), true)
 
-    g.confirm = () => true
-    assert.equal(requestCloseTab(id), true)
-    assert.ok(!getTabs().some((t) => t.id === id), "确认关闭 → 标签移除")
-    assert.equal(isTabDirty(id), false, "关闭后 dirty 标记同步清理")
-  } finally {
-    if (prevConfirm) g.confirm = prevConfirm
-    else Reflect.deleteProperty(g, "confirm")
-  }
+  assert.equal(closeRequests.length, 1)
+  closeRequests[0].confirm()
+  assert.ok(!getTabs().some((t) => t.id === id), "确认关闭 → 标签移除")
+  assert.equal(isTabDirty(id), false, "关闭后 dirty 标记同步清理")
+  unsubscribe()
 })
 
 test("dirty 标签: 常驻软上限回收时跳过未保存标签", () => {

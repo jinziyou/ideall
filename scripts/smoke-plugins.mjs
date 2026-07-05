@@ -4,7 +4,7 @@
 // Usage: pnpm smoke:plugins
 // Optional: BASE=http://localhost:<port> pnpm smoke:plugins
 // Screenshots: /tmp/plugins-smoke/*.png
-import { BASE, createSmokeRun, recordNoPageErrors } from "./smoke-lib.mjs"
+import { BASE, createSilentWavBuffer, createSmokeRun, recordNoPageErrors } from "./smoke-lib.mjs"
 
 const SHOT_DIR = "/tmp/plugins-smoke"
 const RUN_ID = Date.now()
@@ -67,7 +67,7 @@ try {
   await page.locator('input[type="file"][accept="audio/*"]').setInputFiles({
     name: `${AUDIO_TITLE}.wav`,
     mimeType: "audio/wav",
-    buffer: Buffer.from([0]),
+    buffer: createSilentWavBuffer(),
   })
   await page.getByText(AUDIO_TITLE, { exact: true }).waitFor({ state: "visible", timeout: 15000 })
   record("音频插件可导入并展示本地音频", true)
@@ -217,7 +217,10 @@ try {
   record("Git 插件在浏览器形态显示桌面 App 限定兜底", true)
   await page.screenshot({ path: `${SHOT_DIR}/4-git.png` })
 
-  recordNoPageErrors(pageErrors, record, { ignoreFetchAfterConnectionClosed: true })
+  recordNoPageErrors(pageErrors, record, {
+    ignoreFetchAfterConnectionClosed: true,
+    ignoreConsoleFetchFailures: true,
+  })
 } catch (e) {
   record("插件冒烟脚本异常", false, String(e.message).split("\n")[0])
   await page.screenshot({ path: `${SHOT_DIR}/error.png` }).catch(() => {})

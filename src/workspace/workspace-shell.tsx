@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { isTauri, browserHide } from "@/lib/tauri"
 import { Header } from "@/shell/header"
 import BottomTabBar from "@/shell/bottom-tab-bar"
+import { ConfirmDialog } from "@/shared/prompt-dialog"
 import TopBar from "./top-bar"
 import ActivityBar from "./activity-bar"
 import RightAiPanel from "./right-ai-panel"
@@ -23,7 +24,9 @@ import {
   getActiveId,
   getTabs,
   hydrateWorkspace,
+  subscribeDirtyTabCloseRequests,
   tabKey,
+  type DirtyTabCloseRequest,
   useActiveId,
   useHydrated,
   useRightPanelOpen,
@@ -100,6 +103,30 @@ function UrlSync() {
   return null
 }
 
+function DirtyTabCloseDialog() {
+  const [request, setRequest] = React.useState<DirtyTabCloseRequest | null>(null)
+
+  React.useEffect(() => subscribeDirtyTabCloseRequests(setRequest), [])
+
+  return (
+    <ConfirmDialog
+      open={!!request}
+      onOpenChange={(open) => {
+        if (!open) setRequest(null)
+      }}
+      title={request?.title ?? "关闭未保存的标签？"}
+      description={request?.description}
+      confirmLabel={request?.confirmLabel ?? "关闭标签"}
+      destructive
+      onConfirm={() => {
+        const next = request
+        setRequest(null)
+        next?.confirm()
+      }}
+    />
+  )
+}
+
 export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   useWindowViewport()
@@ -137,6 +164,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
         <UrlSync />
       </React.Suspense>
       <GlobalShortcuts />
+      <DirtyTabCloseDialog />
 
       <div className="flex h-[var(--app-h,100dvh)] min-h-0 flex-col">
         {/* 移动顶栏 (md:hidden 由组件内部控制; Tauri 窄窗兼作标题栏) */}

@@ -12,9 +12,10 @@ import { sortKeyBetween } from "@/files/sort-key"
 import {
   idbDelete,
   idbGet,
-  idbGetAll,
+  idbGetAllFromIndex,
   idbPutAcrossStores,
   idbReadModifyWrite,
+  INDEX_NODES_KIND,
   STORE_BLOBS,
   STORE_NODES,
 } from "@/lib/idb"
@@ -40,7 +41,11 @@ function nodeToMeta(n: FileNode): FileMeta {
 // ---- nodes 仓库内 kind 作用域读 + sortKey 追加 ----
 
 async function allFileNodes(): Promise<FileNode[]> {
-  const all = await idbGetAll<{ id: string; kind?: NodeKind }>(STORE_NODES)
+  const all = await idbGetAllFromIndex<{ id: string; kind?: NodeKind }>(
+    STORE_NODES,
+    INDEX_NODES_KIND,
+    "file",
+  )
   return all.filter((n): n is FileNode => n.kind === "file")
 }
 

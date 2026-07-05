@@ -7,12 +7,15 @@
 const DB_NAME = "wonita-home"
 // 统一 Node 库 + Blob 旁存两仓; onupgradeneeded 只 createObjectStore, 零 I/O (报错会 abort DB open 且无恢复 UI)。
 // 版本号只升不降, 否则既有库会 VersionError; onversionchange 让旧标签页主动让位避免 onblocked 冻结。
-const DB_VERSION = 12
+const DB_VERSION = 13
 
 export const STORE_NODES = "nodes"
 export const STORE_BLOBS = "blobs"
 export const STORE_TRASH_SNAPSHOTS = "trash_snapshots"
 export const INDEX_NODES_DELETED_AT = "deletedAt"
+export const INDEX_NODES_KIND = "kind"
+export const INDEX_NODES_PARENT_ID = "parentId"
+export const INDEX_NODES_UPDATED_AT = "updatedAt"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -32,6 +35,15 @@ function openDB(): Promise<IDBDatabase> {
         : db.createObjectStore(STORE_NODES, { keyPath: "id" })
       if (nodes && !nodes.indexNames.contains(INDEX_NODES_DELETED_AT)) {
         nodes.createIndex(INDEX_NODES_DELETED_AT, "deletedAt", { unique: false })
+      }
+      if (nodes && !nodes.indexNames.contains(INDEX_NODES_KIND)) {
+        nodes.createIndex(INDEX_NODES_KIND, "kind", { unique: false })
+      }
+      if (nodes && !nodes.indexNames.contains(INDEX_NODES_PARENT_ID)) {
+        nodes.createIndex(INDEX_NODES_PARENT_ID, "parentId", { unique: false })
+      }
+      if (nodes && !nodes.indexNames.contains(INDEX_NODES_UPDATED_AT)) {
+        nodes.createIndex(INDEX_NODES_UPDATED_AT, "updatedAt", { unique: false })
       }
       if (!db.objectStoreNames.contains(STORE_BLOBS)) {
         db.createObjectStore(STORE_BLOBS, { keyPath: "key" })

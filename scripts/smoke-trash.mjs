@@ -4,7 +4,7 @@
 // Usage: pnpm smoke:trash
 // Optional: BASE=http://localhost:<port> pnpm smoke:trash
 // Screenshots: /tmp/trash-smoke/*.png
-import { BASE, createSmokeRun, recordNoPageErrors, sleep } from "./smoke-lib.mjs"
+import { BASE, createSmokeRun, escapeRegex, recordNoPageErrors, sleep } from "./smoke-lib.mjs"
 
 const TRASH_URL = `${BASE}/trash`
 const SHOT_DIR = "/tmp/trash-smoke"
@@ -318,8 +318,11 @@ try {
   )
 
   markStage("purge")
-  page.once("dialog", (dialog) => dialog.accept())
   await page.getByTestId(`trash-purge-${IDS.filePurge}`).click()
+  await page
+    .getByRole("dialog", { name: new RegExp(`永久删除「${escapeRegex(TITLES.filePurge)}」`) })
+    .getByRole("button", { name: "永久删除", exact: true })
+    .click()
   await page.getByTestId(`trash-item-${IDS.filePurge}`).waitFor({ state: "hidden", timeout: 15000 })
   record("回收站可永久删除文件删除项", await waitForMissingNode(page, IDS.filePurge))
   await page.screenshot({ path: `${SHOT_DIR}/2-cleared.png` })

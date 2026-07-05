@@ -31,6 +31,7 @@
     "verify": "pnpm verify:base",
     "verify:base": "pnpm format:check && pnpm lint && rm -rf .next && pnpm typecheck && pnpm test && pnpm gen:api:check && pnpm build",
     "verify:smoke": "node scripts/verify-full.mjs --smoke-only",
+    "verify:smoke:static": "node scripts/verify-static-smoke.mjs",
     "verify:full": "node scripts/verify-full.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -11,7 +11,15 @@ import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
 import { sortKeyBetween } from "@/files/sort-key"
 import { computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
-import { idbBulkPut, idbGet, idbGetAll, idbPut, idbReadModifyWrite, STORE_NODES } from "@/lib/idb"
+import {
+  idbBulkPut,
+  idbGet,
+  idbGetAllFromIndex,
+  idbPut,
+  idbReadModifyWrite,
+  INDEX_NODES_KIND,
+  STORE_NODES,
+} from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshot } from "@/files/stores/trash-store"
 
@@ -54,12 +62,20 @@ function bookmarkToNode(b: Bookmark, sortKey: string, updatedAt: number): Bookma
 // ---- nodes 仓库内 kind 作用域读 + sortKey 追加 ----
 
 async function allBookmarkNodes(): Promise<BookmarkNode[]> {
-  const all = await idbGetAll<{ id: string; kind?: NodeKind }>(STORE_NODES)
+  const all = await idbGetAllFromIndex<{ id: string; kind?: NodeKind }>(
+    STORE_NODES,
+    INDEX_NODES_KIND,
+    "bookmark",
+  )
   return all.filter((n): n is BookmarkNode => n.kind === "bookmark")
 }
 
 async function allFolderNodes(): Promise<FolderNode[]> {
-  const all = await idbGetAll<{ id: string; kind?: NodeKind }>(STORE_NODES)
+  const all = await idbGetAllFromIndex<{ id: string; kind?: NodeKind }>(
+    STORE_NODES,
+    INDEX_NODES_KIND,
+    "folder",
+  )
   return all.filter((n): n is FolderNode => n.kind === "folder")
 }
 

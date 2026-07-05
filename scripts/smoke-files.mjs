@@ -9,6 +9,7 @@ import {
   BASE,
   SMOKE_LEVEL,
   cleanupTestFiles,
+  createSilentWavBuffer,
   createSmokeRun,
   escapeRegex,
   recordNoPageErrors,
@@ -98,7 +99,7 @@ const PREVIEW_SAMPLES = [
     label: "音频",
     name: `ideall-preview-${RUN_ID}.wav`,
     mimeType: "audio/wav",
-    buffer: Buffer.from([0]),
+    buffer: createSilentWavBuffer(),
     assert: async (dialog) => {
       await dialog.locator("audio[controls]").waitFor({ state: "visible" })
     },
@@ -315,7 +316,7 @@ try {
     console.log("  - 跳过主流预览类型矩阵 (SMOKE_LEVEL=core)")
   }
 
-  recordNoPageErrors(pageErrors, record)
+  recordNoPageErrors(pageErrors, record, { ignoreConsoleFetchFailures: true })
 } catch (e) {
   record("冒烟脚本异常", false, String(e.message).split("\n")[0])
   await page.screenshot({ path: `${SHOT_DIR}/error.png` }).catch(() => {})

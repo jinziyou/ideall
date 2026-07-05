@@ -385,21 +385,48 @@ export function isTabDirty(id: string): boolean {
   return ws().dirtyTabs.includes(id)
 }
 
-function confirmCloseDirty(ids: string[]): boolean {
+export type DirtyTabCloseRequest = {
+  title: string
+  description: string
+  confirmLabel: string
+  ids: string[]
+  confirm: () => void
+}
+
+const dirtyTabCloseListeners = new Set<(request: DirtyTabCloseRequest) => void>()
+
+export function subscribeDirtyTabCloseRequests(
+  listener: (request: DirtyTabCloseRequest) => void,
+): () => void {
+  dirtyTabCloseListeners.add(listener)
+  return () => {
+    dirtyTabCloseListeners.delete(listener)
+  }
+}
+
+function dirtyCloseRequest(ids: string[], confirm: () => void): DirtyTabCloseRequest | null {
   const dirtyIds = ids.filter((id) => ws().dirtyTabs.includes(id))
-  if (dirtyIds.length === 0) return true
+  if (dirtyIds.length === 0) return null
   const dirtyTabs = ws().tabs.filter((t) => dirtyIds.includes(t.id))
   const names = dirtyTabs
     .slice(0, 3)
     .map((t) => `「${t.title || "未命名"}」`)
     .join("、")
   const extra = dirtyTabs.length > 3 ? `等 ${dirtyTabs.length} 个标签` : ""
-  const message = `${names}${extra} 有未保存更改，关闭后会丢失这些更改。确定关闭吗？`
-  if (typeof window !== "undefined" && typeof window.confirm === "function") {
-    return window.confirm(message)
+  return {
+    ids: dirtyIds,
+    title: "关闭未保存的标签？",
+    description: `${names}${extra} 有未保存更改，关闭后会丢失这些更改。`,
+    confirmLabel: "关闭标签",
+    confirm,
   }
-  if (typeof globalThis.confirm === "function") return globalThis.confirm(message)
-  return true
+}
+
+function requestDirtyClose(ids: string[], confirm: () => void): boolean {
+  const request = dirtyCloseRequest(ids, confirm)
+  if (!request) return true
+  for (const listener of dirtyTabCloseListeners) listener(request)
+  return false
 }
 
 /** 关闭标签; 若关的是激活项, 焦点转移到相邻标签。 */
@@ -432,7 +459,7 @@ export function closeTab(id: string) {
 
 /** UI 关闭标签入口: dirty 标签先确认; 返回是否真的关闭。 */
 export function requestCloseTab(id: string): boolean {
-  if (!confirmCloseDirty([id])) return false
+  if (!requestDirtyClose([id], () => closeTab(id))) return false
   closeTab(id)
   return true
 }
@@ -450,7 +477,13 @@ export function closeAllTabs() {
 }
 
 export function requestCloseAllTabs(): boolean {
-  if (!confirmCloseDirty(ws().tabs.map((t) => t.id))) return false
+  if (
+    !requestDirtyClose(
+      ws().tabs.map((t) => t.id),
+      closeAllTabs,
+    )
+  )
+    return false
   closeAllTabs()
   return true
 }
@@ -471,10 +504,11 @@ export function closeOtherTabs(keepId: string) {
 
 export function requestCloseOtherTabs(keepId: string): boolean {
   if (
-    !confirmCloseDirty(
+    !requestDirtyClose(
       ws()
         .tabs.filter((t) => t.id !== keepId)
         .map((t) => t.id),
+      () => closeOtherTabs(keepId),
     )
   )
     return false

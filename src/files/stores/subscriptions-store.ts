@@ -10,7 +10,14 @@ import { faviconForDomain, faviconForUrl } from "@/lib/favicon"
 import { safeHref } from "@/lib/safe-url"
 import { sortKeyBetween } from "@/files/sort-key"
 import { feedNodeId, subToFeedNode, feedNodeToSub } from "@/files/feed-node"
-import { idbBulkPutDelete, idbGet, idbGetAll, idbPut, STORE_NODES } from "@/lib/idb"
+import {
+  idbBulkPutDelete,
+  idbGet,
+  idbGetAllFromIndex,
+  idbPut,
+  INDEX_NODES_KIND,
+  STORE_NODES,
+} from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshot } from "@/files/stores/trash-store"
 
@@ -19,7 +26,11 @@ type FeedNode = NodeOfKind<"feed">
 // ---- feed 节点读 + sortKey 追加 ----
 
 async function allFeedNodes(): Promise<FeedNode[]> {
-  const all = await idbGetAll<{ id: string; kind?: NodeKind }>(STORE_NODES)
+  const all = await idbGetAllFromIndex<{ id: string; kind?: NodeKind }>(
+    STORE_NODES,
+    INDEX_NODES_KIND,
+    "feed",
+  )
   return all.filter((n): n is FeedNode => n.kind === "feed")
 }
 

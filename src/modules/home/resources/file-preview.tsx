@@ -115,9 +115,9 @@ export function FilePreviewBox({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={file.name} className={cn(maxH, "max-w-full object-contain")} />
       ) : type?.preview === "video" ? (
-        <video src={url} controls className={cn(maxH, "w-full")} />
+        <video src={url} controls preload="none" className={cn(maxH, "w-full")} />
       ) : type?.preview === "audio" ? (
-        <audio src={url} controls className="w-full p-4" />
+        <audio src={url} controls preload="none" className="w-full p-4" />
       ) : type?.preview === "pdf" ? (
         // sandbox (无 allow-scripts/allow-same-origin): blob: 与 app 文档同源, 不沙箱则一个 MIME 实为
         // text/html 却名为 .pdf 的文件会以 ideall origin 执行脚本、读 localStorage。

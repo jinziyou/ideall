@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
+import { ConfirmDialog } from "@/shared/prompt-dialog"
 import { formatBytes, formatTimestamp } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import {
@@ -60,6 +61,9 @@ export default function TrashPage() {
   const [loading, setLoading] = React.useState(true)
   const [busyId, setBusyId] = React.useState<string | null>(null)
   const [emptying, setEmptying] = React.useState(false)
+  const [confirming, setConfirming] = React.useState<
+    { kind: "purge"; item: TrashItem } | { kind: "empty" } | null
+  >(null)
 
   const refresh = React.useCallback(() => {
     setLoading(true)
@@ -93,8 +97,6 @@ export default function TrashPage() {
   }
 
   async function purge(item: TrashItem) {
-    const ok = window.confirm(`永久删除「${item.title}」？此操作不可恢复。`)
-    if (!ok) return
     setBusyId(item.id)
     try {
       await purgeTrashItem(item.id)
@@ -110,8 +112,6 @@ export default function TrashPage() {
 
   async function clearAll() {
     if (items.length === 0) return
-    const ok = window.confirm(`清空回收站中的 ${items.length} 项？此操作不可恢复。`)
-    if (!ok) return
     setEmptying(true)
     try {
       const count = await emptyTrash()
@@ -127,6 +127,28 @@ export default function TrashPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+      <ConfirmDialog
+        open={!!confirming}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(null)
+        }}
+        title={
+          confirming?.kind === "purge" ? `永久删除「${confirming.item.title}」？` : "清空回收站？"
+        }
+        description={
+          confirming?.kind === "purge"
+            ? "此操作不可恢复，文件内容快照也会被移除。"
+            : `将永久删除回收站中的 ${items.length} 项，此操作不可恢复。`
+        }
+        confirmLabel={confirming?.kind === "purge" ? "永久删除" : "清空回收站"}
+        destructive
+        onConfirm={() => {
+          const next = confirming
+          setConfirming(null)
+          if (next?.kind === "purge") void purge(next.item)
+          else if (next?.kind === "empty") void clearAll()
+        }}
+      />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">回收站</h1>
@@ -143,7 +165,7 @@ export default function TrashPage() {
             type="button"
             variant="destructive"
             size="sm"
-            onClick={() => void clearAll()}
+            onClick={() => setConfirming({ kind: "empty" })}
             disabled={items.length === 0 || emptying}
           >
             {emptying ? (
@@ -220,7 +242,7 @@ export default function TrashPage() {
                       className="text-destructive hover:text-destructive"
                       disabled={busy}
                       data-testid={`trash-purge-${item.id}`}
-                      onClick={() => void purge(item)}
+                      onClick={() => setConfirming({ kind: "purge", item })}
                     >
                       <Trash2 className="mr-1.5 h-4 w-4" />
                       永久删除

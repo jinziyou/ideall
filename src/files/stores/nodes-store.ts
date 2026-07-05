@@ -4,7 +4,7 @@ import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node
 import { NODE_KINDS } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import { safeHref } from "@/lib/safe-url"
-import { idbGet, idbGetAll, STORE_NODES } from "@/lib/idb"
+import { idbGet, idbGetAllFromIndex, INDEX_NODES_KIND, STORE_NODES } from "@/lib/idb"
 import { buildParentOf, effectiveParentId, type TreeItem } from "@/files/notes-tree-util"
 import { addNote, updateNote, moveNote, deleteNote } from "@/files/stores/notes-store"
 import {
@@ -46,6 +46,14 @@ type RawNode = {
   blobRef?: { mime?: string }
 }
 
+async function nodesByKinds<T extends { kind?: NodeKind }>(kinds: NodeKind[]): Promise<T[]> {
+  const uniqueKinds = [...new Set(kinds)]
+  const rows = await Promise.all(
+    uniqueKinds.map((kind) => idbGetAllFromIndex<T>(STORE_NODES, INDEX_NODES_KIND, kind)),
+  )
+  return rows.flat()
+}
+
 /**
  * 列出指定 kind 的活跃节点摘要 (过滤删除标记)。供侧栏跨 kind 文件树 / places 导航。
  * hasChildren 仅在所请求 kinds 集合内计算 (跨 place 的父子不串台)。
@@ -53,7 +61,7 @@ type RawNode = {
 export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[]> {
   if (kinds.length === 0) return []
   const want = new Set(kinds)
-  const all = await idbGetAll<RawNode>(STORE_NODES)
+  const all = await nodesByKinds<RawNode>(kinds)
   const live = all.filter((n) => n.kind != null && want.has(n.kind) && n.deletedAt == null)
   // hasChildren: 同集合内按 effectiveParentId 聚合 (复用笔记树同一不变量: 环/孤儿归根)。
   const flat = live.map((n) => ({ id: n.id, parentId: n.parentId ?? null }))
@@ -80,7 +88,7 @@ export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[
 export async function listNodesRaw(kinds: NodeKind[]): Promise<Node[]> {
   if (kinds.length === 0) return []
   const want = new Set(kinds)
-  const all = await idbGetAll<Node>(STORE_NODES)
+  const all = await nodesByKinds<Node>(kinds)
   return all.filter((n) => n.kind != null && want.has(n.kind) && n.deletedAt == null)
 }
 

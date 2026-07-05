@@ -20,9 +20,10 @@ import {
   idbBulkPut,
   idbBulkPutDelete,
   idbGet,
-  idbGetAll,
+  idbGetAllFromIndex,
   idbPut,
   idbReadModifyWrite,
+  INDEX_NODES_KIND,
   STORE_NODES,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
@@ -119,7 +120,11 @@ function toMeta(note: Note, hasChildren: boolean, withText: boolean): NoteMeta {
  * 这是 notes-store 在统一 nodes 仓库下只见笔记的边界, 防 listNotes / 同步 GC 误伤其它 kind。
  */
 async function allNoteNodes(): Promise<NoteRow[]> {
-  const all = await idbGetAll<Partial<NoteRow> & { id: string; kind?: NodeKind }>(STORE_NODES)
+  const all = await idbGetAllFromIndex<Partial<NoteRow> & { id: string; kind?: NodeKind }>(
+    STORE_NODES,
+    INDEX_NODES_KIND,
+    KIND_NOTE,
+  )
   return all.filter((n): n is NoteRow => n.kind === KIND_NOTE)
 }
 

@@ -2,7 +2,7 @@ export type PluginDbConfig = {
   name: string
   version: number
   blockedMessage?: string
-  upgrade: (db: IDBDatabase) => void
+  upgrade: (db: IDBDatabase, tx: IDBTransaction | null, event: IDBVersionChangeEvent) => void
 }
 
 export type PluginDb = ReturnType<typeof createPluginDb>
@@ -21,7 +21,7 @@ export function createPluginDb(config: PluginDbConfig) {
       const req = indexedDB.open(config.name, config.version)
       req.onerror = () => {
         dbPromise = null
-        reject(req.error)
+        reject(req.error ?? new Error(`打开 IndexedDB ${config.name} 失败`))
       }
       req.onblocked = () => {
         dbPromise = null
@@ -33,10 +33,18 @@ export function createPluginDb(config: PluginDbConfig) {
           db.close()
           dbPromise = null
         }
+        ;(db as IDBDatabase & { onclose?: () => void }).onclose = () => {
+          dbPromise = null
+        }
         resolve(db)
       }
-      req.onupgradeneeded = () => {
-        config.upgrade(req.result)
+      req.onupgradeneeded = (event) => {
+        try {
+          config.upgrade(req.result, req.transaction, event)
+        } catch (error) {
+          req.transaction?.abort()
+          throw error
+        }
       }
     })
     return dbPromise
@@ -45,14 +53,14 @@ export function createPluginDb(config: PluginDbConfig) {
   const request = <T>(req: IDBRequest<T>): Promise<T> =>
     new Promise((resolve, reject) => {
       req.onsuccess = () => resolve(req.result)
-      req.onerror = () => reject(req.error)
+      req.onerror = () => reject(req.error ?? new Error("IndexedDB 请求失败"))
     })
 
   const transactionDone = (tx: IDBTransaction): Promise<void> =>
     new Promise((resolve, reject) => {
       tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error)
-      tx.onabort = () => reject(tx.error)
+      tx.onerror = () => reject(tx.error ?? new Error("IndexedDB 事务失败"))
+      tx.onabort = () => reject(tx.error ?? new Error("IndexedDB 事务已中止"))
     })
 
   const getAll = async <T>(storeName: string): Promise<T[]> => {
@@ -88,5 +96,11 @@ export function createPluginDb(config: PluginDbConfig) {
     await transactionDone(tx)
   }
 
-  return { open, request, getAll, get, put, remove, clear }
+  const close = async (): Promise<void> => {
+    const db = await open()
+    db.close()
+    dbPromise = null
+  }
+
+  return { open, request, getAll, get, put, remove, clear, close }
 }

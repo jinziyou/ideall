@@ -20,6 +20,7 @@ on:
       - "scripts/smoke-plugins.mjs"
       - "scripts/smoke-trash.mjs"
       - "scripts/verify-full.mjs"
+      - "scripts/verify-static-smoke.mjs"
       - "scripts/serve-out.mjs"
       - ".github/workflows/smoke.yml"
   push:
@@ -37,6 +38,7 @@ on:
       - "scripts/smoke-plugins.mjs"
       - "scripts/smoke-trash.mjs"
       - "scripts/verify-full.mjs"
+      - "scripts/verify-static-smoke.mjs"
       - "scripts/serve-out.mjs"
       - ".github/workflows/smoke.yml"
   schedule:
@@ -65,28 +67,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium --with-deps
-      - name: Build (static export)
-        run: pnpm build
-      - name: Serve out/
-        run: |
-          node scripts/serve-out.mjs > /tmp/serve.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -sf --max-time 5 http://localhost:5030/home/notes > /dev/null && exit 0
-            sleep 1
-          done
-          echo "静态服 30s 未就绪"; cat /tmp/serve.log; exit 1
-      - name: Smoke (notes e2e)
-        run: BASE=http://localhost:5030 pnpm smoke:notes
-      - name: Smoke (plugins core)
-        run: BASE=http://localhost:5030 pnpm smoke:plugins
-      - name: Smoke (trash e2e)
-        run: BASE=http://localhost:5030 pnpm smoke:trash
-      - name: Smoke (files e2e core)
-        if: github.event_name == 'pull_request'
-        run: SMOKE_LEVEL=core BASE=http://localhost:5030 pnpm smoke:files
-      - name: Smoke (files e2e full)
-        if: github.event_name != 'pull_request'
-        run: SMOKE_LEVEL=full BASE=http://localhost:5030 pnpm smoke:files
+      - name: Verify static smoke
+        run: pnpm verify:smoke:static
+        env:
+          SMOKE_LEVEL: ${{ github.event_name == 'pull_request' && 'core' || 'full' }}
       - name: 上传截图 (失败排查用)
         if: failure()
         uses: actions/upload-artifact@v4
