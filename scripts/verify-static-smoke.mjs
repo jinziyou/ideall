@@ -107,9 +107,16 @@ async function startReadyStaticServer() {
 }
 
 async function main() {
-  const noBuild = process.argv.includes("--no-build")
+  const args = process.argv.slice(2)
+  const noBuild = args.includes("--no-build")
   const smokeLevel = (process.env.SMOKE_LEVEL || "full").toLowerCase() === "core" ? "core" : "full"
-  const smokeScripts = ["smoke:notes", "smoke:plugins", "smoke:trash", "smoke:files"]
+  const defaultSmokeScripts = ["smoke:notes", "smoke:plugins", "smoke:trash", "smoke:files"]
+  const requestedScripts = args.filter((arg) => arg !== "--" && arg !== "--no-build")
+  const smokeScripts = requestedScripts.length ? requestedScripts : defaultSmokeScripts
+  const unknownScript = smokeScripts.find((script) => !defaultSmokeScripts.includes(script))
+  if (unknownScript) {
+    throw new Error(`unknown smoke script: ${unknownScript}`)
+  }
 
   if (!noBuild) {
     console.log("[verify:static-smoke] running static export build")

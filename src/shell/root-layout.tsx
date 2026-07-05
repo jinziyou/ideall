@@ -8,6 +8,7 @@ import ThemeApplier from "./theme-applier"
 import BootGate from "./boot-gate"
 import ReduxProvider from "./redux-provider"
 import XStateInspectorPanel from "./xstate-inspector-panel"
+import SecureHydrationBootstrap from "./secure-hydration-bootstrap"
 
 export const metadata: Metadata = {
   title: "ideall | 个人信息终端",
@@ -35,6 +36,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
         {/* 水合后兜底重新断言主题 (防根树重渲染抹掉 .dark) */}
         <ThemeApplier />
+        <SecureHydrationBootstrap />
         <BootGate>
           <ReduxProvider>
             {/* 现代面板式标签工作区壳: 活动栏 + 二级侧栏 + 多标签主区 + 状态栏 (移动端降级为顶栏+底栏)。

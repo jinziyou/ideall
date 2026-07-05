@@ -52,10 +52,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  smoke:
-    name: workspace e2e (静态导出)
+  build-static:
+    name: build static export
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -73,6 +73,44 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-next-
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build static export
+        run: pnpm build
+      - name: Upload static export
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-export
+          path: out
+          if-no-files-found: error
+          retention-days: 1
+
+  smoke:
+    name: smoke / ${{ matrix.name }}
+    needs: build-static
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: notes
+            script: smoke:notes
+          - name: files
+            script: smoke:files
+          - name: plugins
+            script: smoke:plugins
+          - name: trash
+            script: smoke:trash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
       - name: Restore Playwright cache
         uses: actions/cache@v4
         with:
@@ -84,15 +122,20 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium --with-deps
-      - name: Verify static smoke
-        run: pnpm verify:smoke:static
+      - name: Download static export
+        uses: actions/download-artifact@v4
+        with:
+          name: static-export
+          path: out
+      - name: Run static smoke
+        run: node scripts/verify-static-smoke.mjs --no-build ${{ matrix.script }}
         env:
           SMOKE_LEVEL: ${{ github.event_name == 'pull_request' && 'core' || 'full' }}
       - name: 上传截图 (失败排查用)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-screenshots
+          name: smoke-screenshots-${{ matrix.name }}
           path: |
             /tmp/notes-smoke
             /tmp/files-smoke

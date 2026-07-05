@@ -295,6 +295,44 @@ try {
   record("通过资源列表执行最终清理", await waitForNoLiveFileByName(page, RENAMED_NAME))
   await page.screenshot({ path: `${SHOT_DIR}/4-cleaned.png` })
 
+  markStage("missing file preview")
+  const missingFileId = `f_missing_${RUN_ID}`
+  const missingNodeQuery = `file:${missingFileId}`
+  const missingTabId = `node:id=${missingFileId}&kind=file`
+  await page.evaluate(
+    ({ nodeQuery, tabId, fileId }) => {
+      const snapshot = {
+        tabs: [
+          {
+            id: tabId,
+            kind: "node",
+            module: "home",
+            title: fileId,
+            path: `/home/notes?node=${encodeURIComponent(nodeQuery)}`,
+            params: { kind: "file", id: fileId },
+          },
+        ],
+        activeId: tabId,
+        transientId: tabId,
+        activeModule: "home",
+        mode: "local",
+        sidebarCollapsed: false,
+        rightPanelOpen: false,
+      }
+      sessionStorage.setItem("ideall:workspace:v1", JSON.stringify(snapshot))
+      localStorage.setItem("ideall:workspace:v1", JSON.stringify(snapshot))
+    },
+    { nodeQuery: missingNodeQuery, tabId: missingTabId, fileId: missingFileId },
+  )
+  await page.goto(`${BASE}/home/notes?node=${encodeURIComponent(missingNodeQuery)}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 30000,
+  })
+  await page
+    .getByText("该文件不存在或已删除。", { exact: true })
+    .waitFor({ state: "visible", timeout: 15000 })
+  record("文件预览缺失项展示明确兜底", true)
+
   if (SMOKE_LEVEL === "full") {
     markStage("preview matrix upload")
     await uploadPreviewSamples(page)

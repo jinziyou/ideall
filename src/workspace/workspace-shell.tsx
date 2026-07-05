@@ -8,8 +8,6 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { hydrateSessionTokenSecure } from "@/lib/auth/auth-store"
-import { hydrateSyncCodeSecure } from "@/lib/sync-code"
 import { isTauri, browserHide } from "@/lib/tauri"
 import { Header } from "@/shell/header"
 import BottomTabBar from "@/shell/bottom-tab-bar"
@@ -144,8 +142,6 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   // 客户端挂载后恢复上次的标签。
   React.useEffect(() => {
     hydrateWorkspace()
-    void hydrateSessionTokenSecure()
-    void hydrateSyncCodeSecure()
   }, [])
 
   // 启动 / 刷新后若不在「浏览器」标签, 强制收起 Linux 原生 overlay (否则会挡全窗点击)。

@@ -23,6 +23,8 @@ jobs:
             command: pnpm format:check
           - name: lint
             command: pnpm lint
+          - name: workflow lint
+            command: pnpm lint:actions
           - name: typecheck
             command: pnpm typecheck
           - name: test
