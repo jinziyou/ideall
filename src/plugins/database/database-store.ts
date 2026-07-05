@@ -22,6 +22,21 @@ export type DataRow = {
   updatedAt: number
 }
 
+export const DATABASE_EXPORT_KIND = "ideall.database"
+export const DATABASE_EXPORT_VERSION = 1
+
+export type DatabaseExportTable = {
+  table: DataTable
+  rows: DataRow[]
+}
+
+export type DatabaseExport = {
+  kind: typeof DATABASE_EXPORT_KIND
+  version: typeof DATABASE_EXPORT_VERSION
+  exportedAt: string
+  tables: DatabaseExportTable[]
+}
+
 const databaseDb = createPluginDb({
   name: DB_NAME,
   version: DB_VERSION,
@@ -73,6 +88,86 @@ export function rowValuesForColumns(
   draft: Record<string, string | undefined>,
 ): Record<string, string> {
   return Object.fromEntries(columns.map((column) => [column, draft[column]?.trim() ?? ""]))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function requireString(value: unknown, label: string): string {
+  if (typeof value !== "string") throw new Error(`${label} 格式无效`)
+  return value
+}
+
+function requireNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} 格式无效`)
+  return value
+}
+
+function normalizeTableRecord(value: unknown): DataTable {
+  if (!isRecord(value)) throw new Error("表格式无效")
+  const id = requireString(value.id, "表 id")
+  const name = normalizeTableName(requireString(value.name, "表名"))
+  const columns = Array.isArray(value.columns)
+    ? value.columns.filter((column): column is string => typeof column === "string")
+    : []
+  validateTableDraft(name, columns)
+  return {
+    id,
+    name,
+    columns,
+    createdAt: requireNumber(value.createdAt, "表 createdAt"),
+    updatedAt: requireNumber(value.updatedAt, "表 updatedAt"),
+  }
+}
+
+function normalizeRowRecord(value: unknown, tableId: string): DataRow {
+  if (!isRecord(value)) throw new Error("行格式无效")
+  const rawValues = isRecord(value.values) ? value.values : {}
+  const values = Object.fromEntries(
+    Object.entries(rawValues).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  )
+  return {
+    id: requireString(value.id, "行 id"),
+    tableId,
+    values,
+    createdAt: requireNumber(value.createdAt, "行 createdAt"),
+    updatedAt: requireNumber(value.updatedAt, "行 updatedAt"),
+  }
+}
+
+export function createDatabaseExport(
+  tables: DatabaseExportTable[],
+  exportedAt = new Date().toISOString(),
+): DatabaseExport {
+  return {
+    kind: DATABASE_EXPORT_KIND,
+    version: DATABASE_EXPORT_VERSION,
+    exportedAt,
+    tables,
+  }
+}
+
+export function parseDatabaseExport(raw: string): DatabaseExport {
+  const parsed = JSON.parse(raw) as unknown
+  if (!isRecord(parsed)) throw new Error("数据库 JSON 格式无效")
+  if (parsed.kind !== DATABASE_EXPORT_KIND || parsed.version !== DATABASE_EXPORT_VERSION) {
+    throw new Error("不支持的数据库 JSON 版本")
+  }
+  if (!Array.isArray(parsed.tables)) throw new Error("数据库 JSON 缺少 tables")
+  return createDatabaseExport(
+    parsed.tables.map((item) => {
+      if (!isRecord(item)) throw new Error("表导出项格式无效")
+      const table = normalizeTableRecord(item.table)
+      const rows = Array.isArray(item.rows)
+        ? item.rows.map((row) => normalizeRowRecord(row, table.id))
+        : []
+      return { table, rows }
+    }),
+    requireString(parsed.exportedAt, "exportedAt"),
+  )
 }
 
 export async function listTables(): Promise<DataTable[]> {
@@ -151,4 +246,38 @@ export async function updateRow(
 
 export async function deleteRow(id: string): Promise<void> {
   await databaseDb.remove(STORE_ROWS, id)
+}
+
+export async function exportDatabaseJson(): Promise<string> {
+  const tables = await listTables()
+  const entries = await Promise.all(
+    tables.map(async (table) => ({
+      table,
+      rows: await listRows(table.id),
+    })),
+  )
+  return JSON.stringify(createDatabaseExport(entries), null, 2)
+}
+
+export async function importDatabaseJson(raw: string): Promise<{ tables: number; rows: number }> {
+  const backup = parseDatabaseExport(raw)
+  const db = await databaseDb.open()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([STORE_TABLES, STORE_ROWS], "readwrite")
+    const tables = tx.objectStore(STORE_TABLES)
+    const rows = tx.objectStore(STORE_ROWS)
+    tables.clear()
+    rows.clear()
+    for (const entry of backup.tables) {
+      tables.put(entry.table)
+      for (const row of entry.rows) rows.put(row)
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+  return {
+    tables: backup.tables.length,
+    rows: backup.tables.reduce((sum, item) => sum + item.rows.length, 0),
+  }
 }

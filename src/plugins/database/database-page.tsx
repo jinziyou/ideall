@@ -1,9 +1,19 @@
 "use client"
 
 import * as React from "react"
-import { ClipboardCopy, Database, Plus, Search, Table2, Trash2 } from "lucide-react"
+import {
+  ClipboardCopy,
+  Database,
+  FileDown,
+  FileUp,
+  Plus,
+  Search,
+  Table2,
+  Trash2,
+} from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { downloadTextFile } from "@/lib/browser-download"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { Input } from "@/ui/input"
@@ -12,6 +22,8 @@ import {
   createTable,
   deleteRow,
   deleteTable,
+  exportDatabaseJson,
+  importDatabaseJson,
   listRows,
   listTables,
   normalizeColumns,
@@ -30,6 +42,7 @@ export default function DatabasePage() {
   const [filter, setFilter] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
+  const importInputRef = React.useRef<HTMLInputElement | null>(null)
 
   const activeTable = React.useMemo(
     () => tables.find((table) => table.id === activeId) ?? null,
@@ -81,6 +94,8 @@ export default function DatabasePage() {
       setActiveId(selectId)
       if (selectId !== activeId) setRows([])
     } else if (activeId && !next.some((table) => table.id === activeId)) {
+      setActiveId(next[0]?.id ?? null)
+    } else if (!activeId) {
       setActiveId(next[0]?.id ?? null)
     }
   }
@@ -151,6 +166,32 @@ export default function DatabasePage() {
     }
   }
 
+  const handleExportAll = async () => {
+    try {
+      downloadTextFile(`ideall-database-${Date.now()}.json`, await exportDatabaseJson())
+      toast("已导出数据库 JSON")
+    } catch (e) {
+      toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const handleImportJson = async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file || busy) return
+    setBusy(true)
+    try {
+      const result = await importDatabaseJson(await file.text())
+      setRows([])
+      await reloadTables()
+      toast(`已导入 ${result.tables} 张表、${result.rows} 行`)
+    } catch (e) {
+      toast.error("导入失败", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = ""
+      setBusy(false)
+    }
+  }
+
   const filteredRows = React.useMemo(() => {
     const q = filter.trim().toLowerCase()
     if (!q) return rows
@@ -159,7 +200,18 @@ export default function DatabasePage() {
 
   return (
     <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
-      <PageHeader />
+      <PageHeader
+        busy={busy}
+        onImport={() => importInputRef.current?.click()}
+        onExport={() => void handleExportAll()}
+      />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onChange={(e) => void handleImportJson(e.target.files)}
+      />
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="flex min-h-0 flex-col gap-3 rounded-lg border border-border/60 bg-card p-3">
@@ -361,7 +413,15 @@ export default function DatabasePage() {
   )
 }
 
-function PageHeader() {
+function PageHeader({
+  busy,
+  onImport,
+  onExport,
+}: {
+  busy: boolean
+  onImport: () => void
+  onExport: () => void
+}) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -370,6 +430,30 @@ function PageHeader() {
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             本地表、行记录与 JSON 导出
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={busy}
+            onClick={onImport}
+          >
+            <FileUp className="h-4 w-4" />
+            导入 JSON
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={busy}
+            onClick={onExport}
+          >
+            <FileDown className="h-4 w-4" />
+            导出全部
+          </Button>
         </div>
       </div>
     </div>

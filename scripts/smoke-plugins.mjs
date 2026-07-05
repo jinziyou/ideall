@@ -60,6 +60,20 @@ try {
   })
   await page.getByText(AUDIO_TITLE, { exact: true }).waitFor({ state: "visible", timeout: 15000 })
   record("音频插件可导入并展示本地音频", true)
+  const audioDownloadPromise = page.waitForEvent("download")
+  await page.getByRole("button", { name: "导出 JSON", exact: true }).click()
+  const audioDownload = await audioDownloadPromise
+  const audioExportPath = await audioDownload.path()
+  if (!audioExportPath) throw new Error("audio JSON export path unavailable")
+  record("音频插件可导出 JSON 备份", true)
+  await openPluginPage(page, "/home")
+  await deleteDb(page, "ideall:audio")
+  await openPluginPage(page, "/audio")
+  await page
+    .locator('input[type="file"][accept="application/json,.json"]')
+    .setInputFiles(audioExportPath)
+  await page.getByText(AUDIO_TITLE, { exact: true }).waitFor({ state: "visible", timeout: 15000 })
+  record("音频插件可从 JSON 备份恢复", true)
   await page.screenshot({ path: `${SHOT_DIR}/1-audio.png` })
 
   markStage("database")
@@ -83,12 +97,27 @@ try {
   await page.getByText("alpha", { exact: true }).waitFor({ state: "visible", timeout: 15000 })
   await page.getByText("42", { exact: true }).waitFor({ state: "visible", timeout: 15000 })
   record("数据库插件可建表并写入行", true)
+  const dbDownloadPromise = page.waitForEvent("download")
+  await page.getByRole("button", { name: "导出全部", exact: true }).click()
+  const dbDownload = await dbDownloadPromise
+  const dbExportPath = await dbDownload.path()
+  if (!dbExportPath) throw new Error("database JSON export path unavailable")
+  record("数据库插件可导出 JSON 备份", true)
   await page.getByRole("button", { name: "删除表", exact: true }).click()
   await page.getByText("创建或选择一张表", { exact: true }).waitFor({
     state: "visible",
     timeout: 15000,
   })
   record("数据库插件可删除表并清理行", true)
+  await page
+    .locator('input[type="file"][accept="application/json,.json"]')
+    .setInputFiles(dbExportPath)
+  await page.getByRole("button", { name: TABLE_NAME, exact: false }).waitFor({
+    state: "visible",
+    timeout: 15000,
+  })
+  await page.getByText("alpha", { exact: true }).waitFor({ state: "visible", timeout: 15000 })
+  record("数据库插件可从 JSON 备份恢复", true)
   await page.screenshot({ path: `${SHOT_DIR}/2-database.png` })
 
   markStage("debug")

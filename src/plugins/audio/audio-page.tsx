@@ -2,7 +2,9 @@
 
 import * as React from "react"
 import {
+  FileDown,
   FileAudio,
+  FileUp,
   FolderPlus,
   Pause,
   Play,
@@ -14,12 +16,16 @@ import {
   Trash2,
   Volume2,
 } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { downloadTextFile } from "@/lib/browser-download"
 import { Button } from "@/ui/button"
 import { Slider } from "@/ui/slider"
 import { EmptyState } from "@/ui/empty-state"
 import {
   addAudioTrack,
+  exportAudioLibraryJson,
+  importAudioLibraryJson,
   isSupportedAudioFile,
   listAudioTracks,
   loadAudioPlaybackState,
@@ -42,6 +48,7 @@ export default function AudioPage() {
   const [loading, setLoading] = React.useState(true)
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const jsonInputRef = React.useRef<HTMLInputElement>(null)
   const pendingTimeRef = React.useRef<number | null>(null)
   const shuffleSeedRef = React.useRef(0)
 
@@ -54,22 +61,41 @@ export default function AudioPage() {
     shuffleSeedRef.current = Math.floor(Math.random() * 1_000_000)
   }, [])
 
+  const applyLibraryState = React.useCallback(
+    (savedTracks: AudioTrack[], state: Awaited<ReturnType<typeof loadAudioPlaybackState>>) => {
+      setTracks(savedTracks)
+      const savedTrack = state.currentTrackId
+        ? savedTracks.find((t) => t.id === state.currentTrackId)
+        : null
+      if (savedTrack) {
+        setCurrentId(savedTrack.id)
+        setCurrentTime(state.currentTime)
+        pendingTimeRef.current = state.currentTime
+        setDuration(savedTrack.duration ?? 0)
+      } else {
+        setCurrentId(null)
+        setCurrentTime(0)
+        pendingTimeRef.current = null
+        setDuration(0)
+      }
+      setVolume(state.volume)
+      setRepeat(state.repeat)
+      setShuffle(state.shuffle)
+    },
+    [],
+  )
+
+  const loadLibrary = React.useCallback(async () => {
+    const [savedTracks, state] = await Promise.all([listAudioTracks(), loadAudioPlaybackState()])
+    applyLibraryState(savedTracks, state)
+  }, [applyLibraryState])
+
   React.useEffect(() => {
     let alive = true
     Promise.all([listAudioTracks(), loadAudioPlaybackState()])
       .then(([savedTracks, state]) => {
         if (!alive) return
-        setTracks(savedTracks)
-        if (state.currentTrackId && savedTracks.some((t) => t.id === state.currentTrackId)) {
-          setCurrentId(state.currentTrackId)
-          setCurrentTime(state.currentTime)
-          pendingTimeRef.current = state.currentTime
-          const savedTrack = savedTracks.find((t) => t.id === state.currentTrackId)
-          setDuration(savedTrack?.duration ?? 0)
-        }
-        setVolume(state.volume)
-        setRepeat(state.repeat)
-        setShuffle(state.shuffle)
+        applyLibraryState(savedTracks, state)
       })
       .finally(() => {
         if (alive) setLoading(false)
@@ -77,7 +103,7 @@ export default function AudioPage() {
     return () => {
       alive = false
     }
-  }, [])
+  }, [applyLibraryState])
 
   React.useEffect(() => {
     saveAudioPlaybackState({ currentTrackId: currentId, currentTime, volume, repeat, shuffle })
@@ -155,6 +181,31 @@ export default function AudioPage() {
     await refreshTracks()
   }
 
+  const handleExportJson = async () => {
+    try {
+      downloadTextFile(`ideall-audio-${Date.now()}.json`, await exportAudioLibraryJson())
+      toast("已导出音频库 JSON")
+    } catch (e) {
+      toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const handleImportJson = async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    try {
+      setIsPlaying(false)
+      const result = await importAudioLibraryJson(await file.text())
+      await loadLibrary()
+      if (result.tracks === 0) setCurrentSrc("")
+      toast(`已导入 ${result.tracks} 首音频`)
+    } catch (e) {
+      toast.error("导入失败", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      if (jsonInputRef.current) jsonInputRef.current.value = ""
+    }
+  }
+
   const playNext = () => {
     if (tracks.length === 0) return
     if (shuffle) {
@@ -216,7 +267,17 @@ export default function AudioPage() {
 
   return (
     <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-4">
-      <PageHeader />
+      <PageHeader
+        onImport={() => jsonInputRef.current?.click()}
+        onExport={() => void handleExportJson()}
+      />
+      <input
+        ref={jsonInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => void handleImportJson(e.target.files)}
+      />
 
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-lg border border-border/60 bg-card p-4">
@@ -452,7 +513,7 @@ function formatBytes(bytes: number): string {
   return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
 }
 
-function PageHeader() {
+function PageHeader({ onImport, onExport }: { onImport: () => void; onExport: () => void }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -461,6 +522,16 @@ function PageHeader() {
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
             本地播放列表 · IndexedDB 持久化
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onImport}>
+            <FileUp className="h-4 w-4" />
+            导入 JSON
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onExport}>
+            <FileDown className="h-4 w-4" />
+            导出 JSON
+          </Button>
         </div>
       </div>
     </div>
