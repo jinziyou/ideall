@@ -8,7 +8,7 @@
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
-import { moduleById, isModeNeutralModule } from "./modules"
+import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
 import { isTauri, browserHide } from "@/lib/tauri"
 import { store, useAppSelector } from "@/lib/store"
 import { workspaceActions, type ActiveSource, type WorkspaceState } from "./workspace-slice"
@@ -169,10 +169,10 @@ export function hydrateWorkspace() {
         activeModule: aiActive
           ? saved.activeModule
           : activeTab
-            ? activeTab.module
+            ? coerceActiveModuleForMode(activeTab.module, saved.mode, saved.activeModule)
             : cur.activeId
-              ? cur.activeModule
-              : "home",
+              ? coerceActiveModuleForMode(cur.activeModule, saved.mode, saved.activeModule)
+              : coerceActiveModuleForMode(saved.activeModule, saved.mode),
         mode: saved.mode,
         sidebarCollapsed: saved.sidebarCollapsed,
         rightPanelOpen: saved.rightPanelOpen,
@@ -252,7 +252,7 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: 
   if (opts?.transient) {
     setState({
       ...transientOpenPatch(d),
-      activeModule: d.module,
+      activeModule: coerceActiveModuleForMode(d.module, ws().mode, ws().activeModule),
       activeSource: source,
     })
     return
@@ -264,7 +264,7 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: 
     // 显式 (非瞬态) 打开命中当前预览槽 → 提升为常驻。
     transientId: ws().transientId === id ? null : ws().transientId,
     activeId: id,
-    activeModule: d.module,
+    activeModule: coerceActiveModuleForMode(d.module, ws().mode, ws().activeModule),
     activeSource: source,
   })
 }
@@ -445,7 +445,7 @@ export function closeTab(id: string) {
     // 焦点转移到相邻标签时同步活动模块 (否则活动栏/侧栏会停在旧模块); mode 不随标签翻转。
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next.kind)
-      activeModule = next.module
+      activeModule = coerceActiveModuleForMode(next.module, ws().mode, activeModule)
     } else if (closingKind === "browser-view" && isTauri()) {
       void browserHide().catch(() => {})
     }
@@ -498,7 +498,7 @@ export function closeOtherTabs(keepId: string) {
   setState({
     tabs: [keep],
     activeId: keepId,
-    activeModule: keep.module,
+    activeModule: coerceActiveModuleForMode(keep.module, ws().mode, ws().activeModule),
     transientId: ws().transientId === keepId ? keepId : null,
     activeSource: "user",
   })
@@ -522,9 +522,13 @@ export function setActiveTab(id: string) {
   const t = ws().tabs.find((x) => x.id === id)
   if (!t) return
   hideBrowserWebviewUnlessBrowserTab(t.kind)
-  // 激活标签不翻 mode 视图 (原先非中性模块会整排重构活动栏, 摧毁空间锚点)。
+  // 激活标签不翻 mode 视图; activeModule 只作为左侧导航/侧栏锚点, 需收束在当前 mode 可见范围内。
   // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
-  setState({ activeId: id, activeModule: t.module, activeSource: "user" })
+  setState({
+    activeId: id,
+    activeModule: coerceActiveModuleForMode(t.module, ws().mode, ws().activeModule),
+    activeSource: "user",
+  })
 }
 
 /** 点活动栏图标: 同模块且侧栏展开 → 收起侧栏; 否则切到该模块、展开侧栏, 并以「预览」方式开其首个面板。 */
@@ -555,7 +559,11 @@ export function toggleModule(m: ModuleId) {
 /** 切换工作区模式视图 (本地 / 连接): 活动模块归到该模式首个模块, 展开侧栏并以预览方式开其落地面板。
  *  已是该模式则无操作 (点已激活的分段不打扰当前标签)。 */
 export function setMode(mode: WsMode) {
-  if (mode === ws().mode) return
+  if (mode === ws().mode) {
+    const activeModule = coerceActiveModuleForMode(ws().activeModule, mode)
+    if (activeModule !== ws().activeModule) setState({ activeModule })
+    return
+  }
   const firstModule: ModuleId = mode === "local" ? "home" : "info"
   const mod = moduleById(firstModule)
   const first = mod.entries[0]
@@ -709,6 +717,10 @@ export function getTransientId(): string | null {
 /** 当前工作区模式视图的实时快照 (effect / 测试用)。 */
 export function getMode(): WsMode {
   return ws().mode
+}
+/** 当前左侧导航/侧栏模块的实时快照 (effect / 测试用)。 */
+export function getActiveModule(): ModuleId {
+  return ws().activeModule
 }
 /** 当前激活节点的激活来源 (user / agent)。隐私: active-node 端口对 agent 自激活的节点返回 null, 不计入隐式同意。 */
 export function getActiveSource(): ActiveSource {

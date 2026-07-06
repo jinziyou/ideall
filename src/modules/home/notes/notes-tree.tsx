@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils"
 import type { NoteMeta } from "@protocol/files"
 import { buildNoteTree, type TreeNode } from "@/files/notes-tree-util"
 import { onTreeArrowNav, focusTreeSibling } from "@/workspace/tree/tree-keynav"
-import { EmptyState } from "@/ui/empty-state"
 
 /** 拖放落在的位置: 目标行上缘=插到其前; 下缘=插到其后; 中部=作其子页。 */
 type DropZone = "before" | "after" | "inside"
@@ -101,9 +100,7 @@ export function PageTree({
     [dragId, info, isUnder, onMove],
   )
 
-  if (forest.length === 0) {
-    return <EmptyState title="还没有页面。点上方「新建」开始。" />
-  }
+  if (forest.length === 0) return null
 
   return (
     <div

@@ -26,12 +26,19 @@ import {
   getActiveSource,
   getTransientId,
   getMode,
+  getActiveModule,
   getTabs,
 } from "./store"
 
 // —— 标签描述符夹具 (本地/连接各取一个 + 跨模式工具) ——
 const HOME = { kind: "home-overview", module: "home", title: "概览", path: "/home" } as const
 const INFO = { kind: "info", module: "info", title: "资讯", path: "/info" } as const
+const COMMUNITY = {
+  kind: "community",
+  module: "community",
+  title: "社区",
+  path: "/community",
+} as const
 const TOOL = { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" } as const
 
 test("openNodeTab 默认来源 user; 传 agent 标记 agent", () => {
@@ -197,35 +204,44 @@ test("dirty 标签: 常驻软上限回收时跳过未保存标签", () => {
 
 // —— 本地/连接 模式镜头 (仅显式导航切换; 打开/激活/关闭标签不翻转) ——
 
-test("openTab / setActiveTab 不翻镜头: 标签导航保留当前视图", () => {
+test("openTab / setActiveTab 不翻镜头, 也不污染当前镜头侧栏模块", () => {
   closeAllTabs()
+  setMode("local")
   assert.equal(getMode(), "local")
-  openTab(INFO) // 连接模块 → 打开但不翻镜头 (活动栏以附加图标保证高亮可见)
+  assert.equal(getActiveModule(), "home")
+  openTab(COMMUNITY) // 连接模块 → 打开但不翻镜头, activeModule 保持本地可见
   assert.equal(getMode(), "local", "打开连接模块标签不翻镜头")
+  assert.equal(getActiveModule(), "home", "连接标签不会在本地活动栏生成幽灵模块")
   openTab(HOME)
-  const infoId = getTabs().find((t) => t.kind === "info")!.id
-  setActiveTab(infoId)
+  const communityId = getTabs().find((t) => t.kind === "community")!.id
+  setActiveTab(communityId)
   assert.equal(getMode(), "local", "激活连接标签也不翻镜头")
-  openTab(TOOL) // crossMode 工具同理
+  assert.equal(getActiveModule(), "home", "激活连接标签不污染本地侧栏模块")
+  openTab(TOOL) // crossMode 工具可在两侧镜头中作为当前侧栏模块
   assert.equal(getMode(), "local")
+  assert.equal(getActiveModule(), "tool")
 })
 
 test("toggleModule 显式模块导航才切镜头; 中性工具除外", () => {
   closeAllTabs()
-  toggleModule("info")
+  toggleModule("community")
   assert.equal(getMode(), "connected", "点活动栏模块图标 = 显式切视图")
+  assert.equal(getActiveModule(), "community")
   toggleModule("home")
   assert.equal(getMode(), "local")
+  assert.equal(getActiveModule(), "home")
   toggleModule("tool") // crossMode 中性: 不翻
   assert.equal(getMode(), "local", "跨模式工具不翻镜头")
+  assert.equal(getActiveModule(), "tool")
 })
 
-test("setMode 切镜头并落到该模式首个模块; 同模式则无操作", () => {
+test("setMode 切镜头并落到该模式首个模块; 同模式仅做污染态归一", () => {
   closeAllTabs()
   setMode("local") // 归位 (上个测试结束在 local, 幂等)
   openTab(HOME)
   setMode("connected")
   assert.equal(getMode(), "connected")
+  assert.equal(getActiveModule(), "info")
   const active = getTabs().find((t) => t.id === getActiveId())
   assert.equal(active?.kind, "info", "连接模式落到资讯")
   const before = getActiveId()
@@ -233,15 +249,17 @@ test("setMode 切镜头并落到该模式首个模块; 同模式则无操作", (
   assert.equal(getActiveId(), before, "点已激活模式不打扰当前标签")
 })
 
-test("closeTab: 焦点转移同步 activeModule, 但不翻镜头", () => {
+test("closeTab: 焦点转移不翻镜头, activeModule 收束到当前镜头", () => {
   closeAllTabs()
   assert.equal(getMode(), "connected") // 上个测试结束在 connected
-  openTab(HOME) // local 模块, 打开不翻
+  openTab(HOME) // local 模块, 打开不翻, 连接镜头侧栏仍保持 info
+  assert.equal(getActiveModule(), "info")
   openTab(INFO)
   closeTab(getActiveId()!) // 关 info → 焦点回 home
   const active = getTabs().find((t) => t.id === getActiveId())
   assert.equal(active?.kind, "home-overview", "焦点转移到相邻标签")
   assert.equal(getMode(), "connected", "镜头保持, 不随焦点翻转")
+  assert.equal(getActiveModule(), "info", "本地标签不会污染连接镜头侧栏模块")
 })
 
 // —— 键盘导航动作 (全局快捷键用) ——

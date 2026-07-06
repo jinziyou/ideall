@@ -7,17 +7,18 @@ const INSPECTOR_URL = "https://stately.ai/inspect"
 
 /** 开发态内嵌 Stately Inspector (Tauri / 禁弹窗环境用 iframe 代替 window.open)。 */
 export default function XStateInspectorPanel() {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const iframeRef = useCallback((el: HTMLIFrameElement | null) => {
     if (el) registerXStateInspectorIframe(el)
   }, [])
 
   if (process.env.NODE_ENV === "production") return null
-  if (process.env.NEXT_PUBLIC_XSTATE_INSPECT === "0") return null
+  // Inspector 只在显式 opt-in 时挂载; 默认不占用左下角, 避免遮挡工作区内容。
+  if (process.env.NEXT_PUBLIC_XSTATE_INSPECT !== "1") return null
 
   return (
     <div
-      className="fixed bottom-2 right-2 z-[9999] flex flex-col overflow-hidden rounded-lg border border-border bg-background shadow-lg"
+      className="fixed bottom-2 left-2 z-[9999] flex flex-col overflow-hidden rounded-lg border border-border bg-background shadow-lg md:left-16"
       style={{ width: open ? 420 : 160, height: open ? 320 : 36 }}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1 text-xs text-muted-foreground">

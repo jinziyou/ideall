@@ -8,6 +8,9 @@ import {
   moduleById,
   modulesForMode,
   isModeNeutralModule,
+  isModuleVisibleInMode,
+  primaryModuleForMode,
+  coerceActiveModuleForMode,
 } from "./modules"
 
 test("descriptorForPath: 根路径与 /home 落到「我的」概览", () => {
@@ -69,4 +72,28 @@ test("isModeNeutralModule: agent 与 crossMode 工具中性, 其余不翻", () =
 test("moduleById: 未知 id 回退首个模块 (不抛错)", () => {
   assert.equal(moduleById("home").id, "home")
   assert.equal(moduleById("不存在" as never).id, "home")
+})
+
+test("module visibility: 当前镜头只暴露本模式模块与允许的特殊模块", () => {
+  assert.equal(primaryModuleForMode("local"), "home")
+  assert.equal(primaryModuleForMode("connected"), "info")
+  assert.equal(isModuleVisibleInMode("home", "local"), true)
+  assert.equal(isModuleVisibleInMode("plugins", "local"), true)
+  assert.equal(isModuleVisibleInMode("shell", "local"), true, "插件子模块通过插件组在本地可见")
+  assert.equal(isModuleVisibleInMode("community", "local"), false)
+  assert.equal(isModuleVisibleInMode("info", "connected"), true)
+  assert.equal(isModuleVisibleInMode("browser", "connected"), true)
+  assert.equal(isModuleVisibleInMode("home", "connected"), false)
+  assert.equal(isModuleVisibleInMode("shell", "connected"), false)
+  assert.equal(isModuleVisibleInMode("agent", "local"), true)
+  assert.equal(isModuleVisibleInMode("agent", "connected"), true)
+})
+
+test("coerceActiveModuleForMode: 跨模式标签不污染当前镜头侧栏", () => {
+  assert.equal(coerceActiveModuleForMode("community", "local", "home"), "home")
+  assert.equal(coerceActiveModuleForMode("community", "local", "plugins"), "plugins")
+  assert.equal(coerceActiveModuleForMode("community", "local"), "home")
+  assert.equal(coerceActiveModuleForMode("home", "connected", "info"), "info")
+  assert.equal(coerceActiveModuleForMode("home", "connected"), "info")
+  assert.equal(coerceActiveModuleForMode("tool", "local", "home"), "tool", "crossMode 工具两侧可见")
 })

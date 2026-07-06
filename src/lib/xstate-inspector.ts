@@ -17,7 +17,7 @@ let pendingIframe: HTMLIFrameElement | undefined
 function inspectDisabled(): boolean {
   if (process.env.NODE_ENV === "production") return true
   if (typeof window === "undefined") return true
-  return process.env.NEXT_PUBLIC_XSTATE_INSPECT === "0"
+  return process.env.NEXT_PUBLIC_XSTATE_INSPECT !== "1"
 }
 
 async function waitForIframeRegistration(): Promise<void> {

@@ -1,6 +1,6 @@
 // 工作区模块配置 (桌面工作区壳的唯一数据来源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 活动栏按当前「本地/连接」模式视图过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
-//   本机/我的(local): 我的(home) · 关注(subscriptions) · [轨底] 插件 · 应用  ← + 活动栏「工作区」钮
+//   本机/我的(local): 我的(home) · 关注(subscriptions) · [轨底] 插件 · 应用 · 回收站  ← + 活动栏「工作区」钮
 //   连接/发现(connected): 资讯(info) · 社区(community) · 工具(tool) · 浏览器(browser)
 //   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (与 AI 区段同类, 见 store isModeNeutralModule)。
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏搜索框/⌘K 统一面板搜本机内容, 两者职责分离。
@@ -14,7 +14,7 @@ import type { ComponentType } from "react"
 import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"
 import type { ModuleId, TabDescriptor, WsMode } from "./types"
 import { MODULE_META } from "./module-meta"
-import { PLUGIN_ENTRIES } from "./plugin-entries"
+import { PLUGIN_ENTRIES, isPluginModule } from "./plugin-entries"
 import { nodeTab } from "./node-tab"
 import { parseNodeQuery } from "./node-ref"
 
@@ -239,6 +239,33 @@ export function moduleById(id: ModuleId): ModuleConfig {
 /** 某模式下的模块列表 (活动栏按当前视图渲染; crossMode 模块两种模式均展示)。 */
 export function modulesForMode(mode: WsMode): ModuleConfig[] {
   return MODULES.filter((m) => m.mode === mode || m.crossMode)
+}
+
+/** 模式镜头默认落点: local → 我的, connected → 资讯。 */
+export function primaryModuleForMode(mode: WsMode): ModuleId {
+  return mode === "local" ? "home" : "info"
+}
+
+/** 模块是否应在当前 mode 的左侧导航/侧栏语境中可见。 */
+export function isModuleVisibleInMode(id: ModuleId, mode: WsMode): boolean {
+  if (id === "agent") return true
+  if (mode === "local" && isPluginModule(id)) return true
+  return modulesForMode(mode).some((m) => m.id === id)
+}
+
+/**
+ * 将 activeModule 收束到当前 mode 可见的左侧导航模块。
+ * preferred 来自“想激活的标签模块”; current 是当前侧栏锚点。
+ * 标签跨 mode 激活时优先保留 current, 避免左侧栏被另一模式污染。
+ */
+export function coerceActiveModuleForMode(
+  preferred: ModuleId,
+  mode: WsMode,
+  current?: ModuleId,
+): ModuleId {
+  if (isModuleVisibleInMode(preferred, mode)) return preferred
+  if (current && isModuleVisibleInMode(current, mode)) return current
+  return primaryModuleForMode(mode)
 }
 
 /** 打开/激活时不翻 mode 的模块 (AI 区段 + 跨模式工具): 保留当前视图, 不由 module 反推。 */

@@ -2,7 +2,8 @@
 
 // 活动栏 (IDE 式标签工作区侧栏的图标轨): 按当前「本地/连接」模式视图过滤展示模块图标 (+ crossMode 跨模式模块);
 // 顶栏 ModeSwitch 切换视图。点模块图标 = 切到该模块并展开二级侧栏 (再点已激活模块 = 收起侧栏);
-// 「工作区」钮紧随「我的」(home) 下方; 本地模式「插件」+「应用」在轨底 (分隔线下方, 应用在插件之下)。
+// 「工作区」钮紧随「我的」(home) 下方; 本地模式「插件」+「应用」+「回收站」在轨底 (分隔线下方, 应用在插件之下, 回收站在应用之下)。
+// 活动栏只显示当前模式的模块 (+ crossMode 模块); 已打开的跨模式标签留在标签条, 不在轨底补一个“幽灵模块”。
 // 设置 / AI 对话入口在顶栏 (Trae 式)。
 
 import { Fragment } from "react"
@@ -35,15 +36,6 @@ export default function ActivityBar() {
   const appsMod = listed.find((m) => m.id === "apps")
   const trashMod = listed.find((m) => m.id === "trash")
   const topModules = listed.filter((m) => m.id !== "plugins" && m.id !== "apps" && m.id !== "trash")
-  const stray =
-    activeModule !== "agent" &&
-    !isPluginModule(activeModule) &&
-    activeModule !== "plugins" &&
-    activeModule !== "apps" &&
-    activeModule !== "trash" &&
-    !listed.some((m) => m.id === activeModule)
-      ? moduleById(activeModule)
-      : null
   const pluginsActive = activeModule === "plugins" || isPluginModule(activeModule)
 
   const workspaceButton = (
@@ -125,22 +117,23 @@ export default function ActivityBar() {
             <BarDivider />
             {moduleButton(pluginsMod, { forceActive: pluginsActive })}
             {appsMod && moduleButton(appsMod)}
+            {trashMod && moduleButton(trashMod)}
           </>
         )}
         {!pluginsMod && appsMod && (
           <>
             <BarDivider />
             {moduleButton(appsMod)}
+            {trashMod && moduleButton(trashMod)}
+          </>
+        )}
+        {!pluginsMod && !appsMod && trashMod && (
+          <>
+            <BarDivider />
+            {moduleButton(trashMod)}
           </>
         )}
       </div>
-      {(stray || trashMod) && (
-        <div className="mt-auto flex w-full flex-col gap-1">
-          <BarDivider />
-          {stray && moduleButton(stray)}
-          {trashMod && moduleButton(trashMod)}
-        </div>
-      )}
     </aside>
   )
 }
