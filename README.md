@@ -105,7 +105,6 @@ cd ideall
 cp .env.example .env.local   # 按需选择官方或自托管后端地址
 pnpm install
 pnpm dev                     # 开发服 http://localhost:5020（也是 Tauri 壳的加载源）
-# bash scripts/run.sh        # 等价于 pnpm dev
 pnpm app:dev                 # 起 Tauri 桌面开发壳（加载上面的 dev 服）
 ```
 
@@ -175,14 +174,6 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 ## 参与贡献
 
 欢迎 Issue 与 PR（UI、home 本地能力、插件等）。开发约定见 [docs/claude.md](docs/claude.md)，架构说明见 [docs/architecture.md](docs/architecture.md)。
-
-## 赞助
-
-ideall 客户端免费开源；赞助用于支持客户端开发与社区维护（**不包含**官方信息服务关注）。
-
-<!-- TODO: 启用 .github/FUNDING.yml 或填入链接 -->
-
-<!-- [GitHub Sponsors](https://github.com/sponsors/YOUR_USERNAME) · [爱发电](https://afdian.com/a/YOUR_ID) -->
 
 ## 许可与商标
 

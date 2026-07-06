@@ -14,12 +14,7 @@
 //   pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026","beforeDevCommand":"pnpm exec next dev -p 5026"}}'
 //   —— 末尾的参数原样透传给 `tauri dev` (如 5020 被占用时用 --config 换端口, 见 docs/app.md)。
 //
-// WSL + Clash fake-ip: Windows TUN 下浏览器正常, WSL 解析 198.18.x 直连超时。
-// 优先: Windows Clash 开 allow-lan + mixed-port → HTTP 代理 (IDEALL_PROXY_PORT, 默认 7890)。
-// 仅 TUN、无代理口: 运行 pnpm wsl:hosts --apply 写 /etc/hosts 真实 IP (与 TUN 并存)。
-// IDEALL_WSL_PROXY=0 跳过代理探测; 代理口不通时不注入无效 HTTP_PROXY。
 import { spawn, spawnSync } from "node:child_process"
-import fs from "node:fs"
 import http from "node:http"
 import net from "node:net"
 
@@ -102,84 +97,6 @@ async function warmupHome(url) {
   console.log(`\n[app:dev] Frontend ready (${sec}s). Launching Tauri…\n`)
 }
 
-/** WSL2: /etc/resolv.conf 的 nameserver 即 Windows 宿主 IP (Clash Allow LAN 监听在此)。 */
-function wslWindowsHostIp() {
-  try {
-    const ver = fs.readFileSync("/proc/version", "utf8")
-    if (!/microsoft/i.test(ver)) return null
-    const resolv = fs.readFileSync("/etc/resolv.conf", "utf8")
-    const m = resolv.match(/^nameserver\s+(\S+)/m)
-    return m?.[1] ?? null
-  } catch {
-    return null
-  }
-}
-
-function proxyReachable(host, port, ms = 2000) {
-  return new Promise((resolve) => {
-    const s = net.connect(Number(port), host, () => {
-      s.destroy()
-      resolve(true)
-    })
-    s.on("error", () => resolve(false))
-    s.setTimeout(ms, () => {
-      s.destroy()
-      resolve(false)
-    })
-  })
-}
-
-function isFakeIp(ip) {
-  if (!ip) return false
-  const p = ip.split(".").map(Number)
-  return p.length === 4 && p[0] === 198 && p[1] >= 18 && p[1] <= 19
-}
-
-function systemResolve(name) {
-  const r = spawnSync("getent", ["hosts", name], { encoding: "utf8" })
-  const m = r.stdout.trim().match(/^(\S+)/)
-  return m?.[1] ?? null
-}
-
-/** 方案 B: 仅当 Windows Clash HTTP 口可达时注入代理 (纯 TUN 无 mixed-port 则跳过)。 */
-async function applyWslClashProxy(env) {
-  if (process.platform !== "linux") return false
-  if (process.env.IDEALL_WSL_PROXY === "0") return false
-  if (env.HTTP_PROXY || env.http_proxy || env.HTTPS_PROXY || env.https_proxy) return true
-
-  const host = wslWindowsHostIp()
-  if (!host) return false
-
-  const port = env.IDEALL_PROXY_PORT ?? "7890"
-  const ok = await proxyReachable(host, port)
-  if (!ok) return false
-
-  const proxy = `http://${host}:${port}`
-  const noProxy = env.NO_PROXY ?? env.no_proxy ?? "localhost,127.0.0.1,::1,10.0.0.0/8"
-
-  env.HTTP_PROXY = proxy
-  env.HTTPS_PROXY = proxy
-  env.http_proxy = proxy
-  env.https_proxy = proxy
-  env.NO_PROXY = noProxy
-  env.no_proxy = noProxy
-  console.log(`[app:dev] WSL proxy → ${proxy}`)
-  return true
-}
-
-/** Clash 纯 TUN: 提示 fake-ip + hosts 修复 (不依赖 7890)。 */
-function warnWslTunFakeIp() {
-  if (process.platform !== "linux" || !wslWindowsHostIp()) return
-  const ip = systemResolve("www.wonita.link")
-  if (!isFakeIp(ip)) return
-  console.warn(
-    `[app:dev] Clash TUN fake-ip: www.wonita.link → ${ip} (WSL 不可达)\n` +
-      "  · 纯 TUN 无 HTTP 代理口 → 请运行: sudo node scripts/wsl-wonita-hosts.mjs --apply\n" +
-      "  · 或在 Clash 额外开启 mixed-port + allow-lan (可与 TUN 并存)\n" +
-      "  · IDEALL_WSL_PROXY=0 跳过代理探测",
-  )
-}
-
 const env = { ...process.env }
 if (process.platform === "linux") {
   env.WEBKIT_DISABLE_DMABUF_RENDERER ??= "1"
@@ -222,9 +139,6 @@ process.on("SIGTERM", () => {
 })
 
 async function main() {
-  const proxied = await applyWslClashProxy(env)
-  if (!proxied) warnWslTunFakeIp()
-
   const alreadyUp = await portTaken(port)
   if (!alreadyUp) {
     const nextArgs = port === 5020 ? ["dev"] : ["exec", "next", "dev", "-p", String(port)]
