@@ -91,6 +91,9 @@ pnpm app:dev      # 桌面开发壳 (加载 pnpm dev 的 localhost:5020)
 pnpm app:export   # 静态导出 → out/ (= pnpm build; 数据层已同构客户端化)
 pnpm app:build    # 多平台打包 (需平台工具链 + 图标)
 
+# 本地基础门禁 (对应 CI 基础检查; 会先清理 .next 再 typecheck)
+pnpm verify:base
+
 # API codegen (后端数据服务的 schema 变更后) —— 产物是 wire DTO, 仅供 HTTP 适配器消费 (见下 ServerPort)
 pnpm gen:api      # openapi/server.json → src/lib/api/server.d.ts (离线, 普通贡献者只需这一步)
 pnpm gen:api:check  # CI 卡点
@@ -100,8 +103,8 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 
 ## 形态：App-only (Tauri 跨平台)
 
-ideall 仅以 App 形态分发 (见 [app.md](app.md)):
-- **构建**: `output: export` 静态导出 (默认且唯一生产构建)，Tauri 2.0 (`src-tauri/`) 打包为 **Windows/Linux/macOS/iOS/Android**。无 Node 运行时 / 无 SSR 生产部署，数据层走**客户端直连后端** (`NEXT_PUBLIC_SERVER_ADDR`)；数据访问已同构客户端化 (见 docs/app.md)。
+ideall 仅以 App 形态分发 (当前流程见 [app.md](app.md)，历史迁移见 [app-history.md](app-history.md)):
+- **构建**: `output: export` 静态导出 (默认且唯一生产构建)，Tauri 2.0 (`src-tauri/`) 打包为 **Windows/Linux/macOS/iOS/Android**。无 Node 运行时 / 无 SSR 生产部署，数据层走**客户端直连后端** (`NEXT_PUBLIC_SERVER_ADDR`)；数据访问已同构客户端化。
 - **开发**: `pnpm dev` 仍是本地 SSR 开发服 (供 `pnpm app:dev` 的 Tauri 壳加载)，不影响导出。
 - `lib/env.ts` 的 `SERVER_ADDR` 同构: App 客户端 / 浏览器直连 `NEXT_PUBLIC_SERVER_ADDR`; `pnpm dev` 的 SSR 渲染期服务端读 `SERVER_ADDR`。客户端直连需后端放行 CORS (App 内 agent 经 tauri-plugin-http 绕过)。
 
