@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
 import { toast } from "sonner"
-import { clearSession, getSession, subscribeSession } from "@protocol/auth"
+import { clearSession, getSession, subscribeSession } from "@/lib/auth/auth-store"
 
 /** 账户菜单: 已登录显示用户名 + 退出; 未登录显示登录入口。读本地会话 (useSyncExternalStore)。 */
 export default function AccountMenu() {

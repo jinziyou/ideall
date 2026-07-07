@@ -7,7 +7,6 @@
 import * as React from "react"
 import { Loader2 } from "lucide-react"
 import { ErrorBoundary } from "@/ui/error-boundary"
-import { EmbedHost } from "@/plugins/embed/host"
 import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manifest"
 import type { SubscriptionType } from "@protocol/subscription"
 import type { Tab } from "./types"
@@ -16,6 +15,10 @@ import { parseNodeParams } from "./node-tab"
 
 // 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
 const FOLLOW_TYPES: SubscriptionType[] = ["publisher", "entity", "search", "peer"]
+
+const EmbedHost = React.lazy(() =>
+  import("@/plugins/embed/host").then((mod) => ({ default: mod.EmbedHost })),
+)
 
 const Overview = React.lazy(() => import("@/modules/home/overview"))
 const NotesManager = React.lazy(() => import("@/modules/home/notes/notes-manager"))

@@ -7,8 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/card"
-import { setSession } from "@protocol/auth"
-import { runAuthFlow } from "@/lib/auth/auth-flow-machine"
+import { setSession } from "@/lib/auth/auth-store"
 import { useFlowProgress } from "@/lib/use-flow-progress"
 
 /**
@@ -27,6 +26,7 @@ export default function AuthForm() {
     e.preventDefault()
     setBusy(true)
     try {
+      const { runAuthFlow } = await import("@/lib/auth/auth-flow-machine")
       const { token, user } = await runAuthFlow({ mode, email, password })
       setSession(token, user)
       toast.success(mode === "login" ? "已登录" : "注册成功，已登录")

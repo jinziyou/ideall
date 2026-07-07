@@ -14,7 +14,6 @@ import BottomTabBar from "@/shell/bottom-tab-bar"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
 import TopBar from "./top-bar"
 import ActivityBar from "./activity-bar"
-import RightAiPanel from "./right-ai-panel"
 import SecondarySidebar from "./secondary-sidebar"
 import MobileDrillBar from "./mobile-drill-bar"
 import TabBar from "./tab-bar"
@@ -36,6 +35,8 @@ import {
 import { useMediaQuery } from "@/lib/use-media-query"
 import { useWindowViewport } from "@/lib/use-window-viewport"
 import { descriptorForNode, descriptorForPath } from "./modules"
+
+const RightAiPanel = React.lazy(() => import("./right-ai-panel"))
 
 // URL 同步抽成独立子组件: 它用 useSearchParams (output:export 下必须包 <Suspense>)。
 // 仅在「真正切换标签」时把地址栏换成激活标签的规范路由 (深链 / 刷新可恢复)。
@@ -127,6 +128,22 @@ function DirtyTabCloseDialog() {
   )
 }
 
+function DeferredRightAiPanel({ open }: { open: boolean }) {
+  const [everOpened, setEverOpened] = React.useState(false)
+
+  React.useEffect(() => {
+    if (open) setEverOpened(true)
+  }, [open])
+
+  if (!everOpened) return null
+
+  return (
+    <React.Suspense fallback={null}>
+      <RightAiPanel />
+    </React.Suspense>
+  )
+}
+
 export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   useWindowViewport()
@@ -193,7 +210,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
               </div>
             </div>
           </div>
-          <RightAiPanel />
+          <DeferredRightAiPanel open={rightPanelOpen} />
         </div>
 
         {/* 移动底栏 (md:hidden 由组件内部控制; fixed) */}

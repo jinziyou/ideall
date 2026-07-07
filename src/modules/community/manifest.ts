@@ -2,9 +2,9 @@
 // 「我的」关注流经此拉取某 peer 的最新发布, 不再直接依赖 peer 拉取细节。
 import type { SubscriptionType } from "@protocol/subscription"
 import type { ContentResolver, FeedItem, ResolverRegistration } from "@protocol/content"
-import { getPeerPublications } from "@protocol/peer"
 
 const resolve: ContentResolver = async (sub, ctx) => {
+  const { getPeerPublications } = await import("@protocol/peer")
   const res = await getPeerPublications(sub.key)
   if (!res.ok) return { items: [], error: true }
   const items: FeedItem[] = [...(res.data ?? [])]
