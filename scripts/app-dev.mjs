@@ -17,6 +17,7 @@
 import { spawn, spawnSync } from "node:child_process"
 import http from "node:http"
 import net from "node:net"
+import path from "node:path"
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -141,8 +142,11 @@ process.on("SIGTERM", () => {
 async function main() {
   const alreadyUp = await portTaken(port)
   if (!alreadyUp) {
-    const nextArgs = port === 5020 ? ["dev"] : ["exec", "next", "dev", "-p", String(port)]
-    nextChild = spawn("pnpm", nextArgs, { stdio: "inherit", env, shell: isWin })
+    const nextBin = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next")
+    nextChild = spawn(process.execPath, [nextBin, "dev", "-p", String(port)], {
+      stdio: "inherit",
+      env,
+    })
     nextChild.on("exit", (code) => {
       if (code !== 0 && code !== null) {
         cleanup()
@@ -172,10 +176,11 @@ async function main() {
     build: { beforeDevCommand: "", devUrl },
     app: { security: { csp: devCsp } },
   })
+  const tauriJs = path.join(process.cwd(), "node_modules", "@tauri-apps", "cli", "tauri.js")
   const result = spawnSync(
-    isWin ? "tauri.cmd" : "tauri",
-    ["dev", "--no-dev-server-wait", ...userArgs, "--config", tauriConfig],
-    { stdio: "inherit", env, shell: isWin },
+    process.execPath,
+    [tauriJs, "dev", "--no-dev-server-wait", ...userArgs, "--config", tauriConfig],
+    { stdio: "inherit", env },
   )
   cleanup()
   process.exit(result.status ?? 1)
