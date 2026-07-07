@@ -110,12 +110,14 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       for (const tc of toolCalls) {
         // 用户中途「停止」: 不再执行后续工具, 把副作用限制在已发起的这一个之内
         if (opts.signal?.aborted) return { content: "", toolEvents, canceled: true }
+        const apiName = tc.function.name
+        const mcpName = mcp.resolveToolName(apiName)
         let args: Record<string, unknown>
         try {
           args = JSON.parse(tc.function.arguments || "{}")
         } catch {
           const ev: AgentToolEvent = {
-            name: tc.function.name,
+            name: mcpName,
             argsText: shorten(tc.function.arguments),
             ok: false,
             summary: "工具参数不是合法 JSON，已跳过执行",
@@ -132,11 +134,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         if (
           opts.onApprove &&
           ((opts.approvalPolicy ?? "confirm") === "confirm" ||
-            requiresApproval(tc.function.name)) &&
-          !(await opts.onApprove(tc.function.name, tc.function.arguments || ""))
+            requiresApproval(mcpName)) &&
+          !(await opts.onApprove(mcpName, tc.function.arguments || ""))
         ) {
           const ev: AgentToolEvent = {
-            name: tc.function.name,
+            name: mcpName,
             argsText: shorten(tc.function.arguments),
             ok: false,
             summary: "已拒绝执行",
@@ -149,10 +151,10 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
           })
           continue
         }
-        const { ok, data } = await mcp.callTool(tc.function.name, args)
-        const summary = summarizeTool(tc.function.name, ok, data)
+        const { ok, data } = await mcp.callTool(apiName, args)
+        const summary = summarizeTool(mcpName, ok, data)
         const ev: AgentToolEvent = {
-          name: tc.function.name,
+          name: mcpName,
           argsText: shorten(tc.function.arguments),
           ok,
           summary,

@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { registerFilesPort, type FilesPort } from "@protocol/files"
 import type { Node } from "@protocol/node"
 import { registerUiActions } from "@/lib/ui-actions"
-import { connectAgentMcp } from "./agent-mcp"
+import { connectAgentMcp, toApiToolName } from "./agent-mcp"
 
 const noop = () => {
   throw new Error("不应触达")
@@ -42,6 +42,13 @@ const noteNode = (id: string): Node => ({
   content: [{ type: "p", children: [{ text: "私密正文不应批量外发" }] }],
 })
 
+test("toApiToolName: MCP 带点命名 → OpenAI 兼容名", () => {
+  assert.equal(toApiToolName("fs.list"), "fs_list")
+  assert.equal(toApiToolName("ui.openTab"), "ui_openTab")
+  assert.equal(toApiToolName("m0_echo"), "m0_echo")
+  assert.match(toApiToolName("host.toast"), /^[a-zA-Z0-9_-]+$/)
+})
+
 test("tools/list 只暴露 agentGrant 授权工具 (fs.*/ui.*/web.*; 不含 hub.*/identity)", async () => {
   registerMock({})
   const mcp = await connectAgentMcp()
@@ -56,7 +63,7 @@ test("tools/list 只暴露 agentGrant 授权工具 (fs.*/ui.*/web.*; 不含 hub.
     "web.search",
     "web.fetch",
   ]) {
-    assert.ok(names.includes(n), `应暴露 ${n}`)
+    assert.ok(names.includes(toApiToolName(n)), `应暴露 ${n} (API 名 ${toApiToolName(n)})`)
   }
   assert.ok(!names.includes("hub.addBookmark"), "无 hub.bookmarks:write → 不暴露 hub.addBookmark")
   assert.ok(!names.includes("identity.me"), "无 identity:read → 不暴露 identity.me")
@@ -84,7 +91,7 @@ test("web.fetch: 抓取 https 网页 → 回标题与正文文本", async () => 
       ),
     async () => {
       const mcp = await connectAgentMcp()
-      const r = await mcp.callTool("web.fetch", { url: "https://example.com/a" })
+      const r = await mcp.callTool("web_fetch", { url: "https://example.com/a" })
       assert.equal(r.ok, true)
       const d = r.data as { title: string; text: string }
       assert.equal(d.title, "示例标题")
@@ -105,7 +112,7 @@ test("web.fetch: 非 https 协议 (javascript:) → blocked-protocol (不发起�
     },
     async () => {
       const mcp = await connectAgentMcp()
-      const r = await mcp.callTool("web.fetch", { url: "javascript:alert(1)" })
+      const r = await mcp.callTool("web_fetch", { url: "javascript:alert(1)" })
       assert.equal(r.ok, false)
       assert.equal((r.data as { message?: string }).message, "blocked-protocol")
       assert.equal(called, false, "策略闸应在发起 fetch 前拦截")
@@ -120,7 +127,7 @@ test("web.fetch: https 指向环回 IP (127.0.0.1) → blocked-host (SSRF 闸)",
     async () => new Response("", { status: 200 }),
     async () => {
       const mcp = await connectAgentMcp()
-      const r = await mcp.callTool("web.fetch", { url: "https://127.0.0.1/admin" })
+      const r = await mcp.callTool("web_fetch", { url: "https://127.0.0.1/admin" })
       assert.equal(r.ok, false)
       assert.equal((r.data as { message?: string }).message, "blocked-host")
       await mcp.close()
@@ -139,7 +146,7 @@ test("web.search: DDG HTML 抓取 → 解析出 {标题,链接,摘要} 列表", 
     async () => new Response(ddgHtml, { status: 200, headers: { "content-type": "text/html" } }),
     async () => {
       const mcp = await connectAgentMcp()
-      const r = await mcp.callTool("web.search", { query: "示例" })
+      const r = await mcp.callTool("web_search", { query: "示例" })
       assert.equal(r.ok, true)
       const d = r.data as { results: { title: string; url: string; snippet: string }[] }
       assert.ok(Array.isArray(d.results) && d.results.length >= 1, "应有结果")
@@ -154,7 +161,7 @@ test("web.search: DDG HTML 抓取 → 解析出 {标题,链接,摘要} 列表", 
 test("fs.read(note) 在 agent (无 fs.notes:read) → consent-required", async () => {
   registerMock({ n1: noteNode("n1") })
   const mcp = await connectAgentMcp()
-  const r = await mcp.callTool("fs.read", { kind: "note", id: "n1" })
+  const r = await mcp.callTool("fs_read", { kind: "note", id: "n1" })
   assert.equal(r.ok, false)
   assert.equal((r.data as { message?: string }).message, "consent-required")
   await mcp.close()
@@ -163,7 +170,7 @@ test("fs.read(note) 在 agent (无 fs.notes:read) → consent-required", async (
 test("fs.list(note) 剥正文 (只回标题元数据, 即便经 agent)", async () => {
   registerMock({ n1: noteNode("n1") })
   const mcp = await connectAgentMcp()
-  const r = await mcp.callTool("fs.list", { kind: "note" })
+  const r = await mcp.callTool("fs_list", { kind: "note" })
   assert.equal(r.ok, true)
   const items = r.data as { kind: string; title: string; content: unknown[] }[]
   assert.equal(items.length, 1)
@@ -189,7 +196,7 @@ test("fs.create(note) by agent (有 fs.notes:write 无 fs.notes:read) → 成功
   } as unknown as FilesPort)
   registerUiActions({ openTab: () => {}, closeTab: () => {} })
   const mcp = await connectAgentMcp()
-  const r = await mcp.callTool("fs.create", {
+  const r = await mcp.callTool("fs_create", {
     kind: "note",
     title: "X",
     content: [{ type: "p", children: [{ text: "hi" }] }],

@@ -21,11 +21,18 @@ export type OpenAiTool = {
   function: { name: string; description?: string; parameters: unknown }
 }
 
+/** OpenAI 兼容端点 (含 DeepSeek) 要求 function.name 仅含 [a-zA-Z0-9_-]; MCP 工具名常含 '.'。 */
+export function toApiToolName(mcpName: string): string {
+  return mcpName.replace(/[^a-zA-Z0-9_-]/g, "_")
+}
+
 export interface AgentMcp {
   /** 由 MCP tools/list 转出的 OpenAI 工具数组 (随授权位变化)。 */
   tools: OpenAiTool[]
   /** 本轮连接诊断。外部 MCP 不可达时不阻断运行, 但应暴露给 UI/日志。 */
   diagnostics: AgentMcpDiagnostic[]
+  /** API 工具名 → MCP 原名 (展示/审批用; 未映射则回传原值)。 */
+  resolveToolName(apiName: string): string
   /** 调一个工具; 收敛为 {ok, data} (协议/传输错另抛, 应用级 isError 不抛, 同 callToolSafe 语义)。 */
   callTool(name: string, args: Record<string, unknown>): Promise<{ ok: boolean; data: unknown }>
   /** 断开并释放 (loopback 端口)。 */
@@ -216,6 +223,7 @@ export async function probeMcpServer(
 export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp> {
   await hydrateAgentSecretsSecure()
   const tools: OpenAiTool[] = []
+  const apiToMcp = new Map<string, string>()
   const dispatch = new Map<
     string,
     (args: Record<string, unknown>) => Promise<{ ok: boolean; data: unknown }>
@@ -258,15 +266,17 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
       const listed = await client.listTools()
       for (const t of listed.tools) {
         if (allow && !allow.has(t.name)) continue
+        const apiName = toApiToolName(t.name)
+        apiToMcp.set(apiName, t.name)
         tools.push({
           type: "function",
           function: {
-            name: t.name,
+            name: apiName,
             description: t.description,
             parameters: t.inputSchema ?? { type: "object", properties: {} },
           },
         })
-        dispatch.set(t.name, (args) => callMcpClient(client, t.name, args))
+        dispatch.set(apiName, (args) => callMcpClient(client, t.name, args))
       }
     } catch (e) {
       diagnostics.push({
@@ -321,16 +331,17 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
       const listed = await client.listTools()
       const prefix = `m${i}_`
       for (const t of listed.tools) {
-        const exposed = `${prefix}${t.name}`
+        const apiName = toApiToolName(`${prefix}${t.name}`)
+        apiToMcp.set(apiName, apiName)
         tools.push({
           type: "function",
           function: {
-            name: exposed,
+            name: apiName,
             description: externalToolDescription(s.name, t.description),
             parameters: t.inputSchema ?? { type: "object", properties: {} },
           },
         })
-        dispatch.set(exposed, (args) => callMcpClient(client, t.name, args))
+        dispatch.set(apiName, (args) => callMcpClient(client, t.name, args))
       }
     } catch (e) {
       diagnostics.push({
@@ -364,6 +375,9 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
   return {
     tools,
     diagnostics,
+    resolveToolName(apiName) {
+      return apiToMcp.get(apiName) ?? apiName
+    },
     async callTool(name, args) {
       const fn = dispatch.get(name)
       if (!fn) return { ok: false, data: { message: "该工具未在本工作区启用" } }
