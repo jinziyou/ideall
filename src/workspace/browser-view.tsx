@@ -139,27 +139,24 @@ export default function BrowserView() {
     [releaseNative],
   )
 
-  const openAt = React.useCallback(
-    async (b: BrowserBounds) => {
-      openedRef.current = true
-      try {
-        await openBrowserView(currentUrlRef.current, b)
-        // 等子 webview 在屏外创建完成后再 present, 避免首帧以错误尺寸参与命中测试。
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-        })
-        await browserPresent(b)
-        const info = await browserGetBackend()
-        setBackend(info)
-        setBrowserBackend(info.mode)
-      } catch {
-        openedRef.current = false
-        await browserRelease().catch(() => {})
-        toast.error("打开内嵌浏览器失败")
-      }
-    },
-    [],
-  )
+  const openAt = React.useCallback(async (b: BrowserBounds) => {
+    openedRef.current = true
+    try {
+      await openBrowserView(currentUrlRef.current, b)
+      // 等子 webview 在屏外创建完成后再 present, 避免首帧以错误尺寸参与命中测试。
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
+      await browserPresent(b)
+      const info = await browserGetBackend()
+      setBackend(info)
+      setBrowserBackend(info.mode)
+    } catch {
+      openedRef.current = false
+      await browserRelease().catch(() => {})
+      toast.error("打开内嵌浏览器失败")
+    }
+  }, [])
 
   const syncBrowser = React.useCallback(async () => {
     if (!isTauri()) return
@@ -313,11 +310,7 @@ export default function BrowserView() {
               {backendLabel}
             </span>
           ) : null}
-          <IconButton
-            onClick={() => browserBack().catch(() => {})}
-            title="后退"
-            aria-label="后退"
-          >
+          <IconButton onClick={() => browserBack().catch(() => {})} title="后退" aria-label="后退">
             <ArrowLeft className="h-4 w-4" />
           </IconButton>
           <IconButton

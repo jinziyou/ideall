@@ -133,8 +133,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
         // 工具审批 (confirm 策略): 执行前征询用户; 拒绝 → 把「已拒绝」喂回模型, 不执行副作用。
         if (
           opts.onApprove &&
-          ((opts.approvalPolicy ?? "confirm") === "confirm" ||
-            requiresApproval(mcpName)) &&
+          ((opts.approvalPolicy ?? "confirm") === "confirm" || requiresApproval(mcpName)) &&
           !(await opts.onApprove(mcpName, tc.function.arguments || ""))
         ) {
           const ev: AgentToolEvent = {

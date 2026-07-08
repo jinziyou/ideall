@@ -18,8 +18,24 @@ async function getWindowApi(): Promise<WinApi> {
 function RestoreIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 12 12" className={className} aria-hidden>
-      <rect x="3.5" y="0.75" width="7.5" height="7.5" fill="none" stroke="currentColor" strokeWidth="1.35" />
-      <rect x="0.75" y="3.5" width="7.5" height="7.5" fill="none" stroke="currentColor" strokeWidth="1.35" />
+      <rect
+        x="3.5"
+        y="0.75"
+        width="7.5"
+        height="7.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
+      <rect
+        x="0.75"
+        y="3.5"
+        width="7.5"
+        height="7.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.35"
+      />
     </svg>
   )
 }
