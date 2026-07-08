@@ -9,7 +9,7 @@ import { ArrowRight, Bot, Database, Inbox, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { onFilesUpdated } from "@protocol/flowback"
 import { openTab, setRightPanel } from "@/workspace/store"
-import { HOME_SECTIONS } from "@/workspace/tree/home-sections"
+import { HOME_PLACES } from "@/workspace/tree/home-places"
 import { Button } from "@/ui/button"
 import { Chip } from "@/ui/chip"
 import { EmptyState } from "@/ui/empty-state"
@@ -45,9 +45,9 @@ const NEXT_ACTIONS = [
 ] as const
 
 function openHomeSection(id: string) {
-  const section = HOME_SECTIONS.find((s) => s.id === id)
-  if (section?.descriptor) {
-    openTab(section.descriptor)
+  const place = HOME_PLACES.find((s) => s.id === id)
+  if (place?.descriptor) {
+    openTab(place.descriptor)
     return
   }
   setRightPanel(true)
@@ -152,7 +152,7 @@ export default function Overview() {
 
         {/* 区段入口: 关注 / 书签 / 资源 / 笔记 / 工作区 */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-3">
-          {HOME_SECTIONS.map((s) => {
+          {HOME_PLACES.map((s) => {
             const Icon = s.icon
             const count = data?.counts[s.id]
             const tone = SECTION_TONE[s.id as keyof typeof SECTION_TONE] ?? "idle"

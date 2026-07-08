@@ -4,28 +4,15 @@
 // path = /home/notes?node=kind:id (收敛到单一静态壳 out/home/notes.html; query 不参与 Tauri asset
 // 寻址, 深链/刷新不 404)。URL 同步由 workspace-shell 的 <UrlSync/> 守护 (pathname+search 比对 +
 // descriptorForNode 优先), 收敛靠 tabKey 命中而非 URL 串比对, 不重演 dc7ce06 狂切。
-import type { ModuleId, TabDescriptor } from "./types"
+import type { TabDescriptor } from "./types"
 import { isNodeKind, refToQuery, type NodeKind, type NodeRef } from "./node-ref"
-
-/**
- * 节点 kind → 归属模块 (驱动活动栏高亮 / 模式视图 / 标签色点)。
- * 全部本地 node kind 归 "home": 它们都经「我的」的 places 文件树打开, 归 home 保持 places 侧栏连贯,
- * 且不切走视图 (thread 归 local 视图、移除 agent 的 connected 归属, 见设计 §1; feed 同理不跳关注模块)。
- */
-const MODULE_OF_KIND: Record<NodeKind, ModuleId> = {
-  note: "home",
-  bookmark: "home",
-  folder: "home",
-  file: "home",
-  feed: "home",
-  thread: "home",
-}
+import { moduleForNodeKind } from "./node-kind-config"
 
 /** 由 NodeRef + 标题构造标签描述符。title 仅显示, 不入 tabKey (去重只看 kind+params)。 */
 export function nodeTab(ref: NodeRef, title: string): TabDescriptor {
   return {
     kind: "node",
-    module: MODULE_OF_KIND[ref.kind],
+    module: moduleForNodeKind(ref.kind),
     title: title || "无标题",
     path: `/home/notes?node=${refToQuery(ref)}`,
     params: { kind: ref.kind, id: ref.id },

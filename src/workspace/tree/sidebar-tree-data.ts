@@ -2,25 +2,12 @@
 // 动态子节点 (note/bookmark/feed 等) 由 sidebar-tree.tsx 经 listNodeSummaries 懒加载。
 
 import type { ComponentType } from "react"
-import {
-  Bookmark,
-  Boxes,
-  FileText,
-  Folder,
-  Link2,
-  Plug,
-  Rss,
-  ScrollText,
-  Sparkles,
-  Tag,
-  Users,
-  MessagesSquare,
-} from "lucide-react"
+import { Bookmark, Boxes, Plug, ScrollText, Sparkles, Tag, Users } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import type { TabDescriptor } from "../types"
 import type { ModuleId } from "../types"
-import { HOME_SECTIONS } from "./home-sections"
+import { HOME_PLACES, type HomePlaceStaticChild } from "./home-places"
 import { moduleById } from "../modules"
 import type { SidebarEntry } from "../modules"
 import { tabDescriptor } from "../tab-definitions"
@@ -45,34 +32,13 @@ export type SidebarTreeNode = {
   hasChildren: boolean
 }
 
-const NODE_ICON: Partial<Record<NodeKind, ComponentType<{ className?: string }>>> = {
-  note: FileText,
-  bookmark: Link2,
-  folder: Folder,
-  file: FileText,
-  feed: Rss,
-  thread: ScrollText,
-}
-
-export function iconForNodeKind(kind: NodeKind): ComponentType<{ className?: string }> {
-  return NODE_ICON[kind] ?? FileText
-}
-
-/** 各 home 区段展开时加载的 node kind。 */
-const HOME_SECTION_KINDS: Record<string, NodeKind[]> = {
-  subscriptions: ["feed"],
-  bookmarks: ["folder", "bookmark"],
-  resources: ["file"],
-  notes: ["note"],
-}
-
-function workspaceThreadsNode(): SidebarTreeNode {
+function staticHomeChildNode(placeId: string, child: HomePlaceStaticChild): SidebarTreeNode {
   return {
-    id: "section:workspace:threads",
-    label: "对话",
-    icon: MessagesSquare,
+    id: `section:${placeId}:${child.id}`,
+    label: child.label,
+    icon: child.icon,
     nodeKind: "section",
-    childKinds: ["thread"],
+    childKinds: child.childKinds,
     hasChildren: true,
   }
 }
@@ -91,18 +57,19 @@ function entryNode(e: SidebarEntry): SidebarTreeNode {
 /** 按当前活动模块构造侧栏树的静态根 (不含 IndexedDB 子节点)。 */
 export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
   if (moduleId === "home") {
-    return HOME_SECTIONS.map((s) => {
-      const childKinds = HOME_SECTION_KINDS[s.id] ?? []
-      const staticChildren = s.id === "workspace" ? [workspaceThreadsNode()] : undefined
+    return HOME_PLACES.map((place) => {
+      const staticChildren = place.staticChildren?.map((child) =>
+        staticHomeChildNode(place.id, child),
+      )
       return {
-        id: `section:${s.id}`,
-        label: s.label,
-        icon: s.icon,
+        id: `section:${place.id}`,
+        label: place.label,
+        icon: place.icon,
         nodeKind: "section" as const,
-        descriptor: s.descriptor,
-        childKinds,
+        descriptor: place.descriptor,
+        childKinds: place.childKinds,
         staticChildren,
-        hasChildren: childKinds.length > 0 || Boolean(staticChildren?.length),
+        hasChildren: place.childKinds.length > 0 || Boolean(staticChildren?.length),
       }
     })
   }
