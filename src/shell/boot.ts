@@ -20,8 +20,7 @@ import {
   openAiSection,
   openAiTasks,
 } from "@/workspace/store"
-import { nodeTab } from "@/workspace/node-tab"
-import { nodeResourceRefForTab } from "@/workspace/resource-tab"
+import { nodeResourceRefForTab, resourceTab } from "@/workspace/resource-tab"
 import { openInBrowserTab } from "@/workspace/browser-open"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
@@ -47,7 +46,7 @@ export function registerAll(): void {
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
     openTab: (kind, id, title) =>
       openTarget({ type: "resource", ref: { scheme: "node", kind, id }, title }, "agent"),
-    closeTab: (kind, id) => closeTab(tabKey(nodeTab({ kind, id }, ""))),
+    closeTab: (kind, id) => closeTab(tabKey(resourceTab({ scheme: "node", kind, id }))),
     // 外链 → 「浏览器」模块 (插件经 host.external 触达, 守 plugin↛workspace 边界由 app 注入实现)。
     openExternal: (url) => openInBrowserTab(url),
     // AI 区段动作: agent 插件视图经端口打开/关闭 AI 管理标签 (不直接 import 工作区)。

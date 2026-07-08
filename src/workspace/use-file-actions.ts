@@ -6,7 +6,7 @@ import type { StoredFile } from "@protocol/files"
 import { deleteFile, getFile, restoreFile, updateFileMeta } from "@/files/stores/files-store"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import { downloadStoredFile } from "@/modules/home/resources/file-preview"
-import { nodeTab } from "./node-tab"
+import { resourceTab } from "./resource-tab"
 import { closeTab, renameNodeTab, tabKey } from "./store"
 import { refreshSidebarTree } from "./tree/sidebar-tree-bus"
 import { clearFileDraft } from "./viewers/file-draft"
@@ -65,7 +65,8 @@ const realFileActionDeps: FileActionDeps = {
   deleteFile,
   restoreFile,
   renameFileTab: (id, name) => renameNodeTab({ kind: "file", id }, name),
-  closeFileTab: (id, label) => closeTab(tabKey(nodeTab({ kind: "file", id }, label))),
+  closeFileTab: (id, label) =>
+    closeTab(tabKey(resourceTab({ scheme: "node", kind: "file", id }, label))),
   refreshTree: refreshSidebarTree,
   clearFileDraft,
   downloadFile: downloadStoredFile,

@@ -302,8 +302,3 @@ export function descriptorForResource(search: string): TabDescriptor | null {
   // title 占位为 id, viewer 取数后经 renameNodeTab 修正 (不入 tabKey, 不影响去重)。
   return descriptorForResourceSearch(search)
 }
-
-/** @deprecated 兼容旧调用名；新代码使用 descriptorForResource。 */
-export function descriptorForNode(search: string): TabDescriptor | null {
-  return descriptorForResource(search)
-}

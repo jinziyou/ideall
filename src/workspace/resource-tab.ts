@@ -1,6 +1,6 @@
 import type { NodeResourceRef, ResourceMeta, ResourceRef } from "@protocol/resource"
 import { parseResourceKey, resourceKey, resourceQueryValue } from "@protocol/resource"
-import { isNodeKind, type NodeKind } from "@protocol/node"
+import { isNodeKind } from "@protocol/node"
 import {
   connectedResourceTitle,
   routeForConnectedResource,
@@ -63,7 +63,7 @@ export function parseResourceTabParams(params?: Record<string, string>): Resourc
   const kind = params?.kind
   const id = params?.id
   if (!kind || !id || !isNodeKind(kind)) return null
-  return { scheme: "node", kind: kind as NodeKind, id }
+  return { scheme: "node", kind, id }
 }
 
 export function isBrowserResourceTab(tab: Pick<TabDescriptor, "kind" | "params">): boolean {

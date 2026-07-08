@@ -16,9 +16,8 @@ import {
   type StaticTabKind,
   type TabLayout,
 } from "./tab-definitions"
-import { parseNodeParams } from "./node-tab"
 import { resolveNodeResourceViewer, resourceLayout } from "./resource-engines"
-import { RESOURCE_TAB_KIND, parseResourceTabParams } from "./resource-tab"
+import { RESOURCE_TAB_KIND, nodeResourceRefForTab, parseResourceTabParams } from "./resource-tab"
 import type { ResourceRef } from "@protocol/resource"
 
 // 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
@@ -106,8 +105,8 @@ export function tabLayout(tab: Tab): TabLayout {
   }
   // 节点级标签: layout 取自查看器注册表 (file 的 mime 分派在叶子, 故按 kind 即可定 layout)。
   if (tab.kind === "node") {
-    const ref = parseNodeParams(tab.params)
-    return ref ? resourceLayout({ scheme: "node", ...ref }) : "padded"
+    const ref = nodeResourceRefForTab(tab)
+    return ref ? resourceLayout(ref) : "padded"
   }
   return tabDefinitionLayout(tab.kind) ?? "padded"
 }
@@ -161,8 +160,7 @@ function renderTabBody(tab: Tab): React.ReactNode {
 
   // 节点级标签 (一切皆标签): params={kind,id} → 解析 NodeRef → 查节点查看器 → <Comp nodeId/>。
   if (tab.kind === "node") {
-    const ref = parseNodeParams(tab.params)
-    const resourceRef = ref ? ({ scheme: "node", ...ref } as const) : null
+    const resourceRef = nodeResourceRefForTab(tab)
     if (!resourceRef) {
       return <div className="p-6 text-sm text-muted-foreground">无法打开此内容（{tab.id}）</div>
     }

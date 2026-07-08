@@ -6,10 +6,14 @@
 // (不重载); 超出上限的重标签被卸载 (草稿由写队列落盘)。轻标签全挂载。详见 tab-host.tsx。
 
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
-import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { descriptorForResource, descriptorForResourceMeta, type OpenTarget } from "./open-target"
-import { isBrowserResourceTab, parseResourceTabParams } from "./resource-tab"
+import {
+  isBrowserResourceTab,
+  nodeResourceRefForTab,
+  parseResourceTabParams,
+  resourceTab,
+} from "./resource-tab"
 import { getResource } from "@/vfs/registry"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
 import { tabDescriptor } from "./tab-definitions"
@@ -157,7 +161,7 @@ export function hydrateWorkspace() {
     // 节点标签额外要求 params 能解析出合法 NodeRef (防下线某 kind / 损坏 params 留僵尸标签)。
     const validTabs = saved.tabs.filter((t) => {
       if (!VALID_MODULES.has(t.module)) return false
-      if (t.kind === "node") return !!parseNodeParams(t.params)
+      if (t.kind === "node") return !!nodeResourceRefForTab(t)
       if (t.kind === "resource") return !!parseResourceTabParams(t.params)
       return true
     })
@@ -416,7 +420,7 @@ export function openNodeTab(
 
 /** 节点标签取数后回填真实标题 (不改 id / 去重 key, 仅更新显示)。 */
 export function renameNodeTab(ref: NodeRef, title: string) {
-  const id = tabKey(nodeTab(ref, title))
+  const id = tabKey(resourceTab({ scheme: "node", ...ref }, title))
   if (!ws().tabs.some((t) => t.id === id)) return
   setState({ tabs: ws().tabs.map((t) => (t.id === id ? { ...t, title } : t)) })
 }

@@ -10,7 +10,7 @@ import { fileTypeInfo } from "@/lib/format"
 import { updateFileContent } from "@/files/stores/files-store"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { useFilePreview, FilePreviewBox } from "@/modules/home/resources/file-preview"
-import { nodeTab } from "../node-tab"
+import { resourceTab } from "../resource-tab"
 import { promoteActiveTab, renameNodeTab, setTabDirty, tabKey } from "../store"
 import { useTabActive } from "../tab-active-context"
 import { useFileActions } from "../use-file-actions"
@@ -35,7 +35,10 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
   const [revision, setRevision] = React.useState(0)
   const preview = useFilePreview(nodeId, revision)
   const { file, loading } = preview
-  const tabId = React.useMemo(() => tabKey(nodeTab({ kind: "file", id: nodeId }, "")), [nodeId])
+  const tabId = React.useMemo(
+    () => tabKey(resourceTab({ scheme: "node", kind: "file", id: nodeId })),
+    [nodeId],
+  )
   const [mode, setMode] = React.useState<FileViewerMode>("preview")
   const [draft, setDraft] = React.useState("")
   const [saving, setSaving] = React.useState(false)
