@@ -2045,6 +2045,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "webkit2gtk",
+ "windows",
  "wry",
 ]
 

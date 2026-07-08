@@ -14,6 +14,16 @@ async function getWindowApi(): Promise<WinApi> {
   return import("@tauri-apps/api/window")
 }
 
+/** Windows 式「还原」图标 (两个重叠方框, 非最小化减号)。 */
+function RestoreIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 12 12" className={className} aria-hidden>
+      <rect x="3.5" y="0.75" width="7.5" height="7.5" fill="none" stroke="currentColor" strokeWidth="1.35" />
+      <rect x="0.75" y="3.5" width="7.5" height="7.5" fill="none" stroke="currentColor" strokeWidth="1.35" />
+    </svg>
+  )
+}
+
 function TitleBarButton({
   label,
   onClick,
@@ -74,7 +84,7 @@ export default function WindowControls() {
 
   // -mr-3 抵消所在栏的 px-3, 让关闭钮贴到窗口右上角 (惯例: 甩到角落即可关闭); self-stretch 撑满栏高。
   return (
-    <div className="-mr-3 ml-1 flex shrink-0 items-stretch self-stretch">
+    <div className="-mr-3 ml-1 flex shrink-0 items-stretch self-stretch pointer-events-auto">
       <TitleBarButton
         label="最小化"
         onClick={() =>
@@ -85,9 +95,17 @@ export default function WindowControls() {
       </TitleBarButton>
       <TitleBarButton
         label={maximized ? "还原" : "最大化"}
-        onClick={() => void windowToggleMaximize().then(setMaximized)}
+        onClick={() =>
+          void windowToggleMaximize()
+            .then(setMaximized)
+            .then(() => windowQueryMaximized().then(setMaximized))
+        }
       >
-        <Square className="h-3 w-3" strokeWidth={2.25} />
+        {maximized ? (
+          <RestoreIcon className="h-3 w-3" />
+        ) : (
+          <Square className="h-3 w-3" strokeWidth={2.25} />
+        )}
       </TitleBarButton>
       <TitleBarButton
         label="关闭"

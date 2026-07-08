@@ -18,18 +18,18 @@ export function Header() {
   const dragRegion = useTauriDragRegion()
 
   return (
-    <header
-      {...(dragRegion ? { "data-tauri-drag-region": true } : {})}
-      className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-stretch gap-2 border-b bg-background/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden"
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <MobileNav />
-        <Link href="/" className="flex items-center" aria-label="ideall 首页">
-          <WonitaMark className="h-6 w-auto text-foreground" />
-        </Link>
-        <CommandTrigger className="ml-1 h-8 min-w-0 flex-1" />
-      </div>
-      {/* Tauri 窄窗才显示 (非 Tauri 返回 null), 保证收窄时仍能最小化/关闭窗口。 */}
+    <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-stretch gap-2 border-b bg-background/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+      <MobileNav />
+      <Link href="/" className="flex shrink-0 items-center" aria-label="ideall 首页">
+        <WonitaMark className="h-6 w-auto text-foreground" />
+      </Link>
+      <CommandTrigger className="ml-1 h-8 min-w-0 max-w-[14rem] shrink-0" />
+      {/* 仅空白条带可拖拽; 勿挂整栏, 否则 WebView2 会吞子控件 mousedown。 */}
+      <div
+        {...(dragRegion ? { "data-tauri-drag-region": true } : {})}
+        className="min-w-0 flex-1"
+        aria-hidden
+      />
       <WindowControls />
     </header>
   )

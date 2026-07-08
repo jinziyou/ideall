@@ -10,7 +10,7 @@
 // 既简单又避免「每次切标签 overflow 标签反复 mount/flush/unmount」的抖动。
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { isTauri, browserHide } from "@/lib/tauri"
+import { isTauri, browserRelease } from "@/lib/tauri"
 import { useTabs, useActiveId, useActiveTabKind, useDirtyTabIds } from "./store"
 import { TabContent, tabLayout } from "./registry"
 import { TabActiveContext } from "./tab-active-context"
@@ -35,7 +35,7 @@ export default function TabHost() {
   // 切离「浏览器」标签 (或无激活标签) 时强制收起原生子 webview —— Linux GTK overlay 否则会挡全窗点击。
   React.useEffect(() => {
     if (activeKind === "browser-view") return
-    if (isTauri()) void browserHide().catch(() => {})
+    if (isTauri()) void browserRelease().catch(() => {})
   }, [activeKind, activeId])
 
   // LRU 顺序: 最近激活在末尾。openTab 即激活, 故每个曾打开的标签都进过此表。

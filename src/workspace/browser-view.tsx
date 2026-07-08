@@ -1,6 +1,6 @@
 "use client"
 
-// 内嵌浏览器标签内容 (路线 A): 顶部工具条 + 下方内容占位区; 原生子 webview 铺满占位区。
+// 内嵌浏览器标签内容 (路线 A): 顶部工具条 + 下方内容占位区; 原生子 webview 对齐占位区 (Windows/macOS/Linux)。
 import * as React from "react"
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react"
 import { toast } from "sonner"
@@ -8,14 +8,12 @@ import { IconButton } from "@/ui/icon-button"
 import {
   isTauri,
   openBrowserView,
-  browserSetBounds,
+  browserPresent,
   browserNavigate,
   browserBack,
   browserForward,
   browserReload,
-  browserHide,
-  browserClose,
-  browserShow,
+  browserRelease,
   onBrowserUrl,
   browserGetBackend,
   type BrowserBounds,
@@ -26,11 +24,54 @@ import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-ope
 import { useTabActive } from "./tab-active-context"
 
 const START_URL = "https://www.google.com"
+/** TopBar(44) + TabBar(36) + 浏览器卡片边距/工具条(≈64); 低于此 y 会盖住壳层 (HWND 在 CSS 之上)。 */
+const MIN_CONTENT_TOP_PX = 140
+const MIN_CONTENT_LEFT_PX = 48
 
 function normalizeInput(v: string): string {
   const t = v.trim()
   if (!t) return ""
-  return /^https?:\/\//i.test(t) ? t : `https://${t}`
+  if (/^https?:\/\//i.test(t)) return t
+  if (/^localhost(?:[:/]|$)/i.test(t) || /^127\.0\.0\.1/.test(t)) {
+    return `http://${t}`
+  }
+  return `https://${t}`
+}
+
+/** 首帧布局未完成时占位区可能暂时≈整窗, 此时创建子 webview 会挡全窗点击。 */
+function saneContentBounds(r: DOMRect): boolean {
+  if (r.width < 8 || r.height < 8) return false
+  if (typeof window === "undefined") return true
+  if (r.top < MIN_CONTENT_TOP_PX || r.left < MIN_CONTENT_LEFT_PX) return false
+  if (r.width > window.innerWidth * 0.92 || r.height > window.innerHeight * 0.88) {
+    return false
+  }
+  return true
+}
+
+function boundsEqual(a: BrowserBounds, b: BrowserBounds): boolean {
+  const eps = 0.5
+  return (
+    Math.abs(a.x - b.x) < eps &&
+    Math.abs(a.y - b.y) < eps &&
+    Math.abs(a.w - b.w) < eps &&
+    Math.abs(a.h - b.h) < eps
+  )
+}
+
+/** 连续两帧 bounds 一致才认为布局稳定, 避免首帧整窗尺寸创建子 HWND。 */
+async function waitStableBounds(
+  read: () => BrowserBounds | null,
+  maxFrames = 12,
+): Promise<BrowserBounds | null> {
+  let prev: BrowserBounds | null = null
+  for (let i = 0; i < maxFrames; i++) {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    const cur = read()
+    if (cur && prev && boundsEqual(cur, prev)) return cur
+    prev = cur
+  }
+  return read()
 }
 
 export default function BrowserView() {
@@ -41,6 +82,8 @@ export default function BrowserView() {
     () => false,
   )
   const contentRef = React.useRef<HTMLDivElement | null>(null)
+  const toolbarRef = React.useRef<HTMLDivElement | null>(null)
+  const cardRef = React.useRef<HTMLDivElement | null>(null)
   const openedRef = React.useRef(false)
   const initialUrl = React.useMemo(() => takePendingBrowserUrl() ?? START_URL, [])
   const currentUrlRef = React.useRef(initialUrl)
@@ -61,6 +104,94 @@ export default function BrowserView() {
     setBrowserUrl(initialUrl)
   }, [initialUrl])
 
+  const tabActiveRef = React.useRef(tabActive)
+
+  React.useEffect(() => {
+    tabActiveRef.current = tabActive
+  }, [tabActive])
+
+  const boundsOf = React.useCallback((): BrowserBounds | null => {
+    const el = contentRef.current
+    const toolbar = toolbarRef.current
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    if (!saneContentBounds(r)) return null
+    if (toolbar) {
+      const tb = toolbar.getBoundingClientRect()
+      if (r.top < tb.bottom - 1) return null
+    }
+    return { x: r.left, y: r.top, w: r.width, h: r.height }
+  }, [])
+
+  const releaseNative = React.useCallback(async () => {
+    openedRef.current = false
+    await browserRelease().catch(() => {})
+  }, [])
+
+  const presentAt = React.useCallback(
+    async (b: BrowserBounds) => {
+      try {
+        await browserPresent(b)
+      } catch {
+        await releaseNative()
+      }
+    },
+    [releaseNative],
+  )
+
+  const openAt = React.useCallback(
+    async (b: BrowserBounds) => {
+      openedRef.current = true
+      try {
+        await openBrowserView(currentUrlRef.current, b)
+        // 等子 webview 在屏外创建完成后再 present, 避免首帧以错误尺寸参与命中测试。
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        })
+        await browserPresent(b)
+        const info = await browserGetBackend()
+        setBackend(info)
+        setBrowserBackend(info.mode)
+      } catch {
+        openedRef.current = false
+        await browserRelease().catch(() => {})
+        toast.error("打开内嵌浏览器失败")
+      }
+    },
+    [],
+  )
+
+  const syncBrowser = React.useCallback(async () => {
+    if (!isTauri()) return
+    if (!tabActiveRef.current) {
+      await releaseNative()
+      return
+    }
+    const b = await waitStableBounds(boundsOf)
+    if (!b) {
+      await releaseNative()
+      return
+    }
+    if (!openedRef.current) {
+      await openAt(b)
+      return
+    }
+    await presentAt(b)
+  }, [boundsOf, openAt, presentAt, releaseNative])
+
+  const ensureBrowserReady = React.useCallback(async (): Promise<boolean> => {
+    if (!isTauri()) return false
+    if (!tabActiveRef.current) return false
+    const b = await waitStableBounds(boundsOf)
+    if (!b) return false
+    if (!openedRef.current) {
+      await openAt(b)
+    } else {
+      await presentAt(b)
+    }
+    return openedRef.current
+  }, [boundsOf, openAt, presentAt])
+
   React.useEffect(() => {
     return subscribePendingBrowserUrl((url) => {
       currentUrlRef.current = url
@@ -68,49 +199,23 @@ export default function BrowserView() {
       setBrowserUrl(url)
       if (openedRef.current) {
         browserNavigate(url).catch(() => toast.error("导航失败"))
-        browserShow().catch(() => {})
+        const b = boundsOf()
+        if (b) void presentAt(b)
       }
     })
-  }, [])
-
-  const tabActiveRef = React.useRef(tabActive)
-
-  React.useEffect(() => {
-    tabActiveRef.current = tabActive
-  }, [tabActive])
+  }, [boundsOf, presentAt])
 
   React.useEffect(() => {
     if (!isTauri()) return
     if (!tabActive) {
-      if (openedRef.current) browserHide().catch(() => {})
+      void releaseNative()
       return
     }
-    const el = contentRef.current
-    if (!el) return
     const raf = requestAnimationFrame(() => {
-      const r = el.getBoundingClientRect()
-      if (r.width < 1 || r.height < 1) return
-      const b = { x: r.left, y: r.top, w: r.width, h: r.height }
-      if (!openedRef.current) {
-        openedRef.current = true
-        openBrowserView(currentUrlRef.current, b)
-          .then(() =>
-            browserGetBackend()
-              .then((info) => setBackend(info))
-              .catch(() => {}),
-          )
-          .catch(() => {
-            openedRef.current = false
-            toast.error("打开内嵌浏览器失败")
-          })
-      } else {
-        browserShow()
-          .then(() => browserSetBounds(b))
-          .catch(() => {})
-      }
+      void syncBrowser()
     })
     return () => cancelAnimationFrame(raf)
-  }, [tabActive])
+  }, [tabActive, releaseNative, syncBrowser])
 
   React.useEffect(() => {
     if (!isTauri()) return
@@ -118,44 +223,11 @@ export default function BrowserView() {
     let ro: ResizeObserver | undefined
     let raf = 0
 
-    const boundsOf = (): BrowserBounds | null => {
-      const el = contentRef.current
-      if (!el) return null
-      const r = el.getBoundingClientRect()
-      return { x: r.left, y: r.top, w: r.width, h: r.height }
-    }
-    const sync = () => {
-      if (!tabActiveRef.current) {
-        if (openedRef.current) browserHide().catch(() => {})
-        return
-      }
-      const b = boundsOf()
-      if (!b) return
-      if (b.w < 1 || b.h < 1) {
-        if (openedRef.current) browserHide().catch(() => {})
-        return
-      }
-      if (!openedRef.current) {
-        openedRef.current = true
-        openBrowserView(currentUrlRef.current, b)
-          .then(() =>
-            browserGetBackend()
-              .then((info) => setBackend(info))
-              .catch(() => {}),
-          )
-          .catch(() => {
-            openedRef.current = false
-            toast.error("打开内嵌浏览器失败")
-          })
-      } else {
-        browserShow()
-          .then(() => browserSetBounds(b))
-          .catch(() => {})
-      }
-    }
     const schedule = () => {
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(sync)
+      raf = requestAnimationFrame(() => {
+        void syncBrowser()
+      })
     }
 
     onBrowserUrl((u) => {
@@ -166,10 +238,10 @@ export default function BrowserView() {
       unUrl = u
     })
 
-    const el = contentRef.current
-    if (el) {
+    const observe = cardRef.current ?? contentRef.current
+    if (observe) {
       ro = new ResizeObserver(schedule)
-      ro.observe(el)
+      ro.observe(observe)
     }
     window.addEventListener("resize", schedule)
     schedule()
@@ -179,18 +251,26 @@ export default function BrowserView() {
       ro?.disconnect()
       window.removeEventListener("resize", schedule)
       cancelAnimationFrame(raf)
-      browserClose().catch(() => {})
-      openedRef.current = false
+      void releaseNative()
       setBrowserBackend(null)
     }
-  }, [])
+  }, [releaseNative, syncBrowser])
 
-  const go = (raw?: string) => {
+  const go = async (raw?: string) => {
     const v = normalizeInput(raw ?? addr)
     if (!v) return
     currentUrlRef.current = v
     setAddr(v)
-    browserNavigate(v).catch(() => toast.error("导航失败"))
+    setBrowserUrl(v)
+    if (!(await ensureBrowserReady())) {
+      toast.error("浏览器尚未就绪，请稍候再试")
+      return
+    }
+    try {
+      await browserNavigate(v)
+    } catch {
+      toast.error("导航失败")
+    }
   }
 
   if (!tauri) {
@@ -214,9 +294,15 @@ export default function BrowserView() {
 
   return (
     <div className="flex h-full flex-col bg-muted/25 p-4">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
-        {/* 工具条 (可信本地 DOM; 与下方子 webview 区域严格不重叠) */}
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+      <div
+        ref={cardRef}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card"
+      >
+        <div
+          ref={toolbarRef}
+          data-browser-toolbar
+          className="relative z-10 flex h-12 shrink-0 items-center gap-2 border-b px-4"
+        >
           {backendLabel ? (
             <span
               title={
@@ -227,7 +313,11 @@ export default function BrowserView() {
               {backendLabel}
             </span>
           ) : null}
-          <IconButton onClick={() => browserBack().catch(() => {})} title="后退" aria-label="后退">
+          <IconButton
+            onClick={() => browserBack().catch(() => {})}
+            title="后退"
+            aria-label="后退"
+          >
             <ArrowLeft className="h-4 w-4" />
           </IconButton>
           <IconButton
@@ -247,7 +337,7 @@ export default function BrowserView() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              go()
+              void go()
             }}
             className="flex min-w-0 flex-1 items-center"
           >
@@ -261,8 +351,7 @@ export default function BrowserView() {
             />
           </form>
         </div>
-        {/* 内容占位区: 原生子 webview 或 CDP Chrome 窗口对齐此矩形 */}
-        <div ref={contentRef} className="relative min-h-0 flex-1 bg-background">
+        <div ref={contentRef} className="relative z-0 min-h-0 flex-1 bg-background">
           {backend?.mode === "cdp" ? (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 p-6 text-center text-muted-foreground">
               <Globe className="h-6 w-6 opacity-40" />

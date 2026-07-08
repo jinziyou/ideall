@@ -1,9 +1,13 @@
 // 本机已安装应用 (Linux .desktop / macOS .app / Windows 开始菜单快捷方式)。
 // 供本地模式「应用」模块列举与启动; 解析与 exec 均在 Rust 侧完成, 前端只收展示字段 + id。
 
+#[cfg(target_os = "linux")]
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
+#[cfg(not(target_os = "linux"))]
+use std::process::Command;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
@@ -141,6 +145,7 @@ fn is_allowed_linux_icon_path(canonical_str: &str, canonical: &Path) -> bool {
     false
 }
 
+#[cfg(target_os = "linux")]
 fn is_icon_image_path(path: &Path) -> bool {
     matches!(
         path.extension()

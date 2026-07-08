@@ -9,7 +9,7 @@ import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
-import { isTauri, browserHide } from "@/lib/tauri"
+import { isTauri, browserRelease } from "@/lib/tauri"
 import { store, useAppSelector } from "@/lib/store"
 import { workspaceActions, type ActiveSource, type WorkspaceState } from "./workspace-slice"
 import { WORKSPACE_STORAGE_KEY } from "./workspace-persist"
@@ -186,7 +186,7 @@ export function hydrateWorkspace() {
   if (isTauri()) {
     const { tabs, activeId } = store.getState().workspace
     const active = tabs.find((t) => t.id === activeId)
-    if (active?.kind !== "browser-view") void browserHide().catch(() => {})
+    if (active?.kind !== "browser-view") void browserRelease().catch(() => {})
   }
 }
 
@@ -195,7 +195,7 @@ export function hydrateWorkspace() {
 /** 切离「浏览器」标签时收起原生子 webview, 避免其叠在插件 iframe 上拦截点击。 */
 function hideBrowserWebviewUnlessBrowserTab(kind: string) {
   if (kind === "browser-view") return
-  if (isTauri()) void browserHide().catch(() => {})
+  if (isTauri()) void browserRelease().catch(() => {})
 }
 
 /** 计算「以瞬态(预览)方式打开 d」后的 tabs/transientId/activeId 补丁: 复用单一预览槽。
@@ -439,6 +439,9 @@ export function closeTab(id: string) {
   if (idx === -1) return
   const closingKind = ws().tabs[idx]?.kind
   const tabs = ws().tabs.filter((t) => t.id !== id)
+  if (closingKind === "browser-view" && isTauri()) {
+    void browserRelease().catch(() => {})
+  }
   let activeId = ws().activeId
   let activeModule = ws().activeModule
   if (ws().activeId === id) {
@@ -448,8 +451,6 @@ export function closeTab(id: string) {
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next.kind)
       activeModule = coerceActiveModuleForMode(next.module, ws().mode, activeModule)
-    } else if (closingKind === "browser-view" && isTauri()) {
-      void browserHide().catch(() => {})
     }
   }
   setState({
@@ -471,7 +472,7 @@ export function requestCloseTab(id: string): boolean {
 /** 关闭全部标签。 */
 export function closeAllTabs() {
   if (ws().tabs.length === 0) return
-  if (isTauri()) void browserHide().catch(() => {})
+  if (isTauri()) void browserRelease().catch(() => {})
   setState({
     tabs: [],
     activeId: null,

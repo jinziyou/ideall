@@ -17,7 +17,7 @@ export default function TopBar() {
   const dragRegion = useTauriDragRegion()
 
   return (
-    <header className="relative z-20 hidden h-11 shrink-0 items-center gap-2 border-b bg-card px-3 md:flex">
+    <header className="relative z-30 hidden h-11 shrink-0 items-center gap-2 border-b bg-card px-3 md:flex">
       <div className="flex shrink-0 items-center gap-2">
         <Link href="/home" className="flex shrink-0 items-center" aria-label="ideall 首页">
           <WonitaMark className="h-6 w-auto text-foreground" />
@@ -25,13 +25,20 @@ export default function TopBar() {
         <div className="mx-1 h-5 w-px shrink-0 bg-border" />
         <ModeSwitch />
       </div>
-      <div
-        {...(dragRegion ? { "data-tauri-drag-region": true } : {})}
-        className="flex min-w-0 flex-1 justify-center px-4"
-      >
+      <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
+        <div
+          {...(dragRegion ? { "data-tauri-drag-region": true } : {})}
+          className="min-w-4 flex-1"
+          aria-hidden
+        />
         <TopSearch />
+        <div
+          {...(dragRegion ? { "data-tauri-drag-region": true } : {})}
+          className="min-w-4 flex-1"
+          aria-hidden
+        />
       </div>
-      <div className="relative z-10 flex shrink-0 items-stretch gap-1 self-stretch">
+      <div className="relative z-50 flex shrink-0 items-stretch gap-1 self-stretch pointer-events-auto">
         <div className="flex items-center gap-1">
           <LayoutToggles />
           <div className="mx-1 h-5 w-px bg-border" />

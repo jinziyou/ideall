@@ -14,6 +14,16 @@ export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 }
 
+/**
+ * Windows: 原生子 webview (HWND) 叠在主界面之上, bounds 异常时会挡全窗。
+ * 由 browser_present 原子 set_bounds + show, 并在 bounds 非法时 browserClose 释放。
+ */
+
+/** 收起并销毁原生子 webview (切标签 / 异常 bounds 时清场)。 */
+export function browserRelease(): Promise<void> {
+  return browserClose()
+}
+
 // tauri-plugin-http 的 fetch 惰性加载一次后缓存 (undefined=未尝试, null=加载失败回退标准 fetch)。
 let _appFetch: typeof fetch | null | undefined
 
@@ -82,6 +92,10 @@ export function openBrowserView(url: string, bounds: BrowserBounds): Promise<voi
 /** 同步子 webview 矩形 (内容区随窗口/侧栏变化时调用)。 */
 export function browserSetBounds(bounds: BrowserBounds): Promise<void> {
   return tauriInvoke("browser_set_bounds", { b: bounds })
+}
+/** 同步 bounds 并显示子 webview (原子操作, 避免 Windows HWND 全窗遮挡)。 */
+export function browserPresent(bounds: BrowserBounds): Promise<void> {
+  return tauriInvoke("browser_present", { b: bounds })
 }
 /** 地址栏导航。 */
 export function browserNavigate(url: string): Promise<void> {

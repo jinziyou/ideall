@@ -190,7 +190,11 @@
   body {
     height: 100%;
   }
-  /* Tauri 无边框窗: data-tauri-drag-region 在 Linux/WSL 会吞子树 mousedown; 交互控件显式 no-drag。 */
+  /* Tauri 无边框窗: data-tauri-drag-region 会吞子树 mousedown; 交互控件显式 no-drag + 组件侧 stopPropagation。 */
+  [data-tauri-drag-region] {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
   button,
   a,
   input,

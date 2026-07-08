@@ -1,7 +1,7 @@
 // 外部资源统一入口: 桌面 App 把任意外链 (https://…) 交给「浏览器」模块; 插件 SPA 内的相对路由不在此处理。
 // 产品定位: 资讯 / 社区 = 嵌入 SPA 插件 (wonita/portal iframe); 浏览器 = 外部网页资源。
 // 触发方: 插件 host.openExternal、宿主 UI 的 openExternal、全局 target=_blank 拦截。
-import { isTauri, browserNavigate, browserShow } from "@/lib/tauri"
+import { isTauri, browserNavigate } from "@/lib/tauri"
 import { safeHref } from "@/lib/safe-url"
 import { openTab } from "./store"
 import type { ModuleId } from "./types"
@@ -52,7 +52,6 @@ export async function navigateExternal(
 
   try {
     await browserNavigate(href)
-    await browserShow()
     if (newTab) pendingUrl = null
   } catch {
     if (newTab) for (const cb of subscribers) cb(href)

@@ -8,7 +8,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { isTauri, browserHide } from "@/lib/tauri"
+import { isTauri, browserRelease } from "@/lib/tauri"
 import { Header } from "@/shell/header"
 import BottomTabBar from "@/shell/bottom-tab-bar"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
@@ -165,7 +165,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   React.useEffect(() => {
     if (!isTauri()) return
     const t = getTabs().find((x) => x.id === getActiveId())
-    if (t?.kind !== "browser-view") void browserHide().catch(() => {})
+    if (t?.kind !== "browser-view") void browserRelease().catch(() => {})
   }, [])
 
   // 认证页: 跳出工作区壳。

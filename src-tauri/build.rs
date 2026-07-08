@@ -9,6 +9,7 @@ fn main() {
                 "agent_guarded_fetch",
                 "open_browser_view",
                 "browser_set_bounds",
+                "browser_present",
                 "browser_navigate",
                 "browser_back",
                 "browser_forward",

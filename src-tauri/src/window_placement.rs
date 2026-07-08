@@ -4,6 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 
 use tauri::utils::config::WindowConfig;
@@ -21,11 +22,11 @@ static WSL_PSEUDO_MAX: AtomicBool = AtomicBool::new(false);
 
 /// 铺满主屏可用区域 (WSL 最大化用)。
 pub fn apply_primary_work_area(window: &WebviewWindow) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    if running_under_wsl() {
-        // 须在改尺寸/坐标前置位, 否则 Resized 回调里的 try_place_window 会把窗口拉回居中。
-        WSL_PSEUDO_MAX.store(true, Ordering::Relaxed);
+    if !wsl_managed_maximize() {
+        return Ok(());
     }
+    // 须在改尺寸/坐标前置位, 否则 Resized 回调里的 try_place_window 会把窗口拉回居中。
+    WSL_PSEUDO_MAX.store(true, Ordering::Relaxed);
     let screens = enumerate_screens(window)?;
     let primary = pick_primary_screen(window, &screens)?;
     if window.is_fullscreen().unwrap_or(false) {
@@ -71,13 +72,12 @@ fn notify_webview_resize(window: &WebviewWindow) {
 }
 
 /// 窗控「最大化/还原」: WSL 走伪最大化; 其余平台用系统 toggleMaximize。
-pub fn toggle_primary_maximize(window: &WebviewWindow, conf: &WindowConfig) -> Result<bool, String> {
-    #[cfg(target_os = "linux")]
-    if running_under_wsl() {
+pub fn toggle_primary_maximize(window: &WebviewWindow, _conf: &WindowConfig) -> Result<bool, String> {
+    if wsl_managed_maximize() {
         if WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
             WSL_PSEUDO_MAX.store(false, Ordering::Relaxed);
             let _ = normalize_on_close(window);
-            place_main_window(window, conf)?;
+            place_main_window(window, _conf)?;
             notify_webview_resize(window);
             return Ok(false);
         }
@@ -95,8 +95,7 @@ pub fn toggle_primary_maximize(window: &WebviewWindow, conf: &WindowConfig) -> R
 
 /// 窗控图标状态: WSL 伪最大化时也为 true。
 pub fn is_primary_maximized(window: &WebviewWindow) -> bool {
-    #[cfg(target_os = "linux")]
-    if running_under_wsl() {
+    if wsl_managed_maximize() {
         return WSL_PSEUDO_MAX.load(Ordering::Relaxed);
     }
     window.is_maximized().unwrap_or(false)
@@ -204,6 +203,9 @@ fn fills_primary_work_area(window: &WebviewWindow, primary: &Monitor) -> bool {
 }
 
 fn try_fix_expanded_on_primary(window: &WebviewWindow, attempts: Option<&AtomicU8>) {
+    if !wsl_managed_maximize() {
+        return;
+    }
     if !window_is_user_expanded(window) {
         return;
     }
@@ -246,12 +248,15 @@ fn try_place_window(
     if attempts.is_some_and(|a| a.load(Ordering::Relaxed) >= MAX_PLACE_ATTEMPTS) {
         return;
     }
-    // 用户最大化/全屏: 勿 normalize+居中 (会把窗口缩回 conf 尺寸); 仅修正跨屏错位。
-    if window_is_user_expanded(window) && !WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
-        try_fix_expanded_on_primary(window, attempts);
+    if WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
         return;
     }
-    if WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
+    // 原生 WM 最大化/全屏: 勿干预 (Windows 双屏下误触 apply_primary_work_area 会导致
+    // is_maximized=false 但视觉已铺满 → 再点 maximize 跨屏溢出)。
+    if window_is_user_expanded(window) {
+        if wsl_managed_maximize() {
+            try_fix_expanded_on_primary(window, attempts);
+        }
         return;
     }
     let Ok(screens) = enumerate_screens(window) else {
@@ -334,6 +339,18 @@ fn running_under_wsl() -> bool {
         .unwrap_or(false)
 }
 
+/// 仅 WSL 需本模块接管最大化; Windows/macOS/原生 Linux 信任 WM 原生 maximize。
+fn wsl_managed_maximize() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        running_under_wsl()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 /// WSLg X11 WM 对 gtk move_ 有固定偏移 (实测 move 802,541 → 实际 764,482)。
 /// 可通过 IDEALL_PLACEMENT_OFFSET=x,y 覆盖, 设为 0,0 关闭。
 #[cfg(target_os = "linux")]
@@ -376,17 +393,24 @@ fn settle_window_size_for_wsl(
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
+fn settle_window_size_for_wsl(
+    _window: &WebviewWindow,
+    _target: &PhysicalSize<u32>,
+) -> Result<(), String> {
+    Ok(())
+}
+
 /// 设置窗口位置。WSLg Wayland 忽略坐标; X11 下走 gtk move_ (不做读回补偿 —— 立即读回常为旧坐标)。
 fn apply_window_position(
     window: &WebviewWindow,
     pos: PhysicalPosition<i32>,
 ) -> Result<(), String> {
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let lx = (pos.x as f64 / scale).round() as i32;
-    let ly = (pos.y as f64 / scale).round() as i32;
-
     #[cfg(target_os = "linux")]
     {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let lx = (pos.x as f64 / scale).round() as i32;
+        let ly = (pos.y as f64 / scale).round() as i32;
         use gtk::prelude::GtkWindowExt;
         if let Ok(gtk_win) = window.gtk_window() {
             let (ox, oy) = gtk_placement_offset();

@@ -8,7 +8,7 @@ use tauri::AppHandle;
 #[cfg(desktop)]
 use tauri::Manager;
 #[cfg(all(desktop, not(target_os = "linux")))]
-use tauri::{Emitter, LogicalPosition, LogicalSize, WebviewUrl};
+use tauri::{Emitter, LogicalPosition, LogicalSize, Rect, WebviewUrl};
 
 // ACP (Agent Client Protocol) 外部智能体传输 —— 子进程 stdin/stdout 哑管道 (NDJSON 行框定), 仅桌面。
 #[cfg(desktop)]
@@ -21,6 +21,8 @@ mod browser_cdp;
 mod browser_scripts;
 #[cfg(all(desktop, target_os = "linux"))]
 mod browser_linux;
+#[cfg(all(desktop, target_os = "windows"))]
+mod browser_win;
 #[cfg(desktop)]
 mod window_placement;
 #[cfg(desktop)]
@@ -31,6 +33,31 @@ mod secure_store;
 #[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_LABEL: &str = "browser_view";
 
+/// Windows: 上次 present 的 bounds, 供页面加载后再次同步。
+#[cfg(all(desktop, target_os = "windows"))]
+#[derive(Default)]
+struct BrowserWinState {
+    last_bounds: std::sync::Mutex<Option<Bounds>>,
+    subclassed: std::sync::Mutex<Vec<isize>>,
+}
+
+/// Tauri invoke 在后台线程; with_webview / SetWindowRgn 必须在主线程同步完成。
+#[cfg(all(desktop, target_os = "windows"))]
+fn run_on_main_thread_sync<R, F>(app: &AppHandle, f: F) -> Result<R, String>
+where
+    R: Send + 'static,
+    F: FnOnce(&AppHandle) -> Result<R, String> + Send + 'static,
+{
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    let app = app.clone();
+    let app2 = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(f(&app2));
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv().map_err(|_| "主线程执行失败".to_string())?
+}
+
 // 主窗口内容区矩形 (CSS 像素, 相对窗口左上)。直接当 Logical 传, 勿乘 devicePixelRatio (Tauri 自动按 scale 换算)。
 #[cfg(desktop)]
 #[derive(serde::Deserialize, Clone, Copy, Debug, Default)]
@@ -39,6 +66,236 @@ pub(crate) struct Bounds {
     y: f64,
     w: f64,
     h: f64,
+}
+
+/// 子 webview 是原生 HWND (Windows) / NSView, 盖住主 webview 顶栏; 校验并裁剪 bounds。
+#[cfg(desktop)]
+fn sanitize_browser_bounds(app: &AppHandle, mut b: Bounds) -> Result<Bounds, String> {
+    // TopBar(44) + TabBar(36) + browser 卡片上边距/工具条(≈64) ≈ 144; 留 4px 容差。
+    const MIN_Y: f64 = 140.0;
+    const MIN_X: f64 = 48.0;
+    const MIN_SIZE: f64 = 8.0;
+    if b.w < MIN_SIZE || b.h < MIN_SIZE {
+        return Err(format!("浏览器区域过小 ({}×{})", b.w, b.h));
+    }
+    if b.y < MIN_Y {
+        return Err(format!(
+            "浏览器区域过高 (y={}), 会遮挡顶栏/窗控",
+            b.y.round()
+        ));
+    }
+    if b.x < MIN_X {
+        return Err(format!(
+            "浏览器区域过左 (x={}), 会遮挡侧栏",
+            b.x.round()
+        ));
+    }
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let scale = main.scale_factor().unwrap_or(1.0);
+    if let Ok(inner) = main.inner_size() {
+        let win_w = inner.width as f64 / scale;
+        let win_h = inner.height as f64 / scale;
+        if b.w > win_w * 0.92 || b.h > win_h * 0.88 {
+            return Err(format!(
+                "浏览器区域过大 ({}×{}), 会遮挡壳层 UI",
+                b.w.round(),
+                b.h.round()
+            ));
+        }
+        if b.x + b.w > win_w + 1.0 {
+            b.w = (win_w - b.x).max(MIN_SIZE);
+        }
+        if b.y + b.h > win_h + 1.0 {
+            b.h = (win_h - b.y).max(MIN_SIZE);
+        }
+    }
+    Ok(b)
+}
+
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn browser_webview_builder(
+    label: &str,
+    parsed: tauri::Url,
+    app_nav: AppHandle,
+    app_load: AppHandle,
+) -> WebviewBuilder<tauri::Wry> {
+    let mut builder = WebviewBuilder::new(label, WebviewUrl::External(parsed))
+        .on_navigation(move |target| {
+            let _ = app_nav.emit("browser://url", target.to_string());
+            true
+        })
+        .on_page_load(move |_webview, payload| {
+            if matches!(payload.event(), PageLoadEvent::Finished) {
+                let _ = app_load.emit("browser://url", payload.url().to_string());
+                #[cfg(target_os = "windows")]
+                {
+                    let app = app_load.clone();
+                    let app2 = app.clone();
+                    let _ = app.run_on_main_thread(move || {
+                        browser_win_reclip(&app2);
+                    });
+                }
+            }
+        });
+    // 内网自签 HTTPS (如 inventory); Linux 走 webkit TLS policy, Windows 需 WebView2 参数。
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.additional_browser_args("--ignore-certificate-errors");
+    }
+    builder
+}
+
+/// 移出视口并隐藏 (WebView2 hide 后有时仍拦截鼠标, 须归零尺寸)。
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn stash_browser_webview(wv: &tauri::Webview) {
+    let _ = wv.hide();
+    let _ = wv.set_size(LogicalSize::new(0.0, 0.0));
+    let _ = wv.set_position(LogicalPosition::new(-10000.0, -10000.0));
+}
+
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn bounds_to_rect(b: Bounds) -> Rect {
+    Rect {
+        position: LogicalPosition::new(b.x, b.y).into(),
+        size: LogicalSize::new(b.w, b.h).into(),
+    }
+}
+
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn apply_browser_bounds(wv: &tauri::Webview, app: &AppHandle, b: Bounds) -> Result<Bounds, String> {
+    let b = sanitize_browser_bounds(app, b)?;
+    wv.set_bounds(bounds_to_rect(b))
+        .map_err(|e| e.to_string())?;
+    Ok(b)
+}
+
+#[cfg(all(desktop, target_os = "windows"))]
+fn win_webview_hwnd(wv: &tauri::Webview) -> Option<isize> {
+    use std::sync::{Arc, Mutex};
+    let out = Arc::new(Mutex::new(None::<isize>));
+    let slot = out.clone();
+    let _ = wv.with_webview(move |platform| {
+        let controller = platform.controller();
+        let mut hwnd = windows::Win32::Foundation::HWND::default();
+        unsafe {
+            let _ = controller.ParentWindow(std::ptr::addr_of_mut!(hwnd) as _);
+        }
+        if !hwnd.0.is_null() {
+            *slot.lock().unwrap() = Some(hwnd.0 as isize);
+        }
+    });
+    let hwnd = out.lock().unwrap().take();
+    hwnd
+}
+
+#[cfg(all(desktop, target_os = "windows"))]
+fn browser_win_clear_subclass(app: &AppHandle) {
+    let hwnds = app
+        .state::<BrowserWinState>()
+        .subclassed
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_default();
+    browser_win::remove_hit_pass_tree(&hwnds);
+    if let Ok(mut list) = app.state::<BrowserWinState>().subclassed.lock() {
+        list.clear();
+    }
+}
+
+#[cfg(all(desktop, target_os = "windows"))]
+fn browser_win_sync(wv: &tauri::Webview, app: &AppHandle, b: Bounds) {
+    let Some(main_win) = app.get_webview_window("main") else {
+        return;
+    };
+    let scale = main_win.scale_factor().unwrap_or(1.0);
+    let pb = browser_win::PhysicalBounds::from_logical(b.x, b.y, b.w, b.h, scale);
+
+    let min_screen_y = if let Some(main) = app.get_webview("main") {
+        if let Some(main_hwnd) = win_webview_hwnd(&main) {
+            let origin = browser_win::client_origin_screen_y(main_hwnd).unwrap_or(0);
+            let clip_logical = b.y.max(browser_win::TOP_CHROME_LOGICAL);
+            origin + (clip_logical * scale).round() as i32
+        } else {
+            (b.y.max(browser_win::TOP_CHROME_LOGICAL) * scale).round() as i32
+        }
+    } else {
+        (b.y.max(browser_win::TOP_CHROME_LOGICAL) * scale).round() as i32
+    };
+
+    browser_win_clear_subclass(app);
+
+    let installed = std::sync::Arc::new(std::sync::Mutex::new(Vec::<isize>::new()));
+    let slot = installed.clone();
+    let b_log = b;
+
+    let _ = wv.with_webview(move |platform| {
+        let controller = platform.controller();
+        let mut hwnd = windows::Win32::Foundation::HWND::default();
+        unsafe {
+            let _ = controller.ParentWindow(std::ptr::addr_of_mut!(hwnd) as _);
+        }
+        if hwnd.0.is_null() {
+            eprintln!("[ideall] browser sync: ParentWindow null");
+            return;
+        }
+        let hwnd_raw = hwnd.0 as isize;
+
+        if let Err(e) = browser_win::force_hwnd_bounds(hwnd_raw, pb) {
+            eprintln!("[ideall] browser sync SetWindowPos: {e}");
+        }
+        unsafe {
+            use windows::Win32::Foundation::RECT;
+            let _ = controller.SetBounds(RECT {
+                left: 0,
+                top: 0,
+                right: pb.w,
+                bottom: pb.h,
+            });
+            let _ = controller.NotifyParentWindowPositionChanged();
+        }
+
+        if let Some(rect) = browser_win::hwnd_screen_rect(hwnd_raw) {
+            eprintln!(
+                "[ideall] browser sync: logical=({:.0},{:.0} {:.0}x{:.0}) physical=({},{} {}x{}) hwnd_rect={:?} min_screen_y={}",
+                b_log.x, b_log.y, b_log.w, b_log.h, pb.x, pb.y, pb.w, pb.h, rect, min_screen_y
+            );
+        }
+
+        let list = browser_win::install_hit_pass_tree(hwnd_raw, min_screen_y);
+        eprintln!(
+            "[ideall] browser sync: hit_pass on {} hwnd(s)",
+            list.len()
+        );
+        *slot.lock().unwrap() = list;
+    });
+
+    if let Ok(mut list) = app.state::<BrowserWinState>().subclassed.lock() {
+        *list = installed.lock().unwrap().clone();
+    }
+}
+
+#[cfg(all(desktop, target_os = "windows"))]
+fn browser_win_reclip(app: &AppHandle) {
+    let b = match app.state::<BrowserWinState>().last_bounds.lock() {
+        Ok(g) => g.clone(),
+        Err(_) => return,
+    };
+    let Some(b) = b else { return };
+    if let Some(wv) = app.get_webview(BROWSER_LABEL) {
+        browser_win_sync(&wv, app, b);
+    }
+}
+
+#[cfg(all(desktop, target_os = "windows"))]
+fn win_raise_main_webview(app: &AppHandle) {
+    let Some(main) = app.get_webview("main") else {
+        return;
+    };
+    if let Some(hwnd) = win_webview_hwnd(&main) {
+        browser_win::raise_hwnd(hwnd);
+    }
 }
 
 /// 内嵌浏览器后端信息 (CDP / WebKit / WebView)。
@@ -245,6 +502,37 @@ fn parse_list_interactive(v: serde_json::Value) -> Result<BrowserInteractiveResu
     serde_json::from_value(v).map_err(|e| format!("解析可交互元素失败: {e}"))
 }
 
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn open_browser_view_impl(app: &AppHandle, url: String, b: Bounds) -> Result<(), String> {
+    let target = if url.trim().is_empty() {
+        "https://www.google.com".to_string()
+    } else {
+        url
+    };
+    let parsed = parse_http_url(&target)?;
+    let _b = sanitize_browser_bounds(app, b)?;
+    let main = app.get_webview_window("main").ok_or("主窗口不存在")?;
+    let window = main.as_ref().window();
+    if let Some(w) = app.get_webview(BROWSER_LABEL) {
+        let _ = w.close();
+    }
+    let app_nav = app.clone();
+    let app_load = app.clone();
+    let builder = browser_webview_builder(BROWSER_LABEL, parsed, app_nav, app_load);
+    window
+        .add_child(
+            builder,
+            LogicalPosition::new(-10000.0, -10000.0),
+            LogicalSize::new(1.0, 1.0),
+        )
+        .map_err(|e| e.to_string())?;
+    if let Some(wv) = app.get_webview(BROWSER_LABEL) {
+        let _ = wv.set_auto_resize(false);
+        stash_browser_webview(&wv);
+    }
+    Ok(())
+}
+
 /// 打开 (或重建) 内嵌浏览器子 webview, 加载 url, 定位到主窗口内容区 bounds。
 #[cfg(desktop)]
 #[tauri::command]
@@ -256,41 +544,30 @@ fn open_browser_view(
     #[cfg(target_os = "linux")]
     return browser_linux::open(&app, url, b);
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
+    return run_on_main_thread_sync(&app, move |app| open_browser_view_impl(app, url, b));
+
+    #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+    return open_browser_view_impl(&app, url, b);
+}
+
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn browser_set_bounds_impl(app: &AppHandle, b: Bounds) -> Result<(), String> {
+    let b = apply_browser_bounds(
+        &app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?,
+        app,
+        b,
+    )?;
+    #[cfg(target_os = "windows")]
     {
-    let target = if url.trim().is_empty() {
-        "https://www.google.com".to_string()
-    } else {
-        url
-    };
-    let parsed = parse_http_url(&target)?;
-    let main = app.get_webview_window("main").ok_or("主窗口不存在")?;
-    let window = main.as_ref().window();
-    // 单例: 已存在则先关。
-    if let Some(w) = app.get_webview(BROWSER_LABEL) {
-        let _ = w.close();
+        if let Ok(mut g) = app.state::<BrowserWinState>().last_bounds.lock() {
+            *g = Some(b);
+        }
+        if let Some(wv) = app.get_webview(BROWSER_LABEL) {
+            browser_win_sync(&wv, app, b);
+        }
     }
-    let app_nav = app.clone();
-    let app_load = app.clone();
-    let builder = WebviewBuilder::new(BROWSER_LABEL, WebviewUrl::External(parsed))
-        .on_navigation(move |target| {
-            let _ = app_nav.emit("browser://url", target.to_string());
-            true
-        })
-        .on_page_load(move |_webview, payload| {
-            if matches!(payload.event(), PageLoadEvent::Finished) {
-                let _ = app_load.emit("browser://url", payload.url().to_string());
-            }
-        });
-    window
-        .add_child(
-            builder,
-            LogicalPosition::new(b.x, b.y),
-            LogicalSize::new(b.w, b.h),
-        )
-        .map_err(|e| e.to_string())?;
     Ok(())
-    }
 }
 
 /// 同步子 webview 矩形 (内容区随窗口缩放/侧栏折叠变化时调用)。
@@ -303,15 +580,55 @@ fn browser_set_bounds(
     #[cfg(target_os = "linux")]
     return browser_linux::set_bounds(&app, b);
 
-    #[cfg(not(target_os = "linux"))]
-    {
+    #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
+    return run_on_main_thread_sync(&app, move |app| browser_set_bounds_impl(app, b));
+
+    #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+    return browser_set_bounds_impl(&app, b);
+}
+
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn browser_present_impl(app: &AppHandle, b: Bounds) -> Result<(), String> {
     let wv = app.get_webview(BROWSER_LABEL).ok_or("浏览器视图不存在")?;
-    wv.set_position(LogicalPosition::new(b.x, b.y))
-        .map_err(|e| e.to_string())?;
-    wv.set_size(LogicalSize::new(b.w, b.h))
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    stash_browser_webview(&wv);
+    let b = apply_browser_bounds(&wv, app, b)?;
+    wv.show().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(mut g) = app.state::<BrowserWinState>().last_bounds.lock() {
+            *g = Some(b);
+        }
+        browser_win_sync(&wv, app, b);
+        // WebView2 内部 HWND 可能晚于 show 才出现, 短延迟后再同步一次命中穿透。
+        let app2 = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                let app3 = app2.clone();
+                let _ = app2.run_on_main_thread(move || {
+                    browser_win_reclip(&app3);
+                });
+            });
+        });
     }
+    Ok(())
+}
+
+/// 同步 bounds 并显示子 webview (原子操作, 避免 Windows 上 show 与 set_bounds 竞态导致全窗遮挡)。
+#[cfg(desktop)]
+#[tauri::command]
+fn browser_present(app: AppHandle, b: Bounds) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        browser_linux::set_bounds(&app, b)?;
+        return browser_linux::show(&app);
+    }
+
+    #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
+    return run_on_main_thread_sync(&app, move |app| browser_present_impl(app, b));
+
+    #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+    return browser_present_impl(&app, b);
 }
 
 /// 地址栏导航到新 url。
@@ -386,10 +703,11 @@ fn browser_hide(app: AppHandle) -> Result<(), String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        app.get_webview(BROWSER_LABEL)
-            .ok_or("浏览器视图不存在")?
-            .hide()
-            .map_err(|e| e.to_string())
+        let Some(wv) = app.get_webview(BROWSER_LABEL) else {
+            return Ok(());
+        };
+        stash_browser_webview(&wv);
+        Ok(())
     }
 }
 #[cfg(desktop)]
@@ -400,10 +718,9 @@ fn browser_show(app: AppHandle) -> Result<(), String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        app.get_webview(BROWSER_LABEL)
-            .ok_or("浏览器视图不存在")?
-            .show()
-            .map_err(|e| e.to_string())
+        let _ = app;
+        // 禁止无 bounds 的 show (会以错误尺寸挡全窗); 请用 browser_present。
+        Ok(())
     }
 }
 /// 内嵌浏览器后端信息 (CDP / WebKit / WebView); 供 UI 显示模式徽标。
@@ -545,19 +862,41 @@ async fn browser_wait_for_selector(
     }
 }
 
+#[cfg(all(desktop, not(target_os = "linux")))]
+fn browser_close_impl(app: &AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview(BROWSER_LABEL) {
+        #[cfg(target_os = "windows")]
+        browser_win_clear_subclass(app);
+        stash_browser_webview(&w);
+        let _ = w.close();
+    }
+    if app.get_webview(BROWSER_LABEL).is_some() {
+        if let Some(w) = app.get_webview(BROWSER_LABEL) {
+            stash_browser_webview(&w);
+            let _ = w.close();
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(mut g) = app.state::<BrowserWinState>().last_bounds.lock() {
+            *g = None;
+        }
+        win_raise_main_webview(app);
+    }
+    Ok(())
+}
+
 #[cfg(desktop)]
 #[tauri::command]
 fn browser_close(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return browser_linux::close(&app);
 
-    #[cfg(not(target_os = "linux"))]
-    {
-        if let Some(w) = app.get_webview(BROWSER_LABEL) {
-            w.close().map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    }
+    #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
+    return run_on_main_thread_sync(&app, |app| browser_close_impl(app));
+
+    #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+    return browser_close_impl(&app);
 }
 
 #[cfg(desktop)]
@@ -818,6 +1157,17 @@ pub fn run() {
         // 注: 内嵌浏览器子 webview (Window::add_child) 仅支持 X11 (Wayland 下不显示)。
     }
 
+    // Windows: 子 webview WebView2; 允许内网自签 HTTPS (inventory 等)。
+    #[cfg(target_os = "windows")]
+    {
+        if std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
+            std::env::set_var(
+                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+                "--ignore-certificate-errors",
+            );
+        }
+    }
+
     let context = tauri::generate_context!();
 
     let builder = tauri::Builder::default()
@@ -857,12 +1207,16 @@ pub fn run() {
     #[cfg(all(desktop, target_os = "linux"))]
     let builder = builder.manage(browser_cdp::init_state());
 
+    #[cfg(all(desktop, target_os = "windows"))]
+    let builder = builder.manage(BrowserWinState::default());
+
     #[cfg(desktop)]
     let builder = builder
         .invoke_handler(tauri::generate_handler![
             agent_guarded_fetch,
             open_browser_view,
             browser_set_bounds,
+            browser_present,
             browser_navigate,
             browser_back,
             browser_forward,
