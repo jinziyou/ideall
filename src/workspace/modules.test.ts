@@ -26,7 +26,11 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
   assert.equal(descriptorForPath("/home/publications")?.module, "publications")
   assert.equal(descriptorForPath("/tool/ai")?.kind, "tool-ai")
   assert.equal(descriptorForPath("/apps")?.kind, "apps")
-  assert.equal(descriptorForPath("/browser")?.kind, "browser-view")
+  const browser = descriptorForPath("/browser")
+  assert.equal(browser?.kind, "resource")
+  assert.deepEqual(browser?.params, {
+    resource: resourceKey({ scheme: "browser", kind: "page", id: "default" }),
+  })
   assert.equal(descriptorForPath("/git")?.kind, "git")
   assert.equal(descriptorForPath("/database")?.kind, "database")
   assert.equal(descriptorForPath("/audio")?.kind, "audio")

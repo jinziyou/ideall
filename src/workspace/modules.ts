@@ -281,7 +281,9 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (pathname.startsWith("/home")) return homeEntries[0].descriptor
   if (pathname.startsWith("/info")) return tabDescriptor("info")
   if (pathname.startsWith("/community")) return tabDescriptor("community")
-  if (pathname.startsWith("/browser")) return tabDescriptor("browser-view")
+  if (pathname.startsWith("/browser")) {
+    return resourceTab({ scheme: "browser", kind: "page", id: "default" }, "浏览器")
+  }
   if (pathname.startsWith("/apps")) return tabDescriptor("apps")
   if (pathname.startsWith("/shell")) return tabDescriptor("shell")
   if (pathname.startsWith("/git")) return tabDescriptor("git")
