@@ -28,8 +28,7 @@ const config = [
   ...nextConfig,
   {
     // @/lib/api/server.d.ts 是 openapi-typescript 生成物, 不该被 lint;
-    // src-tauri (Rust 工程 + target/gen 产物) / out (静态导出产物) / ds-bundle (design-sync 编译产物)
-    // 均非手写 JS 源, 不入 lint (三者已 gitignore)。
+    // src-tauri (Rust 工程 + target/gen 产物) / out (静态导出产物) 均非手写 JS 源, 不入 lint。
     ignores: [
       ".next/**",
       "node_modules/**",
@@ -37,7 +36,6 @@ const config = [
       "src/lib/api/**",
       "src-tauri/**",
       "out/**",
-      "ds-bundle/**",
     ],
   },
 
