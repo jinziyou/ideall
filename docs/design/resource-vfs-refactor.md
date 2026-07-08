@@ -2,7 +2,7 @@
 
 本文修正“把全项目统一到 Linux 式分层模型”方案中的缺口，目标是把本地模式和连接模式统一到同一套可寻址、可打开、可搜索、可显示的 Resource 模型，同时保留本地 `Node` 的同步、隐私和墓碑语义。
 
-当前状态：Resource 契约、VFS registry、`node` provider、连接模式 providers、`OpenTarget`、resource engines、连接侧栏 ResourceMeta 渲染、`save-to-mine` projector、VFS watch 已落地。仍保留 `kind:"node"` 标签作为兼容壳，暂不引入统一 `kind:"resource"` 标签。
+当前状态：Resource 契约、VFS registry、`node` provider、连接模式 providers、`OpenTarget`、统一 `kind:"resource"` 标签壳、resource engines、连接侧栏 ResourceMeta 渲染、本地搜索 Resource-first、`save-to-mine` projector、VFS watch 粒度失效已落地。旧 `?node=` 深链和旧 `kind:"node"` 持久化标签仅作为水合/解析兼容入口保留。
 
 ## 1. 目标与非目标
 
@@ -23,7 +23,7 @@ Storage -> VFS -> Resource Contract -> Engine -> Display
 - 不把远端 `info/community` 对象强行写入本地 `STORE_NODES`。
 - 不改 `Node` 同步、墓碑、`stripNode` 隐私净化和笔记块级合并。
 - 不让 `protocol` 或 `vfs` 依赖 React、lucide、workspace UI。
-- 不一次性删除 `openNodeTab`、`descriptorForNode`、`kind:"node"` 等旧入口。
+- 不删除旧会话兼容：已持久化的 `kind:"node"` 标签仍可水合为 `node` Resource，旧 `?node=` 深链仍可解析。
 
 ## 2. ResourceRef 规范
 
@@ -164,7 +164,7 @@ export type VfsProvider = {
     input: unknown,
     ctx: VfsAccessContext,
   ): Promise<unknown>
-  watch?(query: ResourceQuery, ctx: VfsAccessContext, notify: () => void): WatchHandle
+  watch?(query: ResourceQuery, ctx: VfsAccessContext, notify: () => void): WatchHandle | null
 }
 ```
 
@@ -201,7 +201,7 @@ Provider 责任：
 - `info-provider`：包装 ServerPort 可取的 entity/publisher/search 语义，并把 embed route 暴露为 Resource route。
 - `community-provider`：包装 peer/publication，支持打开 community embed route。
 - `tool-provider`：包装 search/ai/navigation 页面，通常是静态 Resource。
-- `browser-provider`：包装 browser page 和本地 bookmark 导航。
+- `browser-provider`：包装 browser page，并把本地书签列为 `browser:bookmark:<url>` 资源。
 - `app-provider`：包装 Tauri native app launcher。
 
 远端保存规则：
@@ -227,8 +227,8 @@ export type OpenTarget =
 
 - 新增 `openTarget(target)`，旧 `openTab` 和 `openNodeTab` 保持。
 - `openNodeTab(ref,title)` 变成薄包装：`openTarget({ type:"resource", ref:{ scheme:"node", ...ref }, title })`。
-- `openTarget(resource)` 同步打开 fallback descriptor，同时通过 VFS `get(..., intent:"metadata")` 读取 `ResourceMeta` 修正标题、route 和 embed 内部导航。
-- 新 tab 类型可以先沿用旧 `kind:"node"`，待 resource engine 稳定后再引入 `kind:"resource"`。
+- `openTarget(resource)` 同步打开 `kind:"resource"` descriptor，同时通过 VFS `get(..., intent:"metadata")` 读取 `ResourceMeta` 修正标题、route 和 embed 内部导航。
+- 所有新打开的 node/connected/browser/app 资源都使用统一 `kind:"resource"` 标签；旧 `kind:"node"` 只在 hydration 和 registry 中兼容读取。
 - URL sync 优先读 `?resource=`，其次读旧 `?node=`。
 - 水合旧标签：
   - 旧 `kind:"node"` 标签按 params 反解为 `node` Resource。
@@ -318,12 +318,12 @@ export type ResourceEngine = {
 
 ### 阶段 D：Display 消费 Resource
 
-把 sidebar tree 的 `descriptor/nodeRef` 迁移为 `target: OpenTarget`，动态子项从 `ResourceMeta` 生成。连接模式 info/community 侧栏已从订阅 DTO 改为 VFS `listResources()`；resource 行携带 `ResourceMeta` 打开。
+把 sidebar tree 的 `descriptor/nodeRef` 迁移为 `target: OpenTarget`，动态子项从 `ResourceMeta` 生成。连接模式 info/community 侧栏已从订阅 DTO 改为 VFS `listResources()`；resource 行携带 `ResourceMeta` 打开。本地搜索也改为通过 VFS `listResources({ scheme:"node" })` 读取 note/feed/bookmark/file/thread。
 
 验收：
 
 - Home places 展开结果不变。
-- browser 书签导航保留原语义。
+- browser 书签导航保留原语义，同时 browser provider 可把本地书签暴露为 `browser:bookmark` 资源。
 - agent workspace 静态树不受影响。
 - sidebar 通过 `watchResources()` 监听 node/resource query，按 section 失效缓存。
 
@@ -357,14 +357,17 @@ export type ResourceEngine = {
 
 ### 阶段 G：清理旧兼容层
 
-当所有调用迁完后再清理：
+已清理：
 
-- `node-viewers.ts` re-export
-- `home-sections.ts` re-export
 - `descriptorForNode`
-- 手写 NodeKind 到 section 的映射
+- `node-tab.ts` 旧构造器
 
-删除前必须有全量测试和 hydration 兼容测试。
+仍保留：
+
+- 旧 `kind:"node"` 标签水合/渲染兼容。
+- 旧 `?node=kind:id` 深链兼容。
+
+删除兼容读取前必须有迁移策略和 hydration 覆盖。
 
 ## 10. 测试矩阵
 
@@ -385,7 +388,7 @@ export type ResourceEngine = {
 - embed route resource 不泄 ServerPort DTO。
 - sidebar tree 从 ResourceMeta 构造。
 - mobile drill bar 根据 ResourceRef 找回 fallback。
-- VFS watch 通知 node/connected query 后显示缓存失效并重载。
+- VFS watch 按 node kind、subscription subtype、bookmark kind 精确通知对应 query 后显示缓存失效并重载。
 
 每阶段最低验证：
 
