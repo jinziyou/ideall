@@ -284,8 +284,16 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
       switch (action) {
         case "open":
         case "preview":
-        case "navigate":
           throw new VfsError("unsupported", `Action ${action} is handled by display layer`)
+        case "navigate": {
+          assertCanReadMetadata(ctx)
+          const node = await requireNode(deps, nodeRefValue)
+          if (node.kind === "bookmark") return { ref: nodeRefValue, url: node.content.url }
+          if (node.kind === "feed" && node.content.type === "tool") {
+            return { ref: nodeRefValue, url: node.content.key }
+          }
+          throw new VfsError("unsupported", `Action ${action} is not supported by ${node.kind}`)
+        }
         case "read-blob": {
           if (nodeRefValue.kind !== "file") {
             throw new VfsError("unsupported", "read-blob only supports file nodes")

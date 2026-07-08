@@ -7,6 +7,8 @@ import type {
 import { isResourceKindForScheme, resourceKey } from "@protocol/resource"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import { onFilesUpdated, type FilesUpdate } from "@protocol/flowback"
+import type { Bookmark } from "@protocol/files"
+import { listBookmarks } from "@/files/stores/bookmarks-store"
 import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
 import {
   CONNECTED_STATIC_RESOURCES,
@@ -37,6 +39,7 @@ type ConnectedRecord = ResourceRecord & {
 
 export type ConnectedVfsProviderDeps = {
   listSubscriptionsByTypes: (types: SubscriptionType[]) => Promise<Subscription[]>
+  listBookmarks: () => Promise<Bookmark[]>
   saveResourceToMine: (
     ref: ResourceRef,
     input: unknown,
@@ -46,6 +49,7 @@ export type ConnectedVfsProviderDeps = {
 
 const defaultDeps: ConnectedVfsProviderDeps = {
   listSubscriptionsByTypes,
+  listBookmarks,
   saveResourceToMine,
 }
 
@@ -98,6 +102,13 @@ function subscriptionRecord(sub: Subscription): ConnectedRecord | null {
     case "tool":
       return null
   }
+}
+
+function bookmarkRecord(bookmark: Bookmark): ConnectedRecord | null {
+  return connectedRecord(
+    { scheme: "browser", kind: "bookmark", id: bookmark.url },
+    bookmark.title || bookmark.url,
+  )
 }
 
 function knownRecord(ref: ResourceRef, title?: string): ConnectedRecord {
@@ -251,6 +262,14 @@ function createRouteProvider(
     },
     watch(query, _ctx, notify) {
       queryKinds(query, scheme)
+      if (scheme === "browser") {
+        const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["bookmark"])
+        if (!kinds.includes("bookmark")) return null
+        const dispose = onFilesUpdated((detail) => {
+          if (!detail?.kind || detail.kind === "bookmark") notify()
+        })
+        return { dispose }
+      }
       const types = subscriptionTypesForWatch(scheme, query)
       if (types.length === 0) return null
       const dispose = onFilesUpdated((detail) => {
@@ -323,7 +342,20 @@ export function createConnectedVfsProviders(
     infoVfsProvider,
     communityVfsProvider,
     createRouteProvider("tool", TOOL_RECORDS, undefined, resolvedDeps.saveResourceToMine),
-    createRouteProvider("browser", BROWSER_RECORDS, undefined, resolvedDeps.saveResourceToMine),
+    createRouteProvider(
+      "browser",
+      BROWSER_RECORDS,
+      async (query) => {
+        const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["bookmark"])
+        if (!kinds.includes("bookmark")) return []
+        const bookmarks = await resolvedDeps.listBookmarks()
+        return bookmarks.flatMap((bookmark) => {
+          const record = bookmarkRecord(bookmark)
+          return record ? [record] : []
+        })
+      },
+      resolvedDeps.saveResourceToMine,
+    ),
     createRouteProvider("app", APP_RECORDS, undefined, resolvedDeps.saveResourceToMine),
   ]
 }

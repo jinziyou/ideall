@@ -243,6 +243,19 @@ test("node provider: read-blob requires blob permission and only supports files"
   )
 })
 
+test("node provider: navigate returns bookmark url", async () => {
+  const provider = createNodeVfsProvider(makeDeps([bookmark("b1"), note("n1")]).deps)
+
+  assert.deepEqual(await provider.invoke(ref("bookmark", "b1"), "navigate", null, agentReadCtx), {
+    ref: ref("bookmark", "b1"),
+    url: "https://example.com",
+  })
+  await rejectCode(
+    provider.invoke(ref("note", "n1"), "navigate", null, agentReadCtx),
+    "unsupported",
+  )
+})
+
 test("node provider: edit/move/delete enforce kind-specific write grants", async () => {
   const { deps, calls } = makeDeps([note("n1"), bookmark("b1"), fileNode("f1")])
   const provider = createNodeVfsProvider(deps)

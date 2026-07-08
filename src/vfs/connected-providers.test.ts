@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { resourceKey } from "@protocol/resource"
+import type { Bookmark } from "@protocol/files"
 import type { Subscription } from "@protocol/subscription"
 import { FILES_UPDATED } from "@protocol/flowback"
 import {
@@ -104,6 +105,39 @@ test("connected providers: list followed entity and peer resources from subscrip
   assert.equal(peers.items[0]?.route, "/community?openPeer=42")
 })
 
+test("connected providers: list local bookmarks as browser resources", async () => {
+  const bookmarks: Bookmark[] = [
+    {
+      id: "b1",
+      title: "Example",
+      url: "https://example.com",
+      description: "",
+      favicon: "",
+      folderId: null,
+      tags: [],
+      createdAt: 1,
+    },
+  ]
+  const providers = createConnectedVfsProviders({
+    async listSubscriptionsByTypes() {
+      return []
+    },
+    async listBookmarks() {
+      return bookmarks
+    },
+  })
+  const browser = providers[3]
+
+  const page = await browser.list({ scheme: "browser", kind: "bookmark" }, ctx)
+
+  assert.deepEqual(page.items[0]?.ref, {
+    scheme: "browser",
+    kind: "bookmark",
+    id: "https://example.com",
+  })
+  assert.equal(page.items[0]?.title, "Example")
+})
+
 test("connected providers: invoke save-to-mine through injected projector", async () => {
   const calls: Array<{ ref: unknown; input: unknown; actor: string }> = []
   const [info] = createConnectedVfsProviders({
@@ -167,4 +201,28 @@ test("connected providers: static resources do not subscribe to file updates", (
     toolVfsProvider.watch?.({ scheme: "tool", kind: "search" }, ctx, () => {}),
     null,
   )
+})
+
+test("connected providers: browser bookmark watch ignores unrelated node updates", () => {
+  const providers = createConnectedVfsProviders({
+    async listSubscriptionsByTypes() {
+      return []
+    },
+    async listBookmarks() {
+      return []
+    },
+  })
+  const browser = providers[3]
+
+  withWindow((target) => {
+    let count = 0
+    const handle = browser.watch?.({ scheme: "browser", kind: "bookmark" }, ctx, () => count++)
+    assert.ok(handle)
+
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "note" } }))
+    assert.equal(count, 0)
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "bookmark" } }))
+    assert.equal(count, 1)
+    handle.dispose()
+  })
 })
