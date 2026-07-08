@@ -6,6 +6,8 @@ import type {
   ResourceScheme,
 } from "@protocol/resource"
 import { isResourceKindForScheme, resourceKey } from "@protocol/resource"
+import type { Subscription, SubscriptionType } from "@protocol/subscription"
+import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
 import type {
   ResourceAction,
   ResourceActionId,
@@ -21,6 +23,14 @@ type ConnectedRecord = ResourceRecord & {
   meta: ResourceMeta & { route: string }
 }
 
+export type ConnectedVfsProviderDeps = {
+  listSubscriptionsByTypes: (types: SubscriptionType[]) => Promise<Subscription[]>
+}
+
+const defaultDeps: ConnectedVfsProviderDeps = {
+  listSubscriptionsByTypes,
+}
+
 function routeQuery(path: string, params: Record<string, string | undefined>): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
@@ -32,8 +42,10 @@ function routeQuery(path: string, params: Record<string, string | undefined>): s
 
 function splitPair(id: string): [string, string] | null {
   const i = id.indexOf(":")
-  if (i <= 0 || i === id.length - 1) return null
-  return [id.slice(0, i), id.slice(i + 1)]
+  const slash = id.indexOf("/")
+  const split = i > 0 ? i : slash
+  if (split <= 0 || split === id.length - 1) return null
+  return [id.slice(0, split), id.slice(split + 1)]
 }
 
 export function routeForConnectedResource(ref: ResourceRef): string | null {
@@ -112,6 +124,39 @@ function connectedRecord(ref: ResourceRef, title = connectedTitle(ref)): Connect
       capabilities: connectedCapabilities(ref),
     },
     content: { route },
+  }
+}
+
+function entityResourceId(sub: Subscription): string {
+  if (sub.entityLabel && sub.entityName) return `${sub.entityLabel}:${sub.entityName}`
+  const pair = splitPair(sub.key)
+  return pair ? `${pair[0]}:${pair[1]}` : sub.key
+}
+
+function subscriptionRecord(sub: Subscription): ConnectedRecord | null {
+  switch (sub.type) {
+    case "entity":
+      return connectedRecord(
+        { scheme: "info", kind: "entity", id: entityResourceId(sub) },
+        sub.title || sub.entityName || sub.key,
+      )
+    case "publisher":
+      return connectedRecord(
+        { scheme: "info", kind: "publisher", id: sub.key },
+        sub.title || sub.key,
+      )
+    case "search":
+      return connectedRecord(
+        { scheme: "info", kind: "search", id: sub.searchKeyword || sub.key },
+        sub.title || sub.searchKeyword || sub.key,
+      )
+    case "peer":
+      return connectedRecord(
+        { scheme: "community", kind: "peer", id: sub.key },
+        sub.title || sub.key,
+      )
+    case "tool":
+      return null
   }
 }
 
@@ -201,7 +246,25 @@ function paginate(
   }
 }
 
-function createRouteProvider(scheme: RouteScheme, staticRecords: ConnectedRecord[]): VfsProvider {
+type DynamicRecordLoader = (query: ResourceQuery) => Promise<ConnectedRecord[]>
+
+function uniqueRecords(records: ConnectedRecord[]): ConnectedRecord[] {
+  const seen = new Set<string>()
+  const unique: ConnectedRecord[] = []
+  for (const record of records) {
+    const key = resourceKey(record.meta.ref)
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(record)
+  }
+  return unique
+}
+
+function createRouteProvider(
+  scheme: RouteScheme,
+  staticRecords: ConnectedRecord[],
+  loadDynamicRecords?: DynamicRecordLoader,
+): VfsProvider {
   const byKey = new Map(staticRecords.map((record) => [resourceKey(record.meta.ref), record]))
   const recordForRef = (ref: ResourceRef): ConnectedRecord | null => {
     if (ref.scheme !== scheme || !isResourceKindForScheme(scheme, ref.kind)) {
@@ -213,7 +276,11 @@ function createRouteProvider(scheme: RouteScheme, staticRecords: ConnectedRecord
     scheme,
     async list(query) {
       const kinds = queryKinds(query, scheme)
-      const items = staticRecords
+      const records = uniqueRecords([
+        ...staticRecords,
+        ...((await loadDynamicRecords?.(query)) ?? []),
+      ])
+      const items = records
         .map((record) => record.meta)
         .filter((meta) => !kinds || kinds.includes(meta.ref.kind))
         .filter((meta) => matchesText(meta, query.text))
@@ -237,16 +304,53 @@ function createRouteProvider(scheme: RouteScheme, staticRecords: ConnectedRecord
   }
 }
 
-export const infoVfsProvider = createRouteProvider("info", INFO_RECORDS)
-export const communityVfsProvider = createRouteProvider("community", COMMUNITY_RECORDS)
-export const toolVfsProvider = createRouteProvider("tool", TOOL_RECORDS)
-export const browserVfsProvider = createRouteProvider("browser", BROWSER_RECORDS)
-export const appVfsProvider = createRouteProvider("app", APP_RECORDS)
+function subscriptionTypesForInfoQuery(query: ResourceQuery): SubscriptionType[] {
+  const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["entity", "publisher", "search"])
+  const types: SubscriptionType[] = []
+  if (kinds.includes("entity")) types.push("entity")
+  if (kinds.includes("publisher")) types.push("publisher")
+  if (kinds.includes("search")) types.push("search")
+  return types
+}
 
-export const connectedVfsProviders: VfsProvider[] = [
+export function createConnectedVfsProviders(
+  deps: ConnectedVfsProviderDeps = defaultDeps,
+): VfsProvider[] {
+  const infoVfsProvider = createRouteProvider("info", INFO_RECORDS, async (query) => {
+    const types = subscriptionTypesForInfoQuery(query)
+    if (types.length === 0) return []
+    const subs = await deps.listSubscriptionsByTypes(types)
+    return subs.flatMap((sub) => {
+      const record = subscriptionRecord(sub)
+      return record && record.meta.ref.scheme === "info" ? [record] : []
+    })
+  })
+  const communityVfsProvider = createRouteProvider("community", COMMUNITY_RECORDS, async (query) => {
+    const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["peer"])
+    if (!kinds.includes("peer")) return []
+    const subs = await deps.listSubscriptionsByTypes(["peer"])
+    return subs.flatMap((sub) => {
+      const record = subscriptionRecord(sub)
+      return record && record.meta.ref.scheme === "community" ? [record] : []
+    })
+  })
+  return [
+    infoVfsProvider,
+    communityVfsProvider,
+    createRouteProvider("tool", TOOL_RECORDS),
+    createRouteProvider("browser", BROWSER_RECORDS),
+    createRouteProvider("app", APP_RECORDS),
+  ]
+}
+
+const defaultConnectedProviders = createConnectedVfsProviders()
+
+export const [
   infoVfsProvider,
   communityVfsProvider,
   toolVfsProvider,
   browserVfsProvider,
   appVfsProvider,
-]
+] = defaultConnectedProviders
+
+export const connectedVfsProviders: VfsProvider[] = defaultConnectedProviders

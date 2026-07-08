@@ -1,17 +1,18 @@
 "use client"
 
-// 二级侧栏统一文件树 —— 所有模式共用: 静态根 (区段/面板) + 懒加载 node 子树。
-// 点击区段/面板/具体 node → OpenTarget; 旧 descriptor/nodeRef 仅用于 active 状态兼容。
+// 二级侧栏统一文件树 —— 所有模式共用: 静态根 (区段/面板) + 懒加载 node/resource 子树。
+// 点击区段/面板/具体资源 → OpenTarget。
 
 import * as React from "react"
 import { ChevronRight, Rss } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { buildTree, type Tree } from "@/files/notes-tree-util"
 import { listNodeSummaries, type NodeSummary } from "@/files/stores/nodes-store"
-import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
 import type { NodeKind } from "@protocol/node"
-import type { Subscription } from "@protocol/subscription"
+import type { ResourceMeta } from "@protocol/resource"
 import { onFilesUpdated } from "@protocol/flowback"
+import { listResources } from "@/vfs/registry"
+import type { ResourceQuery } from "@/vfs/types"
 import {
   staticTreeRoots,
   subscriptionsTreeRoots,
@@ -20,7 +21,6 @@ import {
   browserTreeRoots,
   type SidebarTreeNode,
 } from "./sidebar-tree-data"
-import { requestEmbedRoute } from "@/plugins/embed/embed-nav"
 import {
   openTarget,
   openAiTasks,
@@ -33,8 +33,9 @@ import {
   useActiveWorkspaceId,
   getTabs,
 } from "../store"
-import type { OpenTarget } from "../open-target"
+import { descriptorForResource, type OpenTarget } from "../open-target"
 import { parseNodeParams } from "../node-tab"
+import { resolveResourceEngine } from "../resource-engines"
 import {
   getWorkspacesState,
   getServerWorkspacesState,
@@ -68,20 +69,8 @@ function defaultExpandedSection(moduleId: ModuleId): string | null {
   return null
 }
 
-function entityEmbedRoute(sub: Subscription): string | null {
-  const label = sub.entityLabel ?? ""
-  const name = sub.entityName ?? sub.title
-  if (!label || !name) return null
-  return `/info/entity?label=${encodeURIComponent(label)}&name=${encodeURIComponent(name)}`
-}
-
 function isBookmarkTreeSection(childKinds?: NodeKind[]): boolean {
   return Boolean(childKinds?.includes("bookmark") || childKinds?.includes("folder"))
-}
-
-function peerEmbedRoute(sub: Subscription): string {
-  const q = new URLSearchParams({ openPeer: sub.key, openPeerName: sub.title })
-  return `/community?${q.toString()}`
 }
 
 function isNodeActive(activeId: string | null, kind: NodeKind, id: string): boolean {
@@ -92,12 +81,41 @@ function isNodeActive(activeId: string | null, kind: NodeKind, id: string): bool
   return ref?.kind === kind && ref.id === id
 }
 
-function isDescriptorActive(
+function isTabTargetActive(
   activeId: string | null,
-  descriptor?: SidebarTreeNode["descriptor"],
+  target: Extract<OpenTarget, { type: "tab" }>,
+  activeKind: string | null,
+  activeWorkspaceId: string | null,
 ): boolean {
-  if (!activeId || !descriptor) return false
+  const descriptor = target.descriptor
+  if (descriptor.kind === "ai-tasks") {
+    return activeWorkspaceId === descriptor.params?.workspaceId
+  }
+  if (descriptor.kind.startsWith("ai-")) return activeKind === descriptor.kind
   return activeId === tabKey(descriptor)
+}
+
+function isResourceTargetActive(
+  activeId: string | null,
+  target: Extract<OpenTarget, { type: "resource" }>,
+): boolean {
+  if (!activeId) return false
+  if (target.ref.scheme === "node") return isNodeActive(activeId, target.ref.kind, target.ref.id)
+  const descriptor = descriptorForResource(target.ref, target.title)
+  return descriptor ? activeId === tabKey(descriptor) : false
+}
+
+function isTargetActive(
+  activeId: string | null,
+  target: OpenTarget | undefined,
+  activeKind: string | null,
+  activeWorkspaceId: string | null,
+): boolean {
+  if (!target) return false
+  if (target.type === "tab")
+    return isTabTargetActive(activeId, target, activeKind, activeWorkspaceId)
+  if (target.type === "resource") return isResourceTargetActive(activeId, target)
+  return false
 }
 
 function openTreeTarget(target: OpenTarget, transient: boolean) {
@@ -115,9 +133,7 @@ export default function SidebarTree() {
 
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
   const [nodeCache, setNodeCache] = React.useState<Map<string, NodeSummary[]>>(new Map())
-  const [subscriptionCache, setSubscriptionCache] = React.useState<Map<string, Subscription[]>>(
-    new Map(),
-  )
+  const [resourceCache, setResourceCache] = React.useState<Map<string, ResourceMeta[]>>(new Map())
 
   const wsState = React.useSyncExternalStore(
     subscribeWorkspaces,
@@ -127,7 +143,7 @@ export default function SidebarTree() {
 
   const clearCaches = React.useCallback(() => {
     setNodeCache(new Map())
-    setSubscriptionCache(new Map())
+    setResourceCache(new Map())
   }, [])
 
   React.useEffect(() => {
@@ -166,18 +182,14 @@ export default function SidebarTree() {
     }
   }, [])
 
-  const loadSubscriptions = React.useCallback(
-    async (sectionId: string, types: Subscription["type"][]) => {
-      if (types.length === 0) return
-      try {
-        const subs = await listSubscriptionsByTypes(types)
-        setSubscriptionCache((prev) => new Map(prev).set(sectionId, subs))
-      } catch {
-        /* ignore */
-      }
-    },
-    [],
-  )
+  const loadResourceChildren = React.useCallback(async (sectionId: string, query: ResourceQuery) => {
+    try {
+      const page = await listResources(query, { actor: "ui", permissions: [] })
+      setResourceCache((prev) => new Map(prev).set(sectionId, page.items))
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   React.useEffect(() => subscribeSidebarTreeRefresh(clearCaches), [clearCaches])
   // 笔记区走独立 NotesSidebarTree, 不经过 nodeCache; notifyFilesUpdated 时须同步 refreshSidebarTree。
@@ -209,11 +221,11 @@ export default function SidebarTree() {
       if (root.childKinds?.length && !nodeCache.has(root.id)) {
         void loadNodes(root.id, root.childKinds)
       }
-      if (root.subscriptionTypes?.length && !subscriptionCache.has(root.id)) {
-        void loadSubscriptions(root.id, root.subscriptionTypes)
+      if (root.childResourceQuery && !resourceCache.has(root.id)) {
+        void loadResourceChildren(root.id, root.childResourceQuery)
       }
     }
-  }, [activeModule, expanded, nodeCache, subscriptionCache, loadNodes, loadSubscriptions])
+  }, [activeModule, expanded, nodeCache, resourceCache, loadNodes, loadResourceChildren])
 
   const roots = React.useMemo(() => {
     if (activeModule === "agent") {
@@ -248,12 +260,12 @@ export default function SidebarTree() {
             activeKind={activeKind}
             activeWorkspaceId={activeWorkspaceId}
             nodeCache={nodeCache}
-            subscriptionCache={subscriptionCache}
+            resourceCache={resourceCache}
             workspaces={activeModule === "agent" ? wsState.workspaces : undefined}
             activeModule={activeModule}
             onToggle={toggleExpand}
             onLoadNodes={loadNodes}
-            onLoadSubscriptions={loadSubscriptions}
+            onLoadResourceChildren={loadResourceChildren}
           />
         ))}
       </nav>
@@ -269,12 +281,12 @@ function TreeRow({
   activeKind,
   activeWorkspaceId,
   nodeCache,
-  subscriptionCache,
+  resourceCache,
   workspaces,
   activeModule,
   onToggle,
   onLoadNodes,
-  onLoadSubscriptions,
+  onLoadResourceChildren,
 }: {
   node: SidebarTreeNode
   depth: number
@@ -283,58 +295,45 @@ function TreeRow({
   activeKind: string | null
   activeWorkspaceId: string | null
   nodeCache: Map<string, NodeSummary[]>
-  subscriptionCache: Map<string, Subscription[]>
+  resourceCache: Map<string, ResourceMeta[]>
   workspaces?: { id: string; name: string }[]
   activeModule: ModuleId
   onToggle: (id: string) => void
   onLoadNodes: (sectionId: string, kinds: NodeKind[]) => void
-  onLoadSubscriptions: (sectionId: string, types: Subscription["type"][]) => void
+  onLoadResourceChildren: (sectionId: string, query: ResourceQuery) => void
 }) {
   const Icon = node.icon
   const isOpen = expanded.has(node.id)
-  const subscriptions = subscriptionCache.get(node.id)
+  const resources = resourceCache.get(node.id)
 
-  const active =
-    node.nodeKind === "node" && node.nodeRef
-      ? isNodeActive(activeId, node.nodeRef.kind, node.nodeRef.id)
-      : node.descriptor?.kind === "ai-tasks"
-        ? activeWorkspaceId === node.descriptor.params?.workspaceId
-        : node.descriptor?.kind?.startsWith("ai-")
-          ? activeKind === node.descriptor.kind
-          : isDescriptorActive(activeId, node.descriptor)
+  const active = isTargetActive(activeId, node.target, activeKind, activeWorkspaceId)
 
   const ensureChildrenLoaded = () => {
     if (node.childKinds?.length && node.id !== "section:notes" && !nodeCache.has(node.id)) {
       onLoadNodes(node.id, node.childKinds)
     }
-    if (node.subscriptionTypes?.length && !subscriptionCache.has(node.id)) {
-      onLoadSubscriptions(node.id, node.subscriptionTypes)
+    if (node.childResourceQuery && !resourceCache.has(node.id)) {
+      onLoadResourceChildren(node.id, node.childResourceQuery)
     }
   }
 
   // 行点击语义 (VS Code 式): 单击 = 预览 (transient, 复用单一预览槽, 随手看不堆标签);
   // 双击 / 键盘 Enter = 常驻 (固定)。纯容器行 (无 descriptor) 则单击 = 双向展开/折叠。
   const openRow = (transient: boolean) => {
-    if (node.nodeKind === "node" && node.nodeRef) {
-      openTreeTarget(
-        { type: "resource", ref: { scheme: "node", ...node.nodeRef }, title: node.label },
-        transient,
-      )
+    const descriptor = node.target?.type === "tab" ? node.target.descriptor : null
+    if (descriptor?.kind === "ai-tasks" && descriptor.params?.workspaceId) {
+      openAiTasks(descriptor.params.workspaceId, descriptor.title, { transient })
       return
     }
-    if (node.descriptor?.kind === "ai-tasks" && node.descriptor.params?.workspaceId) {
-      openAiTasks(node.descriptor.params.workspaceId, node.descriptor.title, { transient })
-      return
-    }
-    if (node.descriptor?.kind === "ai-mcp") {
+    if (descriptor?.kind === "ai-mcp") {
       openAiSection("ai-mcp", { transient })
       return
     }
-    if (node.descriptor?.kind === "ai-skills") {
+    if (descriptor?.kind === "ai-skills") {
       openAiSection("ai-skills", { transient })
       return
     }
-    if (node.descriptor?.kind === "ai-rules") {
+    if (descriptor?.kind === "ai-rules") {
       openAiSection("ai-rules", { transient })
       return
     }
@@ -352,7 +351,7 @@ function TreeRow({
   const handleClick = () => openRow(true)
   // 双击 → 把预览标签固定成常驻 (走非瞬态打开, 命中预览槽即提升; 纯容器行无视)。
   const handleDoubleClick = () => {
-    if ((node.nodeKind === "node" && node.nodeRef) || node.descriptor) openRow(false)
+    if (node.target) openRow(false)
   }
 
   const handleChevron = (e: React.MouseEvent) => {
@@ -435,12 +434,12 @@ function TreeRow({
             activeKind={activeKind}
             activeWorkspaceId={activeWorkspaceId}
             nodeCache={nodeCache}
-            subscriptionCache={subscriptionCache}
+            resourceCache={resourceCache}
             workspaces={workspaces}
             activeModule={activeModule}
             onToggle={onToggle}
             onLoadNodes={onLoadNodes}
-            onLoadSubscriptions={onLoadSubscriptions}
+            onLoadResourceChildren={onLoadResourceChildren}
           />
         ))}
 
@@ -485,12 +484,17 @@ function TreeRow({
       )}
 
       {isOpen &&
-        node.subscriptionTypes?.length &&
-        subscriptions?.map((sub) => (
-          <SubscriptionRow key={sub.id} sub={sub} depth={depth + 1} activeModule={activeModule} />
+        node.childResourceQuery &&
+        resources?.map((resource) => (
+          <ResourceRow
+            key={resourceKey(resource)}
+            meta={resource}
+            depth={depth + 1}
+            activeId={activeId}
+          />
         ))}
 
-      {isOpen && node.subscriptionTypes?.length && subscriptions?.length === 0 && (
+      {isOpen && node.childResourceQuery && resources?.length === 0 && (
         <p
           style={{ paddingLeft: `${(depth + 1) * 12 + 28}px` }}
           className="py-1.5 text-xs text-muted-foreground"
@@ -530,55 +534,50 @@ function TreeRow({
   )
 }
 
-function SubscriptionRow({
-  sub,
+function resourceKey(meta: ResourceMeta): string {
+  return `${meta.ref.scheme}:${meta.ref.kind}:${meta.ref.id}`
+}
+
+function ResourceRow({
+  meta,
   depth,
-  activeModule,
+  activeId,
 }: {
-  sub: Subscription
+  meta: ResourceMeta
   depth: number
-  activeModule: ModuleId
+  activeId: string | null
 }) {
-  const handleClick = () => {
-    if (activeModule === "info" && sub.type === "entity") {
-      const route = entityEmbedRoute(sub)
-      if (route) requestEmbedRoute("info", route)
-      return
-    }
-    if (activeModule === "community" && sub.type === "peer") {
-      requestEmbedRoute("community", peerEmbedRoute(sub))
-    }
-  }
+  const Icon = resolveResourceEngine(meta.ref)?.icon ?? Rss
+  const target: OpenTarget = { type: "resource", ref: meta.ref, title: meta.title }
+  const active = isResourceTargetActive(activeId, target)
+  const open = (transient: boolean) => openTreeTarget(target, transient)
 
   return (
     <div
       role="treeitem"
       tabIndex={-1}
       aria-level={depth + 1}
-      // 订阅行从不可选: 与其它行一致地「未选中即省略」(undefined → 不渲染属性), 而非显式 false。
-      aria-selected={undefined}
-      onClick={handleClick}
+      aria-selected={active || undefined}
+      onClick={() => open(true)}
+      onDoubleClick={() => open(false)}
       onKeyDown={(e) => {
         if (onTreeArrowNav(e)) return
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
-          handleClick()
+          open(false)
         }
       }}
       style={{ paddingLeft: `${depth * 12 + 4}px` }}
       className={cn(
         "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-        "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+        active
+          ? "bg-primary/10 font-medium text-primary"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >
       <span className="h-5 w-5 shrink-0" />
-      {sub.favicon ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={sub.favicon} alt="" className="h-3.5 w-3.5 shrink-0 rounded-[3px]" />
-      ) : (
-        <Rss className="h-3.5 w-3.5 shrink-0" />
-      )}
-      <span className="min-w-0 flex-1 truncate text-left">{sub.title || sub.key}</span>
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate text-left">{meta.title}</span>
     </div>
   )
 }

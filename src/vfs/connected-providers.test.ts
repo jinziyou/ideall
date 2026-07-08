@@ -1,7 +1,13 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { resourceKey } from "@protocol/resource"
-import { infoVfsProvider, routeForConnectedResource, toolVfsProvider } from "./connected-providers"
+import type { Subscription } from "@protocol/subscription"
+import {
+  createConnectedVfsProviders,
+  infoVfsProvider,
+  routeForConnectedResource,
+  toolVfsProvider,
+} from "./connected-providers"
 import { VfsError, type VfsAccessContext } from "./types"
 
 const ctx: VfsAccessContext = { actor: "ui", permissions: [] }
@@ -38,4 +44,47 @@ test("connected providers: reject invalid kinds and expose shared route mapping"
     routeForConnectedResource({ scheme: "community", kind: "peer", id: "42" }),
     "/community?openPeer=42",
   )
+})
+
+test("connected providers: list followed entity and peer resources from subscriptions", async () => {
+  const subscriptions: Subscription[] = [
+    {
+      id: "entity-1",
+      type: "entity",
+      key: "ORG/示例",
+      title: "示例组织",
+      favicon: "",
+      entityLabel: "ORG",
+      entityName: "示例",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    {
+      id: "peer-1",
+      type: "peer",
+      key: "42",
+      title: "社区作者",
+      favicon: "",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ]
+
+  const [info, community] = createConnectedVfsProviders({
+    async listSubscriptionsByTypes(types) {
+      return subscriptions.filter((sub) => types.includes(sub.type))
+    },
+  })
+
+  const entities = await info.list({ scheme: "info", kind: "entity" }, ctx)
+  assert.deepEqual(entities.items.map((item) => item.ref), [
+    { scheme: "info", kind: "entity", id: "ORG:示例" },
+  ])
+  assert.equal(entities.items[0]?.title, "示例组织")
+
+  const peers = await community.list({ scheme: "community", kind: "peer" }, ctx)
+  assert.deepEqual(peers.items.map((item) => item.ref), [
+    { scheme: "community", kind: "peer", id: "42" },
+  ])
+  assert.equal(peers.items[0]?.route, "/community?openPeer=42")
 })
