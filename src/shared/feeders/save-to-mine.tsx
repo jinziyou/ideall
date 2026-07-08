@@ -14,13 +14,14 @@ import {
 } from "@/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { openExternal } from "@/lib/safe-url"
-import { getFilesPort } from "@protocol/files"
+import { invokeResourceAction } from "@/vfs/registry"
+import type { SaveToMineResult } from "@/vfs/save-to-mine-projector"
 import { flowbackToast } from "./flowback-toast"
 
 /**
  * 统一的「加入我的」基础组件 (feeders) —— 把发现模块上的任意条目 (文章 / 事件 / 链接) 加入本地的「我的」。
  * 按传入的能力渲染菜单项: 收藏到书签 / 关注发布者; 另带原文 / 全面报道 直达。
- * 经 protocol 的 FilesPort 写入, 广播 FILES_UPDATED 让头部计数 +1。
+ * 经 VFS save-to-mine action 写入, 让保存映射集中在资源层。
  */
 export function SaveToMine({
   bookmark,
@@ -47,14 +48,16 @@ export function SaveToMine({
   async function doBookmark() {
     if (!bookmark) return
     try {
-      const filesPort = getFilesPort()
-      // 去重: addBookmark 非幂等 (每次新 id), 同一 url 重复点会产生重复书签
-      const existing = await filesPort.listBookmarks()
-      if (existing.some((b) => b.url === bookmark.url)) {
+      const result = (await invokeResourceAction(
+        { scheme: "browser", kind: "page", id: bookmark.url },
+        "save-to-mine",
+        bookmark,
+        { actor: "ui", permissions: [] },
+      )) as SaveToMineResult
+      if (result.kind === "bookmark" && result.existed) {
         toast.info("已在书签中")
         return
       }
-      await filesPort.addBookmark({ title: bookmark.title, url: bookmark.url })
       pop()
       flowbackToast("已收藏到书签", () => router.push("/home/bookmarks"))
     } catch {
@@ -65,21 +68,19 @@ export function SaveToMine({
   async function doSubscribe() {
     if (!publisher?.domain) return
     try {
-      const filesPort = getFilesPort()
-      // 去重: 与 doBookmark 一致, 已关注则提示而非重复弹「已关注」成功 toast (把重复当新增)
-      if (await filesPort.isSubscribed("publisher", publisher.domain)) {
+      const title = publisher.name || publisher.domain
+      const result = (await invokeResourceAction(
+        { scheme: "info", kind: "publisher", id: publisher.domain },
+        "save-to-mine",
+        { domain: publisher.domain, title },
+        { actor: "ui", permissions: [] },
+      )) as SaveToMineResult
+      if (result.kind === "subscription" && result.existed) {
         toast.info("已关注该发布者")
         return
       }
-      await filesPort.addSubscription({
-        type: "publisher",
-        key: publisher.domain,
-        title: publisher.name || publisher.domain,
-      })
       pop()
-      flowbackToast(`已关注 ${publisher.name || publisher.domain}`, () =>
-        router.push("/home/subscriptions"),
-      )
+      flowbackToast(`已关注 ${title}`, () => router.push("/home/subscriptions"))
     } catch {
       toast.error("关注失败，请重试")
     }

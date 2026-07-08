@@ -8,11 +8,17 @@ import type {
 import { isResourceKindForScheme, resourceKey } from "@protocol/resource"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
+import {
+  canProjectSaveToMine,
+  saveResourceToMine,
+  type SaveToMineResult,
+} from "./save-to-mine-projector"
 import type {
   ResourceAction,
   ResourceActionId,
   ResourcePage,
   ResourceQuery,
+  VfsAccessContext,
   VfsProvider,
 } from "./types"
 import { VfsError } from "./types"
@@ -25,10 +31,16 @@ type ConnectedRecord = ResourceRecord & {
 
 export type ConnectedVfsProviderDeps = {
   listSubscriptionsByTypes: (types: SubscriptionType[]) => Promise<Subscription[]>
+  saveResourceToMine: (
+    ref: ResourceRef,
+    input: unknown,
+    ctx: VfsAccessContext,
+  ) => Promise<SaveToMineResult>
 }
 
 const defaultDeps: ConnectedVfsProviderDeps = {
   listSubscriptionsByTypes,
+  saveResourceToMine,
 }
 
 function routeQuery(path: string, params: Record<string, string | undefined>): string {
@@ -109,7 +121,9 @@ function connectedTitle(ref: ResourceRef): string {
 }
 
 function connectedCapabilities(ref: ResourceRef): ResourceCapability[] {
-  return ["open", "preview", "navigate"]
+  const capabilities: ResourceCapability[] = ["open", "preview", "navigate"]
+  if (canProjectSaveToMine(ref)) capabilities.push("save-to-mine")
+  return capabilities
 }
 
 function connectedRecord(ref: ResourceRef, title = connectedTitle(ref)): ConnectedRecord | null {
@@ -209,7 +223,12 @@ function actionLabel(id: ResourceActionId): string {
 }
 
 function actionsFor(meta: ResourceMeta): ResourceAction[] {
-  const ids: Array<Extract<ResourceActionId, ResourceCapability>> = ["open", "preview", "navigate"]
+  const ids: Array<Extract<ResourceActionId, ResourceCapability>> = [
+    "open",
+    "preview",
+    "navigate",
+    "save-to-mine",
+  ]
   return ids
     .filter((id) => meta.capabilities.includes(id))
     .map((id) => ({ id, label: actionLabel(id), requires: [id] }))
@@ -264,6 +283,7 @@ function createRouteProvider(
   scheme: RouteScheme,
   staticRecords: ConnectedRecord[],
   loadDynamicRecords?: DynamicRecordLoader,
+  saveToMine?: ConnectedVfsProviderDeps["saveResourceToMine"],
 ): VfsProvider {
   const byKey = new Map(staticRecords.map((record) => [resourceKey(record.meta.ref), record]))
   const recordForRef = (ref: ResourceRef): ConnectedRecord | null => {
@@ -293,11 +313,17 @@ function createRouteProvider(
       const record = recordForRef(ref)
       return record ? actionsFor(record.meta) : []
     },
-    async invoke(ref, action) {
+    async invoke(ref, action, input, ctx) {
       const record = recordForRef(ref)
       if (!record) throw new VfsError("not-found", `Resource not found: ${resourceKey(ref)}`)
       if (action === "open" || action === "preview" || action === "navigate") {
         return { ref, route: record.meta.route }
+      }
+      if (action === "save-to-mine") {
+        if (!record.meta.capabilities.includes("save-to-mine") || !saveToMine) {
+          throw new VfsError("unsupported", `Action ${action} is not supported by ${scheme} provider`)
+        }
+        return saveToMine(ref, input, ctx)
       }
       throw new VfsError("unsupported", `Action ${action} is not supported by ${scheme} provider`)
     },
@@ -314,32 +340,38 @@ function subscriptionTypesForInfoQuery(query: ResourceQuery): SubscriptionType[]
 }
 
 export function createConnectedVfsProviders(
-  deps: ConnectedVfsProviderDeps = defaultDeps,
+  deps: Partial<ConnectedVfsProviderDeps> = {},
 ): VfsProvider[] {
+  const resolvedDeps: ConnectedVfsProviderDeps = { ...defaultDeps, ...deps }
   const infoVfsProvider = createRouteProvider("info", INFO_RECORDS, async (query) => {
     const types = subscriptionTypesForInfoQuery(query)
     if (types.length === 0) return []
-    const subs = await deps.listSubscriptionsByTypes(types)
+    const subs = await resolvedDeps.listSubscriptionsByTypes(types)
     return subs.flatMap((sub) => {
       const record = subscriptionRecord(sub)
       return record && record.meta.ref.scheme === "info" ? [record] : []
     })
-  })
-  const communityVfsProvider = createRouteProvider("community", COMMUNITY_RECORDS, async (query) => {
-    const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["peer"])
-    if (!kinds.includes("peer")) return []
-    const subs = await deps.listSubscriptionsByTypes(["peer"])
-    return subs.flatMap((sub) => {
-      const record = subscriptionRecord(sub)
-      return record && record.meta.ref.scheme === "community" ? [record] : []
-    })
-  })
+  }, resolvedDeps.saveResourceToMine)
+  const communityVfsProvider = createRouteProvider(
+    "community",
+    COMMUNITY_RECORDS,
+    async (query) => {
+      const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["peer"])
+      if (!kinds.includes("peer")) return []
+      const subs = await resolvedDeps.listSubscriptionsByTypes(["peer"])
+      return subs.flatMap((sub) => {
+        const record = subscriptionRecord(sub)
+        return record && record.meta.ref.scheme === "community" ? [record] : []
+      })
+    },
+    resolvedDeps.saveResourceToMine,
+  )
   return [
     infoVfsProvider,
     communityVfsProvider,
-    createRouteProvider("tool", TOOL_RECORDS),
-    createRouteProvider("browser", BROWSER_RECORDS),
-    createRouteProvider("app", APP_RECORDS),
+    createRouteProvider("tool", TOOL_RECORDS, undefined, resolvedDeps.saveResourceToMine),
+    createRouteProvider("browser", BROWSER_RECORDS, undefined, resolvedDeps.saveResourceToMine),
+    createRouteProvider("app", APP_RECORDS, undefined, resolvedDeps.saveResourceToMine),
   ]
 }
 
