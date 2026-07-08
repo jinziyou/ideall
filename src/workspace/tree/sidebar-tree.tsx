@@ -198,14 +198,17 @@ export default function SidebarTree() {
     }
   }, [])
 
-  const loadResourceChildren = React.useCallback(async (sectionId: string, query: ResourceQuery) => {
-    try {
-      const page = await listResources(query, { actor: "ui", permissions: [] })
-      setResourceCache((prev) => new Map(prev).set(sectionId, page.items))
-    } catch {
-      /* ignore */
-    }
-  }, [])
+  const loadResourceChildren = React.useCallback(
+    async (sectionId: string, query: ResourceQuery) => {
+      try {
+        const page = await listResources(query, { actor: "ui", permissions: [] })
+        setResourceCache((prev) => new Map(prev).set(sectionId, page.items))
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  )
 
   React.useEffect(() => subscribeSidebarTreeRefresh(clearCaches), [clearCaches])
 

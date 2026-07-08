@@ -90,15 +90,17 @@ test("connected providers: list followed entity and peer resources from subscrip
   })
 
   const entities = await info.list({ scheme: "info", kind: "entity" }, ctx)
-  assert.deepEqual(entities.items.map((item) => item.ref), [
-    { scheme: "info", kind: "entity", id: "ORG:示例" },
-  ])
+  assert.deepEqual(
+    entities.items.map((item) => item.ref),
+    [{ scheme: "info", kind: "entity", id: "ORG:示例" }],
+  )
   assert.equal(entities.items[0]?.title, "示例组织")
 
   const peers = await community.list({ scheme: "community", kind: "peer" }, ctx)
-  assert.deepEqual(peers.items.map((item) => item.ref), [
-    { scheme: "community", kind: "peer", id: "42" },
-  ])
+  assert.deepEqual(
+    peers.items.map((item) => item.ref),
+    [{ scheme: "community", kind: "peer", id: "42" }],
+  )
   assert.equal(peers.items[0]?.route, "/community?openPeer=42")
 })
 
@@ -139,11 +141,7 @@ test("connected providers: invoke save-to-mine through injected projector", asyn
 test("connected providers: watch forwards file update events", () => {
   withWindow((target) => {
     let count = 0
-    const handle = infoVfsProvider.watch!(
-      { scheme: "info", kind: "entity" },
-      ctx,
-      () => count++,
-    )
+    const handle = infoVfsProvider.watch!({ scheme: "info", kind: "entity" }, ctx, () => count++)
 
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
     assert.equal(count, 1)

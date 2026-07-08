@@ -16,10 +16,7 @@ import {
   splitConnectedResourcePair,
   type ConnectedResourceScheme,
 } from "./connected-resource-manifest"
-import {
-  saveResourceToMine,
-  type SaveToMineResult,
-} from "./save-to-mine-projector"
+import { saveResourceToMine, type SaveToMineResult } from "./save-to-mine-projector"
 import type {
   ResourceAction,
   ResourceActionId,
@@ -243,7 +240,10 @@ function createRouteProvider(
       }
       if (action === "save-to-mine") {
         if (!record.meta.capabilities.includes("save-to-mine") || !saveToMine) {
-          throw new VfsError("unsupported", `Action ${action} is not supported by ${scheme} provider`)
+          throw new VfsError(
+            "unsupported",
+            `Action ${action} is not supported by ${scheme} provider`,
+          )
         }
         return saveToMine(ref, input, ctx)
       }
@@ -258,7 +258,8 @@ function createRouteProvider(
 }
 
 function subscriptionTypesForInfoQuery(query: ResourceQuery): SubscriptionType[] {
-  const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["entity", "publisher", "search"])
+  const kinds =
+    query.kinds ?? (query.kind != null ? [query.kind] : ["entity", "publisher", "search"])
   const types: SubscriptionType[] = []
   if (kinds.includes("entity")) types.push("entity")
   if (kinds.includes("publisher")) types.push("publisher")
@@ -270,15 +271,20 @@ export function createConnectedVfsProviders(
   deps: Partial<ConnectedVfsProviderDeps> = {},
 ): VfsProvider[] {
   const resolvedDeps: ConnectedVfsProviderDeps = { ...defaultDeps, ...deps }
-  const infoVfsProvider = createRouteProvider("info", INFO_RECORDS, async (query) => {
-    const types = subscriptionTypesForInfoQuery(query)
-    if (types.length === 0) return []
-    const subs = await resolvedDeps.listSubscriptionsByTypes(types)
-    return subs.flatMap((sub) => {
-      const record = subscriptionRecord(sub)
-      return record && record.meta.ref.scheme === "info" ? [record] : []
-    })
-  }, resolvedDeps.saveResourceToMine)
+  const infoVfsProvider = createRouteProvider(
+    "info",
+    INFO_RECORDS,
+    async (query) => {
+      const types = subscriptionTypesForInfoQuery(query)
+      if (types.length === 0) return []
+      const subs = await resolvedDeps.listSubscriptionsByTypes(types)
+      return subs.flatMap((sub) => {
+        const record = subscriptionRecord(sub)
+        return record && record.meta.ref.scheme === "info" ? [record] : []
+      })
+    },
+    resolvedDeps.saveResourceToMine,
+  )
   const communityVfsProvider = createRouteProvider(
     "community",
     COMMUNITY_RECORDS,

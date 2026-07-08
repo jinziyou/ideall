@@ -8,11 +8,7 @@
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
-import {
-  descriptorForResource,
-  descriptorForResourceMeta,
-  type OpenTarget,
-} from "./open-target"
+import { descriptorForResource, descriptorForResourceMeta, type OpenTarget } from "./open-target"
 import { getResource } from "@/vfs/registry"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
 import { tabDescriptor } from "./tab-definitions"

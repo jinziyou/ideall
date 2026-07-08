@@ -80,20 +80,17 @@ function deps({
 }
 
 test("save-to-mine projector: maps connected resources to mine assets", () => {
-  assert.deepEqual(
-    projectSaveToMine({ scheme: "info", kind: "entity", id: "ORG:示例" }),
-    {
-      kind: "subscription",
-      input: {
-        type: "entity",
-        key: "ORG/示例",
-        title: "示例",
-        entityLabel: "ORG",
-        entityName: "示例",
-        favicon: undefined,
-      },
+  assert.deepEqual(projectSaveToMine({ scheme: "info", kind: "entity", id: "ORG:示例" }), {
+    kind: "subscription",
+    input: {
+      type: "entity",
+      key: "ORG/示例",
+      title: "示例",
+      entityLabel: "ORG",
+      entityName: "示例",
+      favicon: undefined,
     },
-  )
+  })
 
   assert.deepEqual(
     projectSaveToMine(
