@@ -4,14 +4,9 @@
 import { isTauri, browserNavigate } from "@/lib/tauri"
 import { safeHref } from "@/lib/safe-url"
 import { openTab } from "./store"
-import type { ModuleId } from "./types"
+import { tabDescriptor } from "./tab-definitions"
 
-const BROWSER_TAB = {
-  kind: "browser-view",
-  module: "browser" as ModuleId,
-  title: "浏览器",
-  path: "/browser",
-}
+const BROWSER_TAB = tabDescriptor("browser-view")
 
 let pendingUrl: string | null = null
 const subscribers = new Set<(url: string) => void>()

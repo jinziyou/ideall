@@ -9,6 +9,7 @@ import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
+import { tabDescriptor } from "./tab-definitions"
 import { isTauri, browserRelease } from "@/lib/tauri"
 import { store, useAppSelector } from "@/lib/store"
 import { workspaceActions, type ActiveSource, type WorkspaceState } from "./workspace-slice"
@@ -285,24 +286,14 @@ export function promoteActiveTab() {
 }
 
 /** 打开全局设置标签 (外观 / 本机 / 已连接应用)。 */
-const SETTINGS_TAB: TabDescriptor = {
-  kind: "home-settings",
-  module: "home",
-  title: "设置",
-  path: "/home/settings",
-}
+const SETTINGS_TAB = tabDescriptor("home-settings")
 
 export function openSettings() {
   openTab(SETTINGS_TAB)
 }
 
 /** AI 全局设置标签 (默认 AI 标签; module:"agent")。 */
-const AI_SETTINGS_TAB: TabDescriptor = {
-  kind: "ai-settings",
-  module: "agent",
-  title: "AI 设置",
-  path: "/ai",
-}
+const AI_SETTINGS_TAB = tabDescriptor("ai-settings")
 
 /** 打开/激活一个 AI 区段标签: 设 activeModule=agent + 展开 AI 二级侧栏。
  *  opts.transient → 走单一预览槽 (与 openTab 同语义)。 */
@@ -335,21 +326,15 @@ export function openAiSettings(opts?: OpenTabOpts) {
   openAgentTab(AI_SETTINGS_TAB, opts)
 }
 
-const AI_SECTION_TITLE: Record<"ai-mcp" | "ai-skills" | "ai-rules", string> = {
-  "ai-mcp": "MCP",
-  "ai-skills": "Skills",
-  "ai-rules": "规则",
-}
-
 /** 打开 AI 区段管理标签 (MCP / Skills / 规则)。 */
 export function openAiSection(kind: "ai-mcp" | "ai-skills" | "ai-rules", opts?: OpenTabOpts) {
-  openAgentTab({ kind, module: "agent", title: AI_SECTION_TITLE[kind] }, opts)
+  openAgentTab(tabDescriptor(kind), opts)
 }
 
 /** 打开某工作区的任务标签 (params.workspaceId 区分实例; 不设 path → 不参与 URL 同步)。 */
 export function openAiTasks(workspaceId: string, title: string, opts?: OpenTabOpts) {
   setActiveWorkspace(workspaceId)
-  openAgentTab({ kind: "ai-tasks", module: "agent", title, params: { workspaceId } }, opts)
+  openAgentTab(tabDescriptor("ai-tasks", { title, params: { workspaceId } }), opts)
 }
 
 /** 打开 (或激活已存在的) 一个节点标签。三入口 (搜索/侧栏/AI) 统一经此, 保证 entity 级去重。

@@ -29,17 +29,13 @@ import {
   getActiveModule,
   getTabs,
 } from "./store"
+import { tabDescriptor } from "./tab-definitions"
 
 // —— 标签描述符夹具 (本地/连接各取一个 + 跨模式工具) ——
-const HOME = { kind: "home-overview", module: "home", title: "概览", path: "/home" } as const
-const INFO = { kind: "info", module: "info", title: "资讯", path: "/info" } as const
-const COMMUNITY = {
-  kind: "community",
-  module: "community",
-  title: "社区",
-  path: "/community",
-} as const
-const TOOL = { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" } as const
+const HOME = tabDescriptor("home-overview")
+const INFO = tabDescriptor("info")
+const COMMUNITY = tabDescriptor("community")
+const TOOL = tabDescriptor("tool-search")
 
 test("openNodeTab 默认来源 user; 传 agent 标记 agent", () => {
   openNodeTab({ kind: "note", id: "u1" }, "用户开")

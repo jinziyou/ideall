@@ -23,6 +23,7 @@ import type { ModuleId } from "../types"
 import { HOME_SECTIONS } from "./home-sections"
 import { moduleById } from "../modules"
 import type { SidebarEntry } from "../modules"
+import { tabDescriptor } from "../tab-definitions"
 
 export type SidebarTreeNodeKind = "section" | "entry" | "node"
 
@@ -113,7 +114,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         label: "MCP",
         icon: Plug,
         nodeKind: "entry",
-        descriptor: { kind: "ai-mcp", module: "agent", title: "MCP" },
+        descriptor: tabDescriptor("ai-mcp"),
         hasChildren: false,
       },
       {
@@ -121,7 +122,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         label: "Skills",
         icon: Sparkles,
         nodeKind: "entry",
-        descriptor: { kind: "ai-skills", module: "agent", title: "Skills" },
+        descriptor: tabDescriptor("ai-skills"),
         hasChildren: false,
       },
       {
@@ -129,7 +130,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         label: "规则",
         icon: ScrollText,
         nodeKind: "entry",
-        descriptor: { kind: "ai-rules", module: "agent", title: "规则" },
+        descriptor: tabDescriptor("ai-rules"),
         hasChildren: false,
       },
       {

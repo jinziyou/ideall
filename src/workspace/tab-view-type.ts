@@ -2,8 +2,9 @@
 // 由 tab.kind (+ params) 推导, 不持久化; 驱动 tab-bar 左侧类型徽标。
 
 import type { Tab } from "./types"
+import { tabDefinitionViewType, type TabViewType } from "./tab-definitions"
 
-export type TabViewType = "overview" | "panel" | "config" | "content"
+export type { TabViewType }
 
 // 标签条 role=tab ↔ 内容区 role=tabpanel 的关联 id (无障碍: aria-controls / aria-labelledby)。
 // tab.id 含 ":" "=" "&" 等字符, 经 encodeURIComponent 转成合法且唯一的 id 片段。
@@ -17,19 +18,8 @@ export const TAB_VIEW_LABEL: Record<TabViewType, string> = {
   content: "内容",
 }
 
-const CONFIG_KINDS = new Set([
-  "ai-settings",
-  "home-settings",
-  "ai-mcp",
-  "ai-skills",
-  "ai-rules",
-  "ai-tasks",
-])
-
 /** 由已打开标签推导视图类型 (概览 / 面板 / 配置 / 内容)。 */
 export function tabViewType(tab: Tab): TabViewType {
-  if (tab.kind === "home-overview") return "overview"
   if (tab.kind === "node" || tab.kind === "browser-view") return "content"
-  if (CONFIG_KINDS.has(tab.kind)) return "config"
-  return "panel"
+  return tabDefinitionViewType(tab.kind) ?? "panel"
 }

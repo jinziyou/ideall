@@ -9,8 +9,8 @@ import { ChevronLeft } from "lucide-react"
 import type { NodeKind } from "./node-ref"
 import { parseNodeParams } from "./node-tab"
 import { getTabs, openTab, requestCloseTab, useActiveId, useTabs } from "./store"
+import { tabDescriptor } from "./tab-definitions"
 import { HOME_SECTIONS } from "./tree/home-sections"
-import type { TabDescriptor } from "./types"
 
 /** 节点 kind → 所属侧栏分区 id (返回兜底与面包屑用)。 */
 const SECTION_OF_KIND: Record<NodeKind, string> = {
@@ -22,12 +22,7 @@ const SECTION_OF_KIND: Record<NodeKind, string> = {
   thread: "workspace",
 }
 
-const OVERVIEW: TabDescriptor = {
-  kind: "home-overview",
-  module: "home",
-  title: "概览",
-  path: "/home",
-}
+const OVERVIEW = tabDescriptor("home-overview")
 
 export default function MobileDrillBar() {
   const tabs = useTabs()

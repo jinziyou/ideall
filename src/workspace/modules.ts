@@ -15,6 +15,7 @@ import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"
 import type { ModuleId, TabDescriptor, WsMode } from "./types"
 import { MODULE_META } from "./module-meta"
 import { PLUGIN_ENTRIES, isPluginModule } from "./plugin-entries"
+import { tabDescriptor } from "./tab-definitions"
 import { nodeTab } from "./node-tab"
 import { parseNodeQuery } from "./node-ref"
 
@@ -42,23 +43,23 @@ const homeEntries: SidebarEntry[] = [
   {
     label: MODULE_META.overview.label,
     icon: MODULE_META.overview.icon,
-    descriptor: { kind: "home-overview", module: "home", title: "概览", path: "/home" },
+    descriptor: tabDescriptor("home-overview"),
   },
   {
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
-    descriptor: { kind: "home-notes", module: "home", title: "笔记", path: "/home/notes" },
+    descriptor: tabDescriptor("home-notes"),
   },
   {
     label: MODULE_META.resources.label,
     icon: MODULE_META.resources.icon,
-    descriptor: { kind: "home-resources", module: "home", title: "资源", path: "/home/resources" },
+    descriptor: tabDescriptor("home-resources"),
   },
   {
     // 「我的」语境下的书签区段 (底层仍是 bookmark 节点)。
     label: MODULE_META.bookmarks.label,
     icon: MODULE_META.bookmarks.icon,
-    descriptor: { kind: "home-bookmarks", module: "home", title: "书签", path: "/home/bookmarks" },
+    descriptor: tabDescriptor("home-bookmarks"),
   },
 ]
 
@@ -85,12 +86,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "关注流",
         icon: MODULE_META.subscriptions.icon,
-        descriptor: {
-          kind: "subscriptions",
-          module: "subscriptions",
-          title: "关注",
-          path: "/home/subscriptions",
-        },
+        descriptor: tabDescriptor("subscriptions"),
       },
     ],
   },
@@ -105,7 +101,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "全部应用",
         icon: MODULE_META.apps.icon,
-        descriptor: { kind: "apps", module: "apps", title: "应用", path: "/apps" },
+        descriptor: tabDescriptor("apps"),
       },
     ],
   },
@@ -129,7 +125,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: MODULE_META.trash.label,
         icon: MODULE_META.trash.icon,
-        descriptor: { kind: "trash", module: "trash", title: "回收站", path: "/trash" },
+        descriptor: tabDescriptor("trash"),
       },
     ],
   },
@@ -145,7 +141,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "资讯主页",
         icon: MODULE_META.info.icon,
-        descriptor: { kind: "info", module: "info", title: "资讯", path: "/info" },
+        descriptor: tabDescriptor("info"),
       },
     ],
   },
@@ -160,7 +156,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "社区主页",
         icon: MODULE_META.community.icon,
-        descriptor: { kind: "community", module: "community", title: "社区", path: "/community" },
+        descriptor: tabDescriptor("community"),
       },
     ],
   },
@@ -175,12 +171,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "我的发布",
         icon: MODULE_META.publications.icon,
-        descriptor: {
-          kind: "home-publications",
-          module: "publications",
-          title: "发布",
-          path: "/home/publications",
-        },
+        descriptor: tabDescriptor("home-publications"),
       },
     ],
   },
@@ -197,23 +188,18 @@ export const MODULES: ModuleConfig[] = [
         // 聚合搜索 (选引擎输词跳转外部搜索引擎); 与顶栏搜索框/⌘K 统一面板职责分离: 前者跳外部引擎, 后者搜本机内容。
         label: "搜索",
         icon: Search,
-        descriptor: { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" },
+        descriptor: tabDescriptor("tool-search"),
       },
       {
         // 「AI 网站」= 外部 AI 站点启动器 (ChatGPT/Claude/…), 与内置 AI 对话 (活动栏 Bot 钮) 区分。
         label: "AI 网站",
         icon: Bot,
-        descriptor: { kind: "tool-ai", module: "tool", title: "AI 网站", path: "/tool/ai" },
+        descriptor: tabDescriptor("tool-ai"),
       },
       {
         label: "导航",
         icon: Compass,
-        descriptor: {
-          kind: "tool-navigation",
-          module: "tool",
-          title: "导航",
-          path: "/tool/navigation",
-        },
+        descriptor: tabDescriptor("tool-navigation"),
       },
     ],
   },
@@ -229,12 +215,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "浏览器",
         icon: Globe,
-        descriptor: {
-          kind: "browser-view",
-          module: "browser",
-          title: "浏览器",
-          path: "/browser",
-        },
+        descriptor: tabDescriptor("browser-view"),
       },
     ],
   },
@@ -295,42 +276,20 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   // /home/agent 是「打开右侧 AI 栏」的虚拟命令路由, 不对应任何标签 → 显式 null。
   if (pathname.startsWith("/home/agent")) return null
   // 前缀回退
-  if (pathname.startsWith("/home/subscriptions"))
-    return {
-      kind: "subscriptions",
-      module: "subscriptions",
-      title: "关注",
-      path: "/home/subscriptions",
-    }
-  if (pathname.startsWith("/home/settings"))
-    return {
-      kind: "home-settings",
-      module: "home",
-      title: "设置",
-      path: "/home/settings",
-    }
+  if (pathname.startsWith("/home/subscriptions")) return tabDescriptor("subscriptions")
+  if (pathname.startsWith("/home/settings")) return tabDescriptor("home-settings")
   if (pathname.startsWith("/home")) return homeEntries[0].descriptor
-  if (pathname.startsWith("/info"))
-    return { kind: "info", module: "info", title: "资讯", path: "/info" }
-  if (pathname.startsWith("/community"))
-    return { kind: "community", module: "community", title: "社区", path: "/community" }
-  if (pathname.startsWith("/browser"))
-    return { kind: "browser-view", module: "browser", title: "浏览器", path: "/browser" }
-  if (pathname.startsWith("/apps"))
-    return { kind: "apps", module: "apps", title: "应用", path: "/apps" }
-  if (pathname.startsWith("/shell"))
-    return { kind: "shell", module: "shell", title: "终端", path: "/shell" }
-  if (pathname.startsWith("/git")) return { kind: "git", module: "git", title: "Git", path: "/git" }
-  if (pathname.startsWith("/database"))
-    return { kind: "database", module: "database", title: "数据库", path: "/database" }
-  if (pathname.startsWith("/audio"))
-    return { kind: "audio", module: "audio", title: "音频播放器", path: "/audio" }
-  if (pathname.startsWith("/code"))
-    return { kind: "code", module: "code", title: "Code", path: "/code" }
-  if (pathname.startsWith("/trash"))
-    return { kind: "trash", module: "trash", title: "回收站", path: "/trash" }
-  if (pathname.startsWith("/tool"))
-    return { kind: "tool-search", module: "tool", title: "搜索", path: "/tool/search" }
+  if (pathname.startsWith("/info")) return tabDescriptor("info")
+  if (pathname.startsWith("/community")) return tabDescriptor("community")
+  if (pathname.startsWith("/browser")) return tabDescriptor("browser-view")
+  if (pathname.startsWith("/apps")) return tabDescriptor("apps")
+  if (pathname.startsWith("/shell")) return tabDescriptor("shell")
+  if (pathname.startsWith("/git")) return tabDescriptor("git")
+  if (pathname.startsWith("/database")) return tabDescriptor("database")
+  if (pathname.startsWith("/audio")) return tabDescriptor("audio")
+  if (pathname.startsWith("/code")) return tabDescriptor("code")
+  if (pathname.startsWith("/trash")) return tabDescriptor("trash")
+  if (pathname.startsWith("/tool")) return tabDescriptor("tool-search")
   return null
 }
 

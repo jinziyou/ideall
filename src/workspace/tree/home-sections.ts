@@ -5,6 +5,7 @@
 import type { ComponentType } from "react"
 import { Boxes } from "lucide-react"
 import { MODULE_META } from "../module-meta"
+import { tabDescriptor } from "../tab-definitions"
 import type { TabDescriptor } from "../types"
 
 export type HomeSection = {
@@ -26,45 +27,30 @@ export const HOME_SECTIONS: HomeSection[] = [
     id: "subscriptions",
     label: MODULE_META.subscriptions.label,
     icon: MODULE_META.subscriptions.icon,
-    descriptor: {
-      kind: "subscriptions",
+    descriptor: tabDescriptor("subscriptions", {
       module: "home",
       title: MODULE_META.subscriptions.label,
       params: { in: "home" },
-    },
+      path: undefined,
+    }),
   },
   {
     id: "bookmarks",
     label: MODULE_META.bookmarks.label,
     icon: MODULE_META.bookmarks.icon,
-    descriptor: {
-      kind: "home-bookmarks",
-      module: "home",
-      title: MODULE_META.bookmarks.label,
-      path: "/home/bookmarks",
-    },
+    descriptor: tabDescriptor("home-bookmarks"),
   },
   {
     id: "resources",
     label: MODULE_META.resources.label,
     icon: MODULE_META.resources.icon,
-    descriptor: {
-      kind: "home-resources",
-      module: "home",
-      title: MODULE_META.resources.label,
-      path: "/home/resources",
-    },
+    descriptor: tabDescriptor("home-resources"),
   },
   {
     id: "notes",
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
-    descriptor: {
-      kind: "home-notes",
-      module: "home",
-      title: MODULE_META.notes.label,
-      path: "/home/notes",
-    },
+    descriptor: tabDescriptor("home-notes"),
   },
   {
     // 工作区: AI 对话与后续工作空间相关本地内容的容器; 对话(thread) 在它下面展开。

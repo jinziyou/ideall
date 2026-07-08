@@ -10,6 +10,12 @@ import { ErrorBoundary } from "@/ui/error-boundary"
 import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manifest"
 import type { SubscriptionType } from "@protocol/subscription"
 import type { Tab } from "./types"
+import {
+  isStaticTabKind,
+  tabDefinitionLayout,
+  type StaticTabKind,
+  type TabLayout,
+} from "./tab-definitions"
 import { resolveViewer } from "./node-viewers"
 import { parseNodeParams } from "./node-tab"
 
@@ -45,13 +51,11 @@ const AiSkills = React.lazy(() => import("@/plugins/agent/views/ai-skills"))
 const AiRules = React.lazy(() => import("@/plugins/agent/views/ai-rules"))
 const AiTasks = React.lazy(() => import("@/plugins/agent/views/ai-tasks"))
 
-export type TabLayout = "padded" | "fill"
+type Entry = { render: (tab: Tab) => React.ReactNode }
 
-type Entry = { render: (tab: Tab) => React.ReactNode; layout: TabLayout }
-
-const REGISTRY: Record<string, Entry> = {
-  "home-overview": { render: () => <Overview />, layout: "padded" },
-  "home-notes": { render: () => <NotesManager />, layout: "padded" },
+const REGISTRY: Record<StaticTabKind, Entry> = {
+  "home-overview": { render: () => <Overview /> },
+  "home-notes": { render: () => <NotesManager /> },
   subscriptions: {
     render: () => (
       <div className="flex flex-col gap-6">
@@ -59,33 +63,31 @@ const REGISTRY: Record<string, Entry> = {
         <SubscriptionFeed types={FOLLOW_TYPES} title="关注流" dotClass="bg-spoke-info" />
       </div>
     ),
-    layout: "padded",
   },
-  "home-publications": { render: () => <MyPublications />, layout: "padded" },
-  "home-resources": { render: () => <FileManager />, layout: "padded" },
-  "home-bookmarks": { render: () => <BookmarkManager />, layout: "padded" },
-  "home-settings": { render: () => <HomeSettings />, layout: "padded" },
-  info: { render: () => <EmbedHost manifest={infoEmbedManifest} />, layout: "fill" },
-  community: { render: () => <EmbedHost manifest={communityEmbedManifest} />, layout: "fill" },
-  "tool-search": { render: () => <ToolSearch />, layout: "padded" },
-  "tool-ai": { render: () => <ToolAi />, layout: "padded" },
-  "tool-navigation": { render: () => <ToolNavigation />, layout: "padded" },
-  apps: { render: () => <AppsPage />, layout: "padded" },
-  shell: { render: () => <ShellPage />, layout: "fill" },
-  git: { render: () => <GitPage />, layout: "padded" },
-  database: { render: () => <DatabasePage />, layout: "padded" },
-  audio: { render: () => <AudioPage />, layout: "padded" },
-  code: { render: () => <CodePage />, layout: "padded" },
-  trash: { render: () => <TrashPage />, layout: "padded" },
-  "browser-view": { render: () => <BrowserView />, layout: "fill" },
+  "home-publications": { render: () => <MyPublications /> },
+  "home-resources": { render: () => <FileManager /> },
+  "home-bookmarks": { render: () => <BookmarkManager /> },
+  "home-settings": { render: () => <HomeSettings /> },
+  info: { render: () => <EmbedHost manifest={infoEmbedManifest} /> },
+  community: { render: () => <EmbedHost manifest={communityEmbedManifest} /> },
+  "tool-search": { render: () => <ToolSearch /> },
+  "tool-ai": { render: () => <ToolAi /> },
+  "tool-navigation": { render: () => <ToolNavigation /> },
+  apps: { render: () => <AppsPage /> },
+  shell: { render: () => <ShellPage /> },
+  git: { render: () => <GitPage /> },
+  database: { render: () => <DatabasePage /> },
+  audio: { render: () => <AudioPage /> },
+  code: { render: () => <CodePage /> },
+  trash: { render: () => <TrashPage /> },
+  "browser-view": { render: () => <BrowserView /> },
   // AI 区段标签 (module:"agent", mode-中性)。任务标签按 params.workspaceId 实例化。
-  "ai-settings": { render: () => <AiSettings />, layout: "fill" },
-  "ai-mcp": { render: () => <AiMcp />, layout: "fill" },
-  "ai-skills": { render: () => <AiSkills />, layout: "fill" },
-  "ai-rules": { render: () => <AiRules />, layout: "fill" },
+  "ai-settings": { render: () => <AiSettings /> },
+  "ai-mcp": { render: () => <AiMcp /> },
+  "ai-skills": { render: () => <AiSkills /> },
+  "ai-rules": { render: () => <AiRules /> },
   "ai-tasks": {
     render: (tab) => <AiTasks workspaceId={tab.params?.workspaceId ?? ""} />,
-    layout: "fill",
   },
 }
 
@@ -101,7 +103,7 @@ export function tabLayout(tab: Tab): TabLayout {
     const ref = parseNodeParams(tab.params)
     return ref ? (resolveViewer(ref.kind)?.layout ?? "padded") : "padded"
   }
-  return REGISTRY[tab.kind]?.layout ?? "padded"
+  return tabDefinitionLayout(tab.kind) ?? "padded"
 }
 
 function renderTabBody(tab: Tab): React.ReactNode {
@@ -124,7 +126,7 @@ function renderTabBody(tab: Tab): React.ReactNode {
     )
   }
 
-  const entry = REGISTRY[tab.kind]
+  const entry = isStaticTabKind(tab.kind) ? REGISTRY[tab.kind] : undefined
   if (!entry) {
     return <div className="p-6 text-sm text-muted-foreground">未知的标签类型：{tab.kind}</div>
   }

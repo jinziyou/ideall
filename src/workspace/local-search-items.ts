@@ -12,7 +12,7 @@ import { listSubscriptions } from "@/files/stores/subscriptions-store"
 import { listThreads } from "@/files/stores/threads-store"
 import { MODULE_META } from "./module-meta"
 import { openTab, openNodeTab } from "./store"
-import type { TabDescriptor } from "./types"
+import { tabDescriptor } from "./tab-definitions"
 
 export type LocalSearchGroup = "笔记" | "关注" | "书签" | "资源" | "对话"
 export type LocalSearchItem = {
@@ -34,18 +34,8 @@ export const LOCAL_SEARCH_ICON: Record<LocalSearchGroup, ComponentType<{ classNa
   对话: MessagesSquare,
 }
 
-const SUBSCRIPTIONS_TAB: TabDescriptor = {
-  kind: "subscriptions",
-  module: "subscriptions",
-  title: "关注",
-  path: "/home/subscriptions",
-}
-const BOOKMARKS_TAB: TabDescriptor = {
-  kind: "home-bookmarks",
-  module: "home",
-  title: "书签",
-  path: "/home/bookmarks",
-}
+const SUBSCRIPTIONS_TAB = tabDescriptor("subscriptions")
+const BOOKMARKS_TAB = tabDescriptor("home-bookmarks")
 
 /** 并行加载本机内容并构建可搜索/可执行条目 (按 笔记→关注→书签→资源→对话 顺序)。 */
 export async function loadLocalSearchItems(): Promise<LocalSearchItem[]> {
