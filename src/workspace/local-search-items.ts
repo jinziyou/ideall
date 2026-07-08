@@ -1,18 +1,14 @@
 // 本机内容 (笔记 / 关注 / 书签 / 资源 / 对话) 的可搜索条目: 唯一数据来源, 供 ⌘K 统一面板消费
 // (顶栏搜索框唤起同一面板; 旧的独立本地搜索对话框已并入)。每项含 run() 执行:
-// 笔记/资源/对话 → 打开实体节点标签; 书签 → 打开网址 (协议白名单); 关注 → 打开关注模块。
+// 所有本机内容先作为 VFS ResourceMeta 加载, 再打开对应 resource 标签。
 
 import type { ComponentType } from "react"
 import { MessagesSquare } from "lucide-react"
-import { safeHref } from "@/lib/safe-url"
-import { listNotes } from "@/files/stores/notes-store"
-import { listBookmarks } from "@/files/stores/bookmarks-store"
-import { listFiles } from "@/files/stores/files-store"
-import { listSubscriptions } from "@/files/stores/subscriptions-store"
-import { listThreads } from "@/files/stores/threads-store"
+import { resourceKey, type ResourceMeta } from "@protocol/resource"
+import { listResources } from "@/vfs/registry"
+import type { ResourceQuery } from "@/vfs/types"
 import { MODULE_META } from "./module-meta"
 import { openTarget } from "./store"
-import { tabDescriptor } from "./tab-definitions"
 import type { OpenTarget } from "./open-target"
 
 export type LocalSearchGroup = "笔记" | "关注" | "书签" | "资源" | "对话"
@@ -36,83 +32,50 @@ export const LOCAL_SEARCH_ICON: Record<LocalSearchGroup, ComponentType<{ classNa
   对话: MessagesSquare,
 }
 
-const SUBSCRIPTIONS_TAB = tabDescriptor("subscriptions")
-const BOOKMARKS_TAB = tabDescriptor("home-bookmarks")
+const NODE_SEARCH_QUERIES: Array<{ group: LocalSearchGroup; query: ResourceQuery }> = [
+  { group: "笔记", query: { scheme: "node", kind: "note" } },
+  { group: "关注", query: { scheme: "node", kind: "feed" } },
+  { group: "书签", query: { scheme: "node", kind: "bookmark" } },
+  { group: "资源", query: { scheme: "node", kind: "file" } },
+  { group: "对话", query: { scheme: "node", kind: "thread" } },
+]
 
 function runTarget(target: OpenTarget): () => void {
   return () => openTarget(target)
 }
 
-function nodeTarget(kind: "note" | "file" | "thread", id: string, title: string): OpenTarget {
-  return { type: "resource", ref: { scheme: "node", kind, id }, title }
+function itemFromResource(group: LocalSearchGroup, meta: ResourceMeta): LocalSearchItem {
+  const target: OpenTarget = { type: "resource", ref: meta.ref, title: meta.title, meta }
+  const fileType =
+    meta.ref.scheme === "node" && meta.ref.kind === "file"
+      ? { name: meta.title, type: meta.iconHint ?? "" }
+      : undefined
+  return {
+    id: resourceKey(meta.ref),
+    label: meta.title,
+    group,
+    ...(fileType ? { fileType } : {}),
+    target,
+    run: runTarget(target),
+  }
 }
 
-function pushTargetItem(
-  items: LocalSearchItem[],
-  item: Omit<LocalSearchItem, "run"> & { target: OpenTarget },
-) {
-  items.push({ ...item, run: runTarget(item.target) })
+async function loadResourceGroup(
+  group: LocalSearchGroup,
+  query: ResourceQuery,
+): Promise<LocalSearchItem[]> {
+  try {
+    const page = await listResources(query, { actor: "ui", permissions: [], intent: "metadata" })
+    return page.items.map((meta) => itemFromResource(group, meta))
+  } catch {
+    return []
+  }
 }
 
 /** 并行加载本机内容并构建可搜索/可执行条目 (按 笔记→关注→书签→资源→对话 顺序)。 */
 export async function loadLocalSearchItems(): Promise<LocalSearchItem[]> {
-  const [notes, bms, files, subs, threads] = await Promise.all([
-    listNotes(),
-    listBookmarks(),
-    listFiles(),
-    listSubscriptions(),
-    // 对话即文件 (§6.5): thread 与笔记平级可搜。单仓失败不拖垮整个搜索面。
-    listThreads().catch(() => []),
-  ])
-  const items: LocalSearchItem[] = []
-  // 笔记: 打开「该篇」为独立节点标签 (一切皆标签), 而非笼统跳到笔记列表。
-  for (const n of notes) {
-    const label = n.title || "无标题笔记"
-    pushTargetItem(items, {
-      id: "n" + n.id,
-      label,
-      group: "笔记",
-      target: nodeTarget("note", n.id, label),
-    })
-  }
-  for (const s of subs) {
-    pushTargetItem(items, {
-      id: "s" + s.id,
-      label: s.title || "未命名关注",
-      group: "关注",
-      target: { type: "tab", descriptor: SUBSCRIPTIONS_TAB },
-    })
-  }
-  for (const b of bms)
-    items.push({
-      id: "b" + b.id,
-      label: b.title || "未命名书签",
-      group: "书签",
-      run: () => {
-        const h = safeHref(b.url)
-        if (h) window.open(h, "_blank", "noopener,noreferrer")
-        else openTarget({ type: "tab", descriptor: BOOKMARKS_TAB })
-      },
-    })
-  // 文件已有查看器 → 打开「该文件」实体标签 (与笔记一致); 不再笼统跳资源管理器。
-  for (const f of files) {
-    pushTargetItem(items, {
-      id: "f" + f.id,
-      label: f.name,
-      group: "资源",
-      fileType: { name: f.name, type: f.type },
-      target: nodeTarget("file", f.id, f.name),
-    })
-  }
-  // 对话 → 打开该 thread 的只读查看器标签 (thread-viewer 内可一键回 AI 栏继续)。
-  for (const t of threads) {
-    const label = t.title || "未命名对话"
-    pushTargetItem(items, {
-      id: "t" + t.id,
-      label,
-      group: "对话",
-      target: nodeTarget("thread", t.id, label),
-    })
-  }
-  return items
+  const groups = await Promise.all(
+    NODE_SEARCH_QUERIES.map(({ group, query }) => loadResourceGroup(group, query)),
+  )
+  return groups.flat()
 }
