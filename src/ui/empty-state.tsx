@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 export function EmptyState({
   icon: Icon,
   title,
+  description,
   action,
   bordered = true,
   variant = "plain",
@@ -18,6 +19,8 @@ export function EmptyState({
   icon?: ComponentType<{ className?: string }>
   /** 主标题 (必填) */
   title: string
+  /** 辅助说明 (可选) */
+  description?: string
   /** 操作区: 按钮等 (可选) */
   action?: ReactNode
   /** 是否渲染虚线边框容器 (默认 true; AI 区段常 false) */
@@ -48,6 +51,11 @@ export function EmptyState({
       ) : null}
       <div>
         <p className={cn(compact ? "text-[13px] font-medium" : "text-sm")}>{title}</p>
+        {description ? (
+          <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
       {action ? (
         <div className="flex flex-wrap items-center justify-center gap-2">{action}</div>

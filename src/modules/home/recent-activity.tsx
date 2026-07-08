@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/format"
 import { FileTypeIcon } from "@/shared/file-type-icon"
 
-/** 一条「关注」记录: 把发现模块的对象 / 资源加入「我的」的一次动作。 */
-export type FlowItem = {
+/** 一条「最近动态」记录: 把本机关注 / 书签 / 资源 / 笔记的动作按时间归并。 */
+export type ActivityItem = {
   id: string
   ts: number
   /** 圆点色 (Tailwind bg-* 类): 板块色做分类, bg-pop 表示落入本地的「我的」 */
@@ -33,10 +33,10 @@ function groupOf(ts: number): GroupName {
 }
 
 /**
- * 「最近关注」时间线 —— 重新设计的主时间线: 关注第一次有了肉眼可见的呈现位置。
- * 跨 subscriptions / bookmarks / files 按时间倒序合并, 分今天 / 本周 / 更早。
+ * 「最近动态」时间线: 跨 subscriptions / bookmarks / files / notes 按时间倒序合并,
+ * 分今天 / 本周 / 更早。
  */
-export function RecentFlowback({ items }: { items: FlowItem[] }) {
+export function RecentActivity({ items }: { items: ActivityItem[] }) {
   const groups = GROUP_ORDER.map((name) => ({
     name,
     items: items.filter((it) => groupOf(it.ts) === name),

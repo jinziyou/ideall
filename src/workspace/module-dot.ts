@@ -16,6 +16,7 @@ export const MODULE_DOT: Record<ModuleId, string> = {
   trash: "bg-destructive",
   info: "bg-spoke-info",
   community: "bg-spoke-community",
+  publications: "bg-spoke-community",
   browser: "bg-spoke-tool",
   tool: "bg-spoke-tool",
   agent: "bg-primary",

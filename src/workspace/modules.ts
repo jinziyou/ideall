@@ -1,8 +1,8 @@
 // 工作区模块配置 (桌面工作区壳的唯一数据来源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
 // 活动栏按当前「本地/连接」模式视图过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
-//   本机/我的(local): 我的(home) · 关注(subscriptions) · [轨底] 插件 · 应用 · 回收站  ← + 活动栏「工作区」钮
-//   连接/发现(connected): 资讯(info) · 社区(community) · 工具(tool) · 浏览器(browser)
-//   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (与 AI 区段同类, 见 store isModeNeutralModule)。
+//   本机/我的(local): 我的(home) · 关注(subscriptions) · [轨底] 插件 · 应用 · 回收站
+//   连接/发现(connected): 资讯(info) · 社区(community) · 发布(publications) · 工具(tool) · 浏览器(browser)
+//   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (见 store isModeNeutralModule)。
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏搜索框/⌘K 统一面板搜本机内容, 两者职责分离。
 //
 // 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
@@ -48,16 +48,6 @@ const homeEntries: SidebarEntry[] = [
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
     descriptor: { kind: "home-notes", module: "home", title: "笔记", path: "/home/notes" },
-  },
-  {
-    label: MODULE_META.publications.label,
-    icon: MODULE_META.publications.icon,
-    descriptor: {
-      kind: "home-publications",
-      module: "home",
-      title: "发布",
-      path: "/home/publications",
-    },
   },
   {
     label: MODULE_META.resources.label,
@@ -175,6 +165,26 @@ export const MODULES: ModuleConfig[] = [
     ],
   },
   {
+    id: "publications",
+    mode: "connected",
+    label: MODULE_META.publications.label,
+    icon: MODULE_META.publications.icon,
+    colorClass: MODULE_META.publications.tintClass,
+    sidebarTitle: "发布",
+    entries: [
+      {
+        label: "我的发布",
+        icon: MODULE_META.publications.icon,
+        descriptor: {
+          kind: "home-publications",
+          module: "publications",
+          title: "发布",
+          path: "/home/publications",
+        },
+      },
+    ],
+  },
+  {
     id: "tool",
     mode: "connected",
     crossMode: true,
@@ -228,7 +238,7 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
-  // 注: "agent" 刻意不在 MODULES 内, 但仍以活动栏专属 AI 钮 (activity-bar.tsx) + ai-* 区段标签
+  // 注: "agent" 刻意不在 MODULES 内, 由顶栏 AI 入口 + ai-* 区段标签
   //     (ai-settings/ai-mcp/ai-skills/ai-rules/ai-tasks, 见 registry) 出现, 外加右侧常驻对话栏 (right-ai-panel.tsx)。
 ]
 

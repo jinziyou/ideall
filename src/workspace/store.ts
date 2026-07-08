@@ -46,6 +46,7 @@ const MODE_OF: Record<ModuleId, WsMode> = {
   tool: "connected",
   info: "connected",
   community: "connected",
+  publications: "connected",
   browser: "connected",
   agent: "connected",
 }
@@ -66,6 +67,7 @@ const VALID_MODULES = new Set(
     trash: 1,
     info: 1,
     community: 1,
+    publications: 1,
     browser: 1,
     tool: 1,
     agent: 1,

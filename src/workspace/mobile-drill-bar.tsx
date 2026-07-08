@@ -19,7 +19,7 @@ const SECTION_OF_KIND: Record<NodeKind, string> = {
   folder: "bookmarks",
   file: "resources",
   feed: "subscriptions",
-  thread: "threads",
+  thread: "workspace",
 }
 
 const OVERVIEW: TabDescriptor = {

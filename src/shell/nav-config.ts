@@ -38,6 +38,13 @@ export const SPOKES: NavLink[] = [
     hint: "关注社区发布者 · 接收他人发布",
   },
   {
+    href: "/home/publications",
+    label: MODULE_META.publications.label,
+    icon: MODULE_META.publications.icon,
+    dot: MODULE_META.publications.dotClass,
+    hint: "用账号身份发布公开内容",
+  },
+  {
     href: "/tool",
     label: MODULE_META.tool.label,
     icon: MODULE_META.tool.icon,
@@ -59,11 +66,6 @@ export const HOME_SUBPAGES: NavLink[] = [
     href: "/home/subscriptions",
     label: MODULE_META.subscriptions.label,
     icon: MODULE_META.subscriptions.icon,
-  },
-  {
-    href: "/home/publications",
-    label: MODULE_META.publications.label,
-    icon: MODULE_META.publications.icon,
   },
   { href: "/home/resources", label: MODULE_META.resources.label, icon: MODULE_META.resources.icon },
   { href: "/home/bookmarks", label: MODULE_META.bookmarks.label, icon: MODULE_META.bookmarks.icon },

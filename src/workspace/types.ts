@@ -18,6 +18,7 @@ export type ModuleId =
   | "trash"
   | "info"
   | "community"
+  | "publications"
   | "browser"
   | "tool"
   | "agent"

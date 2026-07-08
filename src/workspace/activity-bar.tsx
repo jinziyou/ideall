@@ -2,23 +2,16 @@
 
 // 活动栏 (IDE 式标签工作区侧栏的图标轨): 按当前「本地/连接」模式视图过滤展示模块图标 (+ crossMode 跨模式模块);
 // 顶栏 ModeSwitch 切换视图。点模块图标 = 切到该模块并展开二级侧栏 (再点已激活模块 = 收起侧栏);
-// 「工作区」钮紧随「我的」(home) 下方; 本地模式「插件」+「应用」+「回收站」在轨底 (分隔线下方, 应用在插件之下, 回收站在应用之下)。
-// 活动栏只显示当前模式的模块 (+ crossMode 模块); 已打开的跨模式标签留在标签条, 不在轨底补一个“幽灵模块”。
+// 工作区已收束进「我的」侧栏; 本地模式「插件」+「应用」+「回收站」在轨底
+// (分隔线下方, 应用在插件之下, 回收站在应用之下)。
 // 设置 / AI 对话入口在顶栏 (Trae 式)。
 
 import { Fragment } from "react"
-import { Boxes } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNodeCount, useTrashCount } from "@/shell/use-node-count"
 import { moduleById, modulesForMode } from "./modules"
 import { isPluginModule } from "./plugin-entries"
-import {
-  useActiveModule,
-  useMode,
-  useSidebarCollapsed,
-  toggleModule,
-  toggleWorkspace,
-} from "./store"
+import { useActiveModule, useMode, useSidebarCollapsed, toggleModule } from "./store"
 
 function BarDivider() {
   return <div aria-hidden className="my-0.5 h-px w-8 shrink-0 bg-border" />
@@ -28,7 +21,6 @@ export default function ActivityBar() {
   const activeModule = useActiveModule()
   const mode = useMode()
   const sidebarCollapsed = useSidebarCollapsed()
-  const workspaceActive = activeModule === "agent"
   const { count, flash } = useNodeCount()
   const { count: trashCount, flash: trashFlash } = useTrashCount()
   const listed = modulesForMode(mode)
@@ -37,31 +29,6 @@ export default function ActivityBar() {
   const trashMod = listed.find((m) => m.id === "trash")
   const topModules = listed.filter((m) => m.id !== "plugins" && m.id !== "apps" && m.id !== "trash")
   const pluginsActive = activeModule === "plugins" || isPluginModule(activeModule)
-
-  const workspaceButton = (
-    <button
-      key="workspace"
-      type="button"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={toggleWorkspace}
-      aria-pressed={workspaceActive}
-      aria-expanded={workspaceActive && !sidebarCollapsed}
-      className={cn(
-        "relative flex w-full flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[11px] font-medium transition-colors",
-        workspaceActive
-          ? "bg-accent text-foreground"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-      )}
-    >
-      {workspaceActive && (
-        <span className="absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-      )}
-      <Boxes
-        className={cn("h-[1.2rem] w-[1.2rem]", workspaceActive ? "text-primary" : undefined)}
-      />
-      <span className="leading-none">工作区</span>
-    </button>
-  )
 
   const moduleButton = (m: ReturnType<typeof moduleById>, opts?: { forceActive?: boolean }) => {
     const Icon = m.icon
@@ -107,10 +74,7 @@ export default function ActivityBar() {
     <aside className="hidden h-full w-14 shrink-0 flex-col items-center gap-1 border-r bg-card px-2 py-2.5 md:flex">
       <div className="flex w-full flex-col gap-1">
         {topModules.map((m) => (
-          <Fragment key={m.id}>
-            {moduleButton(m)}
-            {m.id === "home" && workspaceButton}
-          </Fragment>
+          <Fragment key={m.id}>{moduleButton(m)}</Fragment>
         ))}
         {pluginsMod && (
           <>

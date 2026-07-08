@@ -1,9 +1,9 @@
-// 「我的」(home) 的区段唯一数据来源: 二级侧栏的 6 个常驻区段 (关注·书签·资源·发布·笔记·对话)。
+// 「我的」(home) 的区段唯一数据来源: 二级侧栏的常驻区段
+// (关注·书签·资源·笔记·工作区; 对话挂在工作区下面)。
 // 全部归属 module:"home" —— 点击在主区开/激活对应标签, 活动栏「我的」保持高亮, 侧栏不切走。
-// 概览由活动栏「我的」钮直达, 不在侧栏列; 侧栏以文件树展示各区段及其 node 子项 (见 sidebar-tree)。
 
 import type { ComponentType } from "react"
-import { MessagesSquare } from "lucide-react"
+import { Boxes } from "lucide-react"
 import { MODULE_META } from "../module-meta"
 import type { TabDescriptor } from "../types"
 
@@ -11,13 +11,13 @@ export type HomeSection = {
   id: string
   label: string
   icon: ComponentType<{ className?: string }>
-  /** 区段头点击打开的面板标签; 缺省 (如「对话」无管理面板) = 纯容器, 点击仅展开/折叠子树。 */
+  /** 区段头点击打开的面板标签; 缺省 (如「工作区」容器) = 纯容器, 点击仅展开/折叠子树。 */
   descriptor?: TabDescriptor
 }
 
-/** 二级侧栏区段 (上→下): 关注 · 书签 · 资源 · 发布 · 笔记 · 对话。
+/** 二级侧栏区段 (上→下): 关注 · 书签 · 资源 · 笔记 · 工作区。
  *  与 README/architecture 的「我的」本机数据口径对齐 (笔记/书签/资源/关注/对话) ——
- *  「对话即文件」(§6.5): thread 是六 kind 之一, 必须与笔记/书签一样可从树寻址, 不能锁死在 AI 面板内部。 */
+ *  「对话即文件」(§6.5): thread 挂在工作区下面, 仍与笔记/书签一样可从树寻址。 */
 export const HOME_SECTIONS: HomeSection[] = [
   {
     // 关注 = 订阅流, 归到「我的」(module:home); params 让它成为独立标签实例,
@@ -56,17 +56,6 @@ export const HOME_SECTIONS: HomeSection[] = [
     },
   },
   {
-    id: "publications",
-    label: MODULE_META.publications.label,
-    icon: MODULE_META.publications.icon,
-    descriptor: {
-      kind: "home-publications",
-      module: "home",
-      title: MODULE_META.publications.label,
-      path: "/home/publications",
-    },
-  },
-  {
     id: "notes",
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
@@ -78,10 +67,10 @@ export const HOME_SECTIONS: HomeSection[] = [
     },
   },
   {
-    // 对话 (AI thread): 无管理面板 → 纯容器区段, 展开列出全部对话, 点子项开 thread-viewer 标签。
+    // 工作区: AI 对话与后续工作空间相关本地内容的容器; 对话(thread) 在它下面展开。
     // 概览卡片对它特殊处理 (无 descriptor → 呼出右侧 AI 栏)。
-    id: "threads",
-    label: "对话",
-    icon: MessagesSquare,
+    id: "workspace",
+    label: "工作区",
+    icon: Boxes,
   },
 ]

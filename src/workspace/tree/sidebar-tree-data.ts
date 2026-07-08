@@ -14,6 +14,7 @@ import {
   Sparkles,
   Tag,
   Users,
+  MessagesSquare,
 } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
@@ -38,6 +39,8 @@ export type SidebarTreeNode = {
   childKinds?: NodeKind[]
   /** 展开后按关注类型加载 (info/community 侧栏) */
   subscriptionTypes?: SubscriptionType[]
+  /** 展开后展示的静态子区段 (如「工作区」下面的「对话」)。 */
+  staticChildren?: SidebarTreeNode[]
   hasChildren: boolean
 }
 
@@ -59,10 +62,18 @@ const HOME_SECTION_KINDS: Record<string, NodeKind[]> = {
   subscriptions: ["feed"],
   bookmarks: ["folder", "bookmark"],
   resources: ["file"],
-  publications: [],
   notes: ["note"],
-  // 对话即文件 (§6.5): thread 与笔记/书签一样可从树寻址。
-  threads: ["thread"],
+}
+
+function workspaceThreadsNode(): SidebarTreeNode {
+  return {
+    id: "section:workspace:threads",
+    label: "对话",
+    icon: MessagesSquare,
+    nodeKind: "section",
+    childKinds: ["thread"],
+    hasChildren: true,
+  }
 }
 
 function entryNode(e: SidebarEntry): SidebarTreeNode {
@@ -79,15 +90,20 @@ function entryNode(e: SidebarEntry): SidebarTreeNode {
 /** 按当前活动模块构造侧栏树的静态根 (不含 IndexedDB 子节点)。 */
 export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
   if (moduleId === "home") {
-    return HOME_SECTIONS.map((s) => ({
-      id: `section:${s.id}`,
-      label: s.label,
-      icon: s.icon,
-      nodeKind: "section" as const,
-      descriptor: s.descriptor,
-      childKinds: HOME_SECTION_KINDS[s.id] ?? [],
-      hasChildren: (HOME_SECTION_KINDS[s.id]?.length ?? 0) > 0,
-    }))
+    return HOME_SECTIONS.map((s) => {
+      const childKinds = HOME_SECTION_KINDS[s.id] ?? []
+      const staticChildren = s.id === "workspace" ? [workspaceThreadsNode()] : undefined
+      return {
+        id: `section:${s.id}`,
+        label: s.label,
+        icon: s.icon,
+        nodeKind: "section" as const,
+        descriptor: s.descriptor,
+        childKinds,
+        staticChildren,
+        hasChildren: childKinds.length > 0 || Boolean(staticChildren?.length),
+      }
+    })
   }
 
   if (moduleId === "agent") {

@@ -61,6 +61,7 @@ function rootsForModule(moduleId: ModuleId): SidebarTreeNode[] {
 }
 
 function defaultExpandedSection(moduleId: ModuleId): string | null {
+  if (moduleId === "home") return "section:workspace"
   if (moduleId === "browser") return "section:bookmarks"
   if (moduleId === "info") return "section:entities"
   if (moduleId === "community") return "section:peers"
@@ -413,6 +414,26 @@ function TreeRow({
         <Icon className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate text-left">{node.label}</span>
       </div>
+
+      {isOpen &&
+        node.staticChildren?.map((child) => (
+          <TreeRow
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            expanded={expanded}
+            activeId={activeId}
+            activeKind={activeKind}
+            activeWorkspaceId={activeWorkspaceId}
+            nodeCache={nodeCache}
+            subscriptionCache={subscriptionCache}
+            workspaces={workspaces}
+            activeModule={activeModule}
+            onToggle={onToggle}
+            onLoadNodes={onLoadNodes}
+            onLoadSubscriptions={onLoadSubscriptions}
+          />
+        ))}
 
       {isOpen &&
         node.id === "section:workspaces" &&

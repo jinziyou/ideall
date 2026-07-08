@@ -40,7 +40,12 @@ export const MODULE_META = {
   overview: { label: "概览", icon: LayoutDashboard },
   notes: { label: "笔记", icon: NotebookPen },
   subscriptions: { label: "关注", icon: Rss, tintClass: "text-spoke-info" },
-  publications: { label: "发布", icon: Megaphone },
+  publications: {
+    label: "发布",
+    icon: Megaphone,
+    dotClass: "bg-spoke-community",
+    tintClass: "text-spoke-community",
+  },
   resources: { label: "资源", icon: FolderOpen },
   bookmarks: { label: "书签", icon: Bookmark },
   info: { label: "资讯", icon: Newspaper, dotClass: "bg-spoke-info", tintClass: "text-spoke-info" },
