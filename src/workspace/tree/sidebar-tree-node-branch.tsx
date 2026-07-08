@@ -10,7 +10,7 @@ import { iconForNodeKind } from "../node-kind-ui"
 import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import { getBookmark } from "@/files/stores/bookmarks-store"
 import { navigateExternal } from "../browser-open"
-import { openNodeTab, getTabs } from "../store"
+import { openTarget, getTabs } from "../store"
 import { parseNodeParams } from "../node-tab"
 import type { ModuleId } from "../types"
 import { FileTypeIcon } from "@/shared/file-type-icon"
@@ -104,7 +104,15 @@ export function NodeTreeBranch({
       if (hasKids) onToggle(id)
       return
     }
-    openNodeTab({ kind: item.kind, id: item.id }, item.title || "无标题", "user", { transient })
+    openTarget(
+      {
+        type: "resource",
+        ref: { scheme: "node", kind: item.kind, id: item.id },
+        title: item.title || "无标题",
+        transient,
+      },
+      "user",
+    )
   }
 
   const handleNodeClick = () => openNode(true)

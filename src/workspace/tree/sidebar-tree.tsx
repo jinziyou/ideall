@@ -1,7 +1,7 @@
 "use client"
 
 // 二级侧栏统一文件树 —— 所有模式共用: 静态根 (区段/面板) + 懒加载 node 子树。
-// 点击区段/面板 → openTab (标签栏显示「面板」); 点击具体 node → openNodeTab (显示「内容」)。
+// 点击区段/面板/具体 node → OpenTarget; 旧 descriptor/nodeRef 仅用于 active 状态兼容。
 
 import * as React from "react"
 import { ChevronRight, Rss } from "lucide-react"
@@ -22,8 +22,7 @@ import {
 } from "./sidebar-tree-data"
 import { requestEmbedRoute } from "@/plugins/embed/embed-nav"
 import {
-  openTab,
-  openNodeTab,
+  openTarget,
   openAiTasks,
   openAiSection,
   tabKey,
@@ -34,6 +33,7 @@ import {
   useActiveWorkspaceId,
   getTabs,
 } from "../store"
+import type { OpenTarget } from "../open-target"
 import { parseNodeParams } from "../node-tab"
 import {
   getWorkspacesState,
@@ -98,6 +98,12 @@ function isDescriptorActive(
 ): boolean {
   if (!activeId || !descriptor) return false
   return activeId === tabKey(descriptor)
+}
+
+function openTreeTarget(target: OpenTarget, transient: boolean) {
+  if (target.type === "resource") openTarget({ ...target, transient }, "user")
+  else if (target.type === "tab") openTarget({ ...target, transient }, "user")
+  else openTarget(target, "user")
 }
 
 export default function SidebarTree() {
@@ -310,7 +316,10 @@ function TreeRow({
   // 双击 / 键盘 Enter = 常驻 (固定)。纯容器行 (无 descriptor) 则单击 = 双向展开/折叠。
   const openRow = (transient: boolean) => {
     if (node.nodeKind === "node" && node.nodeRef) {
-      openNodeTab(node.nodeRef, node.label, "user", { transient })
+      openTreeTarget(
+        { type: "resource", ref: { scheme: "node", ...node.nodeRef }, title: node.label },
+        transient,
+      )
       return
     }
     if (node.descriptor?.kind === "ai-tasks" && node.descriptor.params?.workspaceId) {
@@ -329,8 +338,8 @@ function TreeRow({
       openAiSection("ai-rules", { transient })
       return
     }
-    if (node.descriptor) {
-      openTab(node.descriptor, "user", { transient })
+    if (node.target) {
+      openTreeTarget(node.target, transient)
       return
     }
     // 纯容器 (无 descriptor 的 section/文件夹): 行点击 = 双向展开/折叠 (修复「已展开时点行无反馈」死区)。

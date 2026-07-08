@@ -7,6 +7,7 @@ import type { NodeKind } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import type { TabDescriptor } from "../types"
 import type { ModuleId } from "../types"
+import type { OpenTarget } from "../open-target"
 import { HOME_PLACES, type HomePlaceStaticChild } from "./home-places"
 import { moduleById } from "../modules"
 import type { SidebarEntry } from "../modules"
@@ -23,6 +24,8 @@ export type SidebarTreeNode = {
   descriptor?: TabDescriptor
   /** 点具体节点 → 开内容标签 */
   nodeRef?: { kind: NodeKind; id: string }
+  /** 统一打开目标。保留 descriptor/nodeRef 仅供 active 状态和兼容迁移。 */
+  target?: OpenTarget
   /** 展开后懒加载的子节点 kind (仅 section 有效) */
   childKinds?: NodeKind[]
   /** 展开后按关注类型加载 (info/community 侧栏) */
@@ -50,6 +53,7 @@ function entryNode(e: SidebarEntry): SidebarTreeNode {
     icon: e.icon,
     nodeKind: "entry",
     descriptor: e.descriptor,
+    target: { type: "tab", descriptor: e.descriptor },
     hasChildren: false,
   }
 }
@@ -67,6 +71,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         icon: place.icon,
         nodeKind: "section" as const,
         descriptor: place.descriptor,
+        target: place.descriptor ? { type: "tab", descriptor: place.descriptor } : undefined,
         childKinds: place.childKinds,
         staticChildren,
         hasChildren: place.childKinds.length > 0 || Boolean(staticChildren?.length),
@@ -82,6 +87,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         icon: Plug,
         nodeKind: "entry",
         descriptor: tabDescriptor("ai-mcp"),
+        target: { type: "tab", descriptor: tabDescriptor("ai-mcp") },
         hasChildren: false,
       },
       {
@@ -90,6 +96,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         icon: Sparkles,
         nodeKind: "entry",
         descriptor: tabDescriptor("ai-skills"),
+        target: { type: "tab", descriptor: tabDescriptor("ai-skills") },
         hasChildren: false,
       },
       {
@@ -98,6 +105,7 @@ export function staticTreeRoots(moduleId: ModuleId): SidebarTreeNode[] {
         icon: ScrollText,
         nodeKind: "entry",
         descriptor: tabDescriptor("ai-rules"),
+        target: { type: "tab", descriptor: tabDescriptor("ai-rules") },
         hasChildren: false,
       },
       {
