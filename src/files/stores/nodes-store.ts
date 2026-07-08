@@ -3,6 +3,7 @@
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node"
 import { NODE_KINDS } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
+import { bytesToBase64 } from "@/lib/base64"
 import { safeHref } from "@/lib/safe-url"
 import { idbGet, idbGetAllFromIndex, INDEX_NODES_KIND, STORE_NODES } from "@/lib/idb"
 import { buildParentOf, effectiveParentId, type TreeItem } from "@/files/notes-tree-util"
@@ -270,9 +271,9 @@ export async function readBlobBase64(
   if (f.size > BLOB_READ_CAP) {
     return { mime: f.type, size: f.size, base64: "" } // 过大不内联, 仅回元数据
   }
-  const buf = await f.blob.arrayBuffer()
-  let binary = ""
-  const bytes = new Uint8Array(buf)
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-  return { mime: f.type, size: f.size, base64: btoa(binary) }
+  return {
+    mime: f.type,
+    size: f.size,
+    base64: bytesToBase64(new Uint8Array(await f.blob.arrayBuffer())),
+  }
 }

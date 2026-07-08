@@ -1,6 +1,7 @@
 import { isNodeKind, type Node } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import { notifyFilesUpdated } from "@protocol/flowback"
+import { base64ToBytes, bytesToBase64, isBase64 } from "@/lib/base64"
 import {
   idbGetAll,
   idbReplaceStores,
@@ -81,13 +82,6 @@ export type WorkspaceArchiveImportPreview = PluginDataImportPreview & {
   }
 }
 
-type BufferLike = {
-  from: (
-    input: Uint8Array | string,
-    encoding?: string,
-  ) => { toString: (encoding: string) => string }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
@@ -146,27 +140,11 @@ function normalizeMeta(value: unknown, label: string): Record<string, unknown> {
   return { ...requireRecord(value, label) }
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as unknown as { Buffer?: BufferLike }).Buffer
-  if (maybeBuffer) return maybeBuffer.from(bytes).toString("base64")
-  let binary = ""
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.slice(i, i + 0x8000))
-  }
-  return btoa(binary)
-}
-
-function base64ToBytes(value: string): Uint8Array {
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 !== 0) {
+function requireBase64(value: string): Uint8Array<ArrayBuffer> {
+  if (!isBase64(value)) {
     throw new Error("base64 格式无效")
   }
-  const maybeBuffer = (globalThis as unknown as { Buffer?: BufferLike }).Buffer
-  if (maybeBuffer) {
-    const binary = maybeBuffer.from(value, "base64").toString("binary")
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-  }
-  const binary = atob(value)
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
+  return base64ToBytes(value)
 }
 
 async function blobToSerialized(record: BlobRecord): Promise<SerializedBlobRecord> {
@@ -179,7 +157,7 @@ async function blobToSerialized(record: BlobRecord): Promise<SerializedBlobRecor
 }
 
 function serializedToBlob(record: SerializedBlobRecord): BlobRecord {
-  const bytes = base64ToBytes(record.dataBase64)
+  const bytes = requireBase64(record.dataBase64)
   const buffer = new ArrayBuffer(bytes.byteLength)
   new Uint8Array(buffer).set(bytes)
   return { key: record.key, blob: new Blob([buffer], { type: record.mime }) }
@@ -189,7 +167,7 @@ function normalizeSerializedBlob(value: unknown, label: string): SerializedBlobR
   if (!isRecord(value)) throw new Error(`${label} 格式无效`)
   const size = requireNonNegativeNumber(value.size, `${label}.size`)
   const dataBase64 = requireStringValue(value.dataBase64, `${label}.dataBase64`)
-  const bytes = base64ToBytes(dataBase64)
+  const bytes = requireBase64(dataBase64)
   if (bytes.byteLength !== size) throw new Error(`${label}.size 与 dataBase64 不一致`)
   return {
     key: requireString(value.key, `${label}.key`),

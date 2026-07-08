@@ -4,6 +4,7 @@
 // (由 eslint 强制)。业务代码一律用 `@protocol/server-port` 的领域类型。
 // 同构: App 客户端直连 `NEXT_PUBLIC_SERVER_ADDR`, `pnpm dev` SSR 渲染期读 `SERVER_ADDR`
 // (见 lib/env.ts)。
+import { bytesToBase64 } from "@/lib/base64"
 import { API_V1 } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
 import type { components } from "@/lib/api/server"
@@ -35,10 +36,10 @@ function unwrap<T>(res: ApiResult<Enveloped<T>>): ApiResult<T> {
 
 /** 文章不透明 id = base64url(url) (URL-safe 无填充), 与 wonita `decode_article_id` 对称。 */
 function encodeArticleId(url: string): string {
-  const bytes = new TextEncoder().encode(url)
-  let binary = ""
-  for (const b of bytes) binary += String.fromCharCode(b)
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+  return bytesToBase64(new TextEncoder().encode(url))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "")
 }
 
 // ── 漂移门 (编译期, 零运行时): wire DTO 必须仍可赋给 ideall 领域类型。 ────────────────────────────

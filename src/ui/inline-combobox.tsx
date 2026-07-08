@@ -64,6 +64,10 @@ type InlineComboboxProps = {
   setValue?: (value: string) => void
 }
 
+type CollaborativeElement = TElement & {
+  userId?: unknown
+}
+
 const InlineCombobox = ({
   children,
   element,
@@ -84,11 +88,11 @@ const InlineCombobox = ({
 
   // Check if current user is the creator of this element (for Yjs collaboration)
   const isCreator = React.useMemo(() => {
-    const elementUserId = (element as any).userId
+    const elementUserId = (element as CollaborativeElement).userId
     const currentUserId = editor.meta.userId
 
     // If no userId (backwards compatibility or non-Yjs), allow
-    if (!elementUserId) return true
+    if (typeof elementUserId !== "string" || elementUserId.length === 0) return true
 
     return elementUserId === currentUserId
   }, [editor.meta.userId, element])

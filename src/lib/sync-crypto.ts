@@ -1,6 +1,7 @@
 // 跨端同步的客户端密码学 (浏览器 WebCrypto)。
 // 由「同步码」(高熵随机串) 派生 storageId + 加密密钥; 明文 (关注列表) 只在浏览器内 AES-GCM 加密,
 // 上传的只有密文 —— wonita 服务读不到内容 (端到端加密)。
+import { base64ToBytes, bytesToBase64 } from "@/lib/base64"
 
 const SALT = "wonita-sync"
 const INFO_ID = "wonita-sync-id-v1"
@@ -21,19 +22,6 @@ function enc(s: string): Uint8Array<ArrayBuffer> {
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let s = ""
-  for (const b of bytes) s += String.fromCharCode(b)
-  return btoa(s)
-}
-
-function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
-  const s = atob(b64)
-  const out = new Uint8Array(s.length)
-  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i)
-  return out
 }
 
 /** 生成高熵同步码: 16 字节随机 → 32 位 hex, 每 8 位用 - 分组便于复制。 */
@@ -86,14 +74,14 @@ export type Encrypted = { iv: string; ciphertext: string }
 export async function encryptJson(key: CryptoKey, value: unknown): Promise<Encrypted> {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc(JSON.stringify(value)))
-  return { iv: toBase64(iv), ciphertext: toBase64(new Uint8Array(ct)) }
+  return { iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(ct)) }
 }
 
 export async function decryptJson<T>(key: CryptoKey, iv: string, ciphertext: string): Promise<T> {
   const pt = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: fromBase64(iv) },
+    { name: "AES-GCM", iv: base64ToBytes(iv) },
     key,
-    fromBase64(ciphertext),
+    base64ToBytes(ciphertext),
   )
   return JSON.parse(td.decode(pt)) as T
 }

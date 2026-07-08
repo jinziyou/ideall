@@ -6,6 +6,7 @@ import {
   type PluginDataPackage,
 } from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
+import { base64ToBytes, bytesToBase64 } from "@/lib/base64"
 
 export const AUDIO_DB_NAME = "ideall:audio"
 export const AUDIO_DB_VERSION = 1
@@ -132,33 +133,6 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
-}
-
-type BufferLike = {
-  from: (
-    input: Uint8Array | string,
-    encoding?: string,
-  ) => { toString: (encoding: string) => string }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as unknown as { Buffer?: BufferLike }).Buffer
-  if (maybeBuffer) return maybeBuffer.from(bytes).toString("base64")
-  let binary = ""
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.slice(i, i + 0x8000))
-  }
-  return btoa(binary)
-}
-
-function base64ToBytes(value: string): Uint8Array {
-  const maybeBuffer = (globalThis as unknown as { Buffer?: BufferLike }).Buffer
-  if (maybeBuffer) {
-    const binary = maybeBuffer.from(value, "base64").toString("binary")
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-  }
-  const binary = atob(value)
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
