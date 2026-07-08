@@ -33,7 +33,7 @@ import {
   getTabs,
 } from "../store"
 import { descriptorForResource, descriptorForResourceMeta, type OpenTarget } from "../open-target"
-import { parseNodeParams } from "../node-tab"
+import { nodeResourceRefForTab } from "../resource-tab"
 import { resolveResourceEngine } from "../resource-engines"
 import {
   getWorkspacesState,
@@ -75,8 +75,7 @@ function isBookmarkTreeSection(childKinds?: NodeKind[]): boolean {
 function isNodeActive(activeId: string | null, kind: NodeKind, id: string): boolean {
   if (!activeId) return false
   const t = getTabs().find((x) => x.id === activeId)
-  if (!t || t.kind !== "node") return false
-  const ref = parseNodeParams(t.params)
+  const ref = nodeResourceRefForTab(t)
   return ref?.kind === kind && ref.id === id
 }
 

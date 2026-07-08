@@ -35,6 +35,7 @@ import {
 import { useMediaQuery } from "@/lib/use-media-query"
 import { useWindowViewport } from "@/lib/use-window-viewport"
 import { descriptorForResource, descriptorForPath } from "./modules"
+import { isBrowserResourceTab } from "./resource-tab"
 
 const RightAiPanel = React.lazy(() => import("./right-ai-panel"))
 
@@ -167,7 +168,7 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   React.useEffect(() => {
     if (!isTauri()) return
     const t = getTabs().find((x) => x.id === getActiveId())
-    if (t?.kind !== "browser-view") void browserRelease().catch(() => {})
+    if (!t || !isBrowserResourceTab(t)) void browserRelease().catch(() => {})
   }, [])
 
   // 认证页: 跳出工作区壳。

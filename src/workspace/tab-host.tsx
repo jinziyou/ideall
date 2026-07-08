@@ -11,17 +11,22 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { isTauri, browserRelease } from "@/lib/tauri"
-import { useTabs, useActiveId, useActiveTabKind, useDirtyTabIds } from "./store"
+import { useTabs, useActiveId, useDirtyTabIds } from "./store"
 import { TabContent, tabLayout } from "./registry"
 import { TabActiveContext } from "./tab-active-context"
 import { tabElId, tabPanelId } from "./tab-view-type"
 import type { Tab } from "./types"
+import { RESOURCE_TAB_KIND, isBrowserResourceTab, parseResourceTabParams } from "./resource-tab"
 
 const MAX_ALIVE_FILL = 8 // 同时保持后台运行的 fill 查看器 (笔记等) 上限
 const MAX_ALIVE_IFRAME = 2 // 同时保持后台运行的嵌入应用 iframe 上限 (重新建立连接代价高, 上限防累积)
 
 /** 重型类别 (参与 LRU 逐出); padded 轻面板永久保持后台运行 → null。 */
 function heavyCat(tab: Tab): "fill" | "iframe" | null {
+  if (tab.kind === RESOURCE_TAB_KIND) {
+    const ref = parseResourceTabParams(tab.params)
+    if (ref?.scheme === "info" || ref?.scheme === "community") return "iframe"
+  }
   if (tab.kind === "info" || tab.kind === "community") return "iframe"
   return tabLayout(tab) === "fill" ? "fill" : null
 }
@@ -29,14 +34,14 @@ function heavyCat(tab: Tab): "fill" | "iframe" | null {
 export default function TabHost() {
   const tabs = useTabs()
   const activeId = useActiveId()
-  const activeKind = useActiveTabKind()
   const dirtyTabIds = useDirtyTabIds()
 
   // 切离「浏览器」标签 (或无激活标签) 时强制收起原生子 webview —— Linux GTK overlay 否则会挡全窗点击。
   React.useEffect(() => {
-    if (activeKind === "browser-view") return
+    const activeTab = tabs.find((tab) => tab.id === activeId)
+    if (activeTab && isBrowserResourceTab(activeTab)) return
     if (isTauri()) void browserRelease().catch(() => {})
-  }, [activeKind, activeId])
+  }, [activeId, tabs])
 
   // LRU 顺序: 最近激活在末尾。openTab 即激活, 故每个曾打开的标签都进过此表。
   // 用 React 官方「渲染期按 key 调整派生态」模式维护 (非 effect): 当 activeId / 标签集变化时

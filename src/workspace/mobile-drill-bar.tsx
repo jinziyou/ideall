@@ -1,12 +1,12 @@
 "use client"
 
-// 移动端下钻返回条 (md:hidden, 挂内容区顶部): 激活标签是节点内容 (kind="node") 时出现。
+// 移动端下钻返回条 (md:hidden, 挂内容区顶部): 激活标签是节点资源时出现。
 // 「一切皆标签页」在移动端没有可见标签条, 从列表/树点开实体后缺少显式返回途径 (系统返回
 // 手势不受控) —— 此条补上浏览器式下钻语义: ← 返回 = 关闭当前节点标签, 焦点自动转移到
 // 相邻标签 (通常即来处列表); 若关闭后已无标签, 落到该节点所属分区列表 (预览方式, 不堆常驻)。
 // 面包屑 = 「分区 / 标题」; 分区名从 HOME_PLACES 单源取。
 import { ChevronLeft } from "lucide-react"
-import { parseNodeParams } from "./node-tab"
+import { nodeResourceRefForTab } from "./resource-tab"
 import { getTabs, openTab, requestCloseTab, useActiveId, useTabs } from "./store"
 import { tabDescriptor } from "./tab-definitions"
 import { homePlaceForNodeKind } from "./tree/home-places"
@@ -17,7 +17,7 @@ export default function MobileDrillBar() {
   const tabs = useTabs()
   const activeId = useActiveId()
   const tab = tabs.find((t) => t.id === activeId)
-  const ref = tab?.kind === "node" ? parseNodeParams(tab.params) : null
+  const ref = nodeResourceRefForTab(tab)
   if (!tab || !ref) return null
   const place = homePlaceForNodeKind(ref.kind)
 

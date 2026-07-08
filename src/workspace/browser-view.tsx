@@ -5,6 +5,7 @@ import * as React from "react"
 import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react"
 import { toast } from "sonner"
 import { IconButton } from "@/ui/icon-button"
+import { safeHref } from "@/lib/safe-url"
 import {
   isTauri,
   openBrowserView,
@@ -74,7 +75,7 @@ async function waitStableBounds(
   return read()
 }
 
-export default function BrowserView() {
+export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl?: string }) {
   const tabActive = useTabActive()
   const tauri = React.useSyncExternalStore(
     () => () => {},
@@ -85,7 +86,10 @@ export default function BrowserView() {
   const toolbarRef = React.useRef<HTMLDivElement | null>(null)
   const cardRef = React.useRef<HTMLDivElement | null>(null)
   const openedRef = React.useRef(false)
-  const initialUrl = React.useMemo(() => takePendingBrowserUrl() ?? START_URL, [])
+  const initialUrl = React.useMemo(
+    () => takePendingBrowserUrl() ?? safeHref(initialUrlProp ?? "") ?? START_URL,
+    [initialUrlProp],
+  )
   const currentUrlRef = React.useRef(initialUrl)
   const [addr, setAddr] = React.useState(initialUrl)
   const [backend, setBackend] = React.useState<BrowserBackendInfo | null>(null)

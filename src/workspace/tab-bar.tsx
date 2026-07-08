@@ -27,7 +27,7 @@ import {
 import type { Tab } from "./types"
 import { tabViewType, TAB_VIEW_LABEL, tabElId, tabPanelId } from "./tab-view-type"
 import { MODULE_DOT } from "./module-dot"
-import { parseNodeParams } from "./node-tab"
+import { nodeResourceRefForTab } from "./resource-tab"
 import { FileTypeIcon } from "@/shared/file-type-icon"
 
 /** Chrome 近似: 最小保留色点 + 截断标题, 最大 ~240px; 溢出时横向滚动。 */
@@ -38,8 +38,7 @@ const tabTailTrigger =
   "flex h-full shrink-0 items-center outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 
 function isFileTab(t: Tab): boolean {
-  if (t.kind !== "node") return false
-  return parseNodeParams(t.params)?.kind === "file"
+  return nodeResourceRefForTab(t)?.kind === "file"
 }
 
 function TabLeadingMark({

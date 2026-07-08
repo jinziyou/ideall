@@ -4,9 +4,7 @@
 import { isTauri, browserNavigate } from "@/lib/tauri"
 import { safeHref } from "@/lib/safe-url"
 import { openTab } from "./store"
-import { tabDescriptor } from "./tab-definitions"
-
-const BROWSER_TAB = tabDescriptor("browser-view")
+import { resourceTab } from "./resource-tab"
 
 let pendingUrl: string | null = null
 const subscribers = new Set<(url: string) => void>()
@@ -42,7 +40,7 @@ export async function navigateExternal(
 
   if (newTab) {
     pendingUrl = href
-    openTab(BROWSER_TAB)
+    openTab(resourceTab({ scheme: "browser", kind: "page", id: href }, href))
   }
 
   try {

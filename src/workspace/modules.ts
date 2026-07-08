@@ -17,6 +17,7 @@ import { MODULE_META } from "./module-meta"
 import { PLUGIN_ENTRIES, isPluginModule } from "./plugin-entries"
 import { tabDescriptor } from "./tab-definitions"
 import { descriptorForResourceSearch } from "./open-target"
+import { resourceTab } from "./resource-tab"
 
 export type SidebarEntry = {
   label: string
@@ -140,7 +141,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "资讯主页",
         icon: MODULE_META.info.icon,
-        descriptor: tabDescriptor("info"),
+        descriptor: resourceTab({ scheme: "info", kind: "home", id: "default" }, "资讯"),
       },
     ],
   },
@@ -155,7 +156,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "社区主页",
         icon: MODULE_META.community.icon,
-        descriptor: tabDescriptor("community"),
+        descriptor: resourceTab({ scheme: "community", kind: "home", id: "default" }, "社区"),
       },
     ],
   },
@@ -187,18 +188,18 @@ export const MODULES: ModuleConfig[] = [
         // 聚合搜索 (选引擎输词跳转外部搜索引擎); 与顶栏搜索框/⌘K 统一面板职责分离: 前者跳外部引擎, 后者搜本机内容。
         label: "搜索",
         icon: Search,
-        descriptor: tabDescriptor("tool-search"),
+        descriptor: resourceTab({ scheme: "tool", kind: "search", id: "default" }, "搜索"),
       },
       {
         // 「AI 网站」= 外部 AI 站点启动器 (ChatGPT/Claude/…), 与内置 AI 对话 (活动栏 Bot 钮) 区分。
         label: "AI 网站",
         icon: Bot,
-        descriptor: tabDescriptor("tool-ai"),
+        descriptor: resourceTab({ scheme: "tool", kind: "ai", id: "default" }, "AI 网站"),
       },
       {
         label: "导航",
         icon: Compass,
-        descriptor: tabDescriptor("tool-navigation"),
+        descriptor: resourceTab({ scheme: "tool", kind: "navigation", id: "default" }, "导航"),
       },
     ],
   },
@@ -214,7 +215,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "浏览器",
         icon: Globe,
-        descriptor: tabDescriptor("browser-view"),
+        descriptor: resourceTab({ scheme: "browser", kind: "page", id: "default" }, "浏览器"),
       },
     ],
   },

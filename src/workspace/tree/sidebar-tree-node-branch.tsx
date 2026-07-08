@@ -11,7 +11,7 @@ import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import { getBookmark } from "@/files/stores/bookmarks-store"
 import { navigateExternal } from "../browser-open"
 import { openTarget, getTabs } from "../store"
-import { parseNodeParams } from "../node-tab"
+import { nodeResourceRefForTab } from "../resource-tab"
 import type { ModuleId } from "../types"
 import { FileTypeIcon } from "@/shared/file-type-icon"
 import { useFileActions } from "../use-file-actions"
@@ -29,8 +29,7 @@ type DropZone = "before" | "after" | "inside"
 function isNodeActive(activeId: string | null, kind: NodeKind, id: string): boolean {
   if (!activeId) return false
   const t = getTabs().find((x) => x.id === activeId)
-  if (!t || t.kind !== "node") return false
-  const ref = parseNodeParams(t.params)
+  const ref = nodeResourceRefForTab(t)
   return ref?.kind === kind && ref.id === id
 }
 

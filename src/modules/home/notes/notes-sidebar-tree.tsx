@@ -15,7 +15,7 @@ import {
 } from "@/files/stores/notes-store"
 import { PageTree, type InsertPos } from "./notes-tree"
 import { openTarget, useActiveId, getTabs } from "@/workspace/store"
-import { parseNodeParams } from "@/workspace/node-tab"
+import { nodeResourceRefForTab } from "@/workspace/resource-tab"
 import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/tree/sidebar-tree-bus"
 
 const EXPANDED_KEY = "ideall:notes:sidebar-expanded"
@@ -46,8 +46,7 @@ function countDescendants(notes: NoteMeta[], id: string): number {
 function activeNoteId(activeId: string | null): string | null {
   if (!activeId) return null
   const t = getTabs().find((x) => x.id === activeId)
-  if (!t || t.kind !== "node") return null
-  const ref = parseNodeParams(t.params)
+  const ref = nodeResourceRefForTab(t)
   return ref?.kind === "note" ? ref.id : null
 }
 

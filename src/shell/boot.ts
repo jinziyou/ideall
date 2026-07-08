@@ -20,7 +20,8 @@ import {
   openAiSection,
   openAiTasks,
 } from "@/workspace/store"
-import { nodeTab, parseNodeParams } from "@/workspace/node-tab"
+import { nodeTab } from "@/workspace/node-tab"
+import { nodeResourceRefForTab } from "@/workspace/resource-tab"
 import { openInBrowserTab } from "@/workspace/browser-open"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
@@ -62,8 +63,9 @@ export function registerAll(): void {
   registerActiveNode(() => {
     const id = getActiveId()
     const tab = getTabs().find((t) => t.id === id)
-    if (!tab || tab.kind !== "node" || getActiveSource() !== "user") return null
-    return parseNodeParams(tab.params)
+    if (!tab || getActiveSource() !== "user") return null
+    const ref = nodeResourceRefForTab(tab)
+    return ref ? { kind: ref.kind, id: ref.id } : null
   })
   for (const m of [infoManifest, communityManifest]) {
     for (const r of m.resolvers ?? []) registerContentResolver(r.types, r.resolve)

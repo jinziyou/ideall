@@ -98,7 +98,8 @@ export function connectedResourceTitle(ref: ResourceRef): string {
       if (ref.kind === "navigation") return "导航"
       return ref.id
     case "browser":
-      return ref.kind === "page" ? ref.id : `书签 · ${ref.id}`
+      if (ref.kind === "page") return ref.id === "default" ? "浏览器" : ref.id
+      return `书签 · ${ref.id}`
     case "app":
       return `应用 · ${ref.id}`
   }

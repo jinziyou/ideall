@@ -9,6 +9,7 @@ import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { descriptorForResource, descriptorForResourceMeta, type OpenTarget } from "./open-target"
+import { isBrowserResourceTab, parseResourceTabParams } from "./resource-tab"
 import { getResource } from "@/vfs/registry"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
 import { tabDescriptor } from "./tab-definitions"
@@ -154,10 +155,12 @@ export function hydrateWorkspace() {
     const cur = ws()
     // 清洗: 丢弃 module 不在合法集合的污染/陈旧标签 (防下线某模块留僵尸标签);
     // 节点标签额外要求 params 能解析出合法 NodeRef (防下线某 kind / 损坏 params 留僵尸标签)。
-    const validTabs = saved.tabs.filter(
-      (t) =>
-        VALID_MODULES.has(t.module) && (t.kind === "node" ? !!parseNodeParams(t.params) : true),
-    )
+    const validTabs = saved.tabs.filter((t) => {
+      if (!VALID_MODULES.has(t.module)) return false
+      if (t.kind === "node") return !!parseNodeParams(t.params)
+      if (t.kind === "resource") return !!parseResourceTabParams(t.params)
+      return true
+    })
     const merged = [...validTabs]
     for (const t of cur.tabs) if (!merged.some((x) => x.id === t.id)) merged.push(t)
     const wantId = cur.activeId ?? saved.activeId
@@ -191,15 +194,15 @@ export function hydrateWorkspace() {
   if (isTauri()) {
     const { tabs, activeId } = store.getState().workspace
     const active = tabs.find((t) => t.id === activeId)
-    if (active?.kind !== "browser-view") void browserRelease().catch(() => {})
+    if (!active || !isBrowserResourceTab(active)) void browserRelease().catch(() => {})
   }
 }
 
 // —— 动作 ——
 
 /** 切离「浏览器」标签时收起原生子 webview, 避免其叠在插件 iframe 上拦截点击。 */
-function hideBrowserWebviewUnlessBrowserTab(kind: string) {
-  if (kind === "browser-view") return
+function hideBrowserWebviewUnlessBrowserTab(tab: Pick<TabDescriptor, "kind" | "params">) {
+  if (isBrowserResourceTab(tab)) return
   if (isTauri()) void browserRelease().catch(() => {})
 }
 
@@ -254,7 +257,7 @@ function evictColdTabs(tabs: Tab[], protect: Set<string>): Tab[] {
  *  opts.transient=true → 预览标签 (复用单一预览槽: 轻底/淡色点/标题点线下划线); 缺省 = 常驻打开
  *  (若命中当前预览槽则提升为常驻)。新增常驻标签超过软上限时自动回收最久未用的冷标签。 */
 export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: OpenTabOpts) {
-  hideBrowserWebviewUnlessBrowserTab(d.kind)
+  hideBrowserWebviewUnlessBrowserTab(d)
   const id = tabKey(d)
   if (opts?.transient) {
     setState({
@@ -485,9 +488,9 @@ function requestDirtyClose(ids: string[], confirm: () => void): boolean {
 export function closeTab(id: string) {
   const idx = ws().tabs.findIndex((t) => t.id === id)
   if (idx === -1) return
-  const closingKind = ws().tabs[idx]?.kind
+  const closingTab = ws().tabs[idx]
   const tabs = ws().tabs.filter((t) => t.id !== id)
-  if (closingKind === "browser-view" && isTauri()) {
+  if (closingTab && isBrowserResourceTab(closingTab) && isTauri()) {
     void browserRelease().catch(() => {})
   }
   let activeId = ws().activeId
@@ -497,7 +500,7 @@ export function closeTab(id: string) {
     activeId = next ? next.id : null
     // 焦点转移到相邻标签时同步活动模块 (否则活动栏/侧栏会停在旧模块); mode 不随标签翻转。
     if (next) {
-      hideBrowserWebviewUnlessBrowserTab(next.kind)
+      hideBrowserWebviewUnlessBrowserTab(next)
       activeModule = coerceActiveModuleForMode(next.module, ws().mode, activeModule)
     }
   }
@@ -545,7 +548,7 @@ export function requestCloseAllTabs(): boolean {
 export function closeOtherTabs(keepId: string) {
   const keep = ws().tabs.find((t) => t.id === keepId)
   if (!keep) return
-  hideBrowserWebviewUnlessBrowserTab(keep.kind)
+  hideBrowserWebviewUnlessBrowserTab(keep)
   setState({
     tabs: [keep],
     activeId: keepId,
@@ -572,7 +575,7 @@ export function requestCloseOtherTabs(keepId: string): boolean {
 export function setActiveTab(id: string) {
   const t = ws().tabs.find((x) => x.id === id)
   if (!t) return
-  hideBrowserWebviewUnlessBrowserTab(t.kind)
+  hideBrowserWebviewUnlessBrowserTab(t)
   // 激活标签不翻 mode 视图; activeModule 只作为左侧导航/侧栏锚点, 需收束在当前 mode 可见范围内。
   // 用户主动点标签 = 用户在看它 → 来源 user (即便它原是 agent 经 ui.openTab 开的, 用户点回即视作同意)。
   setState({
@@ -596,7 +599,7 @@ export function toggleModule(m: ModuleId) {
     setState({ activeModule: m, mode, sidebarCollapsed: false })
     return
   }
-  hideBrowserWebviewUnlessBrowserTab(first.descriptor.kind)
+  hideBrowserWebviewUnlessBrowserTab(first.descriptor)
   // 切模块进来的落地面板用「预览」方式开: 点遍多个模块只复用单一预览槽, 不再每切一个就堆一个常驻标签。
   setState({
     ...transientOpenPatch(first.descriptor),
@@ -622,7 +625,7 @@ export function setMode(mode: WsMode) {
     setState({ mode, activeModule: firstModule, sidebarCollapsed: false, activeSource: "user" })
     return
   }
-  hideBrowserWebviewUnlessBrowserTab(first.descriptor.kind)
+  hideBrowserWebviewUnlessBrowserTab(first.descriptor)
   setState({
     ...transientOpenPatch(first.descriptor),
     mode,

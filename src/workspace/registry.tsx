@@ -18,6 +18,8 @@ import {
 } from "./tab-definitions"
 import { parseNodeParams } from "./node-tab"
 import { resolveNodeResourceViewer, resourceLayout } from "./resource-engines"
+import { RESOURCE_TAB_KIND, parseResourceTabParams } from "./resource-tab"
+import type { ResourceRef } from "@protocol/resource"
 
 // 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
 const FOLLOW_TYPES: SubscriptionType[] = ["publisher", "entity", "search", "peer"]
@@ -98,6 +100,10 @@ const Spinner = (
 )
 
 export function tabLayout(tab: Tab): TabLayout {
+  if (tab.kind === RESOURCE_TAB_KIND) {
+    const ref = parseResourceTabParams(tab.params)
+    return ref ? resourceLayout(ref) : "padded"
+  }
   // 节点级标签: layout 取自查看器注册表 (file 的 mime 分派在叶子, 故按 kind 即可定 layout)。
   if (tab.kind === "node") {
     const ref = parseNodeParams(tab.params)
@@ -106,24 +112,61 @@ export function tabLayout(tab: Tab): TabLayout {
   return tabDefinitionLayout(tab.kind) ?? "padded"
 }
 
+function renderNodeResource(ref: ResourceRef): React.ReactNode {
+  if (ref.scheme !== "node") return null
+  const entry = resolveNodeResourceViewer(ref)
+  if (!entry) {
+    return <div className="p-6 text-sm text-muted-foreground">暂不支持这种内容（{ref.kind}）</div>
+  }
+  const Viewer = entry.viewer
+  return (
+    <React.Suspense fallback={Spinner}>
+      <Viewer nodeId={ref.id} />
+    </React.Suspense>
+  )
+}
+
+function renderConnectedResource(ref: ResourceRef): React.ReactNode {
+  switch (ref.scheme) {
+    case "info":
+      return <EmbedHost manifest={infoEmbedManifest} />
+    case "community":
+      return <EmbedHost manifest={communityEmbedManifest} />
+    case "tool":
+      if (ref.kind === "search") return <ToolSearch />
+      if (ref.kind === "ai") return <ToolAi />
+      if (ref.kind === "navigation") return <ToolNavigation />
+      break
+    case "browser":
+      return <BrowserView initialUrl={ref.id === "default" ? undefined : ref.id} />
+    case "app":
+      return <AppsPage />
+    case "node":
+      break
+  }
+  return <div className="p-6 text-sm text-muted-foreground">无法打开此资源</div>
+}
+
+function renderResourceTab(tab: Tab): React.ReactNode {
+  const ref = parseResourceTabParams(tab.params)
+  if (!ref) {
+    return <div className="p-6 text-sm text-muted-foreground">无法打开此资源（{tab.id}）</div>
+  }
+  if (ref.scheme === "node") return renderNodeResource(ref)
+  return <React.Suspense fallback={Spinner}>{renderConnectedResource(ref)}</React.Suspense>
+}
+
 function renderTabBody(tab: Tab): React.ReactNode {
+  if (tab.kind === RESOURCE_TAB_KIND) return renderResourceTab(tab)
+
   // 节点级标签 (一切皆标签): params={kind,id} → 解析 NodeRef → 查节点查看器 → <Comp nodeId/>。
   if (tab.kind === "node") {
     const ref = parseNodeParams(tab.params)
-    const entry = ref ? resolveNodeResourceViewer({ scheme: "node", ...ref }) : null
-    if (!ref || !entry) {
-      return (
-        <div className="p-6 text-sm text-muted-foreground">
-          {ref ? `暂不支持这种内容（${ref.kind}）` : `无法打开此内容（${tab.id}）`}
-        </div>
-      )
+    const resourceRef = ref ? ({ scheme: "node", ...ref } as const) : null
+    if (!resourceRef) {
+      return <div className="p-6 text-sm text-muted-foreground">无法打开此内容（{tab.id}）</div>
     }
-    const Viewer = entry.viewer
-    return (
-      <React.Suspense fallback={Spinner}>
-        <Viewer nodeId={ref.id} />
-      </React.Suspense>
-    )
+    return renderNodeResource(resourceRef)
   }
 
   const entry = isStaticTabKind(tab.kind) ? REGISTRY[tab.kind] : undefined
