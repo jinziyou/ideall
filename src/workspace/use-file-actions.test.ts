@@ -3,7 +3,9 @@ import assert from "node:assert/strict"
 import type { StoredFile } from "@protocol/files"
 import {
   createFileActionHandlers,
+  fileMetaActionInput,
   fileReference,
+  fileResourceRef,
   parseFileTags,
   type FileActionDeps,
 } from "./use-file-actions"
@@ -103,6 +105,14 @@ test("parseFileTags: 支持中英文逗号/换行并去重", () => {
 
 test("fileReference: 生成 fs 文件引用", () => {
   assert.equal(fileReference("abc"), "fs://file/abc")
+})
+
+test("file resource helpers: 生成 VFS ref 并映射文件元数据补丁", () => {
+  assert.deepEqual(fileResourceRef("abc"), { scheme: "node", kind: "file", id: "abc" })
+  assert.deepEqual(fileMetaActionInput({ name: "next.md", tags: ["doc"] }), {
+    title: "next.md",
+    tags: ["doc"],
+  })
 })
 
 test("rename: trim 名称后更新元数据、标签标题、刷新树并回调", async () => {
