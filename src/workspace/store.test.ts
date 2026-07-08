@@ -8,7 +8,6 @@ import { resourceKey } from "@protocol/resource"
 import {
   openTab,
   openTarget,
-  openNodeTab,
   promoteTab,
   promoteActiveTab,
   toggleModule,
@@ -30,7 +29,9 @@ import {
   getMode,
   getActiveModule,
   getTabs,
+  type ActiveSource,
 } from "./store"
+import type { NodeRef } from "./node-ref"
 import { tabDescriptor } from "./tab-definitions"
 import { clearVfsProvidersForTest, registerVfsProvider } from "@/vfs/registry"
 import type { VfsProvider } from "@/vfs/types"
@@ -41,10 +42,22 @@ const INFO = tabDescriptor("info")
 const COMMUNITY = tabDescriptor("community")
 const TOOL = tabDescriptor("tool-search")
 
-test("openNodeTab 默认来源 user; 传 agent 标记 agent", () => {
-  openNodeTab({ kind: "note", id: "u1" }, "用户开")
+function openNodeResource(
+  ref: NodeRef,
+  title: string,
+  source: ActiveSource = "user",
+  opts?: { transient?: boolean },
+) {
+  return openTarget(
+    { type: "resource", ref: { scheme: "node", ...ref }, title, transient: opts?.transient },
+    source,
+  )
+}
+
+test("openTarget node resource 默认来源 user; 传 agent 标记 agent", () => {
+  openNodeResource({ kind: "note", id: "u1" }, "用户开")
   assert.equal(getActiveSource(), "user")
-  openNodeTab({ kind: "note", id: "a1" }, "AI 开", "agent")
+  openNodeResource({ kind: "note", id: "a1" }, "AI 开", "agent")
   assert.equal(getActiveSource(), "agent", "agent 经 ui.openTab 自激活 → 来源 agent")
 })
 
@@ -130,7 +143,7 @@ test("openTarget(resource): refreshes descriptor title from VFS metadata", async
 })
 
 test("用户点回 agent 开的标签 → 来源转 user (用户主动看 = 同意)", () => {
-  openNodeTab({ kind: "note", id: "x" }, "X", "agent")
+  openNodeResource({ kind: "note", id: "x" }, "X", "agent")
   assert.equal(getActiveSource(), "agent")
   const id = getActiveId()
   assert.ok(id)
@@ -139,9 +152,9 @@ test("用户点回 agent 开的标签 → 来源转 user (用户主动看 = 同�
 })
 
 test("用户经侧栏/搜索再开别的节点 → 来源回 user (不被前一个 agent 态污染)", () => {
-  openNodeTab({ kind: "note", id: "a2" }, "AI 开2", "agent")
+  openNodeResource({ kind: "note", id: "a2" }, "AI 开2", "agent")
   assert.equal(getActiveSource(), "agent")
-  openNodeTab({ kind: "file", id: "f1" }, "用户开文件") // 默认 user
+  openNodeResource({ kind: "file", id: "f1" }, "用户开文件") // 默认 user
   assert.equal(getActiveSource(), "user")
 })
 
@@ -149,24 +162,24 @@ test("用户经侧栏/搜索再开别的节点 → 来源回 user (不被前一�
 
 test("单击预览: transient 打开建立单一预览槽", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "p1" }, "P1", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "p1" }, "P1", "user", { transient: true })
   assert.equal(getTabs().length, 1)
   assert.equal(getTransientId(), getActiveId())
 })
 
 test("再次预览不同项 → 原地替换预览槽 (标签数不增)", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "a" }, "A", "user", { transient: true })
-  openNodeTab({ kind: "note", id: "b" }, "B", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "a" }, "A", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "b" }, "B", "user", { transient: true })
   assert.equal(getTabs().length, 1, "预览槽被复用, 不累积")
   assert.equal(getTransientId(), getActiveId())
 })
 
 test("非瞬态打开命中预览槽 → 提升为常驻 (transientId 清空)", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "c" }, "C", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "c" }, "C", "user", { transient: true })
   const id = getActiveId()!
-  openNodeTab({ kind: "note", id: "c" }, "C", "user") // 双击/键盘 = 钉住
+  openNodeResource({ kind: "note", id: "c" }, "C", "user") // 双击/键盘 = 钉住
   assert.equal(getTransientId(), null)
   assert.equal(getTabs().length, 1)
   assert.equal(getActiveId(), id)
@@ -174,7 +187,7 @@ test("非瞬态打开命中预览槽 → 提升为常驻 (transientId 清空)", 
 
 test("promoteTab 仅对当前预览标签生效", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "d" }, "D", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "d" }, "D", "user", { transient: true })
   const id = getActiveId()!
   promoteTab("不存在的-id")
   assert.equal(getTransientId(), id, "对非预览 id 无效")
@@ -184,7 +197,7 @@ test("promoteTab 仅对当前预览标签生效", () => {
 
 test("promoteActiveTab: 编辑即钉住 —— 激活的预览标签提升为常驻", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "ed" }, "编辑", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "ed" }, "编辑", "user", { transient: true })
   const id = getActiveId()!
   assert.equal(getTransientId(), id)
   promoteActiveTab()
@@ -195,9 +208,9 @@ test("promoteActiveTab: 编辑即钉住 —— 激活的预览标签提升为常
 
 test("promoteActiveTab: 激活标签非预览时不动预览槽", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "prev2" }, "预览", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "prev2" }, "预览", "user", { transient: true })
   const previewId = getTransientId()!
-  openNodeTab({ kind: "file", id: "perm" }, "常驻", "user") // 激活变常驻, 预览槽仍是 prev2
+  openNodeResource({ kind: "file", id: "perm" }, "常驻", "user") // 激活变常驻, 预览槽仍是 prev2
   assert.notEqual(getActiveId(), previewId)
   promoteActiveTab()
   assert.equal(getTransientId(), previewId, "激活非预览 → 预览槽不变")
@@ -205,9 +218,9 @@ test("promoteActiveTab: 激活标签非预览时不动预览槽", () => {
 
 test("常驻打开新标签不消耗预览槽; 关闭预览标签清空 transientId", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "e" }, "E", "user", { transient: true }) // 预览 E
+  openNodeResource({ kind: "note", id: "e" }, "E", "user", { transient: true }) // 预览 E
   const previewId = getTransientId()!
-  openNodeTab({ kind: "file", id: "f" }, "F", "user") // 常驻 F (新标签)
+  openNodeResource({ kind: "file", id: "f" }, "F", "user") // 常驻 F (新标签)
   assert.equal(getTabs().length, 2, "常驻打开追加, 不替换预览槽")
   assert.equal(getTransientId(), previewId, "预览槽仍是 E")
   closeTab(previewId)
@@ -217,9 +230,9 @@ test("常驻打开新标签不消耗预览槽; 关闭预览标签清空 transien
 test("软上限: 常驻标签超过上限 → 回收最久未用的冷标签 (激活项保留)", () => {
   closeAllTabs()
   // 开 13 个常驻笔记标签 (上限 12): 第一个 (最久未访问) 应被自动回收。
-  openNodeTab({ kind: "note", id: "cap-0" }, "0", "user")
+  openNodeResource({ kind: "note", id: "cap-0" }, "0", "user")
   const firstId = getActiveId()!
-  for (let i = 1; i <= 12; i++) openNodeTab({ kind: "note", id: `cap-${i}` }, String(i), "user")
+  for (let i = 1; i <= 12; i++) openNodeResource({ kind: "note", id: `cap-${i}` }, String(i), "user")
   const tabs = getTabs()
   assert.equal(tabs.length, 12, "常驻标签数被钳在软上限")
   assert.ok(!tabs.some((t) => t.id === firstId), "最久未用的标签被回收")
@@ -228,9 +241,9 @@ test("软上限: 常驻标签超过上限 → 回收最久未用的冷标签 (�
 
 test("软上限: 预览标签不计入上限, 也不被回收", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "prev" }, "预览", "user", { transient: true })
+  openNodeResource({ kind: "note", id: "prev" }, "预览", "user", { transient: true })
   const previewId = getTransientId()!
-  for (let i = 0; i < 12; i++) openNodeTab({ kind: "note", id: `p-${i}` }, String(i), "user")
+  for (let i = 0; i < 12; i++) openNodeResource({ kind: "note", id: `p-${i}` }, String(i), "user")
   const tabs = getTabs()
   // 12 个常驻 + 1 个预览 = 13, 但预览不计入上限故不触发回收。
   assert.equal(tabs.length, 13, "预览标签不计入上限")
@@ -243,7 +256,7 @@ test("软上限: 预览标签不计入上限, 也不被回收", () => {
 
 test("dirty 标签: 受保护关闭会询问, 拒绝时保留标签与 dirty 状态", () => {
   closeAllTabs()
-  openNodeTab({ kind: "file", id: "dirty" }, "dirty.ts")
+  openNodeResource({ kind: "file", id: "dirty" }, "dirty.ts")
   const id = getActiveId()!
   setTabDirty(id, true)
   assert.equal(isTabDirty(id), true)
@@ -270,10 +283,10 @@ test("dirty 标签: 受保护关闭会询问, 拒绝时保留标签与 dirty 状
 
 test("dirty 标签: 常驻软上限回收时跳过未保存标签", () => {
   closeAllTabs()
-  openNodeTab({ kind: "file", id: "keep-dirty" }, "keep.ts")
+  openNodeResource({ kind: "file", id: "keep-dirty" }, "keep.ts")
   const dirtyId = getActiveId()!
   setTabDirty(dirtyId, true)
-  for (let i = 0; i < 12; i++) openNodeTab({ kind: "note", id: `clean-${i}` }, String(i))
+  for (let i = 0; i < 12; i++) openNodeResource({ kind: "note", id: `clean-${i}` }, String(i))
   const tabs = getTabs()
   assert.equal(tabs.length, 12)
   assert.ok(
@@ -350,9 +363,9 @@ test("closeTab: 焦点转移不翻镜头, activeModule 收束到当前镜头", (
 
 test("activateAdjacentTab 按标签序循环; activateTabAt 按序跳转 (9=最后)", () => {
   closeAllTabs()
-  openNodeTab({ kind: "note", id: "k1" }, "K1")
-  openNodeTab({ kind: "note", id: "k2" }, "K2")
-  openNodeTab({ kind: "note", id: "k3" }, "K3")
+  openNodeResource({ kind: "note", id: "k1" }, "K1")
+  openNodeResource({ kind: "note", id: "k2" }, "K2")
+  openNodeResource({ kind: "note", id: "k3" }, "K3")
   const ids = getTabs().map((t) => t.id)
   assert.equal(getActiveId(), ids[2])
   activateAdjacentTab(1) // 尾部 → 循环回头
@@ -368,8 +381,8 @@ test("activateAdjacentTab 按标签序循环; activateTabAt 按序跳转 (9=最�
 test("closeActiveTab 关闭激活标签; 无标签时安全无操作", () => {
   closeAllTabs()
   closeActiveTab() // 空态无操作不抛
-  openNodeTab({ kind: "note", id: "cw1" }, "CW1")
-  openNodeTab({ kind: "note", id: "cw2" }, "CW2")
+  openNodeResource({ kind: "note", id: "cw1" }, "CW1")
+  openNodeResource({ kind: "note", id: "cw2" }, "CW2")
   closeActiveTab()
   assert.equal(getTabs().length, 1)
   assert.equal(getTabs()[0].title, "CW1", "焦点回相邻标签")

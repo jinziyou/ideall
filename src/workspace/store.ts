@@ -404,8 +404,11 @@ export function openTarget(target: OpenTarget, source: ActiveSource = "user"): b
   }
 }
 
-/** 打开 (或激活已存在的) 一个节点标签。三入口 (搜索/侧栏/AI) 统一经此, 保证 entity 级去重。
- *  AI (boot.ts 的 ui.openTab) 传 source="agent" —— 该节点不计入「打开即隐式同意」(隐私)。 */
+/**
+ * @deprecated 仅保留给旧端口/插件兼容；新代码应直接调用 openTarget({ type:"resource" })。
+ * 打开 (或激活已存在的) 一个节点标签。AI (boot.ts 的 ui.openTab) 传 source="agent" ——
+ * 该节点不计入「打开即隐式同意」(隐私)。
+ */
 export function openNodeTab(
   ref: NodeRef,
   title: string,
