@@ -23,6 +23,7 @@
     "tauri": "tauri",
     "app:dev": "node scripts/app-dev.mjs",
     "git:pull": "node scripts/git-pull.mjs",
+    "git:setup": "node scripts/git-setup.mjs",
     "app:export": "next build",
     "app:build": "tauri build",
     "lint": "eslint",
