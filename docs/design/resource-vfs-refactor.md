@@ -2,6 +2,8 @@
 
 本文修正“把全项目统一到 Linux 式分层模型”方案中的缺口，目标是把本地模式和连接模式统一到同一套可寻址、可打开、可搜索、可显示的 Resource 模型，同时保留本地 `Node` 的同步、隐私和墓碑语义。
 
+当前状态：Resource 契约、VFS registry、`node` provider、连接模式 providers、`OpenTarget`、resource engines、连接侧栏 ResourceMeta 渲染、`save-to-mine` projector、VFS watch 已落地。仍保留 `kind:"node"` 标签作为兼容壳，暂不引入统一 `kind:"resource"` 标签。
+
 ## 1. 目标与非目标
 
 目标分层：
@@ -205,9 +207,10 @@ Provider 责任：
 远端保存规则：
 
 - 远端 Resource 默认只读，不进入 `STORE_NODES`。
-- “关注 / 收藏 / 保存到我的”通过 `save-to-mine` action 投影成本地 `Node`。
-- 投影必须幂等，使用稳定键。例如 `feed:type:key`、bookmark URL hash、publication canonical id。
-- 投影返回 `NodeResourceRef`，显示层随后可以打开本地 Node。
+- “关注 / 收藏 / 保存到我的”通过 `save-to-mine` action 进入 `save-to-mine-projector`。
+- 投影必须幂等：关注走 `feed:type:key` 稳定键；书签按 URL 去重，避免重复创建。
+- 投影结果返回本地资产摘要（subscription/bookmark + existed + href），不把远端对象自动改写成 `NodeResourceRef`。
+- 连接资源的静态入口、route、title、capability 定义集中在 `connected-resource-manifest.ts`，provider 只负责 VFS list/get/action/watch 编排。
 
 ## 6. OpenTarget 与 Tab 兼容
 
@@ -215,7 +218,7 @@ Provider 责任：
 
 ```ts
 export type OpenTarget =
-  | { type: "resource"; ref: ResourceRef; title?: string; transient?: boolean }
+  | { type: "resource"; ref: ResourceRef; title?: string; meta?: ResourceMeta; transient?: boolean }
   | { type: "tab"; descriptor: TabDescriptor; transient?: boolean }
   | { type: "command"; command: "open-ai-panel" | "toggle-right-panel" }
 ```
@@ -224,6 +227,7 @@ export type OpenTarget =
 
 - 新增 `openTarget(target)`，旧 `openTab` 和 `openNodeTab` 保持。
 - `openNodeTab(ref,title)` 变成薄包装：`openTarget({ type:"resource", ref:{ scheme:"node", ...ref }, title })`。
+- `openTarget(resource)` 同步打开 fallback descriptor，同时通过 VFS `get(..., intent:"metadata")` 读取 `ResourceMeta` 修正标题、route 和 embed 内部导航。
 - 新 tab 类型可以先沿用旧 `kind:"node"`，待 resource engine 稳定后再引入 `kind:"resource"`。
 - URL sync 优先读 `?resource=`，其次读旧 `?node=`。
 - 水合旧标签：
@@ -288,7 +292,7 @@ export type ResourceEngine = {
 
 ### 阶段 B：node provider
 
-新增 `src/vfs/node-provider.ts`，包装现有 `nodes-store`：
+已新增 `src/vfs/node-provider.ts`，包装现有 `nodes-store`：
 
 - `listNodeSummaries`
 - `getNodeRaw`
@@ -300,6 +304,7 @@ export type ResourceEngine = {
 - `node` Resource 能覆盖 note/file/bookmark/feed/thread。
 - `stripNode` 与 `fs.notes:read` 测试继续通过。
 - `openNodeTab` 行为不变。
+- provider watch 基于 `onFilesUpdated` 通知 node query 失效。
 
 ### 阶段 C：OpenTarget
 
@@ -313,17 +318,18 @@ export type ResourceEngine = {
 
 ### 阶段 D：Display 消费 Resource
 
-把 sidebar tree 的 `descriptor/nodeRef` 迁移为 `target: OpenTarget`，动态子项从 `ResourceMeta` 生成。
+把 sidebar tree 的 `descriptor/nodeRef` 迁移为 `target: OpenTarget`，动态子项从 `ResourceMeta` 生成。连接模式 info/community 侧栏已从订阅 DTO 改为 VFS `listResources()`；resource 行携带 `ResourceMeta` 打开。
 
 验收：
 
 - Home places 展开结果不变。
 - browser 书签导航保留原语义。
 - agent workspace 静态树不受影响。
+- sidebar 通过 `watchResources()` 监听 node/resource query，按 section 失效缓存。
 
 ### 阶段 E：连接 provider
 
-依次接入：
+已接入：
 
 - `info-provider`
 - `community-provider`
@@ -336,10 +342,12 @@ export type ResourceEngine = {
 - 连接模式侧栏能用 ResourceMeta 表达 entity/peer/tool/browser/app。
 - embed route 打开仍由 `requestEmbedRoute` 执行。
 - 远端对象不会自动写入 `STORE_NODES`。
+- `connected-resource-manifest.ts` 是 route/title/capability 的单一来源。
+- `save-to-mine` action 由 provider 委托 projector，UI 不直接拼写 FilesPort 入参。
 
 ### 阶段 F：Resource Engine
 
-新增 `workspace/resource-engines.tsx`，把 node engine 与连接 engine 统一分派。
+已新增 `workspace/resource-engines.tsx`，把 node engine 与连接 engine 统一分派。
 
 验收：
 
@@ -377,6 +385,7 @@ export type ResourceEngine = {
 - embed route resource 不泄 ServerPort DTO。
 - sidebar tree 从 ResourceMeta 构造。
 - mobile drill bar 根据 ResourceRef 找回 fallback。
+- VFS watch 通知 node/connected query 后显示缓存失效并重载。
 
 每阶段最低验证：
 
