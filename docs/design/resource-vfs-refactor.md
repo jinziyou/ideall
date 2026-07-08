@@ -2,7 +2,7 @@
 
 本文修正“把全项目统一到 Linux 式分层模型”方案中的缺口，目标是把本地模式和连接模式统一到同一套可寻址、可打开、可搜索、可显示的 Resource 模型，同时保留本地 `Node` 的同步、隐私和墓碑语义。
 
-当前状态：Resource 契约、VFS registry、`node` provider、连接模式 providers、`OpenTarget`、统一 `kind:"resource"` 标签壳、resource engines、连接侧栏 ResourceMeta 渲染、本地搜索 Resource-first、`save-to-mine` projector、VFS watch 粒度失效已落地。旧 `?node=` 深链和旧 `kind:"node"` 持久化标签仅作为水合/解析兼容入口保留。
+当前状态：Resource 契约、VFS registry、`node` provider、连接模式 providers、`OpenTarget`、统一 `kind:"resource"` 标签壳、resource engines、本地/连接侧栏 ResourceMeta 渲染、本地搜索按输入 Resource 查询、文件元数据 VFS action、`save-to-mine` projector、VFS watch 粒度失效已落地。旧 `?node=` 深链、旧 `kind:"node"` 和旧 `browser-view` 持久化标签仅作为水合/解析兼容入口保留。
 
 ## 1. 目标与非目标
 
@@ -318,7 +318,7 @@ export type ResourceEngine = {
 
 ### 阶段 D：Display 消费 Resource
 
-把 sidebar tree 的 `descriptor/nodeRef` 迁移为 `target: OpenTarget`，动态子项从 `ResourceMeta` 生成。连接模式 info/community 侧栏已从订阅 DTO 改为 VFS `listResources()`；resource 行携带 `ResourceMeta` 打开。本地搜索也改为通过 VFS `listResources({ scheme:"node" })` 读取 note/feed/bookmark/file/thread。
+把 sidebar tree 的 `descriptor/nodeRef` 迁移为 `target: OpenTarget`，动态子项从 `ResourceMeta` 生成。本地与连接模式动态侧栏都通过 VFS `listResources()` 获取 resource 行。本地搜索按用户输入通过 VFS `listResources({ scheme:"node", text, limit })` 查询 note/feed/bookmark/file/thread。
 
 验收：
 
@@ -365,6 +365,7 @@ export type ResourceEngine = {
 仍保留：
 
 - 旧 `kind:"node"` 标签水合/渲染兼容。
+- 旧 `browser-view` 标签水合/渲染兼容。
 - 旧 `?node=kind:id` 深链兼容。
 
 删除兼容读取前必须有迁移策略和 hydration 覆盖。

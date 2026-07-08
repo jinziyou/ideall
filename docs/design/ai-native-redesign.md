@@ -129,7 +129,7 @@ export type Node = BaseNode & (
 **NoteViewer 包装**:`NoteEditor` 是 5-prop 受控组件,新建 `viewers/note-viewer.tsx` 自取数(`getNode`)+ 渲染受控 NoteEditor + `onSaved` 乐观回填标签标题。NoteEditor 维持 5-prop 零侵入。
 
 ### 5.2 查询参数路由(不能用动态段)
-`?node=kind:id` 收敛到单一静态壳 `out/home/notes.html`——Tauri `output:export` 下动态段刷新 404,query 不参与 asset 寻址,桌面/移动冷启动深链/刷新均不 404(雷1 `fix-holds`,已对照真实产物核实)。`node-ref.ts` 单点编解码(`encodeURIComponent` 封死含 `&/=` 的 feed key);`modules.ts:descriptorForNode` 新增(不动 `descriptorForPath` 签名);`open-workspace-tab.tsx` 有 `?node=` 时**只开节点标签并 return**(防列表页 descriptor 覆盖刚激活节点);`useSearchParams` **必须包 `<Suspense>`**(output:export 编译期硬约束)。
+`?resource=node:kind:id` 收敛到单一静态壳 `out/home/notes.html`——Tauri `output:export` 下动态段刷新 404,query 不参与 asset 寻址,桌面/移动冷启动深链/刷新均不 404(雷1 `fix-holds`,已对照真实产物核实)。`resource.ts` 单点编解码(`encodeURIComponent` 封死含 `&/=` 的 id);`modules.ts:descriptorForResource` 解析 Resource 深链并兼容旧 `?node=`;`open-workspace-tab.tsx` 有 `?resource=` 或旧 `?node=` 时**只开资源标签并 return**(防列表页 descriptor 覆盖刚激活节点);`useSearchParams` **必须包 `<Suspense>`**(output:export 编译期硬约束)。
 
 ### 5.3 LRU keep-alive + 写队列(⚠️ 关键验证修正,雷2 `fix-breaks`)
 entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不限。
@@ -138,7 +138,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 - **修法B**:`note-write-queue.ts` **同步写队列**——`enqueueNoteDraft` 同步入队(读 live ref),独立 worker 串行 `updateNote` 消费;组件卸载/逐出/关窗后队列项仍在内存,worker 继续 → 草稿不随卸载丢。`installVisibilityFlush`(`visibilitychange:hidden`/`pagehide`)兜关窗。
 
 ### 5.4 标签去重 + 侧栏文件树 + places
-`nodeTab(ref,title)` 单一去重构造器 + `openTab` 基于 id 去重 + ESLint 禁 `kind:"node"` 字面量,三重保证;`tabKey` 不含 title 故零碰撞。`secondary-sidebar` 复用泛型化的 `PageTree<T extends TreeItem>`/`buildNoteTree`(notes-tree 不 fork)。活动栏 home 子项重释为根命名空间(places)切换。
+`resourceTab(ref,title)` 单一去重构造器 + `openTab` 基于 id 去重 + ESLint 禁新增 `kind:"node"` 字面量,三重保证;`tabKey` 不含 title 故零碰撞。`secondary-sidebar` 复用泛型化的 Resource 文件树。活动栏 home 子项重释为根命名空间(places)切换。
 
 ---
 
@@ -154,7 +154,7 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 | `fs.read` | `{kind,id}` | note→`fs.notes:read`;余→`fs:read` | `getNode` |
 | `fs.readBlob` | `{kind:"file",id}` | `fs:read` | `readBlob` |
 | `fs.create/write/move/delete` | … | note→`fs.notes:write`;余→`fs:write` | `createNode/updateNode/moveNode/deleteNode` |
-| `ui.openTab/closeTab` | `{kind,id,title}` | `ui.tabs` | `openNodeTab`(单一去重构造器) |
+| `ui.openTab/closeTab` | `{kind,id,title}` | `ui.tabs` | `openTarget({type:"resource"})`；`openNodeTab` 仅兼容旧端口 |
 | `host.openExternal` | `{url}` | `host.external` | 改用 `safeHref` 共用单函数(消除与 `embed/tools.ts:149` 的白名单漂移) |
 
 ### 6.2 权限模型
