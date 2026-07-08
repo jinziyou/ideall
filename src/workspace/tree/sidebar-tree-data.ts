@@ -1,5 +1,5 @@
 // 二级侧栏文件树的模块→节点 kind 映射与静态根节点构造。
-// 动态子节点 (note/bookmark/feed 等) 由 sidebar-tree.tsx 经 listNodeSummaries 懒加载。
+// 动态子节点 (note/bookmark/feed 等) 由 sidebar-tree.tsx 经 VFS ResourceMeta 懒加载。
 
 import type { ComponentType } from "react"
 import { Bookmark, Boxes, Plug, ScrollText, Sparkles, Tag, Users } from "lucide-react"
@@ -23,7 +23,7 @@ export type SidebarTreeNode = {
   target?: OpenTarget
   /** 展开后懒加载的子节点 kind (仅 section 有效) */
   childKinds?: NodeKind[]
-  /** 展开后通过 VFS 加载 ResourceMeta (连接模式侧栏)。 */
+  /** 展开后通过 VFS 加载 ResourceMeta。 */
   childResourceQuery?: ResourceQuery
   /** 展开后展示的静态子区段 (如「工作区」下面的「对话」)。 */
   staticChildren?: SidebarTreeNode[]

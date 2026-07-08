@@ -50,6 +50,7 @@ export type ResourceMeta = {
   subtitle?: string
   parent?: ResourceRef
   sortKey?: string
+  hasChildren?: boolean
   updatedAt?: number
   iconHint?: string
   route?: string

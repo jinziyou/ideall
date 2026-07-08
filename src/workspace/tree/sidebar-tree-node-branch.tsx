@@ -4,7 +4,6 @@ import * as React from "react"
 import { ChevronRight, ClipboardCopy, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Tree } from "@/files/notes-tree-util"
-import type { NodeSummary } from "@/files/stores/nodes-store"
 import type { NodeKind } from "@protocol/node"
 import { iconForNodeKind } from "../node-kind-ui"
 import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
@@ -23,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
+import type { NodeTreeItem } from "./node-tree-item"
 
 type DropZone = "before" | "after" | "inside"
 
@@ -57,8 +57,8 @@ export function NodeTreeBranch({
   isUnder,
   zoneFromEvent,
 }: {
-  item: NodeSummary
-  childNodes: Tree<NodeSummary>[]
+  item: NodeTreeItem
+  childNodes: Tree<NodeTreeItem>[]
   depth: number
   expanded: Set<string>
   activeId: string | null

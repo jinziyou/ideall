@@ -10,11 +10,11 @@ import {
   type Tree,
 } from "@/files/notes-tree-util"
 import { moveBookmark, moveFolder } from "@/files/stores/bookmarks-store"
-import type { NodeSummary } from "@/files/stores/nodes-store"
 import type { NodeKind } from "@protocol/node"
 import { refreshSidebarTree } from "./sidebar-tree-bus"
 import type { ModuleId } from "../types"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
+import type { NodeTreeItem } from "./node-tree-item"
 
 type DropZone = "before" | "after" | "inside"
 
@@ -43,8 +43,8 @@ export function DraggableNodeForest({
   onToggle,
   onLoadNodes,
 }: {
-  forest: Tree<NodeSummary>[]
-  flatItems: NodeSummary[]
+  forest: Tree<NodeTreeItem>[]
+  flatItems: NodeTreeItem[]
   sectionId: string
   childKinds: NodeKind[]
   depth: number
@@ -57,9 +57,9 @@ export function DraggableNodeForest({
   const byId = React.useMemo(() => new Map(flatItems.map((n) => [n.id, n])), [flatItems])
 
   const info = React.useMemo(() => {
-    const m = new Map<string, { parentId: string | null; ordered: NodeSummary[] }>()
+    const m = new Map<string, { parentId: string | null; ordered: NodeTreeItem[] }>()
     const parentOf = buildParentOf(flatItems)
-    const childrenOf = new Map<string | null, NodeSummary[]>()
+    const childrenOf = new Map<string | null, NodeTreeItem[]>()
     for (const n of flatItems) {
       const ep = effectiveParentId(n.id, n.parentId, parentOf)
       const arr = childrenOf.get(ep) ?? []

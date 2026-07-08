@@ -140,12 +140,15 @@ function capabilitiesForKind(kind: NodeKind): ResourceCapability[] {
   }
 }
 
-function summaryMeta(summary: NodeSummary): ResourceMeta {
+function summaryMeta(summary: NodeSummary, byId: Map<string, NodeSummary>): ResourceMeta {
   const ref = nodeRef(summary.kind, summary.id)
+  const parent = summary.parentId ? byId.get(summary.parentId) : undefined
   return {
     ref,
     title: summary.title || "Untitled",
+    ...(parent ? { parent: nodeRef(parent.kind, parent.id) } : {}),
     sortKey: summary.sortKey,
+    hasChildren: summary.hasChildren,
     iconHint: summary.mime || summary.kind,
     capabilities: capabilitiesForKind(summary.kind),
   }
@@ -252,9 +255,11 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
     async list(query, ctx) {
       assertCanReadMetadata(ctx)
       const kinds = nodeKindsFromQuery(query)
-      const metas = (await deps.listNodeSummaries(kinds))
+      const summaries = await deps.listNodeSummaries(kinds)
+      const byId = new Map(summaries.map((summary) => [summary.id, summary]))
+      const metas = summaries
         .filter((summary) => matchesSummaryParent(summary, query.parent))
-        .map(summaryMeta)
+        .map((summary) => summaryMeta(summary, byId))
         .filter((meta) => matchesText(meta, query.text))
         .sort((a, b) => {
           const bySortKey = (a.sortKey ?? "").localeCompare(b.sortKey ?? "")

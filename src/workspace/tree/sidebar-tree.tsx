@@ -7,7 +7,6 @@ import * as React from "react"
 import { ChevronRight, Rss } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { buildTree, type Tree } from "@/files/notes-tree-util"
-import { listNodeSummaries, type NodeSummary } from "@/files/stores/nodes-store"
 import type { NodeKind } from "@protocol/node"
 import type { ResourceMeta } from "@protocol/resource"
 import { listResources, watchResources } from "@/vfs/registry"
@@ -43,6 +42,7 @@ import {
 import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
 import { DraggableNodeForest } from "./draggable-node-forest"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
+import { nodeTreeItemsFromResourceMetas, type NodeTreeItem } from "./node-tree-item"
 import { onTreeArrowNav, focusTreeSibling, forwardTreeFocus } from "./tree-keynav"
 import type { ModuleId } from "../types"
 import { isPluginModule } from "../plugin-entries"
@@ -132,7 +132,7 @@ export default function SidebarTree() {
   const activeWorkspaceId = useActiveWorkspaceId()
 
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
-  const [nodeCache, setNodeCache] = React.useState<Map<string, NodeSummary[]>>(new Map())
+  const [nodeCache, setNodeCache] = React.useState<Map<string, NodeTreeItem[]>>(new Map())
   const [resourceCache, setResourceCache] = React.useState<Map<string, ResourceMeta[]>>(new Map())
 
   const wsState = React.useSyncExternalStore(
@@ -190,7 +190,11 @@ export default function SidebarTree() {
   const loadNodes = React.useCallback(async (sectionId: string, kinds: NodeKind[]) => {
     if (kinds.length === 0) return
     try {
-      const nodes = await listNodeSummaries(kinds)
+      const page = await listResources(
+        { scheme: "node", kinds },
+        { actor: "ui", permissions: [], intent: "metadata" },
+      )
+      const nodes = nodeTreeItemsFromResourceMetas(page.items)
       setNodeCache((prev) => new Map(prev).set(sectionId, nodes))
     } catch {
       /* ignore */
@@ -341,7 +345,7 @@ function TreeRow({
   activeId: string | null
   activeKind: string | null
   activeWorkspaceId: string | null
-  nodeCache: Map<string, NodeSummary[]>
+  nodeCache: Map<string, NodeTreeItem[]>
   resourceCache: Map<string, ResourceMeta[]>
   workspaces?: { id: string; name: string }[]
   activeModule: ModuleId
@@ -408,7 +412,7 @@ function TreeRow({
     if (!isOpen) ensureChildrenLoaded()
   }
 
-  const forest: Tree<NodeSummary>[] =
+  const forest: Tree<NodeTreeItem>[] =
     isOpen && node.childKinds?.length && node.id !== "section:notes"
       ? buildTree(nodeCache.get(node.id) ?? [])
       : []

@@ -121,7 +121,11 @@ function makeDeps(nodes: Node[]): {
     deps: {
       async listNodeSummaries(kinds) {
         const want = new Set(kinds)
-        return [...byId.values()].filter((node) => want.has(node.kind)).map(summary)
+        const summaries = [...byId.values()].filter((node) => want.has(node.kind)).map(summary)
+        return summaries.map((item) => ({
+          ...item,
+          hasChildren: summaries.some((child) => child.parentId === item.id),
+        }))
       },
       async getNodeRaw(id) {
         return byId.get(id)
@@ -193,6 +197,19 @@ test("node provider: list filters kind/parent/text and paginates metadata", asyn
     ["f1"],
   )
   assert.equal(text.items[0]?.iconHint, "text/plain")
+})
+
+test("node provider: list metadata includes tree parent and hasChildren when parent is in query", async () => {
+  const root = folder("root")
+  const nested = bookmark("b1", "Nested", root.id)
+  const provider = createNodeVfsProvider(makeDeps([root, nested]).deps)
+
+  const page = await provider.list({ scheme: "node", kinds: ["folder", "bookmark"] }, agentReadCtx)
+  const folderMeta = page.items.find((item) => item.ref.id === root.id)
+  const bookmarkMeta = page.items.find((item) => item.ref.id === nested.id)
+
+  assert.equal(folderMeta?.hasChildren, true)
+  assert.deepEqual(bookmarkMeta?.parent, ref("folder", root.id))
 })
 
 test("node provider: note content requires notes permission or active resource consent", async () => {
