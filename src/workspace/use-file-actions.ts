@@ -3,19 +3,22 @@
 import * as React from "react"
 import { toast } from "sonner"
 import type { StoredFile } from "@protocol/files"
-import type { NodeResourceRef } from "@protocol/resource"
 import { getFile, restoreFile } from "@/files/stores/files-store"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import { downloadStoredFile } from "@/modules/home/resources/file-preview"
 import { invokeResourceAction } from "@/vfs/registry"
 import type { VfsAccessContext } from "@/vfs/types"
+import {
+  fileMetaActionInput,
+  fileResourceRef,
+  type FileMetaPatch,
+} from "@/vfs/node-file-actions"
 import { resourceTab } from "./resource-tab"
 import { closeTab, renameNodeTab, tabKey } from "./store"
 import { refreshSidebarTree } from "./tree/sidebar-tree-bus"
 import { clearFileDraft } from "./viewers/file-draft"
 
-type FileMetaPatch = Partial<Pick<StoredFile, "name" | "tags">>
-type FileMetaActionInput = { title?: string; tags?: string[] }
+export { fileMetaActionInput, fileResourceRef } from "@/vfs/node-file-actions"
 
 export type FileActionDeps = {
   updateFileMeta: (id: string, patch: FileMetaPatch) => Promise<void>
@@ -61,17 +64,6 @@ export function parseFileTags(input: string): string[] {
 
 export function fileReference(id: string): string {
   return `fs://file/${id}`
-}
-
-export function fileResourceRef(id: string): NodeResourceRef {
-  return { scheme: "node", kind: "file", id }
-}
-
-export function fileMetaActionInput(patch: FileMetaPatch): FileMetaActionInput {
-  return {
-    ...(patch.name !== undefined ? { title: patch.name } : {}),
-    ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
-  }
 }
 
 const UI_RESOURCE_CONTEXT = {

@@ -27,13 +27,10 @@ import {
 import { TextPromptDialog } from "@/shared/prompt-dialog"
 import { cn } from "@/lib/utils"
 import { FileMeta } from "@protocol/files"
-import {
-  deleteFile,
-  getFile,
-  listFiles,
-  restoreFile,
-  updateFileMeta,
-} from "@/files/stores/files-store"
+import { getFile, listFiles, restoreFile } from "@/files/stores/files-store"
+import { invokeResourceAction } from "@/vfs/registry"
+import type { VfsAccessContext } from "@/vfs/types"
+import { fileMetaActionInput, fileResourceRef } from "@/vfs/node-file-actions"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import { fileTypeInfo, formatBytes, formatTime } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
@@ -55,6 +52,11 @@ const TYPE_TABS: { value: TypeFilter; label: string }[] = [
   { value: "archive", label: "压缩包" },
   { value: "other", label: "其他" },
 ]
+
+const UI_RESOURCE_CONTEXT = {
+  actor: "ui",
+  permissions: [],
+} satisfies VfsAccessContext
 
 /** FileTypeInfo.group → 筛选分组 */
 function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
@@ -202,7 +204,9 @@ export default function FileManager() {
     try {
       // 列表只有元数据, 先取完整文件 (含 Blob) 供撤销原样写回
       const full = await getFile(file.id)
-      await deleteFile(file.id)
+      await invokeResourceAction(fileResourceRef(file.id), "delete", undefined, {
+        ...UI_RESOURCE_CONTEXT,
+      })
       setFiles((prev) => prev.filter((f) => f.id !== file.id))
       if (full) {
         undoableDeleteToast(file.name, async () => {
@@ -224,7 +228,9 @@ export default function FileManager() {
   async function handleRename(file: FileMeta, name: string) {
     if (name === file.name) return
     try {
-      await updateFileMeta(file.id, { name })
+      await invokeResourceAction(fileResourceRef(file.id), "edit", fileMetaActionInput({ name }), {
+        ...UI_RESOURCE_CONTEXT,
+      })
       setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name } : f)))
     } catch (e) {
       toast.error("重命名失败", { description: String(e) })
