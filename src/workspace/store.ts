@@ -8,6 +8,7 @@
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
+import { descriptorForResource, type OpenTarget } from "./open-target"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
 import { tabDescriptor } from "./tab-definitions"
 import { isTauri, browserRelease } from "@/lib/tauri"
@@ -17,6 +18,7 @@ import { WORKSPACE_STORAGE_KEY } from "./workspace-persist"
 import { setActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
 
 export type { ActiveSource }
+export type { OpenTarget }
 
 function ws(): WorkspaceState {
   return store.getState().workspace
@@ -337,6 +339,25 @@ export function openAiTasks(workspaceId: string, title: string, opts?: OpenTabOp
   openAgentTab(tabDescriptor("ai-tasks", { title, params: { workspaceId } }), opts)
 }
 
+/** 统一打开入口: ResourceRef 先适配到现有标签 descriptor; 非节点 Resource 后续由 engine/provider 接管。 */
+export function openTarget(target: OpenTarget, source: ActiveSource = "user"): boolean {
+  switch (target.type) {
+    case "tab":
+      openTab(target.descriptor, source, { transient: target.transient })
+      return true
+    case "resource": {
+      const descriptor = descriptorForResource(target.ref, target.title)
+      if (!descriptor) return false
+      openTab(descriptor, source, { transient: target.transient })
+      return true
+    }
+    case "command":
+      if (target.command === "open-ai-panel") setRightPanel(true)
+      else toggleRightPanel()
+      return true
+  }
+}
+
 /** 打开 (或激活已存在的) 一个节点标签。三入口 (搜索/侧栏/AI) 统一经此, 保证 entity 级去重。
  *  AI (boot.ts 的 ui.openTab) 传 source="agent" —— 该节点不计入「打开即隐式同意」(隐私)。 */
 export function openNodeTab(
@@ -345,7 +366,10 @@ export function openNodeTab(
   source: ActiveSource = "user",
   opts?: OpenTabOpts,
 ) {
-  openTab(nodeTab(ref, title), source, opts)
+  openTarget(
+    { type: "resource", ref: { scheme: "node", ...ref }, title, transient: opts?.transient },
+    source,
+  )
 }
 
 /** 节点标签取数后回填真实标题 (不改 id / 去重 key, 仅更新显示)。 */

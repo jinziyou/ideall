@@ -1,6 +1,6 @@
 "use client"
 
-// 路由页标记: 不渲染 UI, 仅按当前路径 / ?node= 打开/激活对应工作区标签。
+// 路由页标记: 不渲染 UI, 仅按当前路径 / ?resource= 或旧 ?node= 打开/激活对应工作区标签。
 // 所有 page.tsx 都 re-export 它, 使深链 / 刷新 / ⌘K / 侧栏 / 移动底栏 统一驱动标签。
 // 实际内容由根布局里持久挂载的 WorkspaceShell → TabHost 渲染 (keep-alive)。
 
@@ -28,7 +28,7 @@ function OpenWorkspaceTabInner() {
     // 在分区/底栏间穿梭只复用单一预览槽, 不再为每个落地路由静默堆一个常驻标签 (双击标签即固定)。
     // 命中已存在标签时 transient 分支不改其常驻性, 故已固定的标签不会被回写降级。
     //
-    // 有 ?node= → 只开节点标签并返回, 不再 fall through 到列表页 descriptor
+    // 有 ?resource=node:* 或旧 ?node= → 只开节点标签并返回, 不再 fall through 到列表页 descriptor
     // (否则会把刚激活的节点标签 activeId 覆盖回列表页)。
     const nodeD = descriptorForNode(search.toString())
     if (nodeD) {

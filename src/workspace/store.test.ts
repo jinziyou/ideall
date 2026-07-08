@@ -6,6 +6,7 @@ import assert from "node:assert/strict"
 
 import {
   openTab,
+  openTarget,
   openNodeTab,
   promoteTab,
   promoteActiveTab,
@@ -42,6 +43,34 @@ test("openNodeTab 默认来源 user; 传 agent 标记 agent", () => {
   assert.equal(getActiveSource(), "user")
   openNodeTab({ kind: "note", id: "a1" }, "AI 开", "agent")
   assert.equal(getActiveSource(), "agent", "agent 经 ui.openTab 自激活 → 来源 agent")
+})
+
+test("openTarget(resource): node Resource 复用旧 node 标签并写入新 resource 深链", () => {
+  closeAllTabs()
+  assert.equal(
+    openTarget(
+      {
+        type: "resource",
+        ref: { scheme: "node", kind: "file", id: "r1" },
+        title: "readme.md",
+        transient: true,
+      },
+      "agent",
+    ),
+    true,
+  )
+  const tab = getTabs()[0]
+  assert.equal(tab.kind, "node")
+  assert.deepEqual(tab.params, { kind: "file", id: "r1" })
+  assert.equal(tab.title, "readme.md")
+  assert.ok(tab.path?.startsWith("/home/notes?resource="))
+  assert.equal(getTransientId(), tab.id)
+  assert.equal(getActiveSource(), "agent")
+  assert.equal(
+    openTarget({ type: "resource", ref: { scheme: "tool", kind: "search", id: "default" } }),
+    false,
+    "连接 resource 等待后续 provider/engine 接管",
+  )
 })
 
 test("用户点回 agent 开的标签 → 来源转 user (用户主动看 = 同意)", () => {

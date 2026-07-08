@@ -16,8 +16,7 @@ import type { ModuleId, TabDescriptor, WsMode } from "./types"
 import { MODULE_META } from "./module-meta"
 import { PLUGIN_ENTRIES, isPluginModule } from "./plugin-entries"
 import { tabDescriptor } from "./tab-definitions"
-import { nodeTab } from "./node-tab"
-import { parseNodeQuery } from "./node-ref"
+import { descriptorForResourceSearch } from "./open-target"
 
 export type SidebarEntry = {
   label: string
@@ -294,11 +293,11 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
 }
 
 /**
- * 由 ?node=kind:id 查询串解析出节点标签描述符; 无 node 参数或非法 → null (调用侧回退 descriptorForPath)。
- * 与 descriptorForPath 分离 (后者只收 pathname): 节点标签共享 /home/notes 壳, 仅 query 区分。
+ * 由 ?resource=node:kind:id 或旧 ?node=kind:id 查询串解析出节点标签描述符。
+ * 无资源参数或非法 → null (调用侧回退 descriptorForPath)。与 descriptorForPath 分离
+ * (后者只收 pathname): 节点标签共享 /home/notes 壳, 仅 query 区分。
  */
 export function descriptorForNode(search: string): TabDescriptor | null {
-  const ref = parseNodeQuery(new URLSearchParams(search).get("node"))
   // title 占位为 id, viewer 取数后经 renameNodeTab 修正 (不入 tabKey, 不影响去重)。
-  return ref ? nodeTab(ref, ref.id) : null
+  return descriptorForResourceSearch(search)
 }
