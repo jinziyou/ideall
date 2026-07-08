@@ -3,13 +3,19 @@ import type {
   ResourceMeta,
   ResourceRecord,
   ResourceRef,
-  ResourceScheme,
 } from "@protocol/resource"
 import { isResourceKindForScheme, resourceKey } from "@protocol/resource"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
 import {
-  canProjectSaveToMine,
+  CONNECTED_STATIC_RESOURCES,
+  connectedResourceCapabilities,
+  connectedResourceTitle,
+  routeForConnectedResource,
+  splitConnectedResourcePair,
+  type ConnectedResourceScheme,
+} from "./connected-resource-manifest"
+import {
   saveResourceToMine,
   type SaveToMineResult,
 } from "./save-to-mine-projector"
@@ -23,7 +29,9 @@ import type {
 } from "./types"
 import { VfsError } from "./types"
 
-type RouteScheme = Exclude<ResourceScheme, "node">
+export { routeForConnectedResource } from "./connected-resource-manifest"
+
+type RouteScheme = ConnectedResourceScheme
 
 type ConnectedRecord = ResourceRecord & {
   meta: ResourceMeta & { route: string }
@@ -43,90 +51,10 @@ const defaultDeps: ConnectedVfsProviderDeps = {
   saveResourceToMine,
 }
 
-function routeQuery(path: string, params: Record<string, string | undefined>): string {
-  const search = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (value) search.set(key, value)
-  }
-  const query = search.toString()
-  return query ? `${path}?${query}` : path
-}
-
-function splitPair(id: string): [string, string] | null {
-  const i = id.indexOf(":")
-  const slash = id.indexOf("/")
-  const split = i > 0 ? i : slash
-  if (split <= 0 || split === id.length - 1) return null
-  return [id.slice(0, split), id.slice(split + 1)]
-}
-
-export function routeForConnectedResource(ref: ResourceRef): string | null {
-  switch (ref.scheme) {
-    case "node":
-      return null
-    case "info":
-      if (ref.kind === "home") return "/info"
-      if (ref.kind === "search")
-        return routeQuery("/info/search", { q: ref.id === "default" ? undefined : ref.id })
-      if (ref.kind === "publisher") return routeQuery("/info/publisher", { domain: ref.id })
-      if (ref.kind === "entity") {
-        const pair = splitPair(ref.id)
-        return pair
-          ? routeQuery("/info/entity", { label: pair[0], name: pair[1] })
-          : routeQuery("/info/search", { q: ref.id })
-      }
-      return null
-    case "community":
-      if (ref.kind === "home") return "/community"
-      if (ref.kind === "peer") return routeQuery("/community", { openPeer: ref.id })
-      if (ref.kind === "publication") return routeQuery("/community/publication", { id: ref.id })
-      return null
-    case "tool":
-      if (ref.kind === "search") return "/tool/search"
-      if (ref.kind === "ai") return "/tool/ai"
-      if (ref.kind === "navigation") return "/tool/navigation"
-      return null
-    case "browser":
-      return "/browser"
-    case "app":
-      return "/apps"
-  }
-}
-
-function connectedTitle(ref: ResourceRef): string {
-  switch (ref.scheme) {
-    case "node":
-      return ref.id
-    case "info":
-      if (ref.kind === "home") return "资讯"
-      if (ref.kind === "search") return ref.id === "default" ? "资讯搜索" : `搜索 · ${ref.id}`
-      if (ref.kind === "publisher") return `发布者 · ${ref.id}`
-      if (ref.kind === "entity") return `实体 · ${splitPair(ref.id)?.[1] ?? ref.id}`
-      return ref.id
-    case "community":
-      if (ref.kind === "home") return "社区"
-      if (ref.kind === "peer") return `社区发布者 · ${ref.id}`
-      if (ref.kind === "publication") return `发布 · ${ref.id}`
-      return ref.id
-    case "tool":
-      if (ref.kind === "search") return "搜索"
-      if (ref.kind === "ai") return "AI 网站"
-      if (ref.kind === "navigation") return "导航"
-      return ref.id
-    case "browser":
-      return ref.kind === "page" ? ref.id : `书签 · ${ref.id}`
-    case "app":
-      return `应用 · ${ref.id}`
-  }
-}
-
-function connectedCapabilities(ref: ResourceRef): ResourceCapability[] {
-  const capabilities: ResourceCapability[] = ["open", "preview", "navigate"]
-  if (canProjectSaveToMine(ref)) capabilities.push("save-to-mine")
-  return capabilities
-}
-
-function connectedRecord(ref: ResourceRef, title = connectedTitle(ref)): ConnectedRecord | null {
+function connectedRecord(
+  ref: ResourceRef,
+  title = connectedResourceTitle(ref),
+): ConnectedRecord | null {
   const route = routeForConnectedResource(ref)
   if (!route) return null
   return {
@@ -135,7 +63,7 @@ function connectedRecord(ref: ResourceRef, title = connectedTitle(ref)): Connect
       title,
       route,
       iconHint: ref.kind,
-      capabilities: connectedCapabilities(ref),
+      capabilities: connectedResourceCapabilities(ref),
     },
     content: { route },
   }
@@ -143,7 +71,7 @@ function connectedRecord(ref: ResourceRef, title = connectedTitle(ref)): Connect
 
 function entityResourceId(sub: Subscription): string {
   if (sub.entityLabel && sub.entityName) return `${sub.entityLabel}:${sub.entityName}`
-  const pair = splitPair(sub.key)
+  const pair = splitConnectedResourcePair(sub.key)
   return pair ? `${pair[0]}:${pair[1]}` : sub.key
 }
 
@@ -180,24 +108,17 @@ function knownRecord(ref: ResourceRef, title?: string): ConnectedRecord {
   return record
 }
 
-const INFO_RECORDS = [
-  knownRecord({ scheme: "info", kind: "home", id: "default" }, "资讯"),
-  knownRecord({ scheme: "info", kind: "search", id: "default" }, "资讯搜索"),
-]
+function staticRecordsFor(scheme: RouteScheme): ConnectedRecord[] {
+  return CONNECTED_STATIC_RESOURCES[scheme].map((resource) =>
+    knownRecord(resource.ref, resource.title),
+  )
+}
 
-const COMMUNITY_RECORDS = [
-  knownRecord({ scheme: "community", kind: "home", id: "default" }, "社区"),
-]
-
-const TOOL_RECORDS = [
-  knownRecord({ scheme: "tool", kind: "search", id: "default" }, "搜索"),
-  knownRecord({ scheme: "tool", kind: "ai", id: "default" }, "AI 网站"),
-  knownRecord({ scheme: "tool", kind: "navigation", id: "default" }, "导航"),
-]
-
-const BROWSER_RECORDS = [knownRecord({ scheme: "browser", kind: "page", id: "default" }, "浏览器")]
-
-const APP_RECORDS = [knownRecord({ scheme: "app", kind: "native-app", id: "apps" }, "应用")]
+const INFO_RECORDS = staticRecordsFor("info")
+const COMMUNITY_RECORDS = staticRecordsFor("community")
+const TOOL_RECORDS = staticRecordsFor("tool")
+const BROWSER_RECORDS = staticRecordsFor("browser")
+const APP_RECORDS = staticRecordsFor("app")
 
 function actionLabel(id: ResourceActionId): string {
   switch (id) {

@@ -3,6 +3,7 @@ import type { ResourceRef } from "@protocol/resource"
 import type { NewSubscription, Subscription, SubscriptionType } from "@protocol/subscription"
 import { addBookmark, listBookmarks } from "@/files/stores/bookmarks-store"
 import { addSubscription, isSubscribed } from "@/files/stores/subscriptions-store"
+import { splitConnectedResourcePair } from "./connected-resource-manifest"
 import type { VfsAccessContext } from "./types"
 import { VfsError } from "./types"
 
@@ -48,14 +49,6 @@ function nonEmpty(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
 
-function splitPair(id: string): [string, string] | null {
-  const colon = id.indexOf(":")
-  const slash = id.indexOf("/")
-  const split = colon > 0 ? colon : slash
-  if (split <= 0 || split === id.length - 1) return null
-  return [id.slice(0, split), id.slice(split + 1)]
-}
-
 function searchKey(keyword: string, domain: string | null): string {
   return domain ? `${domain}:${keyword}` : keyword
 }
@@ -65,20 +58,6 @@ function subscriptionProjection(
   input: NewSubscription,
 ): SaveToMineProjection {
   return { kind: "subscription", input: { ...input, type } }
-}
-
-export function canProjectSaveToMine(ref: ResourceRef): boolean {
-  if (ref.id === "default") return false
-  if (ref.scheme === "info") {
-    if (ref.kind === "entity") return splitPair(ref.id) != null
-    return ref.kind === "publisher" || ref.kind === "search"
-  }
-  if (ref.scheme === "community") return ref.kind === "peer"
-  if (ref.scheme === "browser") return ref.kind === "page"
-  if (ref.scheme === "tool") {
-    return ref.kind === "search" || ref.kind === "ai" || ref.kind === "navigation"
-  }
-  return false
 }
 
 export function projectSaveToMine(
@@ -99,7 +78,7 @@ export function projectSaveToMine(
       })
     }
     if (ref.kind === "entity") {
-      const pair = splitPair(ref.id)
+      const pair = splitConnectedResourcePair(ref.id)
       if (!pair) return null
       const [label, name] = pair
       return subscriptionProjection("entity", {
