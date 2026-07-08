@@ -8,11 +8,7 @@ import { undoableDeleteToast } from "@/lib/undo-toast"
 import { downloadStoredFile } from "@/modules/home/resources/file-preview"
 import { invokeResourceAction } from "@/vfs/registry"
 import type { VfsAccessContext } from "@/vfs/types"
-import {
-  fileMetaActionInput,
-  fileResourceRef,
-  type FileMetaPatch,
-} from "@/vfs/node-file-actions"
+import { fileMetaActionInput, fileResourceRef, type FileMetaPatch } from "@/vfs/node-file-actions"
 import { resourceTab } from "./resource-tab"
 import { closeTab, renameNodeTab, tabKey } from "./store"
 import { refreshSidebarTree } from "./tree/sidebar-tree-bus"
