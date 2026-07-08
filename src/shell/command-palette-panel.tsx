@@ -61,6 +61,9 @@ import { addNote } from "@/files/stores/notes-store"
 import { useShortcutLabel } from "@/lib/shortcuts"
 import { FileTypeIcon } from "@/shared/file-type-icon"
 
+const LOCAL_SEARCH_DEBOUNCE_MS = 160
+const LOCAL_SEARCH_LIMIT_PER_GROUP = 20
+
 // openCommandPalette / CMDK_OPEN 已抽到 @/lib/command-palette-bus (纯事件总线),
 // 使 components 的触发器无需反向 import app/shell; 此处 re-export 维持既有 ./command-palette 导入点。
 export { openCommandPalette }
@@ -81,6 +84,7 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
   // `>` 前缀 = 命令模式 (只看命令): 内容分组整组不渲染; 匹配面靠命令 value 的 "> " 前缀天然收窄。
   const commandMode = query.trimStart().startsWith(">")
   const [content, setContent] = React.useState<LocalSearchItem[]>([])
+  const [contentQuery, setContentQuery] = React.useState("")
   // 打开的标签 (LRU 最近优先, 排除当前激活项): ⌘K 是键盘用户定位已打开标签的唯一入口
   // (标签条截断后肉眼难扫; 桌面下拉与移动抽屉都是指点路径)。
   const tabs = useTabs()
@@ -121,21 +125,27 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
     }
   }, [])
 
-  // 打开时预加载本机内容 (供输入后即时过滤); 输入清空由开/关的事件回调负责 (避免 effect 内同步 setState)。
+  // 仅在用户输入内容搜索时按 query 下推到 VFS; 避免打开面板即全量加载本机数据。
   React.useEffect(() => {
-    if (!open) return
+    const text = query.trim()
+    if (!open || commandMode || !text) return
     let alive = true
-    loadLocalSearchItems()
-      .then((items) => {
-        if (alive) setContent(items)
-      })
-      .catch(() => {
-        /* 本地读取失败时静默, 仅退化为无内容搜索 */
-      })
+    const timer = window.setTimeout(() => {
+      loadLocalSearchItems({ text, limitPerGroup: LOCAL_SEARCH_LIMIT_PER_GROUP })
+        .then((items) => {
+          if (!alive) return
+          setContent(items)
+          setContentQuery(text)
+        })
+        .catch(() => {
+          /* 本地读取失败时静默, 仅退化为无内容搜索 */
+        })
+    }, LOCAL_SEARCH_DEBOUNCE_MS)
     return () => {
       alive = false
+      window.clearTimeout(timer)
     }
-  }, [open])
+  }, [open, commandMode, query])
 
   function go(href: string) {
     setOpen(false)
@@ -382,7 +392,7 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
           )}
         </CommandGroup>
         {/* 本机内容 (笔记/关注/书签/资源): 仅在输入且非命令模式时展示, 按标题模糊匹配 (cmdk 据 keywords 过滤)。 */}
-        {!commandMode && query.trim() && content.length > 0
+        {!commandMode && query.trim() && contentQuery === query.trim() && content.length > 0
           ? LOCAL_SEARCH_ORDER.map((g) => {
               const gi = content.filter((i) => i.group === g)
               if (gi.length === 0) return null

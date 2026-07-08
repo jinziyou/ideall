@@ -2,7 +2,7 @@ import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
 import type { ResourceMeta } from "@protocol/resource"
 import { clearVfsProvidersForTest, registerVfsProvider } from "@/vfs/registry"
-import type { VfsProvider } from "@/vfs/types"
+import type { ResourceQuery, VfsProvider } from "@/vfs/types"
 import { loadLocalSearchItems } from "./local-search-items"
 
 afterEach(() => {
@@ -76,4 +76,39 @@ test("local search: builds content items from VFS resources", async () => {
     title: "Alpha Bookmark",
     meta: metas[2],
   })
+})
+
+test("local search: pushes text and limit into VFS queries", async () => {
+  const queries: ResourceQuery[] = []
+  const provider: VfsProvider = {
+    scheme: "node",
+    async list(query) {
+      queries.push(query)
+      return { items: [] }
+    },
+    async get() {
+      return null
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      return null
+    },
+  }
+  registerVfsProvider(provider)
+
+  await loadLocalSearchItems({ text: "  Alpha  ", limitPerGroup: 7 })
+
+  assert.equal(queries.length, 5)
+  assert.deepEqual(
+    queries.map((query) => ({ kind: query.kind, text: query.text, limit: query.limit })),
+    [
+      { kind: "note", text: "Alpha", limit: 7 },
+      { kind: "feed", text: "Alpha", limit: 7 },
+      { kind: "bookmark", text: "Alpha", limit: 7 },
+      { kind: "file", text: "Alpha", limit: 7 },
+      { kind: "thread", text: "Alpha", limit: 7 },
+    ],
+  )
 })

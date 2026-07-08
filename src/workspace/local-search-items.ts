@@ -40,6 +40,11 @@ const NODE_SEARCH_QUERIES: Array<{ group: LocalSearchGroup; query: ResourceQuery
   { group: "对话", query: { scheme: "node", kind: "thread" } },
 ]
 
+export type LoadLocalSearchItemsOptions = {
+  text?: string
+  limitPerGroup?: number
+}
+
 function runTarget(target: OpenTarget): () => void {
   return () => openTarget(target)
 }
@@ -63,9 +68,18 @@ function itemFromResource(group: LocalSearchGroup, meta: ResourceMeta): LocalSea
 async function loadResourceGroup(
   group: LocalSearchGroup,
   query: ResourceQuery,
+  { text, limitPerGroup }: LoadLocalSearchItemsOptions,
 ): Promise<LocalSearchItem[]> {
   try {
-    const page = await listResources(query, { actor: "ui", permissions: [], intent: "metadata" })
+    const normalizedText = text?.trim()
+    const page = await listResources(
+      {
+        ...query,
+        ...(normalizedText ? { text: normalizedText } : {}),
+        ...(limitPerGroup != null ? { limit: limitPerGroup } : {}),
+      },
+      { actor: "ui", permissions: [], intent: "metadata" },
+    )
     return page.items.map((meta) => itemFromResource(group, meta))
   } catch {
     return []
@@ -73,9 +87,11 @@ async function loadResourceGroup(
 }
 
 /** 并行加载本机内容并构建可搜索/可执行条目 (按 笔记→关注→书签→资源→对话 顺序)。 */
-export async function loadLocalSearchItems(): Promise<LocalSearchItem[]> {
+export async function loadLocalSearchItems(
+  options: LoadLocalSearchItemsOptions = {},
+): Promise<LocalSearchItem[]> {
   const groups = await Promise.all(
-    NODE_SEARCH_QUERIES.map(({ group, query }) => loadResourceGroup(group, query)),
+    NODE_SEARCH_QUERIES.map(({ group, query }) => loadResourceGroup(group, query, options)),
   )
   return groups.flat()
 }
