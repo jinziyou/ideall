@@ -7,27 +7,16 @@
 import * as React from "react"
 import { ArrowRight, Bot, Database, Inbox, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { listSubscriptions } from "@/files/stores/subscriptions-store"
-import { listBookmarks } from "@/files/stores/bookmarks-store"
-import { listFiles } from "@/files/stores/files-store"
-import { listNotes } from "@/files/stores/notes-store"
-import { listThreads } from "@/files/stores/threads-store"
 import { onFilesUpdated } from "@protocol/flowback"
 import { openTab, setRightPanel } from "@/workspace/store"
 import { HOME_SECTIONS } from "@/workspace/tree/home-sections"
-import { SUB_SPOKE_META } from "@/files/spoke-meta"
 import { Button } from "@/ui/button"
 import { Chip } from "@/ui/chip"
 import { EmptyState } from "@/ui/empty-state"
 import { Panel } from "@/ui/panel"
 import { StatusDot } from "@/ui/status-dot"
-import type { Subscription } from "@protocol/subscription"
-import { RecentActivity, type ActivityItem } from "./recent-activity"
-
-/** 本地区段计数 (按 HOME_SECTIONS.id 取; 发布为远端, 无本地计数 → undefined)。 */
-type Counts = Record<string, number | undefined>
-
-type OverviewData = { counts: Counts; activity: ActivityItem[] }
+import { loadHomeOverviewData, type HomeOverviewData } from "./home-read-model"
+import { RecentActivity } from "./recent-activity"
 
 const SECTION_TONE = {
   subscriptions: "info",
@@ -69,85 +58,15 @@ function formatCount(loaded: boolean, count: number | undefined) {
   return typeof count === "number" ? String(count) : "—"
 }
 
-function buildActivity(
-  subs: Subscription[],
-  bookmarks: { id: string; title: string; createdAt: number }[],
-  files: { id: string; name: string; type: string; createdAt: number }[],
-  notes: { id: string; title: string; createdAt: number }[],
-): ActivityItem[] {
-  const items: ActivityItem[] = []
-  for (const n of notes) {
-    // 用 createdAt (加入「我的」的时间) 而非 updatedAt, 否则反复编辑同一篇会不断顶到最前。
-    items.push({
-      id: `note:${n.id}`,
-      ts: n.createdAt,
-      dotClass: "bg-pop",
-      label: "写笔记",
-      title: n.title || "无标题",
-      href: "/home/notes",
-    })
-  }
-  for (const s of subs) {
-    const m = SUB_SPOKE_META[s.type]
-    items.push({
-      id: `sub:${s.id}`,
-      ts: s.createdAt,
-      dotClass: m.dotClass,
-      label: m.actionLabel,
-      title: s.title,
-      href: "/home/subscriptions",
-    })
-  }
-  for (const b of bookmarks) {
-    items.push({
-      id: `bm:${b.id}`,
-      ts: b.createdAt,
-      dotClass: "bg-pop",
-      label: "书签",
-      title: b.title,
-      href: "/home/bookmarks",
-    })
-  }
-  for (const f of files) {
-    items.push({
-      id: `f:${f.id}`,
-      ts: f.createdAt,
-      dotClass: "bg-pop",
-      label: "添加资源",
-      title: f.name,
-      href: "/home/resources",
-      fileType: { name: f.name, type: f.type },
-    })
-  }
-  return items.sort((a, b) => b.ts - a.ts).slice(0, 12)
-}
-
 export default function Overview() {
-  const [data, setData] = React.useState<OverviewData | null>(null)
+  const [data, setData] = React.useState<HomeOverviewData | null>(null)
 
   React.useEffect(() => {
     let alive = true
     async function load() {
-      // 每个 store 各自兜底: 单仓库失败不应把整个概览清空。
-      const [subs, bookmarks, files, notes, threads] = await Promise.all([
-        listSubscriptions().catch(() => [] as Subscription[]),
-        listBookmarks().catch(() => []),
-        listFiles().catch(() => []),
-        listNotes({ text: false }).catch(() => []),
-        listThreads().catch(() => []),
-      ])
+      const next = await loadHomeOverviewData()
       if (!alive) return
-      setData({
-        counts: {
-          // 关注计数排除已固定工具 (tool), 与「关注」语义一致。
-          subscriptions: subs.filter((s) => s.type !== "tool").length,
-          bookmarks: bookmarks.length,
-          resources: files.length,
-          notes: notes.length,
-          workspace: threads.length,
-        },
-        activity: buildActivity(subs, bookmarks, files, notes),
-      })
+      setData(next)
     }
     load()
     // 同会话内任意关注 / 跨端同步后刷新 (防抖合并密集写)。

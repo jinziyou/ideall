@@ -3,18 +3,10 @@ import { ChevronRight, CornerDownLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/format"
 import { FileTypeIcon } from "@/shared/file-type-icon"
+import type { HomeActivityItem } from "./home-read-model"
 
 /** 一条「最近动态」记录: 把本机关注 / 书签 / 资源 / 笔记的动作按时间归并。 */
-export type ActivityItem = {
-  id: string
-  ts: number
-  /** 圆点色 (Tailwind bg-* 类): 板块色做分类, bg-pop 表示落入本地的「我的」 */
-  dotClass: string
-  label: string
-  title: string
-  href: string
-  fileType?: { name: string; type: string }
-}
+export type ActivityItem = HomeActivityItem
 
 const GROUP_ORDER = ["今天", "本周", "更早"] as const
 type GroupName = (typeof GROUP_ORDER)[number]
