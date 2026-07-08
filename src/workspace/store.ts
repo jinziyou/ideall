@@ -107,6 +107,22 @@ export function tabKey(d: TabDescriptor): string {
   return `${d.kind}:${sorted}`
 }
 
+function hydrateTab(tab: Tab): Tab | null {
+  if (!VALID_MODULES.has(tab.module)) return null
+  if (tab.kind === "node") {
+    const ref = nodeResourceRefForTab(tab)
+    if (!ref) return null
+    const descriptor = resourceTab(ref, tab.title)
+    return { ...descriptor, id: tabKey(descriptor) }
+  }
+  if (tab.kind === "browser-view") {
+    const descriptor = resourceTab({ scheme: "browser", kind: "page", id: "default" }, tab.title)
+    return { ...descriptor, id: tabKey(descriptor) }
+  }
+  if (tab.kind === "resource" && !parseResourceTabParams(tab.params)) return null
+  return { ...tab, id: tabKey(tab) }
+}
+
 function persist() {
   /* 持久化由 lib/store workspacePersistMiddleware 处理 (patch/hydrate 后触发)。 */
 }
@@ -159,24 +175,29 @@ export function hydrateWorkspace() {
     const cur = ws()
     // 清洗: 丢弃 module 不在合法集合的污染/陈旧标签 (防下线某模块留僵尸标签);
     // 节点标签额外要求 params 能解析出合法 NodeRef (防下线某 kind / 损坏 params 留僵尸标签)。
-    const validTabs = saved.tabs.filter((t) => {
-      if (!VALID_MODULES.has(t.module)) return false
-      if (t.kind === "node") return !!nodeResourceRefForTab(t)
-      if (t.kind === "resource") return !!parseResourceTabParams(t.params)
-      return true
+    const idMap = new Map<string, string>()
+    const validTabs = saved.tabs.flatMap((t) => {
+      const hydrated = hydrateTab(t)
+      if (!hydrated) return []
+      idMap.set(t.id, hydrated.id)
+      return [hydrated]
     })
     const merged = [...validTabs]
     for (const t of cur.tabs) if (!merged.some((x) => x.id === t.id)) merged.push(t)
-    const wantId = cur.activeId ?? saved.activeId
+    const savedActiveId = saved.activeId ? (idMap.get(saved.activeId) ?? saved.activeId) : null
+    const wantId = cur.activeId ?? savedActiveId
     const activeTab = wantId ? (merged.find((x) => x.id === wantId) ?? null) : null
+    const savedTransientId = saved.transientId
+      ? (idMap.get(saved.transientId) ?? saved.transientId)
+      : null
     const aiActive = activeTab?.module === "agent"
     store.dispatch(
       workspaceActions.hydrate({
         tabs: merged,
         activeId: activeTab ? activeTab.id : null,
         transientId:
-          saved.transientId && merged.some((t) => t.id === saved.transientId)
-            ? saved.transientId
+          savedTransientId && merged.some((t) => t.id === savedTransientId)
+            ? savedTransientId
             : null,
         lru: activeTab ? [activeTab.id] : [],
         activeSource: "user",

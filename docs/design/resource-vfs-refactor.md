@@ -2,7 +2,7 @@
 
 本文修正“把全项目统一到 Linux 式分层模型”方案中的缺口，目标是把本地模式和连接模式统一到同一套可寻址、可打开、可搜索、可显示的 Resource 模型，同时保留本地 `Node` 的同步、隐私和墓碑语义。
 
-当前状态：Resource 契约、VFS registry、`node` provider、连接模式 providers、`OpenTarget`、统一 `kind:"resource"` 标签壳、resource engines、本地/连接侧栏 ResourceMeta 渲染、本地搜索按输入 Resource 查询、文件元数据 VFS action、`save-to-mine` projector、VFS watch 粒度失效已落地。旧 `?node=` 深链、旧 `kind:"node"` 和旧 `browser-view` 持久化标签仅作为水合/解析兼容入口保留。
+当前状态：Resource 契约、VFS registry、`node` provider、连接模式 providers、`OpenTarget`、统一 `kind:"resource"` 标签壳、resource engines、本地/连接侧栏 ResourceMeta 渲染、本地搜索按输入 Resource 查询、文件元数据/书签树移动 VFS action、`save-to-mine` projector、VFS watch 粒度失效已落地。旧 `?node=` 深链、旧 `kind:"node"` 和旧 `browser-view` 持久化标签仅作为水合/解析兼容入口保留，水合后会迁移为 Resource 标签。
 
 ## 1. 目标与非目标
 
@@ -367,6 +367,8 @@ export type ResourceEngine = {
 - 旧 `kind:"node"` 标签水合/渲染兼容。
 - 旧 `browser-view` 标签水合/渲染兼容。
 - 旧 `?node=kind:id` 深链兼容。
+
+当前策略：旧持久化标签在 `hydrateWorkspace()` 中迁移到 `kind:"resource"`；旧 registry 分支保留到确认所有已发布版本都经过一次迁移窗口。
 
 删除兼容读取前必须有迁移策略和 hydration 覆盖。
 
