@@ -11,6 +11,7 @@ export type { ResourceCapability, ResourceMeta, ResourceRecord, ResourceRef, Res
 export type ResourceQuery = {
   scheme: ResourceScheme
   kind?: string
+  kinds?: readonly string[]
   parent?: ResourceRef
   text?: string
   limit?: number
@@ -29,6 +30,7 @@ export type ResourceActionId =
   | "delete"
   | "restore"
   | "move"
+  | "read-blob"
   | "save-to-mine"
   | "navigate"
 
