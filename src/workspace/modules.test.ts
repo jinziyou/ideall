@@ -64,13 +64,11 @@ test("descriptorForNode: ?resource 优先, 兼容旧 ?node 深链", () => {
   assert.deepEqual(resource?.params, { kind: "file", id: "a:b/c?d&e=f" })
 
   assert.equal(descriptorForNode("?node=badkind:x"), null, "非法 kind 拒收")
-  assert.equal(
-    descriptorForNode(
-      `?resource=${resourceQueryValue({ scheme: "info", kind: "entity", id: "e1" })}`,
-    ),
-    null,
-    "非 node resource 暂不落到旧 node 标签",
+  const info = descriptorForNode(
+    `?resource=${resourceQueryValue({ scheme: "info", kind: "entity", id: "ORG:示例" })}`,
   )
+  assert.equal(info?.kind, "info")
+  assert.equal(info?.path, "/info/entity?label=ORG&name=%E7%A4%BA%E4%BE%8B")
   assert.equal(descriptorForNode("?other=1"), null, "无 node 参数")
   assert.equal(descriptorForNode(""), null)
 })

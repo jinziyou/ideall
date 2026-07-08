@@ -9,6 +9,7 @@ import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
 import { descriptorForResource, type OpenTarget } from "./open-target"
+import { routeForConnectedResource } from "@/vfs/connected-providers"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
 import { tabDescriptor } from "./tab-definitions"
 import { isTauri, browserRelease } from "@/lib/tauri"
@@ -16,6 +17,7 @@ import { store, useAppSelector } from "@/lib/store"
 import { workspaceActions, type ActiveSource, type WorkspaceState } from "./workspace-slice"
 import { WORKSPACE_STORAGE_KEY } from "./workspace-persist"
 import { setActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
+import { requestEmbedRoute } from "@/plugins/embed/embed-nav"
 
 export type { ActiveSource }
 export type { OpenTarget }
@@ -349,6 +351,10 @@ export function openTarget(target: OpenTarget, source: ActiveSource = "user"): b
       const descriptor = descriptorForResource(target.ref, target.title)
       if (!descriptor) return false
       openTab(descriptor, source, { transient: target.transient })
+      const route = routeForConnectedResource(target.ref)
+      if (route && (target.ref.scheme === "info" || target.ref.scheme === "community")) {
+        requestEmbedRoute(target.ref.scheme, route)
+      }
       return true
     }
     case "command":

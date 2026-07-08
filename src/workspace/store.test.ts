@@ -68,9 +68,9 @@ test("openTarget(resource): node Resource 复用旧 node 标签并写入新 reso
   assert.equal(getActiveSource(), "agent")
   assert.equal(
     openTarget({ type: "resource", ref: { scheme: "tool", kind: "search", id: "default" } }),
-    false,
-    "连接 resource 等待后续 provider/engine 接管",
+    true,
   )
+  assert.equal(getTabs().at(-1)?.kind, "tool-search")
 })
 
 test("用户点回 agent 开的标签 → 来源转 user (用户主动看 = 同意)", () => {

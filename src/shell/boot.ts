@@ -6,6 +6,7 @@ import { registerContentResolver } from "@protocol/content"
 import { registerFilesPort } from "@protocol/files"
 import { registerUiActions } from "@/lib/ui-actions"
 import { registerActiveNode } from "@/lib/active-node"
+import { registerBuiltInVfsProviders } from "@/vfs/builtin"
 import { isTauri } from "@/lib/tauri"
 import { filesPort } from "@/files/files-port"
 import {
@@ -38,6 +39,8 @@ export function registerAll(): void {
   booted = true
   // 「我的」数据端口 (core 实现, 供 agent 等插件经 protocol 读写「我的」本机数据)。
   registerFilesPort(filesPort)
+  // Resource/VFS 挂载点: 本地 node + 连接模式路由型资源。provider 自身保持 UI 无关。
+  registerBuiltInVfsProviders()
   // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点打开为工作区标签 (守 components↛app 边界, 由 app 注入)。
   registerUiActions({
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
