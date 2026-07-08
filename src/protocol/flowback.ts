@@ -6,7 +6,7 @@ export const FILES_UPDATED = "ideall:files-updated"
 export const SUBSCRIPTIONS_SYNCED = "wonita:subscriptions-synced"
 
 /** 写入 payload (§7/§9): 哪个 kind 的哪个 id 变了 —— live-merge 据此只重读该条, 不被任何「我的」写惊动。缺省=未知。 */
-export type FilesUpdate = { kind?: string; id?: string }
+export type FilesUpdate = { kind?: string; id?: string; subType?: string }
 
 export function notifyFilesUpdated(detail?: FilesUpdate) {
   try {

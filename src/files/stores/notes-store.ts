@@ -354,7 +354,7 @@ export async function moveNote(
       ? { ...current, parentId: newParentId, sortKey, updatedAt: Date.now() }
       : undefined,
   )
-  if (next) notifyFilesUpdated()
+  if (next) notifyFilesUpdated({ kind: "note", id })
   return next
 }
 
@@ -380,7 +380,7 @@ export async function deleteNote(id: string): Promise<Note[]> {
     updatedAt: now,
   }))
   await idbBulkPut(STORE_NODES, tombstones)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "note", id })
   return captured
 }
 
@@ -397,7 +397,7 @@ export async function restoreSubtree(notes: Note[]): Promise<void> {
     return copy
   })
   await idbBulkPut(STORE_NODES, revived)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "note", id: notes[0]?.id })
 }
 
 // ---- 跨端同步钩子 (供 sync 插件经 FilesPort 调用) ----
@@ -416,5 +416,5 @@ export async function bulkPutNotes(notes: Note[]): Promise<void> {
   const keepIds = new Set(rows.map((n) => n.id))
   const toDelete = expiredTombstoneIdsToDelete(existing, keepIds, Date.now())
   await idbBulkPutDelete(STORE_NODES, rows, toDelete)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "note" })
 }

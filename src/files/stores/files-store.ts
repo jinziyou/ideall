@@ -121,7 +121,7 @@ export async function addFile(file: File, tags: string[] = []): Promise<FileMeta
     { store: STORE_BLOBS, value: { key: id, blob: file } satisfies BlobRecord },
     { store: STORE_NODES, value: node },
   ])
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "file", id })
   return nodeToMeta(node)
 }
 
@@ -139,7 +139,7 @@ export async function updateFileMeta(
     return next
   })
   // 与 add/delete 一致: 通知「我的」更新, 否则 keep-alive 的概览时间线在改名后会陈旧。
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "file", id })
 }
 
 /** 更新文本/代码类文件内容: Blob 与文件节点元数据同事务写回。 */
@@ -165,7 +165,7 @@ export async function updateFileContent(
     { store: STORE_BLOBS, value: { key: current.blobRef.key, blob } satisfies BlobRecord },
     { store: STORE_NODES, value: next },
   ])
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "file", id })
   return {
     id: next.id,
     name: next.title,
@@ -190,7 +190,7 @@ export async function deleteFile(id: string): Promise<void> {
     current && current.kind === "file" ? { ...current, deletedAt: now, updatedAt: now } : undefined,
   )
   if (tomb) await idbDelete(STORE_BLOBS, tomb.blobRef.key)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "file", id })
 }
 
 /** 撤销删除: 把刚删除的文件 (含 Blob) 恢复 (重放 Blob + 节点清删除标记, 保留 id/createdAt)。 */
@@ -216,5 +216,5 @@ export async function restoreFile(file: StoredFile): Promise<void> {
     { store: STORE_BLOBS, value: { key: file.id, blob: file.blob } satisfies BlobRecord },
     { store: STORE_NODES, value: revived },
   ])
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "file", id: file.id })
 }

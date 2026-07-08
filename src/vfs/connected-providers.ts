@@ -6,7 +6,7 @@ import type {
 } from "@protocol/resource"
 import { isResourceKindForScheme, resourceKey } from "@protocol/resource"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
-import { onFilesUpdated } from "@protocol/flowback"
+import { onFilesUpdated, type FilesUpdate } from "@protocol/flowback"
 import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
 import {
   CONNECTED_STATIC_RESOURCES,
@@ -251,7 +251,11 @@ function createRouteProvider(
     },
     watch(query, _ctx, notify) {
       queryKinds(query, scheme)
-      const dispose = onFilesUpdated(() => notify())
+      const types = subscriptionTypesForWatch(scheme, query)
+      if (types.length === 0) return null
+      const dispose = onFilesUpdated((detail) => {
+        if (matchesSubscriptionUpdate(detail, types)) notify()
+      })
       return { dispose }
     },
   }
@@ -265,6 +269,22 @@ function subscriptionTypesForInfoQuery(query: ResourceQuery): SubscriptionType[]
   if (kinds.includes("publisher")) types.push("publisher")
   if (kinds.includes("search")) types.push("search")
   return types
+}
+
+function subscriptionTypesForWatch(scheme: RouteScheme, query: ResourceQuery): SubscriptionType[] {
+  if (scheme === "info") return subscriptionTypesForInfoQuery(query)
+  if (scheme === "community") {
+    const kinds = query.kinds ?? (query.kind != null ? [query.kind] : ["peer"])
+    return kinds.includes("peer") ? ["peer"] : []
+  }
+  return []
+}
+
+function matchesSubscriptionUpdate(detail: FilesUpdate | undefined, types: SubscriptionType[]) {
+  if (!detail?.kind) return true
+  if (detail.kind !== "feed") return false
+  if (!detail.subType) return true
+  return types.includes(detail.subType as SubscriptionType)
 }
 
 export function createConnectedVfsProviders(

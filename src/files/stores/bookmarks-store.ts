@@ -202,7 +202,7 @@ export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
     },
   }
   await idbPut(STORE_NODES, node)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "bookmark", id: node.id })
   return nodeToBookmark(node)
 }
 
@@ -229,7 +229,7 @@ export async function bulkAddBookmarks(inputs: NewBookmark[]): Promise<Bookmark[
     },
   }))
   await idbBulkPut(STORE_NODES, nodes)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "bookmark" })
   return nodes.map(nodeToBookmark)
 }
 
@@ -251,7 +251,7 @@ export async function updateBookmark(
     return next
   })
   // 与 add/bulkAdd/delete 一致: 通知「我的」更新, 否则 keep-alive 的概览时间线在改名后会陈旧。
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "bookmark", id })
 }
 
 /** 删除书签 (软删标记; 撤销靠 restoreBookmark 恢复)。 */
@@ -266,7 +266,7 @@ export async function deleteBookmark(id: string): Promise<void> {
       ? { ...current, deletedAt: now, updatedAt: now }
       : undefined,
   )
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "bookmark", id })
 }
 
 export type { InsertPos as BookmarkInsertPos }
@@ -310,7 +310,7 @@ export async function moveBookmark(
       ? { ...current, parentId: newParentId, sortKey, updatedAt: Date.now() }
       : undefined,
   )
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "bookmark", id })
 }
 
 /** 收藏夹同级重排 (parentId 恒为 null)。 */
@@ -323,7 +323,7 @@ export async function moveFolder(id: string, pos?: InsertPos): Promise<void> {
       ? { ...current, parentId: null, sortKey, updatedAt: Date.now() }
       : undefined,
   )
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "folder", id })
 }
 
 /** 撤销删除: 把刚删除的书签恢复 (清删除标记 + bump updatedAt, 保留 id/createdAt/分组)。 */
@@ -346,5 +346,5 @@ export async function restoreBookmark(bookmark: Bookmark): Promise<void> {
     delete revived.deletedAt
     return revived
   })
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "bookmark", id: bookmark.id })
 }

@@ -301,6 +301,7 @@ test("node provider: watch forwards matching file update events", () => {
     const provider = createNodeVfsProvider(makeDeps([note("n1")]).deps)
     let count = 0
     const handle = provider.watch!({ scheme: "node", kind: "note" }, uiCtx, () => count++)
+    assert.ok(handle)
 
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "bookmark" } }))
     assert.equal(count, 0)

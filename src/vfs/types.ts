@@ -63,7 +63,7 @@ export type VfsProvider = {
     input: unknown,
     ctx: VfsAccessContext,
   ): Promise<unknown>
-  watch?(query: ResourceQuery, ctx: VfsAccessContext, notify: () => void): WatchHandle
+  watch?(query: ResourceQuery, ctx: VfsAccessContext, notify: () => void): WatchHandle | null
 }
 
 export type VfsErrorCode =

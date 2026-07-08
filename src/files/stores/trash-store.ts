@@ -157,14 +157,14 @@ export async function restoreTrashItem(id: string): Promise<void> {
     await idbPut(STORE_NODES, reviveNode(snapshot?.node ?? node))
   }
   await idbDelete(STORE_TRASH_SNAPSHOTS, id)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: node.kind, id })
 }
 
 export async function purgeTrashItem(id: string): Promise<void> {
   const node = await idbGet<Node>(STORE_NODES, id)
   if (node?.kind === "file") await idbDelete(STORE_BLOBS, node.blobRef.key)
   await Promise.all([idbDelete(STORE_NODES, id), idbDelete(STORE_TRASH_SNAPSHOTS, id)])
-  notifyFilesUpdated()
+  notifyFilesUpdated(node ? { kind: node.kind, id } : undefined)
 }
 
 export async function emptyTrash(): Promise<number> {

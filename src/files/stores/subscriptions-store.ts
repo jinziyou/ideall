@@ -124,7 +124,7 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
   // sub 无 deletedAt → subToFeedNode 不写删除标记位 = 恢复; 复用删除标记 sortKey, 全新则追加。
   const node = subToFeedNode(sub, existing?.sortKey || nextKey(maxKey(await allFeedNodes())))
   await idbPut(STORE_NODES, node)
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "feed", id, subType: input.type })
   return sub
 }
 
@@ -139,7 +139,7 @@ export async function removeSubscription(type: SubscriptionType, key: string): P
   const now = Date.now()
   await captureTrashSnapshot(existing)
   await idbPut(STORE_NODES, { ...existing, deletedAt: now, updatedAt: now })
-  notifyFilesUpdated()
+  notifyFilesUpdated({ kind: "feed", id, subType: type })
 }
 
 /**
@@ -163,6 +163,10 @@ export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> 
   if (nodes.length || expired.length) {
     // 写回合并后的完整数据 + 物理删过期删除标记同事务原子 (避免「已写回但删除标记未清」中间态)。
     await idbBulkPutDelete(STORE_NODES, nodes, expired)
-    notifyFilesUpdated()
+    const types = new Set(subs.map((sub) => sub.type))
+    notifyFilesUpdated({
+      kind: "feed",
+      ...(types.size === 1 ? { subType: [...types][0] } : {}),
+    })
   }
 }

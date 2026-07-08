@@ -138,15 +138,33 @@ test("connected providers: invoke save-to-mine through injected projector", asyn
   assert.deepEqual(calls, [{ ref, input: { title: "Example" }, actor: "ui" }])
 })
 
-test("connected providers: watch forwards file update events", () => {
+test("connected providers: watch only forwards matching subscription updates", () => {
   withWindow((target) => {
     let count = 0
     const handle = infoVfsProvider.watch!({ scheme: "info", kind: "entity" }, ctx, () => count++)
+    assert.ok(handle)
 
-    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "note", id: "n1" } }))
+    assert.equal(count, 0)
+    target.dispatchEvent(
+      new CustomEvent(FILES_UPDATED, { detail: { kind: "feed", subType: "peer" } }),
+    )
+    assert.equal(count, 0)
+    target.dispatchEvent(
+      new CustomEvent(FILES_UPDATED, { detail: { kind: "feed", subType: "entity" } }),
+    )
     assert.equal(count, 1)
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
+    assert.equal(count, 2)
     handle.dispose()
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
-    assert.equal(count, 1)
+    assert.equal(count, 2)
   })
+})
+
+test("connected providers: static resources do not subscribe to file updates", () => {
+  assert.equal(
+    toolVfsProvider.watch?.({ scheme: "tool", kind: "search" }, ctx, () => {}),
+    null,
+  )
 })
