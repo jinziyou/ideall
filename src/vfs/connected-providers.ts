@@ -6,6 +6,7 @@ import type {
 } from "@protocol/resource"
 import { isResourceKindForScheme, resourceKey } from "@protocol/resource"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
+import { onFilesUpdated } from "@protocol/flowback"
 import { listSubscriptionsByTypes } from "@/files/stores/subscriptions-store"
 import {
   CONNECTED_STATIC_RESOURCES,
@@ -247,6 +248,11 @@ function createRouteProvider(
         return saveToMine(ref, input, ctx)
       }
       throw new VfsError("unsupported", `Action ${action} is not supported by ${scheme} provider`)
+    },
+    watch(query, _ctx, notify) {
+      queryKinds(query, scheme)
+      const dispose = onFilesUpdated(() => notify())
+      return { dispose }
     },
   }
 }

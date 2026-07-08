@@ -2,6 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node"
 import type { NodeResourceRef } from "@protocol/resource"
+import { FILES_UPDATED } from "@protocol/flowback"
 import type { NodeSummary } from "@/files/stores/nodes-store"
 import { createNodeVfsProvider, type NodeVfsProviderDeps } from "./node-provider"
 import { VfsError, type VfsAccessContext } from "./types"
@@ -77,6 +78,18 @@ async function rejectCode(promise: Promise<unknown>, code: string): Promise<void
     assert.equal(error.code, code)
     return true
   })
+}
+
+function withWindow<T>(run: (target: EventTarget) => T): T {
+  const previous = globalThis.window
+  const target = new EventTarget()
+  Object.defineProperty(globalThis, "window", { value: target, configurable: true })
+  try {
+    return run(target)
+  } finally {
+    if (previous === undefined) Reflect.deleteProperty(globalThis, "window")
+    else Object.defineProperty(globalThis, "window", { value: previous, configurable: true })
+  }
 }
 
 function makeDeps(nodes: Node[]): {
@@ -281,4 +294,27 @@ test("node provider: actions expose node capabilities without UI components", as
 
   assert.ok(actions.some((action) => action.id === "read-blob"))
   assert.ok(actions.every((action) => typeof action.label === "string"))
+})
+
+test("node provider: watch forwards matching file update events", () => {
+  withWindow((target) => {
+    const provider = createNodeVfsProvider(makeDeps([note("n1")]).deps)
+    let count = 0
+    const handle = provider.watch!(
+      { scheme: "node", kind: "note" },
+      uiCtx,
+      () => count++,
+    )
+
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "bookmark" } }))
+    assert.equal(count, 0)
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "note" } }))
+    assert.equal(count, 1)
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
+    assert.equal(count, 2)
+
+    handle.dispose()
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "note" } }))
+    assert.equal(count, 2)
+  })
 })

@@ -2,6 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { resourceKey } from "@protocol/resource"
 import type { Subscription } from "@protocol/subscription"
+import { FILES_UPDATED } from "@protocol/flowback"
 import {
   createConnectedVfsProviders,
   infoVfsProvider,
@@ -11,6 +12,18 @@ import {
 import { VfsError, type VfsAccessContext } from "./types"
 
 const ctx: VfsAccessContext = { actor: "ui", permissions: [] }
+
+function withWindow<T>(run: (target: EventTarget) => T): T {
+  const previous = globalThis.window
+  const target = new EventTarget()
+  Object.defineProperty(globalThis, "window", { value: target, configurable: true })
+  try {
+    return run(target)
+  } finally {
+    if (previous === undefined) Reflect.deleteProperty(globalThis, "window")
+    else Object.defineProperty(globalThis, "window", { value: previous, configurable: true })
+  }
+}
 
 async function rejectCode(promise: Promise<unknown>, code: string): Promise<void> {
   await assert.rejects(promise, (error) => {
@@ -121,4 +134,21 @@ test("connected providers: invoke save-to-mine through injected projector", asyn
 
   assert.equal((result as { kind: string }).kind, "subscription")
   assert.deepEqual(calls, [{ ref, input: { title: "Example" }, actor: "ui" }])
+})
+
+test("connected providers: watch forwards file update events", () => {
+  withWindow((target) => {
+    let count = 0
+    const handle = infoVfsProvider.watch!(
+      { scheme: "info", kind: "entity" },
+      ctx,
+      () => count++,
+    )
+
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
+    assert.equal(count, 1)
+    handle.dispose()
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
+    assert.equal(count, 1)
+  })
 })

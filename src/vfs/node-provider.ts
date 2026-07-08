@@ -7,6 +7,7 @@ import type {
   ResourceRef,
 } from "@protocol/resource"
 import { resourceKey } from "@protocol/resource"
+import { onFilesUpdated } from "@protocol/flowback"
 import {
   createNode,
   deleteNode,
@@ -334,6 +335,14 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
         case "save-to-mine":
           throw new VfsError("unsupported", `Action ${action} is not supported by node provider`)
       }
+    },
+    watch(query, ctx, notify) {
+      assertCanReadMetadata(ctx)
+      const kinds = nodeKindsFromQuery(query)
+      const dispose = onFilesUpdated((detail) => {
+        if (!detail?.kind || (isNodeKind(detail.kind) && kinds.includes(detail.kind))) notify()
+      })
+      return { dispose }
     },
   }
 }

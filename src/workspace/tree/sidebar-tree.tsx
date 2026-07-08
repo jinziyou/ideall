@@ -10,8 +10,7 @@ import { buildTree, type Tree } from "@/files/notes-tree-util"
 import { listNodeSummaries, type NodeSummary } from "@/files/stores/nodes-store"
 import type { NodeKind } from "@protocol/node"
 import type { ResourceMeta } from "@protocol/resource"
-import { onFilesUpdated } from "@protocol/flowback"
-import { listResources } from "@/vfs/registry"
+import { listResources, watchResources } from "@/vfs/registry"
 import type { ResourceQuery } from "@/vfs/types"
 import {
   staticTreeRoots,
@@ -148,6 +147,21 @@ export default function SidebarTree() {
     setResourceCache(new Map())
   }, [])
 
+  const invalidateSection = React.useCallback((sectionId: string) => {
+    setNodeCache((prev) => {
+      if (!prev.has(sectionId)) return prev
+      const next = new Map(prev)
+      next.delete(sectionId)
+      return next
+    })
+    setResourceCache((prev) => {
+      if (!prev.has(sectionId)) return prev
+      const next = new Map(prev)
+      next.delete(sectionId)
+      return next
+    })
+  }, [])
+
   React.useEffect(() => {
     try {
       const raw = localStorage.getItem(EXPANDED_KEY)
@@ -194,15 +208,44 @@ export default function SidebarTree() {
   }, [])
 
   React.useEffect(() => subscribeSidebarTreeRefresh(clearCaches), [clearCaches])
-  // 笔记区走独立 NotesSidebarTree, 不经过 nodeCache; notifyFilesUpdated 时须同步 refreshSidebarTree。
-  React.useEffect(
-    () =>
-      onFilesUpdated(() => {
-        clearCaches()
-        refreshSidebarTree()
-      }),
-    [clearCaches],
-  )
+
+  React.useEffect(() => {
+    const disposers: Array<() => void> = []
+    const watchNode = (node: SidebarTreeNode) => {
+      if (node.childKinds?.length) {
+        try {
+          const handle = watchResources(
+            { scheme: "node", kinds: node.childKinds },
+            { actor: "ui", permissions: [] },
+            () => {
+              invalidateSection(node.id)
+              if (node.id === "section:notes") refreshSidebarTree()
+            },
+          )
+          if (handle) disposers.push(() => handle.dispose())
+        } catch {
+          /* provider may not be registered during early boot */
+        }
+      }
+      if (node.childResourceQuery) {
+        try {
+          const handle = watchResources(
+            node.childResourceQuery,
+            { actor: "ui", permissions: [] },
+            () => invalidateSection(node.id),
+          )
+          if (handle) disposers.push(() => handle.dispose())
+        } catch {
+          /* provider may not be registered during early boot */
+        }
+      }
+      node.staticChildren?.forEach(watchNode)
+    }
+    rootsForModule(activeModule).forEach(watchNode)
+    return () => {
+      for (const dispose of disposers) dispose()
+    }
+  }, [activeModule, invalidateSection])
 
   React.useEffect(() => {
     const sectionId = defaultExpandedSection(activeModule)
