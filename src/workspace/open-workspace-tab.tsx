@@ -6,8 +6,9 @@
 
 import * as React from "react"
 import { usePathname, useSearchParams } from "next/navigation"
-import { descriptorForResource, descriptorForPath } from "./modules"
-import { openTab, setRightPanel, openAiSettings } from "./store"
+import { parseResourceSearch } from "@protocol/resource"
+import { descriptorForPath } from "./modules"
+import { openTab, openTarget, setRightPanel, openAiSettings } from "./store"
 
 function OpenWorkspaceTabInner() {
   const pathname = usePathname()
@@ -30,9 +31,9 @@ function OpenWorkspaceTabInner() {
     //
     // 有 ?resource=node:* 或旧 ?node= → 只开节点标签并返回, 不再 fall through 到列表页 descriptor
     // (否则会把刚激活的节点标签 activeId 覆盖回列表页)。
-    const resourceD = descriptorForResource(search.toString())
-    if (resourceD) {
-      openTab(resourceD, "user", { transient: true })
+    const resourceRef = parseResourceSearch(search.toString())
+    if (resourceRef) {
+      openTarget({ type: "resource", ref: resourceRef, transient: true }, "user")
       return
     }
     const d = descriptorForPath(p)
