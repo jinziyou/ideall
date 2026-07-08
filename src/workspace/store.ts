@@ -8,8 +8,12 @@
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import { nodeTab, parseNodeParams } from "./node-tab"
 import type { NodeRef } from "./node-ref"
-import { descriptorForResource, type OpenTarget } from "./open-target"
-import { routeForConnectedResource } from "@/vfs/connected-providers"
+import {
+  descriptorForResource,
+  descriptorForResourceMeta,
+  type OpenTarget,
+} from "./open-target"
+import { getResource } from "@/vfs/registry"
 import { coerceActiveModuleForMode, moduleById, isModeNeutralModule } from "./modules"
 import { tabDescriptor } from "./tab-definitions"
 import { isTauri, browserRelease } from "@/lib/tauri"
@@ -341,20 +345,53 @@ export function openAiTasks(workspaceId: string, title: string, opts?: OpenTabOp
   openAgentTab(tabDescriptor("ai-tasks", { title, params: { workspaceId } }), opts)
 }
 
-/** 统一打开入口: ResourceRef 先适配到现有标签 descriptor; 非节点 Resource 后续由 engine/provider 接管。 */
+function updateTabDescriptor(d: TabDescriptor) {
+  const id = tabKey(d)
+  if (!ws().tabs.some((t) => t.id === id)) return
+  setState({ tabs: ws().tabs.map((t) => (t.id === id ? { ...t, ...d, id } : t)) })
+}
+
+function requestConnectedEmbedRoute(meta: { ref: OpenTargetResourceRef; route?: string }) {
+  const { ref, route } = meta
+  if (!route || (ref.scheme !== "info" && ref.scheme !== "community")) return
+  requestEmbedRoute(ref.scheme, route)
+}
+
+type OpenTargetResourceRef = Extract<OpenTarget, { type: "resource" }>["ref"]
+
+async function refreshResourceTarget(target: Extract<OpenTarget, { type: "resource" }>) {
+  try {
+    const meta =
+      target.meta ??
+      (
+        await getResource(target.ref, {
+          actor: "ui",
+          permissions: [],
+          intent: "metadata",
+        })
+      )?.meta
+    if (!meta) return
+    const descriptor = descriptorForResourceMeta(meta)
+    if (descriptor) updateTabDescriptor(descriptor)
+    requestConnectedEmbedRoute(meta)
+  } catch {
+    /* fallback descriptor already opened */
+  }
+}
+
+/** 统一打开入口: ResourceRef 通过 VFS meta 归一到标签描述; 同步 fallback 保持打开手感。 */
 export function openTarget(target: OpenTarget, source: ActiveSource = "user"): boolean {
   switch (target.type) {
     case "tab":
       openTab(target.descriptor, source, { transient: target.transient })
       return true
     case "resource": {
-      const descriptor = descriptorForResource(target.ref, target.title)
+      const descriptor = target.meta
+        ? descriptorForResourceMeta(target.meta)
+        : descriptorForResource(target.ref, target.title)
       if (!descriptor) return false
       openTab(descriptor, source, { transient: target.transient })
-      const route = routeForConnectedResource(target.ref)
-      if (route && (target.ref.scheme === "info" || target.ref.scheme === "community")) {
-        requestEmbedRoute(target.ref.scheme, route)
-      }
+      void refreshResourceTarget(target)
       return true
     }
     case "command":

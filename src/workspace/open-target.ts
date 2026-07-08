@@ -1,32 +1,36 @@
-import type { ResourceRef } from "@protocol/resource"
+import type { ResourceMeta, ResourceRef } from "@protocol/resource"
 import { parseResourceSearch, resourceKey } from "@protocol/resource"
-import { routeForConnectedResource } from "@/vfs/connected-providers"
+import { routeForConnectedResource } from "@/vfs/connected-resource-manifest"
 import type { TabDescriptor } from "./types"
 import { nodeTab } from "./node-tab"
 import { tabDescriptor } from "./tab-definitions"
 
 export type OpenTarget =
-  | { type: "resource"; ref: ResourceRef; title?: string; transient?: boolean }
+  | { type: "resource"; ref: ResourceRef; title?: string; meta?: ResourceMeta; transient?: boolean }
   | { type: "tab"; descriptor: TabDescriptor; transient?: boolean }
   | { type: "command"; command: "open-ai-panel" | "toggle-right-panel" }
 
-export function descriptorForResource(ref: ResourceRef, title?: string): TabDescriptor | null {
+export function descriptorForResource(
+  ref: ResourceRef,
+  title?: string,
+  route?: string,
+): TabDescriptor | null {
   switch (ref.scheme) {
     case "node":
       return nodeTab({ kind: ref.kind, id: ref.id }, title ?? ref.id)
     case "info": {
-      const route = routeForConnectedResource(ref) ?? "/info"
+      const path = route ?? routeForConnectedResource(ref) ?? "/info"
       return tabDescriptor("info", {
         title: title ?? (ref.kind === "home" ? "资讯" : ref.id),
-        path: route,
+        path,
         params: { resource: resourceKey(ref) },
       })
     }
     case "community": {
-      const route = routeForConnectedResource(ref) ?? "/community"
+      const path = route ?? routeForConnectedResource(ref) ?? "/community"
       return tabDescriptor("community", {
         title: title ?? (ref.kind === "home" ? "社区" : ref.id),
-        path: route,
+        path,
         params: { resource: resourceKey(ref) },
       })
     }
@@ -46,6 +50,10 @@ export function descriptorForResource(ref: ResourceRef, title?: string): TabDesc
         params: { resource: resourceKey(ref) },
       })
   }
+}
+
+export function descriptorForResourceMeta(meta: ResourceMeta): TabDescriptor | null {
+  return descriptorForResource(meta.ref, meta.title, meta.route)
 }
 
 export function descriptorForResourceSearch(search: string): TabDescriptor | null {

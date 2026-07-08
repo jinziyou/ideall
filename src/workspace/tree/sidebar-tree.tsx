@@ -33,7 +33,7 @@ import {
   useActiveWorkspaceId,
   getTabs,
 } from "../store"
-import { descriptorForResource, type OpenTarget } from "../open-target"
+import { descriptorForResource, descriptorForResourceMeta, type OpenTarget } from "../open-target"
 import { parseNodeParams } from "../node-tab"
 import { resolveResourceEngine } from "../resource-engines"
 import {
@@ -101,7 +101,9 @@ function isResourceTargetActive(
 ): boolean {
   if (!activeId) return false
   if (target.ref.scheme === "node") return isNodeActive(activeId, target.ref.kind, target.ref.id)
-  const descriptor = descriptorForResource(target.ref, target.title)
+  const descriptor = target.meta
+    ? descriptorForResourceMeta(target.meta)
+    : descriptorForResource(target.ref, target.title)
   return descriptor ? activeId === tabKey(descriptor) : false
 }
 
@@ -548,7 +550,7 @@ function ResourceRow({
   activeId: string | null
 }) {
   const Icon = resolveResourceEngine(meta.ref)?.icon ?? Rss
-  const target: OpenTarget = { type: "resource", ref: meta.ref, title: meta.title }
+  const target: OpenTarget = { type: "resource", ref: meta.ref, title: meta.title, meta }
   const active = isResourceTargetActive(activeId, target)
   const open = (transient: boolean) => openTreeTarget(target, transient)
 

@@ -31,6 +31,8 @@ import {
   getTabs,
 } from "./store"
 import { tabDescriptor } from "./tab-definitions"
+import { clearVfsProvidersForTest, registerVfsProvider } from "@/vfs/registry"
+import type { VfsProvider } from "@/vfs/types"
 
 // —— 标签描述符夹具 (本地/连接各取一个 + 跨模式工具) ——
 const HOME = tabDescriptor("home-overview")
@@ -71,6 +73,54 @@ test("openTarget(resource): node Resource 复用旧 node 标签并写入新 reso
     true,
   )
   assert.equal(getTabs().at(-1)?.kind, "tool-search")
+})
+
+test("openTarget(resource): refreshes descriptor title from VFS metadata", async () => {
+  closeAllTabs()
+  clearVfsProvidersForTest()
+  const provider: VfsProvider = {
+    scheme: "tool",
+    async list() {
+      return { items: [] }
+    },
+    async get(ref) {
+      return {
+        meta: {
+          ref,
+          title: "VFS Search",
+          route: "/tool/search",
+          capabilities: ["open", "preview", "navigate"],
+        },
+        content: { route: "/tool/search" },
+      }
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      return null
+    },
+  }
+  const unregister = registerVfsProvider(provider)
+
+  try {
+    assert.equal(
+      openTarget({
+        type: "resource",
+        ref: { scheme: "tool", kind: "search", id: "default" },
+        title: "Fallback Search",
+      }),
+      true,
+    )
+    assert.equal(getTabs().at(-1)?.title, "Fallback Search")
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    assert.equal(getTabs().at(-1)?.title, "VFS Search")
+  } finally {
+    unregister()
+    clearVfsProvidersForTest()
+  }
 })
 
 test("用户点回 agent 开的标签 → 来源转 user (用户主动看 = 同意)", () => {
