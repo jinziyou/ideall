@@ -224,6 +224,7 @@ ideall 仅以 App 形态分发（Tauri 工程在 `src-tauri/`）：构建期 `ne
 
 - [README.md](../README.md) — 产品定位、模块表、快速开始、连接后端、App 打包、API 类型同步。
 - [design/ai-native-redesign.md](design/ai-native-redesign.md) — AI 原生重设计权威稿：统一 Node 模型、四步折叠、墓碑、一切皆标签页 UI、`fs.*` AI 层与隐私三道闸、笔记块级合并的完整推导与雷区清单（本文 §2/§3.4/§6 即其落地回写）。
+- [design/resource-vfs-refactor.md](design/resource-vfs-refactor.md) — 将本地 Node 与连接模式对象统一到 Resource/VFS 模型的后续重构计划：ResourceRef、Provider、OpenTarget、Engine、权限隐私与迁移兼容策略。
 - [app.md](app.md) — App（桌面/移动）方案、平台矩阵、CI、签名与分阶段路线图。
 - [claude.md](claude.md) — 仓库结构与开发约定（贡献者必读）。
 - [.github/SECURITY.md](.github/SECURITY.md) — 安全策略与漏洞报告（含同步加密关注点）。
