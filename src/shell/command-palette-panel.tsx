@@ -48,7 +48,7 @@ import {
 } from "@/workspace/local-search-items"
 import {
   getActiveId,
-  openNodeTab,
+  openTarget,
   requestCloseActiveTab,
   requestCloseOtherTabs,
   setActiveTab,
@@ -72,11 +72,7 @@ export { openCommandPalette }
  * 内容分组在命令模式下额外整组不渲染。命令: 跳发现模块 / 我的各子区 / 系统服务 (主题/同步/更新)。
  * 由 ⌘K / Ctrl+K 或任意 openCommandPalette() 触发器 (顶栏搜索框 / 移动顶栏 / 各页页头) 唤起。
  */
-export default function CommandPalettePanel({
-  initialOpen = false,
-}: {
-  initialOpen?: boolean
-}) {
+export default function CommandPalettePanel({ initialOpen = false }: { initialOpen?: boolean }) {
   const router = useRouter()
   const [open, setOpen] = React.useState(initialOpen)
   // 受控输入: 内容项 (笔记/书签/资源/关注) 仅在用户输入时才展示, 避免一打开就糊一屏本机内容
@@ -181,7 +177,11 @@ export default function CommandPalettePanel({
       try {
         const note = await addNote({ parentId: null })
         refreshSidebarTree()
-        openNodeTab({ kind: "note", id: note.id }, note.title || "无标题")
+        openTarget({
+          type: "resource",
+          ref: { scheme: "node", kind: "note", id: note.id },
+          title: note.title || "无标题",
+        })
       } catch (e) {
         toast.error("新建笔记失败", { description: String(e) })
       }

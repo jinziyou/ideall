@@ -297,7 +297,12 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
  * 无资源参数或非法 → null (调用侧回退 descriptorForPath)。与 descriptorForPath 分离
  * (后者只收 pathname): 节点标签共享 /home/notes 壳, 仅 query 区分。
  */
-export function descriptorForNode(search: string): TabDescriptor | null {
+export function descriptorForResource(search: string): TabDescriptor | null {
   // title 占位为 id, viewer 取数后经 renameNodeTab 修正 (不入 tabKey, 不影响去重)。
   return descriptorForResourceSearch(search)
+}
+
+/** @deprecated 兼容旧调用名；新代码使用 descriptorForResource。 */
+export function descriptorForNode(search: string): TabDescriptor | null {
+  return descriptorForResource(search)
 }

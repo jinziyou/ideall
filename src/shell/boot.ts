@@ -10,7 +10,7 @@ import { registerBuiltInVfsProviders } from "@/vfs/builtin"
 import { isTauri } from "@/lib/tauri"
 import { filesPort } from "@/files/files-port"
 import {
-  openNodeTab,
+  openTarget,
   closeTab,
   tabKey,
   getActiveId,
@@ -44,7 +44,8 @@ export function registerAll(): void {
   // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点打开为工作区标签 (守 components↛app 边界, 由 app 注入)。
   registerUiActions({
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
-    openTab: (kind, id, title) => openNodeTab({ kind, id }, title, "agent"),
+    openTab: (kind, id, title) =>
+      openTarget({ type: "resource", ref: { scheme: "node", kind, id }, title }, "agent"),
     closeTab: (kind, id) => closeTab(tabKey(nodeTab({ kind, id }, ""))),
     // 外链 → 「浏览器」模块 (插件经 host.external 触达, 守 plugin↛workspace 边界由 app 注入实现)。
     openExternal: (url) => openInBrowserTab(url),

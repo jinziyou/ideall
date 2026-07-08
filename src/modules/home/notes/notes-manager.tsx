@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/format"
 import type { NoteMeta } from "@protocol/files"
 import { addNote, listNotes } from "@/files/stores/notes-store"
-import { openNodeTab } from "@/workspace/store"
+import { openTarget } from "@/workspace/store"
 import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/tree/sidebar-tree-bus"
 import { EmptyState } from "@/ui/empty-state"
 
@@ -56,14 +56,22 @@ export default function NotesManager() {
       const note = await addNote({ parentId: null })
       await reload()
       refreshSidebarTree()
-      openNodeTab({ kind: "note", id: note.id }, note.title || "无标题")
+      openTarget({
+        type: "resource",
+        ref: { scheme: "node", kind: "note", id: note.id },
+        title: note.title || "无标题",
+      })
     } catch (e) {
       toast.error("新建失败", { description: String(e) })
     }
   }
 
   function openNote(n: NoteMeta) {
-    openNodeTab({ kind: "note", id: n.id }, n.title || "无标题")
+    openTarget({
+      type: "resource",
+      ref: { scheme: "node", kind: "note", id: n.id },
+      title: n.title || "无标题",
+    })
   }
 
   if (loading) {

@@ -14,7 +14,7 @@ import {
   restoreSubtree,
 } from "@/files/stores/notes-store"
 import { PageTree, type InsertPos } from "./notes-tree"
-import { openNodeTab, useActiveId, getTabs } from "@/workspace/store"
+import { openTarget, useActiveId, getTabs } from "@/workspace/store"
 import { parseNodeParams } from "@/workspace/node-tab"
 import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/tree/sidebar-tree-bus"
 
@@ -145,7 +145,15 @@ export default function NotesSidebarTree({ depth = 1 }: { depth?: number }) {
   const handleSelect = React.useCallback(
     (id: string) => {
       const note = notes.find((n) => n.id === id)
-      openNodeTab({ kind: "note", id }, note?.title || "无标题", "user", { transient: true })
+      openTarget(
+        {
+          type: "resource",
+          ref: { scheme: "node", kind: "note", id },
+          title: note?.title || "无标题",
+          transient: true,
+        },
+        "user",
+      )
     },
     [notes],
   )
@@ -156,7 +164,11 @@ export default function NotesSidebarTree({ depth = 1 }: { depth?: number }) {
       await reload()
       refreshSidebarTree()
       setExpanded((prev) => new Set(prev).add(parentId))
-      openNodeTab({ kind: "note", id: note.id }, note.title || "无标题")
+      openTarget({
+        type: "resource",
+        ref: { scheme: "node", kind: "note", id: note.id },
+        title: note.title || "无标题",
+      })
     } catch (e) {
       toast.error("新建子页失败", { description: String(e) })
     }

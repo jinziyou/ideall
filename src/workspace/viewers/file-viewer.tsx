@@ -16,7 +16,7 @@ import { useTabActive } from "../tab-active-context"
 import { useFileActions } from "../use-file-actions"
 import { clearFileDraft, readFileDraft, writeFileDraft } from "./file-draft"
 import FileViewerToolbar from "./file-viewer-toolbar"
-import type { NodeViewerProps } from "../node-viewers"
+import type { NodeViewerProps } from "../node-kind-ui"
 
 export type FileViewerMode = "preview" | "edit"
 

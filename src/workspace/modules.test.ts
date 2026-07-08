@@ -1,11 +1,11 @@
-// 路由 → 标签解析测试 (node:test + tsx): descriptorForPath / descriptorForNode 是深链、
+// 路由 → 标签解析测试 (node:test + tsx): descriptorForPath / descriptorForResource 是深链、
 // 刷新恢复与路由薄标记 (OpenWorkspaceTab) 的唯一入口, 锁定精确匹配 / 前缀回退 / 非法输入。
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { resourceQueryValue } from "@protocol/resource"
 import {
   descriptorForPath,
-  descriptorForNode,
+  descriptorForResource,
   moduleById,
   modulesForMode,
   isModeNeutralModule,
@@ -47,14 +47,14 @@ test("descriptorForPath: /home/agent 是虚拟命令路由 → 显式 null; 未�
   assert.equal(descriptorForPath("")?.kind, "home-overview", "空 pathname 兜底到概览")
 })
 
-test("descriptorForNode: ?resource 优先, 兼容旧 ?node 深链", () => {
-  const d = descriptorForNode("?node=note:abc123")
+test("descriptorForResource: ?resource 优先, 兼容旧 ?node 深链", () => {
+  const d = descriptorForResource("?node=note:abc123")
   assert.ok(d)
   assert.equal(d.kind, "node")
   assert.deepEqual(d.params, { kind: "note", id: "abc123" })
   assert.ok(d.path?.startsWith("/home/notes?resource="))
 
-  const resource = descriptorForNode(
+  const resource = descriptorForResource(
     `?node=note:old&resource=${resourceQueryValue({
       scheme: "node",
       kind: "file",
@@ -63,14 +63,14 @@ test("descriptorForNode: ?resource 优先, 兼容旧 ?node 深链", () => {
   )
   assert.deepEqual(resource?.params, { kind: "file", id: "a:b/c?d&e=f" })
 
-  assert.equal(descriptorForNode("?node=badkind:x"), null, "非法 kind 拒收")
-  const info = descriptorForNode(
+  assert.equal(descriptorForResource("?node=badkind:x"), null, "非法 kind 拒收")
+  const info = descriptorForResource(
     `?resource=${resourceQueryValue({ scheme: "info", kind: "entity", id: "ORG:示例" })}`,
   )
   assert.equal(info?.kind, "info")
   assert.equal(info?.path, "/info/entity?label=ORG&name=%E7%A4%BA%E4%BE%8B")
-  assert.equal(descriptorForNode("?other=1"), null, "无 node 参数")
-  assert.equal(descriptorForNode(""), null)
+  assert.equal(descriptorForResource("?other=1"), null, "无 node 参数")
+  assert.equal(descriptorForResource(""), null)
 })
 
 test("modulesForMode: 本地/连接各自簇 + crossMode 工具两侧都在", () => {

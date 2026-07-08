@@ -8,7 +8,7 @@ import { openExternal } from "@/lib/safe-url"
 import { getBookmark } from "@/files/stores/bookmarks-store"
 import type { Bookmark } from "@protocol/files"
 import { renameNodeTab } from "../store"
-import type { NodeViewerProps } from "../node-viewers"
+import type { NodeViewerProps } from "../node-kind-ui"
 
 function hostOf(url: string): string {
   try {

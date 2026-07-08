@@ -6,8 +6,8 @@ import dynamic from "next/dynamic"
 import { ChevronRight, Loader2 } from "lucide-react"
 import { getNote, getAncestors } from "@/files/stores/notes-store"
 import type { Note, NoteMeta } from "@protocol/files"
-import { openNodeTab, renameNodeTab, promoteActiveTab } from "../store"
-import type { NodeViewerProps } from "../node-viewers"
+import { openTarget, renameNodeTab, promoteActiveTab } from "../store"
+import type { NodeViewerProps } from "../node-kind-ui"
 
 const NoteEditor = dynamic(() => import("@/modules/home/notes/note-editor"), {
   ssr: false,
@@ -63,7 +63,13 @@ export default function NoteViewer({ nodeId }: NodeViewerProps) {
               <ChevronRight className="h-3 w-3 shrink-0" />
               <button
                 type="button"
-                onClick={() => openNodeTab({ kind: "note", id: a.id }, a.title || "无标题")}
+                onClick={() =>
+                  openTarget({
+                    type: "resource",
+                    ref: { scheme: "node", kind: "note", id: a.id },
+                    title: a.title || "无标题",
+                  })
+                }
                 className="max-w-[10rem] shrink-0 truncate rounded px-1 py-0.5 hover:bg-accent"
               >
                 {a.title || "无标题"}

@@ -3,8 +3,8 @@
 //
 // path = /home/notes?resource=node:kind:id (收敛到单一静态壳 out/home/notes.html; query 不参与
 // Tauri asset 寻址, 深链/刷新不 404)。URL 同步由 workspace-shell 的 <UrlSync/> 守护
-// (pathname+search 比对 + descriptorForNode 优先), 收敛靠 tabKey 命中而非 URL 串比对,
-// 不重演 dc7ce06 狂切。旧 ?node=kind:id 仍由 descriptorForNode 兼容读取。
+// (pathname+search 比对 + descriptorForResource 优先), 收敛靠 tabKey 命中而非 URL 串比对,
+// 不重演 dc7ce06 狂切。旧 ?node=kind:id 仍由 descriptorForResource 兼容读取。
 import { resourceQueryValue } from "@protocol/resource"
 import type { TabDescriptor } from "./types"
 import { isNodeKind, type NodeKind, type NodeRef } from "./node-ref"

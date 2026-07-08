@@ -34,7 +34,7 @@ import {
 } from "./store"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { useWindowViewport } from "@/lib/use-window-viewport"
-import { descriptorForNode, descriptorForPath } from "./modules"
+import { descriptorForResource, descriptorForPath } from "./modules"
 
 const RightAiPanel = React.lazy(() => import("./right-ai-panel"))
 
@@ -46,7 +46,7 @@ const RightAiPanel = React.lazy(() => import("./right-ai-panel"))
 //     而非组件渲染闭包里的旧值 —— 路由标记 OpenWorkspaceTab 的 openTab effect 已把 activeId
 //     对齐当前 URL, 这里读实时值即可立即收敛, 不与 marker 互相用对方旧值覆盖。
 //  2. 节点标签共享 /home/notes 壳、仅 query 区分; usePathname 不含 query, 故按 pathname+search
-//     比对并「优先 descriptorForNode(search)」解析 (?resource= 优先, 旧 ?node= 兼容)。
+//     比对并「优先 descriptorForResource(search)」解析 (?resource= 优先, 旧 ?node= 兼容)。
 //     收敛靠 tabKey(cur)===t.id 命中 (而非 URL 串
 //     比对, 避开 ":" vs "%3A" 编码不一致导致永不相等 → 每次都 replace 的狂切)。
 function UrlSync() {
@@ -78,7 +78,7 @@ function UrlSync() {
       // 若当前路径 / ?resource= 或旧 ?node= 能解析成标签 → 不抢, 保住深链;
       // 仅真正孤儿路由或已是 /home 才落 /home。
       const p = pathname || "/"
-      if (p !== "/home" && !descriptorForPath(p) && !descriptorForNode(search)) {
+      if (p !== "/home" && !descriptorForPath(p) && !descriptorForResource(search)) {
         router.replace("/home")
       }
       return
@@ -86,7 +86,7 @@ function UrlSync() {
     const t = liveTabs.find((x) => x.id === liveActiveId)
     if (!t?.path) return
     // 先认 node (含 query), 再认普通路径; URL 已归属激活标签 (含嵌入应用经 host.nav 改写的子路径) → 保留。
-    const cur = descriptorForNode(search) ?? descriptorForPath(pathname || "/")
+    const cur = descriptorForResource(search) ?? descriptorForPath(pathname || "/")
     if (cur && tabKey(cur) === t.id) {
       syncedOnceRef.current = true
       return

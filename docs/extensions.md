@@ -8,7 +8,7 @@
 
 ideall 已把扩展性因式分解成两条既有轴，**不要另起平铺的「扩展类型」清单**：
 
-1. **一切皆文件 / 一切皆标签** —— 内容收敛为统一命名空间的可寻址 Node（`@protocol/node` 的 `NodeKind`），打开任意节点即开一个工作区标签；标签内容由 `kind→viewer` 注册表分派（`src/workspace/node-viewers.ts` / `registry.tsx`）。
+1. **一切皆文件 / 一切皆标签** —— 内容收敛为统一命名空间的可寻址 Resource（本地文件是 `node` scheme 的 `NodeKind`），打开任意资源即经 `OpenTarget` 进入工作区标签；标签内容由 `resource-engines` / `node-kind-ui` / `registry.tsx` 分派。
 2. **MCP 是统一能力总线** —— 一切「可被调用的能力」收敛为本地 MCP server 上的 tool/resource/prompt。唯一工厂 `createLocalMcpServer`（`src/plugins/embed/local-mcp-server.ts:20`）同时被 **agent**（进程内 loopback，`agent-mcp.ts`）和**嵌入页**（iframe MessagePort，`host.tsx`）消费，共用同一份 `tools.ts` 注册面与 `PERMISSIONS` 联合（`src/plugins/embed/protocol.ts:56`）。
 
 ## 1. 扩展的三条一等轴 + 一条横切轴

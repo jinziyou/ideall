@@ -10,7 +10,7 @@ import { getThread } from "@/plugins/agent/lib/agent-store"
 import { requestOpenThread } from "@/plugins/agent/lib/agent-panel-bus"
 import ChatMessage from "@/plugins/agent/views/chat-message"
 import { renameNodeTab, setRightPanel } from "../store"
-import type { NodeViewerProps } from "../node-viewers"
+import type { NodeViewerProps } from "../node-kind-ui"
 
 export default function ThreadViewer({ nodeId }: NodeViewerProps) {
   const [thread, setThread] = React.useState<AgentThread | null>(null)

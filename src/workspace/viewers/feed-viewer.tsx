@@ -12,7 +12,7 @@ import type { SubscriptionType } from "@protocol/subscription"
 import type { Subscription } from "@protocol/subscription"
 import { getSubscription } from "@/files/stores/subscriptions-store"
 import { renameNodeTab } from "../store"
-import type { NodeViewerProps } from "../node-viewers"
+import type { NodeViewerProps } from "../node-kind-ui"
 
 const CTX = { perSource: 20, searchWindow: 200 }
 
