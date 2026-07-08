@@ -9,8 +9,9 @@ import {
   type InsertPos,
   type Tree,
 } from "@/files/notes-tree-util"
-import { moveBookmark, moveFolder } from "@/files/stores/bookmarks-store"
 import type { NodeKind } from "@protocol/node"
+import { invokeResourceAction } from "@/vfs/registry"
+import { nodeMoveActionInput, nodeResourceRef } from "@/vfs/node-actions"
 import { refreshSidebarTree } from "./sidebar-tree-bus"
 import type { ModuleId } from "../types"
 import { NodeTreeBranch } from "./sidebar-tree-node-branch"
@@ -98,8 +99,12 @@ export function DraggableNodeForest({
   const runMove = React.useCallback(
     async (id: string, kind: NodeKind, newParentId: string | null, pos?: InsertPos) => {
       try {
-        if (kind === "bookmark") await moveBookmark(id, newParentId, pos)
-        else if (kind === "folder") await moveFolder(id, pos)
+        await invokeResourceAction(
+          nodeResourceRef(kind, id),
+          "move",
+          nodeMoveActionInput(newParentId, pos?.afterSortKey),
+          { actor: "ui", permissions: [], intent: "action" },
+        )
         reload()
       } catch (e) {
         toast.error("移动失败", { description: String(e) })
