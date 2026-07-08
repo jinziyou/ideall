@@ -46,10 +46,13 @@ function TabLeadingMark({
   tab,
   active,
   compact = false,
+  transient = false,
 }: {
   tab: Tab
   active?: boolean
   compact?: boolean
+  /** 预览标签: 色点略小、略淡, 无激活光环 —— 与已固定标签区分。 */
+  transient?: boolean
 }) {
   if (isFileTab(tab)) {
     return (
@@ -57,7 +60,9 @@ function TabLeadingMark({
         className={cn(
           "flex shrink-0 items-center justify-center rounded bg-muted/70",
           compact ? "h-4 w-4" : "h-5 w-5",
-          active && "bg-background",
+          active && !transient && "bg-background",
+          active && transient && "bg-background/70",
+          transient && "opacity-55",
         )}
       >
         <FileTypeIcon name={tab.title} className={compact ? "h-3.5 w-3.5" : "h-3.5 w-3.5"} />
@@ -68,13 +73,18 @@ function TabLeadingMark({
   return (
     <span
       className={cn(
-        "shrink-0 rounded-full transition-[width,height,box-shadow]",
+        "shrink-0 rounded-full transition-[width,height,opacity,box-shadow]",
         compact
           ? "h-1.5 w-1.5"
-          : active
-            ? "h-2.5 w-2.5 shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_3px_hsl(var(--primary)/0.55)]"
-            : "h-2 w-2",
+          : transient
+            ? active
+              ? "h-2 w-2"
+              : "h-1.5 w-1.5"
+            : active
+              ? "h-2.5 w-2.5 shadow-[0_0_0_2px_hsl(var(--background)),0_0_0_3px_hsl(var(--primary)/0.55)]"
+              : "h-2 w-2",
         MODULE_DOT[tab.module],
+        transient && (active ? "opacity-55" : "opacity-35"),
       )}
     />
   )
@@ -304,19 +314,34 @@ function TabItem({
       }}
       style={{ minWidth: TAB_MIN_PX, maxWidth: TAB_MAX_PX }}
       className={cn(
-        "@container/tab group/tab relative flex h-full shrink-0 cursor-pointer select-none items-center gap-1.5 px-2 text-[13px] outline-none transition-[color,background-color,box-shadow] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        "@container/tab group/tab relative flex h-full shrink-0 cursor-pointer select-none items-center gap-1.5 px-2 text-[13px] outline-none transition-[color,background-color,box-shadow,border-color] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         active
-          ? "z-[1] -mb-px border-b-2 border-primary bg-background font-medium text-foreground shadow-[inset_0_1px_0_0_hsl(var(--border)/0.35)]"
-          : "border-r border-border/40 text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-        // 预览/瞬态标签: 斜体 (VS Code 式), 区分于已固定的常驻标签。
-        transient && "italic",
+          ? cn(
+              "z-[1] -mb-px border-b-2 text-foreground shadow-[inset_0_1px_0_0_hsl(var(--border)/0.35)]",
+              // 预览标签: 轻底 + 淡强调色 (不用 italic / 虚线底 —— 中文 UI 上观感差)。
+              transient
+                ? "border-primary/35 bg-muted/25 font-normal hover:border-primary/50"
+                : "border-primary bg-background font-medium",
+            )
+          : cn(
+              "border-r border-border/40 text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              transient && "text-muted-foreground/75",
+            ),
       )}
     >
-      <TabLeadingMark tab={t} active={active} />
+      <TabLeadingMark tab={t} active={active} transient={transient} />
       <span className="hidden shrink-0 rounded bg-muted px-1 py-px text-[10px] font-medium text-muted-foreground @[96px]/tab:inline">
         {TAB_VIEW_LABEL[tabViewType(t)]}
       </span>
-      <span className="min-w-0 flex-1 truncate" title={t.title}>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate",
+          transient &&
+            active &&
+            "underline decoration-primary/25 decoration-dotted underline-offset-[5px] decoration-[1px]",
+        )}
+        title={t.title}
+      >
         {t.title}
       </span>
       {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />}

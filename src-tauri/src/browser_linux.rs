@@ -3,12 +3,30 @@
 use gtk::prelude::*;
 use std::cell::RefCell;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use webkit2gtk::{TLSErrorsPolicy, WebContextExt, WebsiteDataManagerExt, WebViewExt};
 use wry::dpi::{LogicalPosition, LogicalSize};
-use wry::{PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtUnix};
+use wry::{PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtUnix, WebViewExtUnix};
 
 use crate::browser_scripts::CONTENT_JS;
 use crate::browser_cdp::BrowserCdpState;
 use crate::Bounds;
+
+#[derive(Copy, Clone, Debug, Default)]
+struct PixelRect {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+fn bounds_to_pixel_rect(b: &Bounds) -> PixelRect {
+    PixelRect {
+        x: b.x.round() as i32,
+        y: b.y.round() as i32,
+        w: b.w.max(1.0).round() as i32,
+        h: b.h.max(1.0).round() as i32,
+    }
+}
 
 #[derive(Default)]
 struct Inner {
@@ -60,9 +78,12 @@ fn ensure_overlay(main: &WebviewWindow, inner: &mut Inner) -> Result<(), String>
     let overlay = gtk::Overlay::new();
     overlay.add(&vbox);
 
+    // 铺满 overlay 以便 gtk_fixed_move 用视口绝对坐标; 点击用 input shape 限制在内容区。
     let fixed = gtk::Fixed::new();
-    fixed.set_halign(gtk::Align::Start);
-    fixed.set_valign(gtk::Align::Start);
+    fixed.set_hexpand(true);
+    fixed.set_vexpand(true);
+    fixed.set_halign(gtk::Align::Fill);
+    fixed.set_valign(gtk::Align::Fill);
     overlay.add_overlay(&fixed);
 
     gtk_win.add(&overlay);
@@ -74,16 +95,53 @@ fn ensure_overlay(main: &WebviewWindow, inner: &mut Inner) -> Result<(), String>
     Ok(())
 }
 
-fn apply_fixed_geometry(fixed: &gtk::Fixed, b: &Bounds) {
-    fixed.set_margin_start(b.x as i32);
-    fixed.set_margin_top(b.y as i32);
-    fixed.set_size_request(b.w.max(1.0) as i32, b.h.max(1.0) as i32);
+/// 仅内容区接收鼠标, 其余区域穿透到主 webview (侧栏/标签/工具条可点)。
+fn update_fixed_input_shape(fixed: &gtk::Fixed, b: &Bounds) {
+    let Some(window) = fixed.window() else {
+        return;
+    };
+    let r = bounds_to_pixel_rect(b);
+    if r.w < 1 || r.h < 1 {
+        clear_fixed_input_shape(fixed);
+        return;
+    }
+    let region = cairo::Region::create_rectangle(&cairo::RectangleInt::new(r.x, r.y, r.w, r.h));
+    window.input_shape_combine_region(&region, 0, 0);
+}
+
+fn clear_fixed_input_shape(fixed: &gtk::Fixed) {
+    if let Some(window) = fixed.window() {
+        let empty = cairo::Region::create();
+        window.input_shape_combine_region(&empty, 0, 0);
+    }
+}
+
+fn reposition_embedded_webview(fixed: &gtk::Fixed, wv: &WebView, b: &Bounds) -> Result<(), String> {
+    let r = bounds_to_pixel_rect(b);
+    let gtk_wv = wv.webview();
+    gtk_wv.set_size_request(r.w, r.h);
+    fixed.move_(&gtk_wv, r.x, r.y);
+    wv.set_bounds(webview_bounds(b))
+        .map_err(|e| e.to_string())?;
+    update_fixed_input_shape(fixed, b);
+    Ok(())
 }
 
 fn webview_bounds(b: &Bounds) -> Rect {
+    let r = bounds_to_pixel_rect(b);
     Rect {
-        position: LogicalPosition::new(0.0, 0.0).into(),
-        size: LogicalSize::new(b.w.max(1.0), b.h.max(1.0)).into(),
+        position: LogicalPosition::new(r.x as f64, r.y as f64).into(),
+        size: LogicalSize::new(r.w as f64, r.h as f64).into(),
+    }
+}
+
+/// 内嵌浏览器需访问内网自签 HTTPS (如 inventory); 仅作用于本子 webview 的 WebContext, 不影响主窗口。
+fn configure_embedded_browser_tls(wv: &WebView) {
+    let gtk_wv = wv.webview();
+    if let Some(ctx) = gtk_wv.context() {
+        if let Some(wdm) = ctx.website_data_manager() {
+            wdm.set_tls_errors_policy(TLSErrorsPolicy::Ignore);
+        }
     }
 }
 
@@ -115,8 +173,6 @@ pub fn open(app: &AppHandle, url: String, b: Bounds) -> Result<(), String> {
             .overlay_fixed
             .as_ref()
             .ok_or_else(|| "浏览器 overlay 未就绪".to_string())?;
-        apply_fixed_geometry(fixed, &b);
-
         let app_nav = app.clone();
         let app_load = app.clone();
         let webview = WebViewBuilder::new()
@@ -133,6 +189,8 @@ pub fn open(app: &AppHandle, url: String, b: Bounds) -> Result<(), String> {
             })
             .build_gtk(fixed)
             .map_err(|e| e.to_string())?;
+        configure_embedded_browser_tls(&webview);
+        reposition_embedded_webview(fixed, &webview, &b)?;
 
         inner.webview = Some(webview);
         inner.visible = true;
@@ -144,18 +202,14 @@ pub fn set_bounds(app: &AppHandle, b: Bounds) -> Result<(), String> {
     remember_content(&b);
     if cdp_enabled(app) {
         let state = app.state::<BrowserCdpState>();
-        return tauri::async_runtime::block_on(crate::browser_cdp::set_bounds(&state, b));
+        return tauri::async_runtime::block_on(crate::browser_cdp::set_bounds(&state, app, b));
     }
     with_browser(|inner| {
         if !inner.visible {
             return Ok(());
         }
-        if let Some(fixed) = inner.overlay_fixed.as_ref() {
-            apply_fixed_geometry(fixed, &b);
-        }
-        if let Some(wv) = inner.webview.as_ref() {
-            wv.set_bounds(webview_bounds(&b))
-                .map_err(|e| e.to_string())?;
+        if let (Some(fixed), Some(wv)) = (inner.overlay_fixed.as_ref(), inner.webview.as_ref()) {
+            reposition_embedded_webview(fixed, wv, &b)?;
         }
         Ok(())
     })
@@ -252,7 +306,7 @@ pub fn hide(app: &AppHandle) -> Result<(), String> {
             wv.set_visible(false).map_err(|e| e.to_string())?;
         }
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
-            fixed.set_size_request(0, 0);
+            clear_fixed_input_shape(fixed);
             fixed.hide();
         }
         Ok(())
@@ -262,13 +316,13 @@ pub fn hide(app: &AppHandle) -> Result<(), String> {
 pub fn show(app: &AppHandle) -> Result<(), String> {
     if cdp_enabled(app) {
         let state = app.state::<BrowserCdpState>();
-        return tauri::async_runtime::block_on(crate::browser_cdp::show(&state));
+        return tauri::async_runtime::block_on(crate::browser_cdp::show(&state, app));
     }
     with_browser(|inner| {
         inner.visible = true;
         let b = LAST_CONTENT.with(|c| *c.borrow());
-        if let Some(fixed) = inner.overlay_fixed.as_ref() {
-            apply_fixed_geometry(fixed, &b);
+        if let (Some(fixed), Some(wv)) = (inner.overlay_fixed.as_ref(), inner.webview.as_ref()) {
+            reposition_embedded_webview(fixed, wv, &b)?;
             fixed.show_all();
         }
         if let Some(wv) = inner.webview.as_ref() {
@@ -289,7 +343,7 @@ pub fn close(app: &AppHandle) -> Result<(), String> {
             let _ = wv.set_visible(false);
         }
         if let Some(fixed) = inner.overlay_fixed.as_ref() {
-            fixed.set_size_request(0, 0);
+            clear_fixed_input_shape(fixed);
             fixed.hide();
         }
         close_webview(inner);

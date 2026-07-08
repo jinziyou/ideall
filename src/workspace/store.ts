@@ -246,7 +246,7 @@ function evictColdTabs(tabs: Tab[], protect: Set<string>): Tab[] {
 /** 打开 (或激活已存在的) 标签, 并把活动模块同步到该标签所属模块 (驱动活动栏高亮 / 侧栏)。
  *  不翻 mode 视图 (打开标签是内容导航, 不是视图切换; 见 MODE_OF 注释)。
  *  source 默认 user (UI/路由触发); agent 经 ui.openTab 打开时传 "agent" —— 仅影响隐式同意, 不改打开行为。
- *  opts.transient=true → VS Code 式预览标签 (复用单一预览槽, 斜体显示); 缺省 = 常驻打开
+ *  opts.transient=true → 预览标签 (复用单一预览槽: 轻底/淡色点/标题点线下划线); 缺省 = 常驻打开
  *  (若命中当前预览槽则提升为常驻)。新增常驻标签超过软上限时自动回收最久未用的冷标签。 */
 export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: OpenTabOpts) {
   hideBrowserWebviewUnlessBrowserTab(d.kind)

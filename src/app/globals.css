@@ -52,8 +52,8 @@
     0 4px 16px -4px hsl(var(--shadow-overlay-color)), 0 1px 3px hsl(var(--shadow-overlay-color));
 
   --font-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    var(--font-source-han-sans), "Source Han Sans SC", "Noto Sans SC", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 
   /* 标识符 (同步码 / domain / peer id / hash) 用等宽, 给本地优先数据「终端」质感 */
   --font-mono:

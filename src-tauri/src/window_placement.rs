@@ -21,6 +21,11 @@ static WSL_PSEUDO_MAX: AtomicBool = AtomicBool::new(false);
 
 /// 铺满主屏可用区域 (WSL 最大化用)。
 pub fn apply_primary_work_area(window: &WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if running_under_wsl() {
+        // 须在改尺寸/坐标前置位, 否则 Resized 回调里的 try_place_window 会把窗口拉回居中。
+        WSL_PSEUDO_MAX.store(true, Ordering::Relaxed);
+    }
     let screens = enumerate_screens(window)?;
     let primary = pick_primary_screen(window, &screens)?;
     if window.is_fullscreen().unwrap_or(false) {
@@ -33,24 +38,27 @@ pub fn apply_primary_work_area(window: &WebviewWindow) -> Result<(), String> {
     let scale = window
         .scale_factor()
         .unwrap_or_else(|_| primary.scale_factor());
-    // set_size 走逻辑像素 (与 place_main_window 一致); 误用 PhysicalSize 在 HiDPI/WSLg 下
-    // 会导致外壳变大而 webview 视口仍停在旧尺寸 → UI 挤在左上角、下方大块空白。
     let logical_w = work.size.width as f64 / scale;
     let logical_h = work.size.height as f64 / scale;
     window
         .set_size(LogicalSize::new(logical_w, logical_h))
         .map_err(|e| e.to_string())?;
+    settle_window_size_for_wsl(window, &work.size)?;
     apply_window_position(window, work.position)?;
     notify_webview_resize(window);
-    eprintln!(
-        "[ideall] 铺满主屏 work area: {}×{} logical (scale={scale}, physical {}×{}) @ ({}, {})",
-        logical_w.round(),
-        logical_h.round(),
-        work.size.width,
-        work.size.height,
-        work.position.x,
-        work.position.y
-    );
+    if let Ok(outer) = window.outer_size() {
+        eprintln!(
+            "[ideall] 铺满主屏 work area: {}×{} logical (scale={scale}, physical {}×{}) @ ({}, {}), 实际 {}×{}",
+            logical_w.round(),
+            logical_h.round(),
+            work.size.width,
+            work.size.height,
+            work.position.x,
+            work.position.y,
+            outer.width,
+            outer.height
+        );
+    }
     Ok(())
 }
 
@@ -74,7 +82,6 @@ pub fn toggle_primary_maximize(window: &WebviewWindow, conf: &WindowConfig) -> R
             return Ok(false);
         }
         apply_primary_work_area(window)?;
-        WSL_PSEUDO_MAX.store(true, Ordering::Relaxed);
         return Ok(true);
     }
     let next = !window.is_maximized().unwrap_or(false);
@@ -346,7 +353,30 @@ fn gtk_placement_offset() -> (i32, i32) {
     }
 }
 
-/// 设置窗口位置。WSLg Wayland 忽略坐标; X11 下走 gtk move_ (不做读回补偿)。
+/// WSLg 下 set_size 异步生效; 尺寸未收敛就 move_ 会导致 WM 拒绝贴边 (尤其最大化到 0,0)。
+#[cfg(target_os = "linux")]
+fn settle_window_size_for_wsl(
+    window: &WebviewWindow,
+    target: &PhysicalSize<u32>,
+) -> Result<(), String> {
+    if !running_under_wsl() {
+        return Ok(());
+    }
+    for _ in 0..8 {
+        while gtk::events_pending() {
+            gtk::main_iteration();
+        }
+        if let Ok(outer) = window.outer_size() {
+            if outer.width <= target.width + 2 && outer.height <= target.height + 2 {
+                return Ok(());
+            }
+        }
+        std::thread::sleep(Duration::from_millis(16));
+    }
+    Ok(())
+}
+
+/// 设置窗口位置。WSLg Wayland 忽略坐标; X11 下走 gtk move_ (不做读回补偿 —— 立即读回常为旧坐标)。
 fn apply_window_position(
     window: &WebviewWindow,
     pos: PhysicalPosition<i32>,

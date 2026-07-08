@@ -10,7 +10,7 @@ use chromiumoxide::cdp::browser_protocol::browser::{
 use futures::StreamExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::browser_scripts::{self, CONTENT_JS, LIST_INTERACTIVE_JS};
@@ -86,6 +86,21 @@ async fn window_id_of(browser: &Browser, page: &Page) -> Result<WindowId, String
         .await
         .map_err(|e| e.to_string())?;
     Ok(resp.result.window_id)
+}
+
+/// 前端 getBoundingClientRect 是视口坐标; CDP/Chrome 窗口要屏幕物理像素。
+fn viewport_bounds_to_screen(app: &AppHandle, b: Bounds) -> Result<Bounds, String> {
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let scale = main.scale_factor().map_err(|e| e.to_string())?;
+    let outer = main.outer_position().map_err(|e| e.to_string())?;
+    Ok(Bounds {
+        x: outer.x as f64 + b.x * scale,
+        y: outer.y as f64 + b.y * scale,
+        w: b.w * scale,
+        h: b.h * scale,
+    })
 }
 
 async fn apply_window_bounds(
@@ -219,10 +234,11 @@ pub async fn open(
 
     std::fs::create_dir_all(profile_dir()).map_err(|e| e.to_string())?;
 
-    let wx = b.x.max(0.0) as i32;
-    let wy = b.y.max(0.0) as i32;
-    let ww = b.w.max(1.0) as u32;
-    let wh = b.h.max(1.0) as u32;
+    let screen = viewport_bounds_to_screen(app, b)?;
+    let wx = screen.x.max(0.0) as i32;
+    let wy = screen.y.max(0.0) as i32;
+    let ww = screen.w.max(1.0) as u32;
+    let wh = screen.h.max(1.0) as u32;
 
     let config = BrowserConfig::builder()
         .chrome_executable(chrome)
@@ -231,6 +247,8 @@ pub async fn open(
         .arg("--no-first-run")
         .arg("--disable-sync")
         .arg("--disable-features=TranslateUI")
+        // 内网 inventory 等站点常用自签证书; 仅 CDP 独立窗口, 不影响主 App webview。
+        .arg("--ignore-certificate-errors")
         .arg(format!("--window-position={wx},{wy}"))
         .arg(format!("--window-size={ww},{wh}"))
         .arg(format!("--app={url}"))
@@ -267,11 +285,12 @@ pub async fn open(
     Ok(())
 }
 
-pub async fn set_bounds(state: &BrowserCdpState, b: Bounds) -> Result<(), String> {
+pub async fn set_bounds(state: &BrowserCdpState, app: &AppHandle, b: Bounds) -> Result<(), String> {
     *state.bounds.lock().await = b;
+    let screen = viewport_bounds_to_screen(app, b)?;
     let guard = state.session.lock().await;
     if let Some(sess) = guard.as_ref() {
-        apply_window_bounds(&sess.browser, &sess.page, b, Some(WindowState::Normal)).await?;
+        apply_window_bounds(&sess.browser, &sess.page, screen, Some(WindowState::Normal)).await?;
     }
     Ok(())
 }
@@ -326,12 +345,13 @@ pub async fn hide(state: &BrowserCdpState) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn show(state: &BrowserCdpState) -> Result<(), String> {
+pub async fn show(state: &BrowserCdpState, app: &AppHandle) -> Result<(), String> {
     *state.visible.lock().await = true;
     let b = *state.bounds.lock().await;
+    let screen = viewport_bounds_to_screen(app, b)?;
     let guard = state.session.lock().await;
     if let Some(sess) = guard.as_ref() {
-        apply_window_bounds(&sess.browser, &sess.page, b, Some(WindowState::Normal)).await?;
+        apply_window_bounds(&sess.browser, &sess.page, screen, Some(WindowState::Normal)).await?;
         let _ = sess.page.bring_to_front().await;
     }
     Ok(())
