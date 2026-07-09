@@ -34,7 +34,7 @@ base64 = "0.22"
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18", features = ["v3_24"] }
 gdk = "0.18"
-cairo-rs = "0.18"
+cairo-rs = "0.22"
 webkit2gtk = "2.0"
 wry = { version = "0.55", default-features = false, features = ["os-webview", "x11"] }
 chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"] }
