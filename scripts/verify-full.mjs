@@ -10,6 +10,15 @@ import {
 
 const PORTS = [5020, 5021, 5022, 5023]
 const READY_TIMEOUT_MS = 90_000
+const HELP = `用法:
+  pnpm verify:full
+  pnpm verify:smoke
+  node scripts/verify-full.mjs [--smoke-only]
+
+说明:
+  verify:full 先运行 verify:base，再启动 Next dev server，并依次运行 notes/files/plugins/trash 冒烟。
+  --smoke-only 跳过 verify:base，仅启动开发服并运行冒烟脚本。
+`
 
 let devServer = null
 
@@ -58,7 +67,16 @@ async function startReadyDevServer() {
 }
 
 async function main() {
-  const smokeOnly = process.argv.includes("--smoke-only")
+  const args = process.argv.slice(2)
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(HELP.trimEnd())
+    return
+  }
+
+  const unknownArg = args.find((arg) => arg !== "--smoke-only")
+  if (unknownArg) throw new Error(`unknown argument: ${unknownArg}`)
+
+  const smokeOnly = args.includes("--smoke-only")
   const smokeScripts = ["smoke:notes", "smoke:files", "smoke:plugins", "smoke:trash"]
 
   if (!smokeOnly) {

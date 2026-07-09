@@ -3,7 +3,7 @@
 // 用法: pnpm smoke:notes   (或 BASE=http://localhost:<端口> pnpm smoke:notes 指向其他服)
 // 前提: 先起一个服 —— 开发态 pnpm dev (5020), 或生产形态 pnpm build && pnpm serve:out (5030,
 // CI 冒烟用后者, 测的就是静态导出产物)。截图落 /tmp/notes-smoke/*.png; 退出码 0=全过, 1=有失败。
-import { BASE, createSmokeRun, recordNoPageErrors } from "./smoke-lib.mjs"
+import { BASE, createSmokeRun, recordNoPageErrors } from "./lib.mjs"
 
 const URL = `${BASE}/home/notes`
 const SHOT_DIR = "/tmp/notes-smoke"

@@ -9,6 +9,19 @@ import { fileURLToPath } from "node:url"
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "out")
 const PORT = Number(process.env.PORT || 5030)
+const HELP = `用法:
+  pnpm serve:out
+  PORT=5031 node scripts/serve-out.mjs
+
+说明:
+  从 out/ 启动静态导出预览服，路由解析顺序为:
+  /x -> out/x -> out/x.html -> out/x/index.html -> 404.html
+`
+
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(HELP.trimEnd())
+  process.exit(0)
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",

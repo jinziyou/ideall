@@ -1,14 +1,14 @@
-// Plugin core smoke test (Playwright) against the real browser UI.
+// 插件核心链路端到端冒烟 (Playwright) —— 真浏览器驱动。
 //
-// Usage: pnpm smoke:plugins
-// Optional: BASE=http://localhost:<port> pnpm smoke:plugins
-// Screenshots: /tmp/plugins-smoke/*.png
-import { BASE, createSmokeRun, recordNoPageErrors } from "./smoke-lib.mjs"
-import { runAudioPluginSmoke } from "./smoke-plugins/audio.mjs"
-import { runCodePluginSmoke } from "./smoke-plugins/code.mjs"
-import { runDatabasePluginSmoke } from "./smoke-plugins/database.mjs"
-import { runGitPluginSmoke } from "./smoke-plugins/git.mjs"
-import { SHOT_DIR, WORKSPACE_KEY, cleanupPluginSmokeData } from "./smoke-plugins/shared.mjs"
+// 用法: pnpm smoke:plugins
+// 可选: BASE=http://localhost:<端口> pnpm smoke:plugins
+// 截图: /tmp/plugins-smoke/*.png
+import { BASE, createSmokeRun, recordNoPageErrors } from "./lib.mjs"
+import { runAudioPluginSmoke } from "./plugins/audio.mjs"
+import { runCodePluginSmoke } from "./plugins/code.mjs"
+import { runDatabasePluginSmoke } from "./plugins/database.mjs"
+import { runGitPluginSmoke } from "./plugins/git.mjs"
+import { SHOT_DIR, WORKSPACE_KEY, cleanupPluginSmokeData } from "./plugins/shared.mjs"
 
 const run = await createSmokeRun({ shotDir: SHOT_DIR })
 const { page, pageErrors, record } = run

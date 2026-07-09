@@ -1,6 +1,20 @@
 import { access, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 
+const HELP = `用法:
+  pnpm verify:static-export
+  node scripts/check-static-export.mjs
+
+说明:
+  检查 out/ 是否包含关键静态入口与 _next/static/chunks/*.js。
+  该脚本不执行构建；如 out/ 不存在，先运行 pnpm build。
+`
+
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(HELP.trimEnd())
+  process.exit(0)
+}
+
 const outDir = path.join(process.cwd(), "out")
 const requiredFiles = [
   "index.html",

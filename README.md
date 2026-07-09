@@ -82,7 +82,7 @@ pnpm verify:smoke:static  # 生产形态冒烟：build → serve out/ → notes/
 pnpm verify:full          # 基础门禁 + 开发服冒烟（自动挑 5020-5023 可用端口）
 ```
 
-静态导出产物检查可单独运行 `pnpm verify:static-export`；已有 `out/` 时可用 `node scripts/verify-static-smoke.mjs --no-build smoke:notes` 只跑指定冒烟脚本。
+静态导出产物检查可单独运行 `pnpm verify:static-export`；已有 `out/` 时可用 `node scripts/verify-static-smoke.mjs --no-build smoke:notes` 只跑指定冒烟脚本。脚本入口、参数与新增脚本约定见 [docs/scripts.md](docs/scripts.md)。
 
 ### 连接后端
 
@@ -125,6 +125,7 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | 架构权威说明：领域模型、模块与边界、数据流图、技术选型、关键不变量 |
 | [docs/app.md](docs/app.md) | App（桌面 / 移动）当前开发、构建、CI、发布与签名手册 |
+| [docs/scripts.md](docs/scripts.md) | 本地验证、冒烟、API codegen、发布与脚本维护入口 |
 | [docs/app-history.md](docs/app-history.md) | App-only / Tauri 化历史路线图 |
 | [docs/design/ui-style.md](docs/design/ui-style.md) | UI 视觉规范（现代 · 面板 · 留白）：阴影 / 颜色 / 圆角 / 间距 / 公共组件的统一口径 |
 | [docs/claude.md](docs/claude.md) | 仓库结构与开发约定（贡献者速查） |

@@ -1,4 +1,4 @@
-import { BASE } from "../smoke-lib.mjs"
+import { BASE } from "../lib.mjs"
 
 export const SHOT_DIR = "/tmp/plugins-smoke"
 export const RUN_ID = Date.now()

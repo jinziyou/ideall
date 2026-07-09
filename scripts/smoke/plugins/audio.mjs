@@ -1,4 +1,4 @@
-import { BASE, createSilentWavBuffer } from "../smoke-lib.mjs"
+import { BASE, createSilentWavBuffer } from "../lib.mjs"
 import { AUDIO_TITLE, SHOT_DIR, deleteDb, openPluginPage, resetWorkspace } from "./shared.mjs"
 
 export async function runAudioPluginSmoke({ page, record, markStage }) {

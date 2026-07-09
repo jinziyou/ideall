@@ -11,6 +11,16 @@ import {
 
 const PORTS = [5030, 5031, 5032, 5033]
 const READY_TIMEOUT_MS = 45_000
+const HELP = `用法:
+  pnpm verify:smoke:static
+  node scripts/verify-static-smoke.mjs [--no-build] [smoke:notes|smoke:files|smoke:files:preview|smoke:plugins|smoke:trash ...]
+
+说明:
+  以生产形态运行浏览器冒烟：可选执行 pnpm build，检查 out/，启动静态预览服，再运行指定 smoke 脚本。
+
+环境变量:
+  SMOKE_LEVEL=core|full  控制部分冒烟脚本的覆盖深度，默认 full。
+`
 
 let staticServer = null
 
@@ -56,6 +66,11 @@ async function startReadyStaticServer() {
 
 async function main() {
   const args = process.argv.slice(2)
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(HELP.trimEnd())
+    return
+  }
+
   const noBuild = args.includes("--no-build")
   const smokeLevel = (process.env.SMOKE_LEVEL || "full").toLowerCase() === "core" ? "core" : "full"
   const defaultSmokeScripts = ["smoke:notes", "smoke:plugins", "smoke:trash", "smoke:files"]

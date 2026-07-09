@@ -70,6 +70,8 @@ pnpm verify:static-export
 pnpm verify:smoke:static  # 静态导出生产形态冒烟
 ```
 
+脚本入口、参数和新增脚本约定见 [scripts.md](scripts.md)。
+
 ### 指定备用端口启动（5020 被占用时）
 
 默认 `pnpm app:dev` 内部走 `next dev -p 5020`。WSL 下编辑器（Cursor / VS Code Remote）的自动端口转发可能钉死 5020，导致反复报 `EADDRINUSE: address already in use :::5020`。

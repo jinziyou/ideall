@@ -1,10 +1,9 @@
-// File IDE smoke test (Playwright) against the real browser UI:
-//   upload -> sidebar open file tab -> edit/save -> preview ->
-//   rename -> tags -> delete/undo -> final UI cleanup.
+// 资源 / 文件 IDE 端到端冒烟 (Playwright) —— 真浏览器驱动:
+//   上传 → 侧栏打开文件标签 → 编辑/保存 → 预览 → 重命名 → 标签 → 删除/撤销 → UI 清理。
 //
-// Usage: pnpm smoke:files
-// Optional: BASE=http://localhost:<port> pnpm smoke:files
-// Screenshots: /tmp/files-smoke/*.png
+// 用法: pnpm smoke:files
+// 可选: BASE=http://localhost:<端口> pnpm smoke:files
+// 截图: /tmp/files-smoke/*.png
 import {
   BASE,
   SMOKE_LEVEL,
@@ -16,7 +15,7 @@ import {
   waitForLiveFileById,
   waitForLiveFileByName,
   waitForNoLiveFileByName,
-} from "./smoke-lib.mjs"
+} from "./lib.mjs"
 
 const RESOURCES_URL = `${BASE}/home/resources`
 const SHOT_DIR = "/tmp/files-smoke"

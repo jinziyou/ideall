@@ -96,9 +96,9 @@ home（即「我的」）是本机数据区，apps（应用）是本机已安装
 | **shell** | `@/shell/*` | 终端外壳——命令台 / header / bottom-tab-bar / 主题（theme/theme-applier）/ account / mobile-nav / nav-config，加 `boot`（组合根，**唯一**允许 import 各 manifest 处）/ `boot-gate`（启动闸）。 |
 | **workspace** | `@/workspace/*` | 一切皆标签页——`tab-host`（keep-alive 多标签）/ `registry`（resource 与静态面板渲染）/ `resource-tab` / `resource-engines` / `store` / `viewers`（按 kind：note/file/bookmark/feed/thread）/ `modules`（模块配置单一真相源）/ `node-ref` / `tree/`（跨 kind Resource 文件树：`sidebar-tree` / `sidebar-tree-data` / `sidebar-tree-node-branch` / `sidebar-tree-bus` / `draggable-node-forest`；根命名空间 places 概念）/ `local-search-items`（⌘K 统一面板的 VFS 本机内容源），以及活动栏 / 二级侧栏 / 标签条 / 状态栏 4 件 IDE chrome。 |
 | **vfs** | `@/vfs/*` | Resource VFS 挂载层——`registry` 分派 `node/info/community/tool/browser/app` provider；`node-provider` 包装统一 Node 库并保留隐私/权限闸；`connected-providers` 通过 `connected-resource-manifest` 暴露连接模式 route/title/capability，并把本地书签列为 browser bookmark 资源；`node-actions` / `node-file-actions` 提供 UI action 输入映射；`save-to-mine-projector` 把远端资源幂等投影为关注或书签；provider watch 按 query 粒度驱动显示缓存失效。 |
-| **files** | `@/files/*` | 一切皆文件——统一 Node 数据层。`stores/`（各 kind store + `nodes-store` 跨 kind 协调层）；顶层 Node 原语：`note-blocks` / `sort-key` / `notes-tree-util` / `note-write-queue` / `flowback` / `feed-node`（关注↔feed 节点投影）/ `files-port`（FilesPort 实现）/ `bookmark-import` / `spoke-meta`。 |
+| **files** | `@/files/*` | 一切皆文件——统一 Node 数据层。`stores/`（各 kind store + `nodes-store` 跨 kind 协调层）；顶层 Node 原语：`note-blocks` / `sort-key` / `notes-tree-util` / `note-write-queue` / `flowback` / `feed-node`（关注↔feed 节点投影）/ `files-port`（FilesPort 实现）/ `bookmark-import`。 |
 | **modules** | `@/modules/*` | 功能模块——`home`（「我的」：本机笔记/书签/资源/关注/对话的功能 UI = overview/notes/bookmarks/resources/publications/subscriptions）/ `info` / `community` / `tool` / `apps`（本机已安装应用启动器，Tauri 桌面 / 本地模式）。 |
-| **plugins** | `@/plugins/*` | 插件——`agent`（AI 环境层，BYO-key）/ `sync`（跨端 E2E 同步）/ `embed`（嵌入页 + AI 共用的 Grant→`createLocalMcpServer` 能力链路）。 |
+| **plugins** | `@/plugins/*` | 插件——`agent`（AI 环境层，BYO-key）/ `sync`（跨端 E2E 同步）/ `embed`（嵌入页 + AI 共用的 Grant→`createLocalMcpServer` 能力链路）/ `code` / `git` / `shell` / `audio` / `database`；公共插件数据能力在 `plugins/shared`。 |
 | **protocol** | `@protocol/*` | 契约 / 端口（纯类型 / 纯函数，**不含 UI**）：`node`（统一 Node 联合 + `stripNode`）/ `files`（FilesPort + 投影域类型 Note/Bookmark/StoredFile/Subscription/Thread）/ `note-merge`（块级合并纯代数）/ `subscription` / `content`（解析注册表）/ `flowback` / `sync`（SyncPort）/ `server-port`（ServerPort）/ `peer` / `auth`。 |
 | **ui** | `@/ui/*` | shadcn 原语 + 块编辑器（`editor/`）。 |
 | **shared** | `@/shared/*` | 跨层共享 UI + 关注反馈（`feeders/`：save-to-mine / subscribe-button / pin-tool-button）。 |
@@ -227,5 +227,6 @@ ideall 仅以 App 形态分发（Tauri 工程在 `src-tauri/`）：构建期 `ne
 - [design/archive/ai-native-redesign.md](design/archive/ai-native-redesign.md) — 已落地的 AI 原生重设计历史稿：统一 Node 模型、四步折叠、墓碑、一切皆标签页 UI、`fs.*` AI 层与隐私三道闸、笔记块级合并的完整推导与雷区清单（本文 §2/§3.4/§6 已吸收落地结果）。
 - [design/archive/resource-vfs-refactor.md](design/archive/resource-vfs-refactor.md) — 已落地的 Resource/VFS 重构历史稿：ResourceRef、Provider、OpenTarget、Engine、权限隐私与迁移兼容策略。
 - [app.md](app.md) — App（桌面/移动）方案、平台矩阵、CI、签名与分阶段路线图。
+- [scripts.md](scripts.md) — 本地验证、冒烟、API codegen、发布与脚本维护入口。
 - [claude.md](claude.md) — 仓库结构与开发约定（贡献者必读）。
 - [.github/SECURITY.md](.github/SECURITY.md) — 安全策略与漏洞报告（含同步加密关注点）。

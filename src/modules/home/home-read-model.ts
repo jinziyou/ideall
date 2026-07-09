@@ -4,7 +4,7 @@ import { listFiles } from "@/files/stores/files-store"
 import { listNotes } from "@/files/stores/notes-store"
 import { listSubscriptions } from "@/files/stores/subscriptions-store"
 import { listThreads } from "@/files/stores/threads-store"
-import { SUB_SPOKE_META } from "@/files/spoke-meta"
+import { SUB_SPOKE_META } from "./subscriptions/subscription-meta"
 
 export type HomeActivityItem = {
   id: string

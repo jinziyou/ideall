@@ -8,6 +8,22 @@ import { readdirSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
+const HELP = `用法:
+  pnpm test
+  pnpm test <路径或文件名子串...>
+  node --import tsx scripts/run-tests.mjs <路径或文件名子串...>
+
+说明:
+  运行 src/**/*.test.ts。传入一个或多个子串时，只运行路径包含任一子串的测试文件。
+  agent-mcp-external.test.ts 与 agent-mcp-stdio.test.ts 会在并发批次后串行运行。
+`
+
+const args = process.argv.slice(2)
+if (args.includes("--help") || args.includes("-h")) {
+  console.log(HELP.trimEnd())
+  process.exit(0)
+}
+
 const testWorkerSource = `
 import { run } from "node:test"
 import { spec } from "node:test/reporters"
@@ -27,7 +43,7 @@ stream.compose(spec).pipe(process.stdout)
 `
 
 const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src")
-const filters = process.argv.slice(2)
+const filters = args
 // MCP 端到端传输测试会启动真实 SDK server/子进程; 在全文件并发 runner 下不稳定, 收尾后串行跑。
 const serialTestFileNames = new Set(["agent-mcp-external.test.ts", "agent-mcp-stdio.test.ts"])
 const files = readdirSync(srcDir, { recursive: true })
