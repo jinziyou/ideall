@@ -267,7 +267,7 @@ info 的 manifest 类似，典型 `permissions`: `["data.info:read"?, "hub.subsc
 
 ## 7. 身份与 token（ideall 持有）
 
-- **现状即如此**：发布身份的 token/用户存于 `localStorage`（`wonita:auth:token` / `wonita:auth:user`），经 `auth-store`（`getSession/setSession/clearSession`）。这是**公开发布身份**，与无账号 E2E 同步身份是两套（见 `auth-store.ts` 注释）。
+- **现状即如此**：发布身份的 token 存于 secure-store key `ideall:auth:token`（Web 降级为 `ideall:secure-fallback:ideall:auth:token`），用户资料存于 `localStorage` 的 `ideall:auth:user`；历史 `wonita:auth:*` 键仅作一次性迁移来源。会话经 `auth-store`（`getSession/setSession/clearSession`）管理。这是**公开发布身份**，与无账号 E2E 同步身份是两套（见 `auth-store.ts` 注释）。
 - **登录只在 ideall 做**：X25519 方案（`getServerPublicKey → encryptPassword → login/register → setSession`）。被嵌入页**不做登录**、不存 token。
 - **嵌入应用如何"以发布身份行事"**：调 `community.publish` / `me.updateProfile`，宿主在 handler 内取 `getSession().token` 调 `ServerPort.publish(token, draft)`。**token 不出现在任何返回值里**。
 - **未登录**：`identity.me` 返回 `null`、写类 tool 返回 `-32002`；页面提示用户在 ideall 登录（可附 `host.navigate({route:"/auth"})`）。
@@ -459,7 +459,7 @@ class IdeallEmbed {
 ## 16. 验收 / 测试
 
 - 握手：iframe 收到 init、origin 校验通过、双 port 建立、MCP `initialize` 成功。
-- 隔膜：iframe 内 `window.__TAURI__` 为 undefined；任何路径拿不到 `wonita:auth:token`；越权 tool 返回 `-32001`。
+- 隔膜：iframe 内 `window.__TAURI__` 为 undefined；任何路径拿不到 `ideall:auth:token` 或 secure-store fallback；越权 tool 返回 `-32001`。
 - 发布闭环：community 嵌入应用经 `community.publish` 成功发布，网络层确认 token 由宿主注入、未经 iframe。
 - 写回主权：在嵌入应用内"订阅发布者"→ `hub://subscriptions` 出现该项 → home 中枢可见。
 - 双模式：同一 wonita 页独立打开（直连+自登录）与嵌入打开（分流+SSO）均工作。

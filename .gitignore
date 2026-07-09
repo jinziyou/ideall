@@ -49,3 +49,8 @@ next-env.d.ts
 
 # 根目录临时验证脚本 (应放在 scripts/)
 /.verify-*.mjs
+
+# local agent/harness state
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
