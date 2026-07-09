@@ -1,5 +1,6 @@
 # ideall 嵌入桥（Embed Bridge）方案与技术规格
 
+> **ideall 实现权威**：本文对应宿主实现 `src/plugins/embed/*`。工作区根 `docs/ideall-embed-bridge.md` 与 wonita 的 `docs/integrations/ideall-embed-bridge.md` 是跨仓协同副本；改协议时需同步。
 > 范围：把 ideall 从"原生实现 info/community"改为"**Web 容器**"——ideall 定义嵌入协议，info/community 只是 wonita 实现的两个嵌入应用。
 > 嵌入与传输用 **iframe + postMessage**，能力契约用 **MCP（JSON-RPC 2.0）跑在 postMessage 之上**。
 > 决策已锁定：**发布身份/token 由 ideall 持有**（微信式 SSO，token 永不进 iframe）。
