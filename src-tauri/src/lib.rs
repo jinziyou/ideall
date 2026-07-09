@@ -69,7 +69,7 @@ pub(crate) struct Bounds {
 }
 
 /// 子 webview 是原生 HWND (Windows) / NSView, 盖住主 webview 顶栏; 校验并裁剪 bounds。
-#[cfg(desktop)]
+#[cfg(all(desktop, not(target_os = "linux")))]
 fn sanitize_browser_bounds(app: &AppHandle, mut b: Bounds) -> Result<Bounds, String> {
     // TopBar(44) + TabBar(36) + browser 卡片上边距/工具条(≈64) ≈ 144; 留 4px 容差。
     const MIN_Y: f64 = 140.0;

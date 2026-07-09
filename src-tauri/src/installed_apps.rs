@@ -325,8 +325,8 @@ fn unescape_desktop_value(s: &str) -> String {
         .replace("\\\\", "\\")
 }
 
-// 输出标签集是 app 分类的真相源; 前端 src/modules/apps/page.tsx 的 STANDARD_CATEGORY_ORDER 必须与此处同步
-// (新增/改名一类时两边同步, 否则前端未识别标签会落入「其他」分组)。
+// 输出标签集是 app 分类的真相源; 前端 src/modules/apps/apps-page.tsx 的
+// STANDARD_CATEGORY_ORDER 必须与此处同步, 否则未识别标签会落入「其他」分组。
 #[cfg(target_os = "linux")]
 fn category_label(key: &str) -> String {
     match key {

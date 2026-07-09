@@ -378,13 +378,14 @@ if (perms.includes("hub.subscriptions:write"))
 ```ts
 const ideall = await IdeallEmbed.tryConnect({ timeoutMs: 800 })  // 嵌入则连上, 否则 null
 
-// 公共语料: 两态都直连 wonita
-export const queryInfo = (p) => fetch(`${API}/info/query?...`).then(r => r.json())
+// 公共语料: 两态都直连 wonita apiserver v1
+export const queryInfo = (p) =>
+  fetch(`${API}/v1/articles/search`, { method: "POST", body: JSON.stringify(p) }).then((r) => r.json())
 
 // 发布: 嵌入态经 host(无 token), 独立态用自己的登录
 export const publish = (d) =>
   ideall ? ideall.call("community.publish", d)
-         : fetch(`${API}/me/publications`, { headers: authHeader(), method: "POST", body: JSON.stringify(d) })
+         : fetch(`${API}/v1/me/publications`, { headers: authHeader(), method: "POST", body: JSON.stringify(d) })
 
 export const me = () => ideall ? ideall.call("identity.me") : fetchMeStandalone()
 export const canPublish = ideall ? ideall.permissions.includes("identity.publish") : isLoggedIn()
@@ -399,7 +400,7 @@ export const canPublish = ideall ? ideall.permissions.includes("identity.publish
 10. 安全：每条入站消息校验 origin；只用移交 port；收紧页面自身 CSP。
 11. 版本：`initialize` 协商 `protocolVersion`，过旧提示升级。
 
-> 实操：wonita web 是相 1 新建，**从第一天把 embed-mode 设计进去**比事后改造便宜。嵌入版可是构建开关或单独路由，与独立站点共享组件，只在"外壳/取数/鉴权/门控"分叉。wonita web 侧已有 info/analysis/entity/publishers 组件可复用作内容区。
+> 实操：wonita portal 已是相 1 的 web 入口；嵌入版与独立站点共享组件，只在“外壳 / 取数 / 鉴权 / 门控”分叉。wonita web 侧已有 info/analysis/entity/publishers 组件可复用作内容区。
 
 ---
 
