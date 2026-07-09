@@ -212,7 +212,7 @@ jobs:
           if [ ! -d "$ANDROID_HOME/ndk/26.1.10909125" ]; then
             sdkmanager "ndk;26.1.10909125"
           fi
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
