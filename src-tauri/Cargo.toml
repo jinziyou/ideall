@@ -37,7 +37,7 @@ gdk = "0.18"
 cairo-rs = "0.18"
 webkit2gtk = "2.0"
 wry = { version = "0.55", default-features = false, features = ["os-webview", "x11"] }
-chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"] }
+chromiumoxide = { version = "0.8", default-features = false, features = ["tokio-runtime"] }
 futures = "0.3"
 dirs = "6"
 
