@@ -58,6 +58,15 @@ where
     rx.recv().map_err(|_| "主线程执行失败".to_string())?
 }
 
+/// 取主窗口。勿用 get_webview_window("main"): add_child 挂上 "browser" 子 webview 后
+/// 窗口不再满足 is_webview_window() (全部 webview label == 窗口 label) → 永远返回 None,
+/// 导致浏览器打开后所有窗控/布局命令报「主窗口不存在」。
+#[cfg(desktop)]
+fn main_window(app: &AppHandle) -> Result<tauri::Window, String> {
+    app.get_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())
+}
+
 // 主窗口内容区矩形 (CSS 像素, 相对窗口左上)。直接当 Logical 传, 勿乘 devicePixelRatio (Tauri 自动按 scale 换算)。
 #[cfg(desktop)]
 #[derive(serde::Deserialize, Clone, Copy, Debug, Default)]
@@ -90,9 +99,7 @@ fn sanitize_browser_bounds(app: &AppHandle, mut b: Bounds) -> Result<Bounds, Str
             b.x.round()
         ));
     }
-    let main = app
-        .get_webview_window("main")
-        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let main = main_window(app)?;
     let scale = main.scale_factor().unwrap_or(1.0);
     if let Ok(inner) = main.inner_size() {
         let win_w = inner.width as f64 / scale;
@@ -206,23 +213,29 @@ fn browser_win_clear_subclass(app: &AppHandle) {
 
 #[cfg(all(desktop, target_os = "windows"))]
 fn browser_win_sync(wv: &tauri::Webview, app: &AppHandle, b: Bounds) {
-    let Some(main_win) = app.get_webview_window("main") else {
+    let Ok(main_win) = main_window(app) else {
         return;
     };
     let scale = main_win.scale_factor().unwrap_or(1.0);
-    let pb = browser_win::PhysicalBounds::from_logical(b.x, b.y, b.w, b.h, scale);
-
-    let min_screen_y = if let Some(main) = app.get_webview("main") {
-        if let Some(main_hwnd) = win_webview_hwnd(&main) {
-            let origin = browser_win::client_origin_screen_y(main_hwnd).unwrap_or(0);
-            let clip_logical = b.y.max(browser_win::TOP_CHROME_LOGICAL);
-            origin + (clip_logical * scale).round() as i32
-        } else {
-            (b.y.max(browser_win::TOP_CHROME_LOGICAL) * scale).round() as i32
-        }
+    // 命中区 = 内容矩形 (屏幕坐标); 矩形外 HTTRANSPARENT → 顶栏/窗控/右侧 AI 可点。
+    let hit_y = b.y.max(browser_win::TOP_CHROME_LOGICAL);
+    let hit_h = (b.y + b.h - hit_y).max(0.0);
+    let local = browser_win::PhysicalBounds::from_logical(b.x, hit_y, b.w, hit_h, scale);
+    let (origin_x, origin_y) = if let Some(main) = app.get_webview("main") {
+        win_webview_hwnd(&main)
+            .and_then(browser_win::client_origin_screen)
+            .unwrap_or((0, 0))
     } else {
-        (b.y.max(browser_win::TOP_CHROME_LOGICAL) * scale).round() as i32
+        (0, 0)
     };
+    let hit_rect = browser_win::PhysicalBounds {
+        x: origin_x + local.x,
+        y: origin_y + local.y,
+        w: local.w,
+        h: local.h,
+    };
+    // 子 HWND 自身定位仍用内容 bounds (与 set_bounds 一致)。
+    let pb = browser_win::PhysicalBounds::from_logical(b.x, b.y, b.w, b.h, scale);
 
     browser_win_clear_subclass(app);
 
@@ -258,12 +271,13 @@ fn browser_win_sync(wv: &tauri::Webview, app: &AppHandle, b: Bounds) {
 
         if let Some(rect) = browser_win::hwnd_screen_rect(hwnd_raw) {
             eprintln!(
-                "[ideall] browser sync: logical=({:.0},{:.0} {:.0}x{:.0}) physical=({},{} {}x{}) hwnd_rect={:?} min_screen_y={}",
-                b_log.x, b_log.y, b_log.w, b_log.h, pb.x, pb.y, pb.w, pb.h, rect, min_screen_y
+                "[ideall] browser sync: logical=({:.0},{:.0} {:.0}x{:.0}) physical=({},{} {}x{}) hwnd_rect={:?} hit_rect=({},{} {}x{})",
+                b_log.x, b_log.y, b_log.w, b_log.h, pb.x, pb.y, pb.w, pb.h, rect,
+                hit_rect.x, hit_rect.y, hit_rect.w, hit_rect.h
             );
         }
 
-        let list = browser_win::install_hit_pass_tree(hwnd_raw, min_screen_y);
+        let list = browser_win::install_hit_pass_tree(hwnd_raw, hit_rect);
         eprintln!(
             "[ideall] browser sync: hit_pass on {} hwnd(s)",
             list.len()
@@ -511,8 +525,7 @@ fn open_browser_view_impl(app: &AppHandle, url: String, b: Bounds) -> Result<(),
     };
     let parsed = parse_http_url(&target)?;
     let _b = sanitize_browser_bounds(app, b)?;
-    let main = app.get_webview_window("main").ok_or("主窗口不存在")?;
-    let window = main.as_ref().window();
+    let window = main_window(app)?;
     if let Some(w) = app.get_webview(BROWSER_LABEL) {
         let _ = w.close();
     }
@@ -534,9 +547,14 @@ fn open_browser_view_impl(app: &AppHandle, url: String, b: Bounds) -> Result<(),
 }
 
 /// 打开 (或重建) 内嵌浏览器子 webview, 加载 url, 定位到主窗口内容区 bounds。
+///
+/// 必须为 async 命令: Windows 上 add_child 创建 WebView2 子窗口需创建它的 UI(主)线程持续泵消息才能完成,
+/// 同步命令会阻塞该线程的消息泵 → 控制器创建回调永不触发 → add_child 死锁不返回 → 事件循环停摆 →
+/// 之后所有 invoke(含窗控)挂起。async 命令在独立运行时线程执行, 主线程得以正常泵消息完成创建。
+/// (见 Tauri WebviewWindowBuilder 文档「Known issues」与 tauri#4121。)
 #[cfg(desktop)]
 #[tauri::command]
-fn open_browser_view(
+async fn open_browser_view(
     app: AppHandle,
     url: String,
     b: Bounds,
@@ -544,10 +562,7 @@ fn open_browser_view(
     #[cfg(target_os = "linux")]
     return browser_linux::open(&app, url, b);
 
-    #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
-    return run_on_main_thread_sync(&app, move |app| open_browser_view_impl(app, url, b));
-
-    #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
+    #[cfg(not(target_os = "linux"))]
     return open_browser_view_impl(&app, url, b);
 }
 
@@ -625,7 +640,13 @@ fn browser_present(app: AppHandle, b: Bounds) -> Result<(), String> {
     }
 
     #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
-    return run_on_main_thread_sync(&app, move |app| browser_present_impl(app, b));
+    {
+        let r = run_on_main_thread_sync(&app, move |app| browser_present_impl(app, b));
+        if let Err(e) = &r {
+            eprintln!("[ideall] browser_present 失败: {e} (b={b:?})");
+        }
+        return r;
+    }
 
     #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
     return browser_present_impl(&app, b);
@@ -911,13 +932,25 @@ fn main_window_conf(app: &AppHandle) -> Result<tauri::utils::config::WindowConfi
         .ok_or_else(|| "主窗口配置不存在".into())
 }
 
+/// 窗控最小化 (经自定义命令, 避免前端动态 import @tauri-apps/api/window 在 HMR 下失效)。
+#[cfg(desktop)]
+#[tauri::command]
+fn window_minimize(app: AppHandle) -> Result<(), String> {
+    main_window(&app)?.minimize().map_err(|e| e.to_string())
+}
+
+/// 窗控关闭。
+#[cfg(desktop)]
+#[tauri::command]
+fn window_close(app: AppHandle) -> Result<(), String> {
+    main_window(&app)?.close().map_err(|e| e.to_string())
+}
+
 /// 窗控最大化/还原 (WSL 下铺满主屏 work area, 非 WSL 走系统 toggleMaximize)。
 #[cfg(desktop)]
 #[tauri::command]
 fn window_toggle_maximize(app: AppHandle) -> Result<bool, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let window = main_window(&app)?;
     let conf = main_window_conf(&app)?;
     window_placement::toggle_primary_maximize(&window, &conf)
 }
@@ -925,9 +958,7 @@ fn window_toggle_maximize(app: AppHandle) -> Result<bool, String> {
 #[cfg(desktop)]
 #[tauri::command]
 fn window_query_maximized(app: AppHandle) -> Result<bool, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let window = main_window(&app)?;
     Ok(window_placement::is_primary_maximized(&window))
 }
 
@@ -1189,7 +1220,7 @@ pub fn run() {
             .or_else(|| app.config().app.windows.first())
             .cloned();
         if conf.as_ref().is_some_and(|w| w.x.is_none() && w.y.is_none()) {
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_window("main") {
                 window_placement::schedule_initial_placement(&window, conf.unwrap());
             }
         }
@@ -1251,6 +1282,8 @@ pub fn run() {
             secure_store::secure_store_get,
             secure_store::secure_store_set,
             secure_store::secure_store_delete,
+            window_minimize,
+            window_close,
             window_toggle_maximize,
             window_query_maximized,
         ]);

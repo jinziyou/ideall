@@ -127,40 +127,62 @@ export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl
     return { x: r.left, y: r.top, w: r.width, h: r.height }
   }, [])
 
+  // open_browser_view 是 async 命令 (Windows 防死锁), 与 browser_present 可能并发;
+  // present 抢在 add_child 完成前执行会报「浏览器视图不存在」→ releaseNative 把刚建的
+  // webview 关掉。这里用 promise 队列把原生浏览器操作串行化, 保证 open → present 顺序。
+  const opQueueRef = React.useRef<Promise<unknown>>(Promise.resolve())
+  const enqueue = React.useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
+    const next = opQueueRef.current.then(fn, fn)
+    opQueueRef.current = next.catch(() => {})
+    return next
+  }, [])
+
   const releaseNative = React.useCallback(async () => {
     openedRef.current = false
-    await browserRelease().catch(() => {})
-  }, [])
+    await enqueue(() => browserRelease().catch(() => {}))
+  }, [enqueue])
 
   const presentAt = React.useCallback(
     async (b: BrowserBounds) => {
-      try {
-        await browserPresent(b)
-      } catch {
-        await releaseNative()
-      }
+      await enqueue(async () => {
+        // 队列中排在前面的 release/open 可能已改变状态; 复查后再 present。
+        if (!openedRef.current) return
+        try {
+          await browserPresent(b)
+        } catch {
+          openedRef.current = false
+          await browserRelease().catch(() => {})
+        }
+      })
     },
-    [releaseNative],
+    [enqueue],
   )
 
-  const openAt = React.useCallback(async (b: BrowserBounds) => {
-    openedRef.current = true
-    try {
-      await openBrowserView(currentUrlRef.current, b)
-      // 等子 webview 在屏外创建完成后再 present, 避免首帧以错误尺寸参与命中测试。
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  const openAt = React.useCallback(
+    async (b: BrowserBounds) => {
+      openedRef.current = true
+      await enqueue(async () => {
+        try {
+          await openBrowserView(currentUrlRef.current, b)
+          // 等子 webview 在屏外创建完成后再 present, 避免首帧以错误尺寸参与命中测试。
+          await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+          })
+          await browserPresent(b)
+          const info = await browserGetBackend()
+          setBackend(info)
+          setBrowserBackend(info.mode)
+        } catch (e) {
+          openedRef.current = false
+          await browserRelease().catch(() => {})
+          const msg = e instanceof Error ? e.message : String(e)
+          console.error("[browser-view] openAt failed:", e)
+          toast.error(`打开内嵌浏览器失败: ${msg}`)
+        }
       })
-      await browserPresent(b)
-      const info = await browserGetBackend()
-      setBackend(info)
-      setBrowserBackend(info.mode)
-    } catch {
-      openedRef.current = false
-      await browserRelease().catch(() => {})
-      toast.error("打开内嵌浏览器失败")
-    }
-  }, [])
+    },
+    [enqueue],
+  )
 
   const syncBrowser = React.useCallback(async () => {
     if (!isTauri()) return

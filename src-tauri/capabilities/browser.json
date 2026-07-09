@@ -15,6 +15,7 @@
     "allow-browser-hide",
     "allow-browser-show",
     "allow-browser-close",
+    "allow-browser-get-backend",
     "allow-browser-get-content",
     "allow-browser-click",
     "allow-browser-fill",

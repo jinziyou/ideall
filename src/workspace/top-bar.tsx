@@ -38,7 +38,10 @@ export default function TopBar() {
           aria-hidden
         />
       </div>
-      <div className="relative z-50 flex shrink-0 items-stretch gap-1 self-stretch pointer-events-auto">
+      <div
+        className="relative z-50 flex shrink-0 items-stretch gap-1 self-stretch pointer-events-auto"
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
         <div className="flex items-center gap-1">
           <LayoutToggles />
           <div className="mx-1 h-5 w-px bg-border" />
