@@ -12,7 +12,7 @@ import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
-import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
+import { LEGACY_SUBSCRIPTIONS_SYNCED, SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import type { SubscriptionType } from "@protocol/subscription"
 import type { Subscription } from "@protocol/subscription"
 import {
@@ -92,12 +92,14 @@ export default function SubscriptionFeed({
   React.useEffect(() => {
     mountedRef.current = true
     load()
-    // 跨端同步完成后刷新关注流 (SyncPanel 广播)
+    // 跨端同步完成后刷新关注流 (SyncPanel 广播); 兼听旧事件名, 避免旧窗口同步后新窗口不刷新。
     const onSynced = () => load()
     window.addEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
+    window.addEventListener(LEGACY_SUBSCRIPTIONS_SYNCED, onSynced)
     return () => {
       mountedRef.current = false
       window.removeEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
+      window.removeEventListener(LEGACY_SUBSCRIPTIONS_SYNCED, onSynced)
     }
   }, [load])
 

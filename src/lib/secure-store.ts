@@ -117,6 +117,34 @@ export function publicStorageRemove(key: string): void {
   }
 }
 
+export function publicStorageSet(key: string, value: string): void {
+  try {
+    storage()?.setItem(key, value)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function publicStorageGetWithLegacy(key: string, legacyKey: string): string | null {
+  const value = publicStorageGet(key)
+  const legacyValue = publicStorageGet(legacyKey)
+  if (value !== null) {
+    if (legacyValue !== null) publicStorageRemove(legacyKey)
+    return value
+  }
+  if (legacyValue !== null) {
+    publicStorageSet(key, legacyValue)
+    publicStorageRemove(legacyKey)
+    return legacyValue
+  }
+  return null
+}
+
+export function publicStorageRemoveWithLegacy(key: string, legacyKey: string): void {
+  publicStorageRemove(key)
+  publicStorageRemove(legacyKey)
+}
+
 export async function secureGetWithLegacy(key: string, legacyKey: string): Promise<string | null> {
   const value = await secureGet(key)
   const legacyValue = publicStorageGet(legacyKey)

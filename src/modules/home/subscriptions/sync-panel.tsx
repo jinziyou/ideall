@@ -15,7 +15,7 @@ import { useFlowProgress } from "@/lib/use-flow-progress"
 /**
  * 跨端同步面板 —— 用同步码在多设备间同步关注 (端到端加密)。
  * 同步码存本地 (useSyncExternalStore 读取); 已开启则进面板时自动同步一次。
- * 同步完成广播 `wonita:subscriptions-synced`, 关注流监听后刷新。
+ * 同步完成广播 `ideall:subscriptions-synced`, 关注流监听后刷新。
  */
 export default function SyncPanel() {
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, () => null)

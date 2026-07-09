@@ -13,7 +13,8 @@ import {
 } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
 
-export const AGENT_SETTINGS_STORAGE_KEY = "wonita:agent:settings"
+export const AGENT_SETTINGS_STORAGE_KEY = "ideall:agent:settings"
+export const LEGACY_AGENT_SETTINGS_STORAGE_KEY = "wonita:agent:settings"
 const API_KEY_SECURE_KEY = SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY
 
 export interface AgentSettings {
@@ -71,6 +72,21 @@ function storage(): Storage | undefined {
   }
 }
 
+function readPublicSettingsRaw(s: Storage): string | null {
+  const raw = s.getItem(AGENT_SETTINGS_STORAGE_KEY)
+  const legacy = s.getItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
+  if (raw !== null) {
+    if (legacy !== null) s.removeItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
+    return raw
+  }
+  if (legacy !== null) {
+    s.setItem(AGENT_SETTINGS_STORAGE_KEY, legacy)
+    s.removeItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
+    return legacy
+  }
+  return null
+}
+
 function parseSettings(raw: string | null): AgentSettings {
   if (!raw) return DEFAULT_SETTINGS
   try {
@@ -88,7 +104,9 @@ function publicSettings(next: AgentSettings): Omit<AgentSettings, "apiKey"> & { 
 
 function persistSettings(next: AgentSettings): void {
   try {
-    storage()?.setItem(AGENT_SETTINGS_STORAGE_KEY, JSON.stringify(publicSettings(next)))
+    const s = storage()
+    s?.setItem(AGENT_SETTINGS_STORAGE_KEY, JSON.stringify(publicSettings(next)))
+    s?.removeItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
   } catch {
     /* 隐私模式 / 存储受限时忽略写入 */
   }
@@ -99,7 +117,7 @@ export function getAgentSettings(): AgentSettings {
   if (!s) return DEFAULT_SETTINGS
   let raw: string | null = null
   try {
-    raw = s.getItem(AGENT_SETTINGS_STORAGE_KEY)
+    raw = readPublicSettingsRaw(s)
   } catch {
     return DEFAULT_SETTINGS
   }
@@ -145,7 +163,7 @@ export async function hydrateAgentSettingsSecure(): Promise<AgentSettings> {
   if (secureHydrating) return secureHydrating
   secureHydrating = (async () => {
     const s = storage()
-    const raw = s?.getItem(AGENT_SETTINGS_STORAGE_KEY) ?? null
+    const raw = s ? readPublicSettingsRaw(s) : null
     const parsed = parseSettings(raw)
     const secureKey = await secureGet(API_KEY_SECURE_KEY)
     if (secureKey) {
@@ -172,7 +190,8 @@ export function agentSettingsSecuritySnapshot(): {
   localApiKeyPresent: boolean
   secureHydrated: boolean
 } {
-  const raw = storage()?.getItem(AGENT_SETTINGS_STORAGE_KEY) ?? null
+  const s = storage()
+  const raw = s ? readPublicSettingsRaw(s) : null
   return {
     key: API_KEY_SECURE_KEY,
     localApiKeyPresent: Boolean(parseSettings(raw).apiKey),

@@ -4,6 +4,7 @@
 //   blobs —— 文件二进制旁存 ({key,blob}, keyPath = key); 文件节点存 blobRef 指向此处, Blob 不进同步
 //   trash_snapshots —— 回收站本机快照, 用于恢复会被同步删除标记压缩掉的正文 / Blob。
 
+// IndexedDB 实例名保持历史 "wonita-home": IndexedDB 不能原子重命名, 直接改名会让老用户本地数据看似丢失。
 const DB_NAME = "wonita-home"
 // 统一 Node 库 + Blob 旁存两仓; onupgradeneeded 只 createObjectStore, 零 I/O (报错会 abort DB open 且无恢复 UI)。
 // 版本号只升不降, 否则既有库会 VersionError; onversionchange 让旧标签页主动让位避免 onblocked 冻结。
