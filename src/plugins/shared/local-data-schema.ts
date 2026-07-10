@@ -2,6 +2,8 @@ import { AUTH_TOKEN_SECURE_KEY } from "@/lib/auth/auth-store"
 import { SYNC_CODE_SECURE_KEY } from "@/lib/sync-code"
 import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
+import { ENGINE_PREFERENCES_STORAGE_KEY } from "@/engines/preferences"
+import { STARTUP_TARGET_STORAGE_KEY } from "@/lib/workspace-storage"
 import { AUDIO_DB_NAME, AUDIO_DB_VERSION } from "@/plugins/audio/audio-store"
 import { DATABASE_DB_NAME, DATABASE_DB_VERSION } from "@/plugins/database/database-store"
 import { GIT_REPOS_STORAGE_KEY } from "@/plugins/git/git-repos-store"
@@ -167,6 +169,30 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
     parseAs: "json",
     validate: isJsonObject,
     repair: () => ({ action: "remove", detail: "已移除损坏的恢复快照" }),
+  },
+  {
+    id: "display.engine-preferences",
+    label: "文件默认引擎关联",
+    owner: "display",
+    storage: "localStorage",
+    key: ENGINE_PREFERENCES_STORAGE_KEY,
+    currentVersion: 1,
+    portable: true,
+    parseAs: "json",
+    validate: isJsonObject,
+    repair: repairJsonObject,
+  },
+  {
+    id: "display.startup-target",
+    label: "默认启动文件视图",
+    owner: "display",
+    storage: "localStorage",
+    key: STARTUP_TARGET_STORAGE_KEY,
+    currentVersion: 1,
+    portable: true,
+    parseAs: "json",
+    validate: isJsonObject,
+    repair: () => ({ action: "remove", detail: "已恢复默认 Home 启动界面" }),
   },
   {
     id: "audio.db",

@@ -5,7 +5,9 @@ import type { ComponentType } from "react"
 import { Bookmark, Boxes, Plug, ScrollText, Sparkles, Tag, Users } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
 import type { ModuleId } from "../types"
+import type { CoreFileRootId } from "../file-roots"
 import type { OpenTarget } from "../open-target"
+import { tabKey } from "../tab-key"
 import type { ResourceQuery } from "@/vfs/types"
 import { HOME_PLACES, type HomePlaceStaticChild } from "./home-places"
 import { moduleById } from "../modules"
@@ -43,7 +45,7 @@ function staticHomeChildNode(placeId: string, child: HomePlaceStaticChild): Side
 
 function entryNode(e: SidebarEntry): SidebarTreeNode {
   return {
-    id: `entry:${e.descriptor.kind}`,
+    id: `entry:${tabKey(e.descriptor)}`,
     label: e.label,
     icon: e.icon,
     nodeKind: "entry",
@@ -164,4 +166,44 @@ export function browserTreeRoots(): SidebarTreeNode[] {
       hasChildren: true,
     },
   ]
+}
+
+/** 根文件不显示；按活动栏选中的直接子树只返回该目录的内容。 */
+export function treeRootsForFileRoot(rootId: CoreFileRootId): SidebarTreeNode[] {
+  const homeRoots = staticTreeRoots("home")
+  const homeSection = (id: string) => homeRoots.filter((node) => node.id === `section:${id}`)
+  switch (rootId) {
+    case "home":
+      return [entryNode(moduleById("home").entries[0])]
+    case "subscriptions":
+      return subscriptionsTreeRoots()
+    case "bookmarks":
+      return homeSection("bookmarks")
+    case "files":
+      return homeSection("resources")
+    case "notes":
+      return homeSection("notes")
+    case "workspace":
+      return [...homeSection("workspace"), ...staticTreeRoots("agent")]
+    case "apps":
+      return staticTreeRoots("apps")
+    case "info":
+      return [...staticTreeRoots("info"), ...infoTreeRoots()]
+    case "community":
+      return [...staticTreeRoots("community"), ...communityTreeRoots()]
+    case "tool":
+      return staticTreeRoots("tool")
+    case "browser":
+      return browserTreeRoots()
+    case "system":
+      return [
+        entryNode({
+          label: "设置",
+          icon: Sparkles,
+          descriptor: tabDescriptor("home-settings"),
+        }),
+        ...staticTreeRoots("plugins"),
+        ...staticTreeRoots("trash"),
+      ]
+  }
 }

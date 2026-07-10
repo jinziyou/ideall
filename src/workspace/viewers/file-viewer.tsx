@@ -11,12 +11,14 @@ import { updateFileContent } from "@/files/stores/files-store"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { useFilePreview, FilePreviewBox } from "@/modules/home/resources/file-preview"
 import { resourceTab } from "../resource-tab"
-import { promoteActiveTab, renameNodeTab, setTabDirty, tabKey } from "../store"
+import { promoteActiveTab, renameNodeTab, setTabDirty, tabKey, useTabs } from "../store"
 import { useTabActive } from "../tab-active-context"
 import { useFileActions } from "../use-file-actions"
 import { clearFileDraft, readFileDraft, writeFileDraft } from "./file-draft"
 import FileViewerToolbar from "./file-viewer-toolbar"
 import type { NodeViewerProps } from "../node-kind-ui"
+import { fileEngineTargetForTab } from "../file-tab"
+import { resourceRefForFile } from "@/filesystem/resource-file-system"
 
 export type FileViewerMode = "preview" | "edit"
 
@@ -35,10 +37,15 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
   const [revision, setRevision] = React.useState(0)
   const preview = useFilePreview(nodeId, revision)
   const { file, loading } = preview
-  const tabId = React.useMemo(
-    () => tabKey(resourceTab({ scheme: "node", kind: "file", id: nodeId })),
-    [nodeId],
-  )
+  const tabs = useTabs()
+  const tabId = React.useMemo(() => {
+    const engineTab = tabs.find((tab) => {
+      const target = fileEngineTargetForTab(tab)
+      const resource = target ? resourceRefForFile(target.ref) : null
+      return resource?.scheme === "node" && resource.kind === "file" && resource.id === nodeId
+    })
+    return engineTab?.id ?? tabKey(resourceTab({ scheme: "node", kind: "file", id: nodeId }))
+  }, [nodeId, tabs])
   const [mode, setMode] = React.useState<FileViewerMode>("preview")
   const [draft, setDraft] = React.useState("")
   const [saving, setSaving] = React.useState(false)

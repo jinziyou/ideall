@@ -29,9 +29,9 @@ import {
 } from "./git-commands"
 import { addGitRepo, loadGitRepos, removeGitRepo, saveGitRepos } from "./git-repos-store"
 
-export default function GitPage() {
+export default function GitPage({ initialRepoPath }: { initialRepoPath?: string } = {}) {
   const [repos, setRepos] = React.useState<string[]>([])
-  const [repoPath, setRepoPath] = React.useState("")
+  const [repoPath, setRepoPath] = React.useState(initialRepoPath ?? "")
   const [snapshot, setSnapshot] = React.useState<GitSnapshot | null>(null)
   const [lastResult, setLastResult] = React.useState<GitResult | null>(null)
   const [branchName, setBranchName] = React.useState("")
@@ -42,8 +42,8 @@ export default function GitPage() {
   React.useEffect(() => {
     const saved = loadGitRepos()
     setRepos(saved)
-    setRepoPath(saved[0] ?? "")
-  }, [])
+    setRepoPath((current) => current || initialRepoPath || saved[0] || "")
+  }, [initialRepoPath])
 
   const persistRepos = (next: string[]) => {
     setRepos(next)

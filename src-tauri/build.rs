@@ -49,6 +49,7 @@ fn main() {
                 "window_close",
                 "window_toggle_maximize",
                 "window_query_maximized",
+                "open_engine_window",
             ]),
         ),
     )

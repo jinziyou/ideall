@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import {
   ClipboardCopy,
   Download,
@@ -47,6 +48,7 @@ type Props = {
   onCopyRef: () => void
   onDiscardDraft: () => void
   onDelete: () => void
+  extraActions?: ReactNode
 }
 
 export default function FileViewerToolbar({
@@ -70,6 +72,7 @@ export default function FileViewerToolbar({
   onCopyRef,
   onDiscardDraft,
   onDelete,
+  extraActions,
 }: Props) {
   const capability = type ? previewCapabilityLabel(type.preview, editable) : null
   return (
@@ -103,6 +106,7 @@ export default function FileViewerToolbar({
       </div>
 
       <div className="flex items-center gap-2">
+        {extraActions}
         {editable && (
           <div className="inline-flex h-9 items-center rounded-md border border-input bg-background p-0.5">
             <button

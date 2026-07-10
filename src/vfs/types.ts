@@ -31,6 +31,7 @@ export type ResourceActionId =
   | "restore"
   | "move"
   | "read-blob"
+  | "write-blob"
   | "save-to-mine"
   | "navigate"
 

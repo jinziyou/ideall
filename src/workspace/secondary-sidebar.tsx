@@ -5,24 +5,15 @@
 
 import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/lib/utils"
-import SidebarTree from "./tree/sidebar-tree"
-import { moduleById } from "./modules"
-import { isPluginModule } from "./plugin-entries"
-import { useActiveModule, useMode, setSidebarCollapsed } from "./store"
+import FileSystemSidebarTree from "./tree/file-system-sidebar-tree"
+import { coreFileRoot, isCoreFileRootId } from "./file-roots"
+import { useActiveRootId, setSidebarCollapsed } from "./store"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
-  const activeModule = useActiveModule()
-  const mode = useMode()
-  const mod = moduleById(activeModule)
-  const isPlugins = activeModule === "plugins" || isPluginModule(activeModule)
-  const title =
-    activeModule === "agent"
-      ? mode === "local"
-        ? "工作区"
-        : "AI"
-      : isPlugins
-        ? "插件"
-        : mod.sidebarTitle
+  const activeRootId = useActiveRootId()
+  const title = isCoreFileRootId(activeRootId)
+    ? coreFileRoot(activeRootId).sidebarTitle
+    : "已挂载文件"
 
   return (
     <aside
@@ -49,7 +40,7 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
             <PanelLeftClose className="h-4 w-4" />
           </button>
         </div>
-        <SidebarTree />
+        <FileSystemSidebarTree />
       </div>
     </aside>
   )

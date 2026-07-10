@@ -9,8 +9,7 @@ import { downloadStoredFile } from "@/modules/home/resources/file-preview"
 import { invokeResourceAction } from "@/vfs/registry"
 import type { VfsAccessContext } from "@/vfs/types"
 import { fileMetaActionInput, fileResourceRef, type FileMetaPatch } from "@/vfs/node-file-actions"
-import { resourceTab } from "./resource-tab"
-import { closeTab, renameNodeTab, tabKey } from "./store"
+import { closeNodeTabs, renameNodeTab } from "./store"
 import { refreshSidebarTree } from "./tree/sidebar-tree-bus"
 import { clearFileDraft } from "./viewers/file-draft"
 
@@ -81,8 +80,7 @@ const realFileActionDeps: FileActionDeps = {
   },
   restoreFile,
   renameFileTab: (id, name) => renameNodeTab({ kind: "file", id }, name),
-  closeFileTab: (id, label) =>
-    closeTab(tabKey(resourceTab({ scheme: "node", kind: "file", id }, label))),
+  closeFileTab: (id) => closeNodeTabs({ kind: "file", id }),
   refreshTree: refreshSidebarTree,
   clearFileDraft,
   downloadFile: downloadStoredFile,

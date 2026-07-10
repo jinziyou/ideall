@@ -103,6 +103,7 @@ function makeDeps(nodes: Node[]): {
       afterSortKey?: string | null
     }>
     delete: Array<{ kind: NodeKind; id: string }>
+    writeBlob: Array<{ id: string; content: string; mime?: string }>
   }
 } {
   const byId = new Map(nodes.map((node) => [node.id, node]))
@@ -115,6 +116,7 @@ function makeDeps(nodes: Node[]): {
       afterSortKey?: string | null
     }>,
     delete: [] as Array<{ kind: NodeKind; id: string }>,
+    writeBlob: [] as Array<{ id: string; content: string; mime?: string }>,
   }
   return {
     calls,
@@ -154,6 +156,21 @@ function makeDeps(nodes: Node[]): {
       },
       async readBlobBase64(id) {
         return byId.has(id) ? { mime: "text/plain", size: 4, base64: "dGVzdA==" } : undefined
+      },
+      async updateFileContent(id, content, mime) {
+        calls.writeBlob.push({ id, content, mime })
+        const existing = byId.get(id)
+        if (!existing || existing.kind !== "file") return undefined
+        byId.set(id, {
+          ...existing,
+          updatedAt: existing.updatedAt + 1,
+          blobRef: {
+            ...existing.blobRef,
+            size: content.length,
+            mime: mime || existing.blobRef.mime,
+          },
+        })
+        return { id }
       },
     },
   }
@@ -258,6 +275,27 @@ test("node provider: read-blob requires blob permission and only supports files"
     }),
     { mime: "text/plain", size: 4, base64: "dGVzdA==" },
   )
+})
+
+test("node provider: write-blob persists text under the existing write guard", async () => {
+  const { deps, calls } = makeDeps([fileNode("f1"), note("n1")])
+  const provider = createNodeVfsProvider(deps)
+
+  await rejectCode(
+    provider.invoke(ref("file", "f1"), "write-blob", { content: "next" }, agentReadCtx),
+    "permission-denied",
+  )
+  await rejectCode(
+    provider.invoke(ref("note", "n1"), "write-blob", { content: "next" }, uiCtx),
+    "unsupported",
+  )
+  await provider.invoke(
+    ref("file", "f1"),
+    "write-blob",
+    { content: "next", mime: "text/markdown" },
+    { actor: "agent", permissions: ["fs:write"] },
+  )
+  assert.deepEqual(calls.writeBlob, [{ id: "f1", content: "next", mime: "text/markdown" }])
 })
 
 test("node provider: navigate returns bookmark url", async () => {

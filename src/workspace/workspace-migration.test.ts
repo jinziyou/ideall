@@ -1,0 +1,94 @@
+import { test } from "node:test"
+import assert from "node:assert/strict"
+import { resourceKey } from "@protocol/resource"
+import { parseFileEngineTabParams } from "./file-tab"
+import { migrateWorkspaceTab, migrateWorkspaceTabs } from "./store"
+import type { Tab } from "./types"
+
+test("workspace migration: legacy node and resource tabs become file + engine tabs", () => {
+  const legacyNode: Tab = {
+    id: "node:note:n1",
+    kind: "node",
+    module: "home",
+    title: "Note",
+    params: { kind: "note", id: "n1" },
+  }
+  const note = migrateWorkspaceTab(legacyNode)
+  assert.equal(note?.kind, "file-engine")
+  assert.deepEqual(parseFileEngineTabParams(note?.params), {
+    ref: { fileSystemId: "ideall.core", fileId: "resource:node%3Anote%3An1" },
+    engineId: "ideall.note",
+  })
+
+  const browserRef = { scheme: "browser", kind: "page", id: "https://example.com" } as const
+  const legacyResource: Tab = {
+    id: "resource:browser",
+    kind: "resource",
+    module: "browser",
+    title: "Example",
+    params: { resource: resourceKey(browserRef) },
+  }
+  const browser = migrateWorkspaceTab(legacyResource)
+  assert.equal(parseFileEngineTabParams(browser?.params)?.engineId, "ideall.browser")
+  assert.equal(browser?.rootId, "browser")
+})
+
+test("workspace migration: legacy node kinds restore their file-tree roots", () => {
+  const roots = {
+    note: "notes",
+    bookmark: "bookmarks",
+    folder: "bookmarks",
+    file: "files",
+    feed: "subscriptions",
+    thread: "workspace",
+  } as const
+
+  for (const [kind, rootId] of Object.entries(roots)) {
+    const migrated = migrateWorkspaceTab({
+      id: `node:${kind}:fixture`,
+      kind: "node",
+      module: kind === "feed" ? "subscriptions" : "home",
+      title: kind,
+      params: { kind, id: "fixture" },
+    })
+    assert.equal(migrated?.rootId, rootId, kind)
+  }
+})
+
+test("workspace migration: tabs are deduplicated after their ids are canonicalized", () => {
+  const ref = { scheme: "node", kind: "note", id: "same" } as const
+  const legacyNode: Tab = {
+    id: "node:note:same",
+    kind: "node",
+    module: "home",
+    title: "Node snapshot",
+    params: { kind: "note", id: "same" },
+  }
+  const legacyResource: Tab = {
+    id: "resource:node-note-same",
+    kind: "resource",
+    module: "home",
+    title: "Resource snapshot",
+    params: { resource: resourceKey(ref) },
+  }
+
+  const migrated = migrateWorkspaceTabs([legacyNode, legacyResource])
+  assert.equal(migrated.tabs.length, 1)
+  assert.equal(migrated.tabs[0]?.kind, "file-engine")
+  assert.equal(migrated.tabs[0]?.rootId, "notes")
+  assert.equal(migrated.idMap.get(legacyNode.id), migrated.tabs[0]?.id)
+  assert.equal(migrated.idMap.get(legacyResource.id), migrated.tabs[0]?.id)
+})
+
+test("workspace migration: malformed file-engine snapshots are discarded", () => {
+  assert.equal(
+    migrateWorkspaceTab({
+      id: "bad",
+      kind: "file-engine",
+      module: "home",
+      title: "bad",
+      params: { file: "broken" },
+    }),
+    null,
+  )
+})

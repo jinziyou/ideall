@@ -1,8 +1,21 @@
-// 音频播放器插件 manifest —— 本地音频文件播放。
-// 视图与路由由 workspace/registry 与 workspace/modules 显式挂载; manifest 目前仅做身份声明。
+import { BUILTIN_ENGINES, engineRegistry } from "@/engines/builtin"
+import { mountFileSystem } from "@/filesystem/composite-root"
+import { ideallRootFileSystem } from "@/filesystem/builtin"
+import { fileSystemRegistry } from "@/filesystem/registry"
+import { registerAudioFileSystem } from "./audio-file-system"
+
+// 音频既是可处理 audio/* 的引擎，也是保留现有 IndexedDB Blob 的 App 文件系统挂载。
 export const audioManifest = {
   id: "audio" as const,
+  engines: ["ideall.audio"] as const,
   register() {
-    // 无额外端口注册; 视图挂载见 workspace/registry.tsx。
+    const descriptor = BUILTIN_ENGINES.find((engine) => engine.engineId === "ideall.audio")
+    if (descriptor && !engineRegistry.get(descriptor.engineId)) engineRegistry.register(descriptor)
+    registerAudioFileSystem((provider) => {
+      mountFileSystem(fileSystemRegistry, ideallRootFileSystem, provider, {
+        entryId: "app.audio-library",
+        name: "音频库",
+      })
+    })
   },
 }

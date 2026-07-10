@@ -4,7 +4,9 @@
 
 import type { ComponentType } from "react"
 import { MessagesSquare } from "lucide-react"
-import { resourceKey, type ResourceMeta } from "@protocol/resource"
+import type { ResourceMeta } from "@protocol/resource"
+import { fileRefKey } from "@protocol/file-system"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { listResources } from "@/vfs/registry"
 import type { ResourceQuery } from "@/vfs/types"
 import { MODULE_META } from "./module-meta"
@@ -50,13 +52,14 @@ function runTarget(target: OpenTarget): () => void {
 }
 
 function itemFromResource(group: LocalSearchGroup, meta: ResourceMeta): LocalSearchItem {
-  const target: OpenTarget = { type: "resource", ref: meta.ref, title: meta.title, meta }
+  const ref = resourceFileRef(meta.ref)
+  const target: OpenTarget = { type: "file", ref, title: meta.title }
   const fileType =
     meta.ref.scheme === "node" && meta.ref.kind === "file"
       ? { name: meta.title, type: meta.iconHint ?? "" }
       : undefined
   return {
-    id: resourceKey(meta.ref),
+    id: fileRefKey(ref),
     label: meta.title,
     group,
     ...(fileType ? { fileType } : {}),

@@ -10,12 +10,16 @@ export type WorkspaceState = {
   transientId: string | null
   activeSource: ActiveSource
   activeModule: ModuleId
+  /** 合成文件系统根目录下当前选中的直接子树。 */
+  activeRootId: string
   mode: WsMode
   sidebarCollapsed: boolean
   rightPanelOpen: boolean
   lru: string[]
   dirtyTabs: string[]
   hydrated: boolean
+  /** 显式路由正在解析 FileRef；URL 镜像在完成前不得回写旧活动标签。 */
+  routeOpenPending: boolean
 }
 
 export const workspaceInitialState: WorkspaceState = {
@@ -24,12 +28,14 @@ export const workspaceInitialState: WorkspaceState = {
   transientId: null,
   activeSource: "user",
   activeModule: "home",
+  activeRootId: "home",
   mode: "local",
   sidebarCollapsed: false,
   rightPanelOpen: false,
   lru: [],
   dirtyTabs: [],
   hydrated: false,
+  routeOpenPending: false,
 }
 
 function applyDerivedAfterPatch(

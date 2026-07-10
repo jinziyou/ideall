@@ -7,8 +7,10 @@ use tauri::webview::{PageLoadEvent, WebviewBuilder};
 use tauri::AppHandle;
 #[cfg(desktop)]
 use tauri::Manager;
+#[cfg(desktop)]
+use tauri::WebviewUrl;
 #[cfg(all(desktop, not(target_os = "linux")))]
-use tauri::{Emitter, LogicalPosition, LogicalSize, Rect, WebviewUrl};
+use tauri::{Emitter, LogicalPosition, LogicalSize, Rect};
 
 // ACP (Agent Client Protocol) 外部智能体传输 —— 子进程 stdin/stdout 哑管道 (NDJSON 行框定), 仅桌面。
 #[cfg(desktop)]
@@ -976,6 +978,167 @@ fn window_query_maximized(app: AppHandle) -> Result<bool, String> {
     Ok(window_placement::is_primary_maximized(&window))
 }
 
+// ── 文件 + 引擎独立窗口 ──────────────────────────────────────────────────────
+
+#[cfg(desktop)]
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenEngineWindowResult {
+    label: String,
+    url: String,
+}
+
+#[cfg(desktop)]
+fn valid_engine_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-'))
+}
+
+#[cfg(desktop)]
+fn valid_engine_window_path(path: &str) -> bool {
+    if path.len() < 2 || path.len() > 256 || path == "/auth" || path.starts_with("/auth/") {
+        return false;
+    }
+    path.strip_prefix('/').is_some_and(|rest| {
+        rest.split('/').all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+        })
+    })
+}
+
+#[cfg(desktop)]
+fn valid_engine_window_label(label: &str) -> bool {
+    let Some(rest) = label.strip_prefix("engine-") else {
+        return false;
+    };
+    let Some((target_hash, nonce)) = rest.split_once('-') else {
+        return false;
+    };
+    target_hash.len() == 7
+        && target_hash
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && nonce.len() == 32
+        && nonce
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+/// 二次校验前端构造的内部深链。只接受 pathname + 唯一的 file/engine/display 参数，
+/// 从命令边界杜绝 scheme/host 注入、query smuggling 与认证页复用。
+#[cfg(desktop)]
+fn validate_engine_window_url(value: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > 8_192
+        || !value.starts_with('/')
+        || value.starts_with("//")
+        || value.chars().any(char::is_control)
+        || value.contains('\\')
+        || value.contains('#')
+    {
+        return Err("invalid-engine-window-url".into());
+    }
+
+    let base = tauri::Url::parse("https://ideall.invalid/")
+        .map_err(|_| "invalid-engine-window-url".to_string())?;
+    let parsed = base
+        .join(value)
+        .map_err(|_| "invalid-engine-window-url".to_string())?;
+    if parsed.scheme() != "https"
+        || parsed.host_str() != Some("ideall.invalid")
+        || parsed.fragment().is_some()
+        || !valid_engine_window_path(parsed.path())
+    {
+        return Err("invalid-engine-window-url".into());
+    }
+
+    let mut file_key: Option<String> = None;
+    let mut engine_id: Option<String> = None;
+    let mut display: Option<String> = None;
+    let mut count = 0usize;
+    for (key, value) in parsed.query_pairs() {
+        count += 1;
+        let slot = match key.as_ref() {
+            "file" => &mut file_key,
+            "engine" => &mut engine_id,
+            "display" => &mut display,
+            _ => return Err("invalid-engine-window-url".into()),
+        };
+        if slot.replace(value.into_owned()).is_some() {
+            return Err("invalid-engine-window-url".into());
+        }
+    }
+
+    let file_key = file_key.ok_or_else(|| "invalid-engine-window-url".to_string())?;
+    let engine_id = engine_id.ok_or_else(|| "invalid-engine-window-url".to_string())?;
+    if count != 3
+        || file_key.trim().is_empty()
+        || file_key.chars().count() > 2_048
+        || file_key.chars().any(|c| c.is_control() || c == '\u{fffd}')
+        || !valid_engine_id(&engine_id)
+        || display.as_deref() != Some("window")
+    {
+        return Err("invalid-engine-window-url".into());
+    }
+    Ok(())
+}
+
+#[cfg(desktop)]
+fn allow_engine_window_navigation(url: &tauri::Url) -> bool {
+    (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
+        || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"))
+        || (cfg!(debug_assertions)
+            && url.scheme() == "http"
+            && url.host_str() == Some("localhost")
+            && url.port() == Some(5020))
+}
+
+/// 创建不继承主窗口 capability 的独立引擎窗口。
+///
+/// 命令本身只授权给 `main`；新窗口 label 固定为 `engine-*`，不匹配任何 capability，
+/// 因而无法调用 secure-store/http/shell 等 IPC。窗口只准在 ideall 内部 origin 导航，
+/// 且拒绝页面再用 window.open 派生不受控窗口。
+#[cfg(desktop)]
+#[tauri::command]
+async fn open_engine_window(
+    app: AppHandle,
+    label: String,
+    url: String,
+) -> Result<OpenEngineWindowResult, String> {
+    if !valid_engine_window_label(&label) {
+        return Err("invalid-engine-window-label".into());
+    }
+    validate_engine_window_url(&url)?;
+    if app.get_window(&label).is_some() {
+        return Err("engine-window-label-exists".into());
+    }
+
+    let app_path = url.trim_start_matches('/').into();
+    tauri::WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(app_path))
+        .title("ideall")
+        .inner_size(1_000.0, 720.0)
+        .min_inner_size(360.0, 600.0)
+        .resizable(true)
+        // 独立窗口没有窗控 IPC 权限，保留系统装饰以确保始终可移动/关闭。
+        .decorations(true)
+        .center()
+        .on_navigation(allow_engine_window_navigation)
+        .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    Ok(OpenEngineWindowResult { label, url })
+}
+
 // ── agent 出站联网守卫 (web.search / web.fetch 的 Rust 侧 SSRF 闭合) ────────────────────────────────
 // JS 侧 (src/lib/web-search.ts) 只能拦 IP 字面量与已知坏名; 「公网域名 A 记录指向私网/环回/元数据」必须在
 // **连接前**解析+校验+钉连。本命令: 自行解析主机→IP, 任一 IP 落非全局段即拒 (fail closed), 再用 resolve_to_addrs
@@ -1300,6 +1463,7 @@ pub fn run() {
             window_close,
             window_toggle_maximize,
             window_query_maximized,
+            open_engine_window,
         ]);
     #[cfg(not(desktop))]
     let builder = builder.invoke_handler(tauri::generate_handler![agent_guarded_fetch]);
@@ -1370,5 +1534,32 @@ mod tests {
         assert!(blocked("172.16.0.1"));
         assert!(blocked("172.31.0.1"));
         assert!(!blocked("172.32.0.1"), "172.32 不在私网段");
+    }
+
+    #[test]
+    fn validates_isolated_engine_window_target() {
+        assert!(valid_engine_window_label(
+            "engine-01abcde-00112233445566778899aabbccddeeff"
+        ));
+        assert!(validate_engine_window_url(
+            "/home/notes?file=local%3Anote-1&engine=builtin.preview&display=window"
+        )
+        .is_ok());
+
+        for value in [
+            "https://evil.test/home?file=x&engine=preview&display=window",
+            "//evil.test/home?file=x&engine=preview&display=window",
+            "/auth?file=x&engine=preview&display=window",
+            "/home?file=x&file=y&engine=preview&display=window",
+            "/home?file=x&engine=preview&display=window&extra=1",
+            "/home?file=x&engine=preview%2Fother&display=window",
+            "/home?file=x&engine=preview&display=tab",
+        ] {
+            assert!(validate_engine_window_url(value).is_err(), "应拒绝 {value}");
+        }
+        assert!(!valid_engine_window_label("main"));
+        assert!(!valid_engine_window_label(
+            "engine-01abcde-00112233445566778899AABBCCDDEEFF"
+        ));
     }
 }

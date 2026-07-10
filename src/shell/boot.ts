@@ -7,11 +7,14 @@ import { registerFilesPort } from "@protocol/files"
 import { registerUiActions } from "@/lib/ui-actions"
 import { registerActiveNode } from "@/lib/active-node"
 import { registerBuiltInVfsProviders } from "@/vfs/builtin"
+import { registerBuiltInFileSystems } from "@/filesystem/builtin"
+import { registerBuiltInEngines } from "@/engines/builtin"
 import { isTauri } from "@/lib/tauri"
 import { filesPort } from "@/files/files-port"
 import {
   openTarget,
   closeTab,
+  closeNodeTabs,
   tabKey,
   getActiveId,
   getActiveSource,
@@ -20,7 +23,9 @@ import {
   openAiSection,
   openAiTasks,
 } from "@/workspace/store"
-import { nodeResourceRefForTab, resourceTab } from "@/workspace/resource-tab"
+import { nodeResourceRefForTab } from "@/workspace/resource-tab"
+import { fileEngineTargetForTab } from "@/workspace/file-tab"
+import { resourceFileRef, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { openInBrowserTab } from "@/workspace/browser-open"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
@@ -41,12 +46,22 @@ export function registerAll(): void {
   registerFilesPort(filesPort)
   // Resource/VFS 挂载点: 本地 node + 连接模式路由型资源。provider 自身保持 UI 无关。
   registerBuiltInVfsProviders()
+  // 五层模型的统一文件系统。旧 Resource/VFS 作为首个存储适配器接入，迁移期并行存在。
+  registerBuiltInFileSystems()
+  registerBuiltInEngines()
   // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点打开为工作区标签 (守 components↛app 边界, 由 app 注入)。
   registerUiActions({
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
     openTab: (kind, id, title) =>
-      openTarget({ type: "resource", ref: { scheme: "node", kind, id }, title }, "agent"),
-    closeTab: (kind, id) => closeTab(tabKey(resourceTab({ scheme: "node", kind, id }))),
+      openTarget(
+        {
+          type: "file",
+          ref: resourceFileRef({ scheme: "node", kind, id }),
+          title,
+        },
+        "agent",
+      ),
+    closeTab: (kind, id) => closeNodeTabs({ kind, id }),
     // 外链 → 「浏览器」模块 (插件经 host.external 触达, 守 plugin↛workspace 边界由 app 注入实现)。
     openExternal: (url) => openInBrowserTab(url),
     // AI 区段动作: agent 插件视图经端口打开/关闭 AI 管理标签 (不直接 import 工作区)。
@@ -63,7 +78,9 @@ export function registerAll(): void {
     const id = getActiveId()
     const tab = getTabs().find((t) => t.id === id)
     if (!tab || getActiveSource() !== "user") return null
-    const ref = nodeResourceRefForTab(tab)
+    const fileTarget = fileEngineTargetForTab(tab)
+    const fileResource = fileTarget ? resourceRefForFile(fileTarget.ref) : null
+    const ref = fileResource?.scheme === "node" ? fileResource : nodeResourceRefForTab(tab)
     return ref ? { kind: ref.kind, id: ref.id } : null
   })
   for (const m of [infoManifest, communityManifest]) {

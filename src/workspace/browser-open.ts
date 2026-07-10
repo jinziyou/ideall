@@ -3,8 +3,7 @@
 // 触发方: 插件 host.openExternal、宿主 UI 的 openExternal、全局 target=_blank 拦截。
 import { isTauri, browserNavigate } from "@/lib/tauri"
 import { safeHref } from "@/lib/safe-url"
-import { openTab } from "./store"
-import { resourceTab } from "./resource-tab"
+import { openTarget } from "./store"
 
 let pendingUrl: string | null = null
 const subscribers = new Set<(url: string) => void>()
@@ -40,7 +39,11 @@ export async function navigateExternal(
 
   if (newTab) {
     pendingUrl = href
-    openTab(resourceTab({ scheme: "browser", kind: "page", id: href }, href))
+    openTarget({
+      type: "resource",
+      ref: { scheme: "browser", kind: "page", id: href },
+      title: href,
+    })
   }
 
   try {

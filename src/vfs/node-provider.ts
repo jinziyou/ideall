@@ -19,6 +19,7 @@ import {
   ALL_NODE_KINDS,
   type NodeSummary,
 } from "@/files/stores/nodes-store"
+import { updateFileContent } from "@/files/stores/files-store"
 import type {
   ResourceAction,
   ResourceActionId,
@@ -45,6 +46,7 @@ export type NodeVfsProviderDeps = {
   readBlobBase64: (
     id: string,
   ) => Promise<{ mime: string; size: number; base64: string } | undefined>
+  updateFileContent: (id: string, content: string, mime?: string) => Promise<unknown | undefined>
 }
 
 const defaultDeps: NodeVfsProviderDeps = {
@@ -55,6 +57,7 @@ const defaultDeps: NodeVfsProviderDeps = {
   moveNode,
   deleteNode,
   readBlobBase64,
+  updateFileContent,
 }
 
 const READ_PERMISSION = "fs:read"
@@ -213,6 +216,17 @@ function writePatch(input: unknown): FsWritePatch {
   }
 }
 
+function blobWriteInput(input: unknown): { content: string; mime?: string } {
+  const raw = objectInput(input)
+  if (typeof raw.content !== "string") {
+    throw new VfsError("unsupported", "write-blob requires string content")
+  }
+  return {
+    content: raw.content,
+    ...(typeof raw.mime === "string" && raw.mime ? { mime: raw.mime } : {}),
+  }
+}
+
 function moveInput(input: unknown): { parentId: string | null; afterSortKey?: string | null } {
   const raw = objectInput(input)
   const parentId = raw.parentId === null || typeof raw.parentId === "string" ? raw.parentId : null
@@ -241,7 +255,10 @@ function nodeActions(kind: NodeKind): ResourceAction[] {
   if (kind !== "feed" && kind !== "file" && kind !== "thread") {
     actions.push({ id: "move", label: "移动", requires: ["move"] })
   }
-  if (kind === "file") actions.push({ id: "read-blob", label: "读取文件", requires: ["read-blob"] })
+  if (kind === "file") {
+    actions.push({ id: "read-blob", label: "读取文件", requires: ["read-blob"] })
+    actions.push({ id: "write-blob", label: "写入文件", requires: ["edit"] })
+  }
   if (kind === "bookmark" || kind === "feed") {
     actions.push({ id: "navigate", label: "访问", requires: ["navigate"] })
   }
@@ -309,6 +326,25 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
           const blob = await deps.readBlobBase64(nodeRefValue.id)
           if (!blob) throw new VfsError("not-found", `Blob not found: ${resourceKey(nodeRefValue)}`)
           return blob
+        }
+        case "write-blob": {
+          if (nodeRefValue.kind !== "file") {
+            throw new VfsError("unsupported", "write-blob only supports file nodes")
+          }
+          if (!canWriteKind(nodeRefValue.kind, ctx)) {
+            throw new VfsError("permission-denied", "Missing write permission")
+          }
+          const inputValue = blobWriteInput(input)
+          const updated = await deps.updateFileContent(
+            nodeRefValue.id,
+            inputValue.content,
+            inputValue.mime,
+          )
+          if (!updated) {
+            throw new VfsError("not-found", `Node not found: ${resourceKey(nodeRefValue)}`)
+          }
+          const node = await requireNode(deps, nodeRefValue)
+          return { meta: nodeMeta(node), content: stripNode(node) }
         }
         case "edit": {
           if (!canWriteKind(nodeRefValue.kind, ctx)) {

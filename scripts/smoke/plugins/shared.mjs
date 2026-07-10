@@ -12,6 +12,7 @@ export const LEGACY_MCP_SECRET = `legacy-mcp-secret-${RUN_ID}`
 export const LEGACY_WORKSPACE_KEY = `legacy-workspace-key-${RUN_ID}`
 export const LEGACY_WORKSPACE_ID = `smoke-ws-${RUN_ID}`
 export const AGENT_SETTINGS_KEY = "wonita:agent:settings"
+export const AGENT_SETTINGS_CANONICAL_KEY = "ideall:agent:settings"
 export const AGENT_SECRETS_KEY = "ideall:agent:secrets:v1"
 export const AGENT_WORKSPACES_KEY = "ideall:agent:workspaces:v1"
 export const LEGACY_AUTH_TOKEN_KEY = "wonita:auth:token"
@@ -134,6 +135,7 @@ export async function readSecurityMigrationState(page) {
       syncCodeKey,
       syncSecureKey,
       agentSettingsKey,
+      agentSettingsCanonicalKey,
       agentSecureKey,
       agentSecretsKey,
       secretSecureKey,
@@ -149,6 +151,7 @@ export async function readSecurityMigrationState(page) {
         }
       }
       const settings = readJson(agentSettingsKey, "{}")
+      const canonicalSettings = readJson(agentSettingsCanonicalKey, "{}")
       const secrets = readJson(agentSecretsKey, "[]")
       const workspaces = readJson(agentWorkspacesKey, "{}")
       return {
@@ -159,7 +162,9 @@ export async function readSecurityMigrationState(page) {
         fallbackAgentKey: localStorage.getItem(fallbackKey(agentSecureKey)),
         fallbackSecret: localStorage.getItem(fallbackKey(secretSecureKey)),
         fallbackWorkspaceKey: localStorage.getItem(fallbackKey(workspaceSecureKey)),
-        publicAgentApiKey: settings?.apiKey,
+        // 诊断读取会先把 wonita 旧键规范化成 ideall 键，再由显式迁移动作写入
+        // secure-store；三个阶段都代表“已识别”，冒烟不能只观察首尾两态。
+        publicAgentApiKey: settings?.apiKey ?? canonicalSettings?.apiKey,
         publicSecretValue: Array.isArray(secrets) ? secrets[0]?.value : undefined,
         publicWorkspaceDump: JSON.stringify(workspaces),
       }
@@ -170,6 +175,7 @@ export async function readSecurityMigrationState(page) {
       syncCodeKey: LEGACY_SYNC_CODE_KEY,
       syncSecureKey: "ideall:sync:code",
       agentSettingsKey: AGENT_SETTINGS_KEY,
+      agentSettingsCanonicalKey: AGENT_SETTINGS_CANONICAL_KEY,
       agentSecureKey: "ideall:agent:settings:apiKey",
       agentSecretsKey: AGENT_SECRETS_KEY,
       secretSecureKey: "ideall:agent:secret:SMOKE_SECRET",
@@ -194,6 +200,7 @@ export async function cleanupPluginSmokeData(page) {
         LEGACY_AUTH_USER_KEY,
         LEGACY_SYNC_CODE_KEY,
         AGENT_SETTINGS_KEY,
+        AGENT_SETTINGS_CANONICAL_KEY,
         AGENT_SECRETS_KEY,
         AGENT_WORKSPACES_KEY,
         "ideall:secure-fallback:ideall:auth:token",

@@ -7,7 +7,8 @@
 
 import type { ModuleId, Tab, TabDescriptor, WsMode } from "./types"
 import type { NodeRef } from "./node-ref"
-import { descriptorForResource, descriptorForResourceMeta, type OpenTarget } from "./open-target"
+import { tabKey } from "./tab-key"
+import type { OpenTarget } from "./open-target"
 import {
   isBrowserResourceTab,
   nodeResourceRefForTab,
@@ -23,9 +24,35 @@ import { workspaceActions, type ActiveSource, type WorkspaceState } from "./work
 import { WORKSPACE_STORAGE_KEY } from "./workspace-persist"
 import { setActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
 import { requestEmbedRoute } from "@/plugins/embed/embed-nav"
+import { coreFileRoot, coreFileRootForModule, mountedFileRootId } from "./file-roots"
+import { getFileSystem, statFile } from "@/filesystem/registry"
+import { engineRegistry } from "@/engines/builtin"
+import { readEnginePreferences } from "@/engines/preferences"
+import { openEngineWindow } from "@/lib/engine-window"
+import { fileTypeInfo } from "@/lib/file-type"
+import {
+  DIRECTORY_MEDIA_TYPE,
+  fileRefKey,
+  type FileRef,
+  type IdeallFile,
+} from "@protocol/file-system"
+import type { ResourceRef } from "@protocol/resource"
+import {
+  FILE_ENGINE_TAB_KIND,
+  fileEngineTab,
+  fileEngineTargetForTab,
+  parseFileEngineTabParams,
+} from "./file-tab"
+import {
+  panelForFile,
+  resourceFileRef,
+  resourceRefForFile,
+} from "@/filesystem/resource-file-system"
+import { DEFAULT_STARTUP_TARGET, readStartupTarget } from "./startup-target"
 
 export type { ActiveSource }
 export type { OpenTarget }
+export { tabKey } from "./tab-key"
 
 function ws(): WorkspaceState {
   return store.getState().workspace
@@ -96,31 +123,158 @@ function validMode(value: unknown): WsMode {
 
 type OpenTabOpts = { transient?: boolean }
 
-/** 标签去重 key: 同 kind(+params) 视为同一标签。
- *  params 按键排序后序列化, 避免顺序差异 (如 {a,b} vs {b,a}) 造成同一标签开成两个实例。 */
-export function tabKey(d: TabDescriptor): string {
-  if (!d.params) return d.kind
-  const sorted = Object.keys(d.params)
-    .sort()
-    .map((k) => `${k}=${d.params![k]}`)
-    .join("&")
-  return `${d.kind}:${sorted}`
+function legacyResourceEngine(ref: ResourceRef): string {
+  if (ref.scheme === "node") {
+    if (ref.kind === "note") return "ideall.note"
+    if (ref.kind === "bookmark") return "ideall.bookmark"
+    if (ref.kind === "feed") return "ideall.feed"
+    if (ref.kind === "thread") return "ideall.thread"
+    if (ref.kind === "folder") return "ideall.directory"
+    return "ideall.preview"
+  }
+  if (ref.scheme === "browser") return "ideall.browser"
+  return "ideall.connected"
 }
 
-function hydrateTab(tab: Tab): Tab | null {
+function legacyResourceRootId(ref: ResourceRef): string {
+  if (ref.scheme === "node") {
+    if (ref.kind === "note") return "notes"
+    if (ref.kind === "bookmark" || ref.kind === "folder") return "bookmarks"
+    if (ref.kind === "file") return "files"
+    if (ref.kind === "feed") return "subscriptions"
+    return "workspace"
+  }
+  if (ref.scheme === "browser") return "browser"
+  if (ref.scheme === "app") return "apps"
+  return ref.scheme
+}
+
+function inferredRootIdForFile(ref: FileRef): string | undefined {
+  const resource = resourceRefForFile(ref)
+  if (resource) return legacyResourceRootId(resource)
+
+  const panel = panelForFile(ref)
+  if (panel) {
+    if (["home"].includes(panel.id)) return "home"
+    if (["subscriptions"].includes(panel.id)) return "subscriptions"
+    if (["bookmarks"].includes(panel.id)) return "bookmarks"
+    if (["files"].includes(panel.id)) return "files"
+    if (["notes"].includes(panel.id)) return "notes"
+    if (["ai-settings", "ai-mcp", "ai-skills", "ai-rules"].includes(panel.id)) {
+      return "workspace"
+    }
+    if (panel.id === "apps") return "apps"
+    if (panel.id === "publications") return "community"
+    return "system"
+  }
+
+  const provider = getFileSystem(ref.fileSystemId)
+  return provider ? mountedFileRootId(provider.descriptor.root) : undefined
+}
+
+function compatibilityFileMediaType(name: string): string {
+  const info = fileTypeInfo(name, "")
+  if (info.preview === "audio") return "audio/*"
+  if (info.preview === "video") return "video/*"
+  if (info.preview === "image" || info.preview === "svg") return `image/${info.ext || "*"}`
+  if (info.preview === "json") return "application/json"
+  if (info.preview === "markdown") return "text/markdown"
+  if (["code", "csv", "text"].includes(info.preview)) return "text/plain"
+  if (info.preview === "pdf") return "application/pdf"
+  return "application/octet-stream"
+}
+
+function compatibilityResourceMediaType(ref: ResourceRef, name: string): string {
+  if (ref.scheme === "node") {
+    if (ref.kind === "folder") return DIRECTORY_MEDIA_TYPE
+    if (ref.kind === "file") return compatibilityFileMediaType(name)
+    return `application/vnd.ideall.${ref.kind}+json`
+  }
+  if (ref.scheme === "browser") return "text/uri-list"
+  if (ref.scheme === "app") return "application/vnd.ideall.app+json"
+  return `application/vnd.ideall.${ref.scheme}.${ref.kind}+json`
+}
+
+/**
+ * ResourceRef 仅是迁移期入口。这里把调用者已有的元数据投影成 File，避免为了
+ * 兼容同步 boolean API 再创建一个临时 resource 标签；VFS 的真实元数据随后刷新。
+ */
+function compatibilityFileForResource(
+  target: Extract<OpenTarget, { type: "resource" }>,
+): IdeallFile {
+  const { ref, meta } = target
+  const directory = ref.scheme === "node" && (ref.kind === "folder" || ref.kind === "note")
+  const name = meta?.title || target.title || ref.id
+  return {
+    ref: resourceFileRef(ref),
+    kind: directory ? "directory" : "file",
+    name,
+    mediaType: compatibilityResourceMediaType(ref, name),
+    capabilities: [
+      ...(directory ? (["read-directory"] as const) : []),
+      ...(meta?.capabilities.map((capability) => `resource:${capability}`) ?? []),
+    ],
+    source:
+      ref.scheme === "node"
+        ? { kind: "local", id: "ideall.nodes", label: "本机" }
+        : ref.scheme === "info" || ref.scheme === "community"
+          ? { kind: "remote", id: ref.scheme, label: ref.scheme }
+          : ref.scheme === "app" || ref.scheme === "browser"
+            ? { kind: "app", id: ref.scheme, label: ref.scheme }
+            : { kind: "system", id: ref.scheme, label: ref.scheme },
+    updatedAt: meta?.updatedAt,
+    properties: {
+      resourceScheme: ref.scheme,
+      resourceKind: ref.kind,
+      route: meta?.route ?? null,
+      iconHint: meta?.iconHint ?? null,
+    },
+  }
+}
+
+function hydrateResourceFileTab(ref: ResourceRef, tab: Tab): Tab {
+  const descriptor = fileEngineTab(
+    { ref: resourceFileRef(ref), name: tab.title || ref.id },
+    legacyResourceEngine(ref),
+    { module: tab.module, rootId: legacyResourceRootId(ref) },
+  )
+  return { ...descriptor, id: tabKey(descriptor) }
+}
+
+export function migrateWorkspaceTab(tab: Tab): Tab | null {
   if (!VALID_MODULES.has(tab.module)) return null
   if (tab.kind === "node") {
     const ref = nodeResourceRefForTab(tab)
     if (!ref) return null
-    const descriptor = resourceTab(ref, tab.title)
-    return { ...descriptor, id: tabKey(descriptor) }
+    return hydrateResourceFileTab(ref, tab)
   }
   if (tab.kind === "browser-view") {
-    const descriptor = resourceTab({ scheme: "browser", kind: "page", id: "default" }, tab.title)
-    return { ...descriptor, id: tabKey(descriptor) }
+    return hydrateResourceFileTab({ scheme: "browser", kind: "page", id: "default" }, tab)
   }
-  if (tab.kind === "resource" && !parseResourceTabParams(tab.params)) return null
+  if (tab.kind === "resource") {
+    const ref = parseResourceTabParams(tab.params)
+    return ref ? hydrateResourceFileTab(ref, tab) : null
+  }
+  if (tab.kind === FILE_ENGINE_TAB_KIND && !parseFileEngineTabParams(tab.params)) return null
   return { ...tab, id: tabKey(tab) }
+}
+
+export function migrateWorkspaceTabs(tabs: readonly Tab[]): {
+  tabs: Tab[]
+  idMap: ReadonlyMap<string, string>
+} {
+  const migrated: Tab[] = []
+  const seen = new Set<string>()
+  const idMap = new Map<string, string>()
+  for (const tab of tabs) {
+    const next = migrateWorkspaceTab(tab)
+    if (!next) continue
+    idMap.set(tab.id, next.id)
+    if (seen.has(next.id)) continue
+    seen.add(next.id)
+    migrated.push(next)
+  }
+  return { tabs: migrated, idMap }
 }
 
 function persist() {
@@ -139,6 +293,7 @@ export function hydrateWorkspace() {
     activeId: string | null
     transientId: string | null
     activeModule: ModuleId
+    activeRootId: string | null
     mode: WsMode
     sidebarCollapsed: boolean
     rightPanelOpen: boolean
@@ -152,6 +307,7 @@ export function hydrateWorkspace() {
         activeId?: string | null
         transientId?: string | null
         activeModule?: ModuleId
+        activeRootId?: string
         mode?: WsMode
         sidebarCollapsed?: boolean
         rightPanelOpen?: boolean
@@ -162,6 +318,8 @@ export function hydrateWorkspace() {
           activeId: p.activeId ?? null,
           transientId: p.transientId ?? null,
           activeModule: validModule(p.activeModule) ?? "home",
+          activeRootId:
+            typeof p.activeRootId === "string" && p.activeRootId ? p.activeRootId : null,
           mode: validMode(p.mode),
           sidebarCollapsed: p.sidebarCollapsed ?? false,
           rightPanelOpen: p.rightPanelOpen ?? false,
@@ -175,13 +333,7 @@ export function hydrateWorkspace() {
     const cur = ws()
     // 清洗: 丢弃 module 不在合法集合的污染/陈旧标签 (防下线某模块留僵尸标签);
     // 节点标签额外要求 params 能解析出合法 NodeRef (防下线某 kind / 损坏 params 留僵尸标签)。
-    const idMap = new Map<string, string>()
-    const validTabs = saved.tabs.flatMap((t) => {
-      const hydrated = hydrateTab(t)
-      if (!hydrated) return []
-      idMap.set(t.id, hydrated.id)
-      return [hydrated]
-    })
+    const { tabs: validTabs, idMap } = migrateWorkspaceTabs(saved.tabs)
     const merged = [...validTabs]
     for (const t of cur.tabs) if (!merged.some((x) => x.id === t.id)) merged.push(t)
     const savedActiveId = saved.activeId ? (idMap.get(saved.activeId) ?? saved.activeId) : null
@@ -208,6 +360,12 @@ export function hydrateWorkspace() {
             : cur.activeId
               ? coerceActiveModuleForMode(cur.activeModule, saved.mode, saved.activeModule)
               : coerceActiveModuleForMode(saved.activeModule, saved.mode),
+        activeRootId:
+          cur.activeId && activeTab
+            ? cur.activeRootId
+            : (saved.activeRootId ??
+              activeTab?.rootId ??
+              coreFileRootForModule(saved.activeModule).id),
         mode: saved.mode,
         sidebarCollapsed: saved.sidebarCollapsed,
         rightPanelOpen: saved.rightPanelOpen,
@@ -282,12 +440,22 @@ function evictColdTabs(tabs: Tab[], protect: Set<string>): Tab[] {
  *  opts.transient=true → 预览标签 (复用单一预览槽: 轻底/淡色点/标题点线下划线); 缺省 = 常驻打开
  *  (若命中当前预览槽则提升为常驻)。新增常驻标签超过软上限时自动回收最久未用的冷标签。 */
 export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: OpenTabOpts) {
+  // 旧模块配置仍可能交出 Resource descriptor；统一入口在运行期立即折叠为
+  // FileRef + Engine，保证任何 UI 路径都不会重新制造第二套标签身份。
+  if (d.kind === "resource") {
+    const ref = parseResourceTabParams(d.params)
+    if (ref) {
+      openTarget({ type: "resource", ref, title: d.title, transient: opts?.transient }, source)
+      return
+    }
+  }
   hideBrowserWebviewUnlessBrowserTab(d)
   const id = tabKey(d)
   if (opts?.transient) {
     setState({
       ...transientOpenPatch(d),
       activeModule: coerceActiveModuleForMode(d.module, ws().mode, ws().activeModule),
+      activeRootId: d.rootId ?? coreFileRootForModule(d.module).id,
       activeSource: source,
     })
     return
@@ -300,6 +468,7 @@ export function openTab(d: TabDescriptor, source: ActiveSource = "user", opts?: 
     transientId: ws().transientId === id ? null : ws().transientId,
     activeId: id,
     activeModule: coerceActiveModuleForMode(d.module, ws().mode, ws().activeModule),
+    activeRootId: d.rootId ?? coreFileRootForModule(d.module).id,
     activeSource: source,
   })
 }
@@ -369,12 +538,6 @@ export function openAiTasks(workspaceId: string, title: string, opts?: OpenTabOp
   openAgentTab(tabDescriptor("ai-tasks", { title, params: { workspaceId } }), opts)
 }
 
-function updateTabDescriptor(d: TabDescriptor) {
-  const id = tabKey(d)
-  if (!ws().tabs.some((t) => t.id === id)) return
-  setState({ tabs: ws().tabs.map((t) => (t.id === id ? { ...t, ...d, id } : t)) })
-}
-
 function requestConnectedEmbedRoute(meta: { ref: OpenTargetResourceRef; route?: string }) {
   const { ref, route } = meta
   if (!route || (ref.scheme !== "info" && ref.scheme !== "community")) return
@@ -395,29 +558,148 @@ async function refreshResourceTarget(target: Extract<OpenTarget, { type: "resour
         })
       )?.meta
     if (!meta) return
-    const descriptor = descriptorForResourceMeta(meta)
-    if (descriptor) updateTabDescriptor(descriptor)
+    const refKey = fileRefKey(resourceFileRef(target.ref))
+    const tabs = ws().tabs.map((tab) => {
+      const opened = fileEngineTargetForTab(tab)
+      return opened && fileRefKey(opened.ref) === refKey && tab.title !== meta.title
+        ? { ...tab, title: meta.title }
+        : tab
+    })
+    if (tabs.some((tab, index) => tab !== ws().tabs[index])) setState({ tabs })
     requestConnectedEmbedRoute(meta)
   } catch {
-    /* fallback descriptor already opened */
+    /* 兼容文件标签已打开；元数据暂不可用时保留调用者提供的标题。 */
   }
 }
 
-/** 统一打开入口: ResourceRef 通过 VFS meta 归一到标签描述; 同步 fallback 保持打开手感。 */
+async function openFileTarget(
+  target: Extract<OpenTarget, { type: "file" }>,
+  source: ActiveSource,
+  shouldCommit?: () => boolean,
+): Promise<boolean> {
+  // 先声明本次导航的空间锚点，再异步读取文件。完成时下方会再次核对：若用户
+  // 已切到别的根，旧请求就安静失效；若仍在此根，深链/活动栏请求可以正常打开。
+  if (target.rootId) setState({ activeRootId: target.rootId })
+  try {
+    const file =
+      target.file ??
+      (await statFile(target.ref, {
+        actor: "ui",
+        permissions: [],
+        intent: "metadata",
+      }))
+    if (!file) return false
+    if (shouldCommit && !shouldCommit()) return false
+    const candidates = engineRegistry.matching(file)
+    const requested = target.engineId
+      ? candidates.find((candidate) => candidate.descriptor.engineId === target.engineId)
+      : undefined
+    const preferences = readEnginePreferences(
+      typeof window === "undefined" ? undefined : window.localStorage,
+    )
+    const resolved = requested ?? engineRegistry.resolve(file, preferences)
+    if (!resolved) return false
+    // 文件 stat / 引擎解析是异步的；用户已切到别的根时丢弃旧点击结果，避免活动栏回跳。
+    if (target.rootId && ws().activeRootId !== target.rootId) return false
+    const engineId = resolved.descriptor.engineId
+    if (target.display === "window") {
+      if (!resolved.descriptor.supportsStandaloneWindow) return false
+      await openEngineWindow(fileRefKey(file.ref), engineId)
+      return true
+    }
+    const provisional = fileEngineTab({ ref: file.ref, name: target.title || file.name }, engineId)
+    const existingRootId = ws().tabs.find((tab) => tab.id === tabKey(provisional))?.rootId
+    const rootId = target.rootId ?? existingRootId ?? inferredRootIdForFile(file.ref)
+    openTab(
+      fileEngineTab(
+        { ref: file.ref, name: target.title || file.name },
+        engineId,
+        rootId ? { rootId } : {},
+      ),
+      source,
+      { transient: target.transient },
+    )
+    if (rootId) setState({ activeRootId: rootId })
+    return true
+  } catch {
+    /* 文件卸载、权限或窗口创建失败时保留当前工作区，不制造损坏标签。 */
+    return false
+  }
+}
+
+let routeFileOpenRequest = 0
+
+/**
+ * 路由专用的可等待文件打开：为 UrlSync 暴露实时 pending 状态，并用递增令牌
+ * 取消已离开的旧深链，避免异步 stat 完成后把用户拉回上一条 URL。
+ */
+export async function openRouteFileTarget(
+  target: Extract<OpenTarget, { type: "file" }>,
+  source: ActiveSource = "user",
+): Promise<boolean> {
+  const request = ++routeFileOpenRequest
+  setState({ routeOpenPending: true })
+  try {
+    return await openFileTarget(target, source, () => request === routeFileOpenRequest)
+  } finally {
+    if (request === routeFileOpenRequest) setState({ routeOpenPending: false })
+  }
+}
+
+export function cancelRouteFileOpen(): void {
+  routeFileOpenRequest += 1
+  if (ws().routeOpenPending) setState({ routeOpenPending: false })
+}
+
+/** 首次启动或恢复目标失效时打开用户配置；最终总是回退 Home。 */
+export async function openStartupTarget(transient = false): Promise<boolean> {
+  const configured = readStartupTarget(
+    typeof window === "undefined" ? undefined : window.localStorage,
+  )
+  if (configured.rootId) setState({ activeRootId: configured.rootId })
+  if (await openFileTarget({ type: "file", ...configured, transient }, "user")) {
+    return true
+  }
+  if (
+    configured.ref.fileSystemId === DEFAULT_STARTUP_TARGET.ref.fileSystemId &&
+    configured.ref.fileId === DEFAULT_STARTUP_TARGET.ref.fileId &&
+    configured.engineId === DEFAULT_STARTUP_TARGET.engineId
+  ) {
+    return false
+  }
+  setState({ activeRootId: DEFAULT_STARTUP_TARGET.rootId ?? "home" })
+  return openFileTarget(
+    { type: "file", ...DEFAULT_STARTUP_TARGET, transient, rootId: "home" },
+    "user",
+  )
+}
+
+/** 统一打开入口: ResourceRef 只作为兼容输入，立即投影为 File 后交给引擎解析。 */
 export function openTarget(target: OpenTarget, source: ActiveSource = "user"): boolean {
   switch (target.type) {
     case "tab":
       openTab(target.descriptor, source, { transient: target.transient })
       return true
     case "resource": {
-      const descriptor = target.meta
-        ? descriptorForResourceMeta(target.meta)
-        : descriptorForResource(target.ref, target.title)
-      if (!descriptor) return false
-      openTab(descriptor, source, { transient: target.transient })
+      const file = compatibilityFileForResource(target)
+      // target.file 使 openFileTarget 在首次 await 之前完成标签激活，保留旧同步 API 的手感；
+      // 标签身份与后续文件入口完全一致，且默认引擎仍经过用户偏好解析。
+      void openFileTarget(
+        {
+          type: "file",
+          ref: file.ref,
+          file,
+          transient: target.transient,
+          rootId: legacyResourceRootId(target.ref),
+        },
+        source,
+      )
       void refreshResourceTarget(target)
       return true
     }
+    case "file":
+      void openFileTarget(target, source)
+      return true
     case "command":
       if (target.command === "open-ai-panel") setRightPanel(true)
       else toggleRightPanel()
@@ -426,7 +708,7 @@ export function openTarget(target: OpenTarget, source: ActiveSource = "user"): b
 }
 
 /**
- * @deprecated 仅保留给旧端口/插件兼容；新代码应直接调用 openTarget({ type:"resource" })。
+ * @deprecated 仅保留给旧端口/插件兼容；新代码应直接调用 openTarget({ type:"file" })。
  * 打开 (或激活已存在的) 一个节点标签。AI (boot.ts 的 ui.openTab) 传 source="agent" ——
  * 该节点不计入「打开即隐式同意」(隐私)。
  */
@@ -437,7 +719,13 @@ export function openNodeTab(
   opts?: OpenTabOpts,
 ) {
   openTarget(
-    { type: "resource", ref: { scheme: "node", ...ref }, title, transient: opts?.transient },
+    {
+      type: "file",
+      ref: resourceFileRef({ scheme: "node", ...ref }),
+      title,
+      transient: opts?.transient,
+      rootId: legacyResourceRootId({ scheme: "node", ...ref }),
+    },
     source,
   )
 }
@@ -445,8 +733,28 @@ export function openNodeTab(
 /** 节点标签取数后回填真实标题 (不改 id / 去重 key, 仅更新显示)。 */
 export function renameNodeTab(ref: NodeRef, title: string) {
   const id = tabKey(resourceTab({ scheme: "node", ...ref }, title))
-  if (!ws().tabs.some((t) => t.id === id)) return
-  setState({ tabs: ws().tabs.map((t) => (t.id === id ? { ...t, title } : t)) })
+  const matches = (tab: Tab) => {
+    if (tab.id === id) return true
+    const fileTarget = fileEngineTargetForTab(tab)
+    const resource = fileTarget ? resourceRefForFile(fileTarget.ref) : null
+    return resource?.scheme === "node" && resource.kind === ref.kind && resource.id === ref.id
+  }
+  if (!ws().tabs.some(matches)) return
+  setState({ tabs: ws().tabs.map((tab) => (matches(tab) ? { ...tab, title } : tab)) })
+}
+
+/** 删除节点后关闭它的全部引擎视图以及旧 Resource 兼容标签。 */
+export function closeNodeTabs(ref: NodeRef) {
+  const ids = ws().tabs.flatMap((tab) => {
+    const legacy = nodeResourceRefForTab(tab)
+    const fileTarget = fileEngineTargetForTab(tab)
+    const resource = fileTarget ? resourceRefForFile(fileTarget.ref) : null
+    return (legacy?.kind === ref.kind && legacy.id === ref.id) ||
+      (resource?.scheme === "node" && resource.kind === ref.kind && resource.id === ref.id)
+      ? [tab.id]
+      : []
+  })
+  for (const id of ids) closeTab(id)
 }
 
 /** 标记标签存在未保存草稿。dirty 标签不会被自动回收; UI 关闭前会二次确认。 */
@@ -523,6 +831,7 @@ export function closeTab(id: string) {
   }
   let activeId = ws().activeId
   let activeModule = ws().activeModule
+  let activeRootId = ws().activeRootId
   if (ws().activeId === id) {
     const next = tabs[idx] ?? tabs[idx - 1] ?? null
     activeId = next ? next.id : null
@@ -530,12 +839,14 @@ export function closeTab(id: string) {
     if (next) {
       hideBrowserWebviewUnlessBrowserTab(next)
       activeModule = coerceActiveModuleForMode(next.module, ws().mode, activeModule)
+      activeRootId = next.rootId ?? coreFileRootForModule(next.module).id
     }
   }
   setState({
     tabs,
     activeId,
     activeModule,
+    activeRootId,
     transientId: ws().transientId === id ? null : ws().transientId,
     activeSource: "user",
   })
@@ -581,6 +892,7 @@ export function closeOtherTabs(keepId: string) {
     tabs: [keep],
     activeId: keepId,
     activeModule: coerceActiveModuleForMode(keep.module, ws().mode, ws().activeModule),
+    activeRootId: keep.rootId ?? coreFileRootForModule(keep.module).id,
     transientId: ws().transientId === keepId ? keepId : null,
     activeSource: "user",
   })
@@ -609,6 +921,45 @@ export function setActiveTab(id: string) {
   setState({
     activeId: id,
     activeModule: coerceActiveModuleForMode(t.module, ws().mode, ws().activeModule),
+    activeRootId: t.rootId ?? coreFileRootForModule(t.module).id,
+    activeSource: "user",
+  })
+}
+
+/**
+ * 选择合成根下的直接子树。活动栏只改变文件树锚点；若该根有默认文件，使用
+ * 单一预览槽打开，避免浏览根目录时持续堆积标签。
+ */
+export function toggleFileRoot(rootId: string) {
+  const root = coreFileRoot(rootId)
+  if (ws().activeRootId === root.id && !ws().sidebarCollapsed) {
+    setState({ sidebarCollapsed: true })
+    return
+  }
+  setState({
+    activeRootId: root.id,
+    activeModule: root.module,
+    sidebarCollapsed: false,
+    activeSource: "user",
+  })
+  if (root.defaultFile) {
+    void openFileTarget(
+      { type: "file", ref: root.defaultFile, transient: true, rootId: root.id },
+      "user",
+    )
+  }
+}
+
+export function toggleMountedFileRoot(ref: FileRef) {
+  const rootId = mountedFileRootId(ref)
+  if (ws().activeRootId === rootId && !ws().sidebarCollapsed) {
+    setState({ sidebarCollapsed: true })
+    return
+  }
+  setState({
+    activeRootId: rootId,
+    activeModule: "home",
+    sidebarCollapsed: false,
     activeSource: "user",
   })
 }
@@ -770,6 +1121,9 @@ export function useActiveWorkspaceId(): string | null {
 export function useActiveModule() {
   return useAppSelector((s) => s.workspace.activeModule)
 }
+export function useActiveRootId() {
+  return useAppSelector((s) => s.workspace.activeRootId)
+}
 export function useMode() {
   return useAppSelector((s) => s.workspace.mode)
 }
@@ -781,6 +1135,9 @@ export function useRightPanelOpen() {
 }
 export function useHydrated() {
   return useAppSelector((s) => s.workspace.hydrated)
+}
+export function useRouteOpenPending() {
+  return useAppSelector((s) => s.workspace.routeOpenPending)
 }
 
 /** 标签访问序 (LRU, 最近激活在末尾)。⌘K「打开的标签」按最近优先排序用。 */
@@ -804,10 +1161,16 @@ export function getMode(): WsMode {
 export function getActiveModule(): ModuleId {
   return ws().activeModule
 }
+export function getActiveRootId(): string {
+  return ws().activeRootId
+}
 /** 当前激活节点的激活来源 (user / agent)。隐私: active-node 端口对 agent 自激活的节点返回 null, 不计入隐式同意。 */
 export function getActiveSource(): ActiveSource {
   return ws().activeSource
 }
 export function getTabs(): Tab[] {
   return ws().tabs
+}
+export function getRouteOpenPending(): boolean {
+  return ws().routeOpenPending
 }

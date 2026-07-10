@@ -8,6 +8,7 @@ export type WorkspacePersistSnapshot = {
   activeId: string | null
   transientId: string | null
   activeModule: ModuleId
+  activeRootId: string
   mode: WsMode
   sidebarCollapsed: boolean
   rightPanelOpen: boolean
@@ -22,6 +23,7 @@ export function persistWorkspaceSnapshot(state: WorkspacePersistSnapshot, hydrat
       activeId: state.activeId,
       transientId: state.transientId,
       activeModule: state.activeModule,
+      activeRootId: state.activeRootId,
       mode: state.mode,
       sidebarCollapsed: state.sidebarCollapsed,
       rightPanelOpen: state.rightPanelOpen,

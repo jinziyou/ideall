@@ -35,6 +35,8 @@ export type TabDescriptor = {
   path?: string
   /** 预留: 带参标签 (如 info-entity ?label=&name=)，参与标签去重 key。 */
   params?: Record<string, string>
+  /** 打开该文件时所在的合成根子树；不参与标签身份。 */
+  rootId?: string
 }
 
 /** 已打开的标签实例。 */

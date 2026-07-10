@@ -1,52 +1,48 @@
 # ideall
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License: Apache 2.0](<https://img.shields.io/badge/License-Apache%202.0-blue.svg>)](LICENSE)
 
-**个人信息终端**
+**功能定位：个人信息终端**
 
-**设计思想：一切皆文件，一切皆标签页。** 数据统一成文件，表现统一成标签页。
+**设计风格：现代 · 面板 · 留白**
 
-**设计风格：现代 · 面板 · 留白。**
+**设计思想：借鉴linux一切皆文件思想，将所有功能统一抽象到存储、文件系统、文件、渲染引擎和显示这个模型中，不同的数据存储（本地、远程、app、第三方app），通过文件系统汇总展示为ideall中的文件，然后根据不同场景（如音频、开发）将同一个文件经引擎渲染展示为不同视图**
+
+核心功能：数据+链接+AI
 
 ## 项目组成
 
-| 组件 | 说明 |
-| --- | --- |
+| 组件             | 说明                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
 | **ideall** | 项目本体：跨平台 App（Android / iOS / Windows / macOS / Linux），管理本地数据，并连接 AI、应用与 Web |
-| **wonita** | 数据服务（独立项目）：数据同步、资讯与社区；提供默认后端实现 |
+| **wonita** | 数据服务（独立项目）：数据同步、资讯与社区；提供默认后端实现                                         |
 
-## 为什么做这个项目
+## 统一文件系统
 
-- **个人视角、本地优先**：给我自己开发使用的项目
-- **不想来回切换多个软件**
-- **我想自己决定看什么**
+ideall 不再按“本地 / 连接”拆成两套产品导航。IndexedDB、Blob、远端服务、内置 App 和第三方 App 都作为独立存储来源，经文件系统挂载到一个隐藏的合成根：
 
-## 五个分区
+```text
+Storage → FileSystem → IdeallFile → Engine → Display
+```
 
-终端按五个产品分区组织。**「我的」(home) 是本机数据区**，**apps（应用）是本机已安装应用的启动器**（Tauri 桌面 / 本地模式专属、零后端）；`info`（资讯）/ `community`（社区）/ `tool`（工具）是三个**发现**模块——它们发现的内容经**关注汇入「我的」**：
+- 活动栏展示合成根的直接子树，例如 Home、关注、书签、文件、笔记、工作区；App 可在授权后动态贡献子树。
+- 文件使用稳定 `FileRef` 寻址，路径和目录项只是投影。同一书签可同时出现在“书签”和“浏览器”中而不复制数据。
+- 普通打开由默认引擎在当前标签页显示；“打开方式”选择其他引擎时创建独立 App 窗口。
+- 默认引擎支持按单文件或内容类型配置；任意“文件 + 引擎”都可设为首次启动界面。正常启动优先恢复上次关闭的工作现场。
+- 音频、Code、Git、数据库、Shell 从静态产品分区转为引擎；旧路由与 Resource 深链继续兼容。
 
-| 模块 | 路由 | 角色 | 是否依赖远程后端 |
-| --- | --- | --- | --- |
-| 我的 (home) | `/home` | 本机数据区：概览 / 笔记 / 书签 / 资源 / 关注 / 对话；本地优先（**发布**需账号，见 [architecture.md](docs/architecture.md)） | 否 |
-| apps（应用） | `/apps` | 本机已安装应用启动器：列举并一键启动本机已装应用 | 否（**Tauri 桌面 / 本地模式专属**，零后端） |
-| info | `/info` | 信息聚合展示（发现界面默认 wonita 应用嵌入，经[嵌入桥](docs/ideall-embed-bridge.md)可换源） | 是（后端数据服务） |
-| community | `/community` | 发布者地图、关注与发布（发现界面默认 wonita 应用嵌入，可换源） | 是（后端数据服务） |
-| tool | `/tool` | 工具聚合（搜索 / AI / 导航） | 否（本地外链启动器，历史仅存本机） |
-
-> 活动栏另有两个**工作区级入口**（不属产品分区）：**浏览器**（`/browser`，连接模式的内嵌 webview 标签）与 **AI**（`/ai`，右侧常驻对话栏与 AI 区段标签）。
->
-> 想深入领域模型、模块边界、数据流图与关键不变量？见 [docs/architecture.md](docs/architecture.md)。
+完整契约、权限和迁移说明见 [文件系统与引擎架构](docs/file-system-engine-architecture.md)及 [architecture.md](docs/architecture.md)。
 
 ## 开源客户端与后端服务
 
 本仓库（**ideall**）是 **Apache 2.0** 开源的客户端，可自由使用、修改、自托管。后端取数经 `ServerPort` 契约消费——**ideall 不被任何单一后端绑死**，wonita 只是默认与参考实现。
 
-| | ideall（本仓库） | wonita 后端服务（默认，可换） |
-| --- | --- | --- |
-| 内容 | Next.js 前端、本地 home、插件、BYO-key agent | 采集、NLP、知识图谱、实体/事件追踪、鉴权 API |
-| 许可 | [Apache 2.0](LICENSE) | 闭源，官方运营（也可自实现 `ServerPort` 替换） |
-| 角色 | 独立可用的本地终端 | 可选的「语料级智能」增强 |
-| 商标 | **Wonita** 名称与官方 logo 不随 Apache 2.0 许可转让 | **Wonita** 品牌与官方数据 |
+|      | ideall（本仓库）                                          | wonita 后端服务（默认，可换）                   |
+| ---- | --------------------------------------------------------- | ----------------------------------------------- |
+| 内容 | Next.js 前端、本地 home、插件、BYO-key agent              | 采集、NLP、知识图谱、实体/事件追踪、鉴权 API    |
+| 许可 | [Apache 2.0](LICENSE)                                      | 闭源，官方运营（也可自实现`ServerPort` 替换） |
+| 角色 | 独立可用的本地终端                                        | 可选的「语料级智能」增强                        |
+| 商标 | **Wonita** 名称与官方 logo 不随 Apache 2.0 许可转让 | **Wonita** 品牌与官方数据                 |
 
 **要点：**
 
@@ -88,10 +84,10 @@ pnpm verify:full          # 基础门禁 + 开发服冒烟（自动挑 5020-5023
 
 开箱默认连官方 wonita（`https://api.wonita.link` + iframe `https://www.wonita.link`），见 [`.env.example`](.env.example)。home / tool 不依赖后端；info / community 需可用后端（经 `ServerPort` 契约；wonita 是默认实现）。
 
-| 场景 | 做法 |
-| --- | --- |
-| **独立运行 / 官方后端** | 无需配置，或复制 `.env.example` → `.env.local` |
-| **联调自建 / 本地后端** | 复制 `.env.example` → `.env.local`，把 `NEXT_PUBLIC_SERVER_ADDR` / `NEXT_PUBLIC_EMBED_BASE` 指向你的后端地址（`.env.local` 不入库） |
+| 场景                          | 做法                                                                                                                                          |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **独立运行 / 官方后端** | 无需配置，或复制`.env.example` → `.env.local`                                                                                            |
+| **联调自建 / 本地后端** | 复制`.env.example` → `.env.local`，把 `NEXT_PUBLIC_SERVER_ADDR` / `NEXT_PUBLIC_EMBED_BASE` 指向你的后端地址（`.env.local` 不入库） |
 
 客户端直连需后端放行 CORS（见 [docs/app.md](docs/app.md)）。
 
@@ -121,15 +117,15 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 
 ## 文档导航
 
-| 文档 | 内容 |
-| --- | --- |
-| [docs/architecture.md](docs/architecture.md) | 架构权威说明：领域模型、模块与边界、数据流图、技术选型、关键不变量 |
-| [docs/app.md](docs/app.md) | App（桌面 / 移动）当前开发、构建、CI、发布与签名手册 |
-| [docs/scripts.md](docs/scripts.md) | 本地验证、冒烟、API codegen、发布与脚本维护入口 |
-| [docs/app-history.md](docs/app-history.md) | App-only / Tauri 化历史路线图 |
+| 文档                                              | 内容                                                                                |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)       | 架构权威说明：领域模型、模块与边界、数据流图、技术选型、关键不变量                  |
+| [docs/app.md](docs/app.md)                         | App（桌面 / 移动）当前开发、构建、CI、发布与签名手册                                |
+| [docs/scripts.md](docs/scripts.md)                 | 本地验证、冒烟、API codegen、发布与脚本维护入口                                     |
+| [docs/app-history.md](docs/app-history.md)         | App-only / Tauri 化历史路线图                                                       |
 | [docs/design/ui-style.md](docs/design/ui-style.md) | UI 视觉规范（现代 · 面板 · 留白）：阴影 / 颜色 / 圆角 / 间距 / 公共组件的统一口径 |
-| [docs/claude.md](docs/claude.md) | 仓库结构与开发约定（贡献者速查） |
-| [.github/SECURITY.md](.github/SECURITY.md) | 安全策略与漏洞报告（含跨端同步加密关注点） |
+| [docs/claude.md](docs/claude.md)                   | 仓库结构与开发约定（贡献者速查）                                                    |
+| [.github/SECURITY.md](.github/SECURITY.md)         | 安全策略与漏洞报告（含跨端同步加密关注点）                                          |
 
 ## 参与贡献
 

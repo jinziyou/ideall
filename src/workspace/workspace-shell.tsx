@@ -21,13 +21,16 @@ import TabHost from "./tab-host"
 import GlobalShortcuts from "./global-shortcuts"
 import {
   getActiveId,
+  getRouteOpenPending,
   getTabs,
   hydrateWorkspace,
+  openStartupTarget,
   subscribeDirtyTabCloseRequests,
   tabKey,
   type DirtyTabCloseRequest,
   useActiveId,
   useHydrated,
+  useRouteOpenPending,
   useRightPanelOpen,
   useSidebarCollapsed,
   useTabs,
@@ -36,6 +39,17 @@ import { useMediaQuery } from "@/lib/use-media-query"
 import { useWindowViewport } from "@/lib/use-window-viewport"
 import { descriptorForResource, descriptorForPath } from "./modules"
 import { isBrowserResourceTab } from "./resource-tab"
+import { descriptorForFileEngineSearch, parseFileEngineSearch } from "./file-tab"
+import { FileEngineContent } from "./registry"
+import { defaultFileForPath } from "./file-roots"
+
+function routeProvidesInitialView(pathname: string | null, search: string): boolean {
+  if (parseFileEngineSearch(search) || descriptorForResource(search)) return true
+  const path = pathname || "/"
+  if (path.startsWith("/ai")) return true
+  if (path === "/" || path === "/home" || path.startsWith("/home/agent")) return false
+  return Boolean(defaultFileForPath(path) || descriptorForPath(path))
+}
 
 const RightAiPanel = React.lazy(() => import("./right-ai-panel"))
 
@@ -57,6 +71,7 @@ function UrlSync() {
   const hydrated = useHydrated()
   const activeId = useActiveId()
   const tabs = useTabs()
+  const routeOpenPending = useRouteOpenPending()
   const search = searchParams.toString()
   const isMdUp = useMediaQuery("(min-width: 768px)")
   // 首次同步 (恢复会话 / 深链归一) 用 replace, 不该堆历史; 之后移动端的标签导航才 push。
@@ -66,6 +81,7 @@ function UrlSync() {
     if (pathname?.startsWith("/auth")) return
     // 未水合前不抢路由: 此刻 store 仍空, 避免对地址栏做任何同步。
     if (!hydrated) return
+    if (getRouteOpenPending()) return
     const liveTabs = getTabs()
     const liveActiveId = getActiveId()
     // /home/agent = 「打开右侧 AI 栏」虚拟命令路由 (无对应标签): 开栏后弹回激活标签 (或 /home)。
@@ -79,7 +95,12 @@ function UrlSync() {
       // 若当前路径 / ?resource= 或旧 ?node= 能解析成标签 → 不抢, 保住深链;
       // 仅真正孤儿路由或已是 /home 才落 /home。
       const p = pathname || "/"
-      if (p !== "/home" && !descriptorForPath(p) && !descriptorForResource(search)) {
+      if (
+        p !== "/home" &&
+        !descriptorForPath(p) &&
+        !descriptorForFileEngineSearch(search) &&
+        !descriptorForResource(search)
+      ) {
         router.replace("/home")
       }
       return
@@ -87,7 +108,10 @@ function UrlSync() {
     const t = liveTabs.find((x) => x.id === liveActiveId)
     if (!t?.path) return
     // 先认 node (含 query), 再认普通路径; URL 已归属激活标签 (含嵌入应用经 host.nav 改写的子路径) → 保留。
-    const cur = descriptorForResource(search) ?? descriptorForPath(pathname || "/")
+    const cur =
+      descriptorForFileEngineSearch(search) ??
+      descriptorForResource(search) ??
+      descriptorForPath(pathname || "/")
     if (cur && tabKey(cur) === t.id) {
       syncedOnceRef.current = true
       return
@@ -102,7 +126,7 @@ function UrlSync() {
       else router.replace(t.path)
     }
     syncedOnceRef.current = true
-  }, [hydrated, activeId, tabs, pathname, search, router, isMdUp])
+  }, [hydrated, routeOpenPending, activeId, tabs, pathname, search, router, isMdUp])
 
   return null
 }
@@ -147,11 +171,20 @@ function DeferredRightAiPanel({ open }: { open: boolean }) {
   )
 }
 
-export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
+function MainWorkspaceShell({
+  children,
+  rawSearch,
+}: {
+  children: React.ReactNode
+  rawSearch: string
+}) {
   const pathname = usePathname()
   useWindowViewport()
   const sidebarCollapsed = useSidebarCollapsed()
   const rightPanelOpen = useRightPanelOpen()
+  const hydrated = useHydrated()
+  const tabs = useTabs()
+  const startupRequestedRef = React.useRef(false)
   const isMdUp = useMediaQuery("(min-width: 768px)")
   const isLg = useMediaQuery("(min-width: 1024px)")
   // 仅移动全屏 AI 覆盖 (<md) 时对主内容 inert; md+ 活动栏/侧栏/标签条始终可点。
@@ -163,6 +196,20 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
   React.useEffect(() => {
     hydrateWorkspace()
   }, [])
+
+  React.useEffect(() => {
+    if (
+      !hydrated ||
+      tabs.length > 0 ||
+      pathname?.startsWith("/auth") ||
+      routeProvidesInitialView(pathname, rawSearch) ||
+      startupRequestedRef.current
+    ) {
+      return
+    }
+    startupRequestedRef.current = true
+    void openStartupTarget()
+  }, [hydrated, pathname, rawSearch, tabs.length])
 
   // 启动 / 刷新后若不在「浏览器」标签, 强制收起 Linux 原生 overlay (否则会挡全窗点击)。
   React.useEffect(() => {
@@ -220,5 +267,28 @@ export default function WorkspaceShell({ children }: { children: React.ReactNode
         <BottomTabBar />
       </div>
     </>
+  )
+}
+
+function WorkspaceShellMode({ children }: { children: React.ReactNode }) {
+  const searchParams = useSearchParams()
+  const rawSearch = searchParams.toString()
+  const standaloneTarget =
+    searchParams.get("display") === "window" ? parseFileEngineSearch(rawSearch) : null
+  if (standaloneTarget) {
+    return (
+      <main className="h-[100dvh] min-h-0 bg-background">
+        <FileEngineContent refValue={standaloneTarget.ref} engineId={standaloneTarget.engineId} />
+      </main>
+    )
+  }
+  return <MainWorkspaceShell rawSearch={rawSearch}>{children}</MainWorkspaceShell>
+}
+
+export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  return (
+    <React.Suspense fallback={<div className="h-[100dvh] animate-pulse bg-muted/25" aria-hidden />}>
+      <WorkspaceShellMode>{children}</WorkspaceShellMode>
+    </React.Suspense>
   )
 }

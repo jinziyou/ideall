@@ -29,3 +29,10 @@ test("sidebar tree data: connected sections load children through ResourceQuery"
     kind: "peer",
   })
 })
+
+test("sidebar tree data: tool module sidebar entries have unique ids", () => {
+  const toolRoots = staticTreeRoots("tool")
+  const ids = toolRoots.map((node) => node.id)
+  assert.equal(new Set(ids).size, ids.length, ids.join(", "))
+  assert.ok(toolRoots.every((node) => node.id.startsWith("entry:resource:")))
+})

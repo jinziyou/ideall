@@ -281,18 +281,18 @@ try {
   }
   record("回收站展示文件、笔记与对话删除项", true)
 
-  const trashButton = page
+  const trashEntry = page
     .locator("aside")
-    .getByRole("button", { name: /回收站/ })
+    .getByRole("treeitem", { name: /回收站/ })
     .last()
-  await trashButton.waitFor({ state: "visible", timeout: 15000 })
+  await trashEntry.waitFor({ state: "visible", timeout: 15000 })
   await page.waitForFunction(() => {
-    const buttons = [...document.querySelectorAll("aside button")]
-    return buttons.some(
-      (button) => button.textContent?.includes("回收站") && button.textContent.includes("4"),
+    const entries = [...document.querySelectorAll('aside [role="treeitem"]')]
+    return entries.some(
+      (entry) => entry.textContent?.includes("回收站") && entry.textContent.includes("4"),
     )
   })
-  record("左侧回收站按钮显示数量徽标", true)
+  record("左侧回收站文件条目显示数量徽标", true)
   await page.screenshot({ path: `${SHOT_DIR}/1-seeded.png` })
 
   markStage("restore note")

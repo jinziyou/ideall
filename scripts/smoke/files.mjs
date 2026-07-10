@@ -211,43 +211,44 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/1-uploaded.png` })
 
   markStage("open from sidebar")
-  const resourcesNode = page.getByRole("treeitem", { name: /^资源$/ }).first()
-  await resourcesNode.waitFor({ state: "visible", timeout: 15000 })
-  if ((await resourcesNode.getAttribute("aria-expanded")) !== "true") {
-    await resourcesNode.focus()
-    await page.keyboard.press("ArrowRight")
-  }
+  // 活动栏“文件”已经是隐藏总根的直接子树；二级文件树直接展示其子项，
+  // 不再额外套旧版“资源”分组目录。
   const uploadedTreeItem = page.getByRole("treeitem", { name: new RegExp(escapeRegex(FILE_NAME)) })
   await uploadedTreeItem.waitFor({ state: "visible", timeout: 15000 })
-  record("侧栏资源树展示新文件", true)
+  record("侧栏文件树展示新文件", true)
 
   await uploadedTreeItem.click()
+  const editor = page.locator(".cm-content").first()
+  await editor.waitFor({ state: "visible", timeout: 30000 })
   await page
-    .getByRole("heading", { name: FILE_NAME, exact: true })
-    .waitFor({ state: "visible", timeout: 30000 })
+    .getByText("Created by ideall files smoke.", { exact: true })
+    .waitFor({ state: "visible", timeout: 15000 })
   record("从侧栏打开文件标签", true)
 
   markStage("edit and save")
-  await page.getByRole("button", { name: "编辑", exact: true }).click()
-  const editor = page.locator(".cm-content").first()
-  await editor.waitFor({ state: "visible", timeout: 30000 })
   await editor.click()
   await page.keyboard.press("Control+A")
   await page.keyboard.type(EDITED_TEXT)
   await page.getByRole("button", { name: "保存", exact: true }).click({ timeout: 15000 })
-  await page.getByText("已保存", { exact: true }).waitFor({ state: "visible", timeout: 15000 })
+  await page
+    .getByText("已保存", { exact: true })
+    .first()
+    .waitFor({ state: "visible", timeout: 15000 })
   record("编辑 CodeMirror 内容并保存", true)
   await page.screenshot({ path: `${SHOT_DIR}/2-edited.png` })
 
-  markStage("preview")
-  await page.getByRole("button", { name: "预览", exact: true }).click()
+  markStage("reload saved content")
+  // 默认开发引擎直接在主标签中编辑；预览是另一个引擎，手动选择时由桌面壳打开独立窗口。
+  // 此处刷新当前 FileRef + engine 标签，验证 write-blob 真正持久化，而非只检查成功 toast。
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 })
+  await page.locator(".cm-content").first().waitFor({ state: "visible", timeout: 30000 })
   await page
     .getByText("Edited by files smoke.", { exact: true })
     .waitFor({ state: "visible", timeout: 15000 })
   await page
     .getByText(FAST_SAVE_TOKEN, { exact: false })
     .waitFor({ state: "visible", timeout: 15000 })
-  record("预览区回显保存后的 Markdown 内容", true)
+  record("刷新后开发引擎回显保存内容", true)
   record("快速输入后立即保存保留尾部 token", true)
 
   markStage("rename")

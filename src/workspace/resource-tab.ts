@@ -68,6 +68,7 @@ export function parseResourceTabParams(params?: Record<string, string>): Resourc
 
 export function isBrowserResourceTab(tab: Pick<TabDescriptor, "kind" | "params">): boolean {
   if (tab.kind === "browser-view") return true
+  if (tab.kind === "file-engine") return tab.params?.engine === "ideall.browser"
   if (tab.kind !== RESOURCE_TAB_KIND) return false
   return parseResourceTabParams(tab.params)?.scheme === "browser"
 }

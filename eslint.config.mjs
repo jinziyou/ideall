@@ -1,7 +1,7 @@
 import nextConfig from "eslint-config-next"
 
 // 个人信息终端 · 分层边界。顶层目录即架构层:
-//   app(Next 路由薄标记) / shell(终端外壳) / workspace(一切皆标签) / files(一切皆文件·统一 Node 数据层) /
+//   app(Next 路由薄标记) / shell(终端外壳) / workspace(Display) / filesystem(挂载层) / engines(引擎解析) / files(Node 数据层) /
 //   modules(功能模块 home·info·community·tool) / plugins(agent·sync·embed·code·git·shell·audio·database) / protocol(契约/端口) /
 //   ui(原语+编辑器) / shared(跨层共享 UI) / lib(纯工具)。
 // ESLint 强制五条边界:
@@ -52,6 +52,8 @@ const config = [
                 "@/app/**",
                 "@/shell/**",
                 "@/workspace/**",
+                "@/filesystem/**",
+                "@/engines/**",
                 "@/files/**",
                 "@/modules/**",
                 "@/plugins/**",

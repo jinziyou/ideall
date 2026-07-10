@@ -64,17 +64,19 @@ test("local search: builds content items from VFS resources", async () => {
   )
   assert.deepEqual(
     items.map((item) => item.target?.type),
-    ["resource", "resource", "resource", "resource", "resource"],
+    ["file", "file", "file", "file", "file"],
   )
   assert.deepEqual(items.find((item) => item.group === "资源")?.fileType, {
     name: "readme.md",
     type: "text/markdown",
   })
   assert.deepEqual(items.find((item) => item.group === "书签")?.target, {
-    type: "resource",
-    ref: { scheme: "node", kind: "bookmark", id: "b1" },
+    type: "file",
+    ref: {
+      fileSystemId: "ideall.core",
+      fileId: "resource:node%3Abookmark%3Ab1",
+    },
     title: "Alpha Bookmark",
-    meta: metas[2],
   })
 })
 

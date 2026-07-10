@@ -33,7 +33,7 @@ import {
   type DataTable,
 } from "./database-store"
 
-export default function DatabasePage() {
+export default function DatabasePage({ initialTableId }: { initialTableId?: string } = {}) {
   const [tables, setTables] = React.useState<DataTable[]>([])
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const [rows, setRows] = React.useState<DataRow[]>([])
@@ -56,7 +56,7 @@ export default function DatabasePage() {
       .then((next) => {
         if (!alive) return
         setTables(next)
-        setActiveId((current) => current ?? next[0]?.id ?? null)
+        setActiveId((current) => current ?? initialTableId ?? next[0]?.id ?? null)
       })
       .finally(() => {
         if (alive) setLoading(false)
@@ -64,7 +64,7 @@ export default function DatabasePage() {
     return () => {
       alive = false
     }
-  }, [])
+  }, [initialTableId])
 
   React.useEffect(() => {
     if (!activeId) {

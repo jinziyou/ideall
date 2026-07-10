@@ -17,6 +17,7 @@ import {
   infoTreeRoots,
   communityTreeRoots,
   browserTreeRoots,
+  treeRootsForFileRoot,
   type SidebarTreeNode,
 } from "./sidebar-tree-data"
 import {
@@ -26,6 +27,7 @@ import {
   tabKey,
   useActiveId,
   useActiveModule,
+  useActiveRootId,
   useMode,
   useActiveTabKind,
   useActiveWorkspaceId,
@@ -46,6 +48,7 @@ import { nodeTreeItemsFromResourceMetas, type NodeTreeItem } from "./node-tree-i
 import { onTreeArrowNav, focusTreeSibling, forwardTreeFocus } from "./tree-keynav"
 import type { ModuleId } from "../types"
 import { isPluginModule } from "../plugin-entries"
+import { coreFileRoot, type CoreFileRootId } from "../file-roots"
 
 const NotesSidebarTree = React.lazy(() => import("@/modules/home/notes/notes-sidebar-tree"))
 
@@ -65,6 +68,18 @@ function defaultExpandedSection(moduleId: ModuleId): string | null {
   if (moduleId === "browser") return "section:bookmarks"
   if (moduleId === "info") return "section:entities"
   if (moduleId === "community") return "section:peers"
+  return null
+}
+
+function defaultExpandedRootSection(rootId: CoreFileRootId): string | null {
+  if (rootId === "subscriptions") return "section:subscriptions"
+  if (rootId === "bookmarks") return "section:bookmarks"
+  if (rootId === "files") return "section:resources"
+  if (rootId === "notes") return "section:notes"
+  if (rootId === "workspace") return "section:workspace"
+  if (rootId === "browser") return "section:bookmarks"
+  if (rootId === "info") return "section:entities"
+  if (rootId === "community") return "section:peers"
   return null
 }
 
@@ -126,6 +141,7 @@ function openTreeTarget(target: OpenTarget, transient: boolean) {
 
 export default function SidebarTree() {
   const activeModule = useActiveModule()
+  const activeRootId = coreFileRoot(useActiveRootId()).id
   const mode = useMode()
   const activeId = useActiveId()
   const activeKind = useActiveTabKind()
@@ -247,14 +263,14 @@ export default function SidebarTree() {
       }
       node.staticChildren?.forEach(watchNode)
     }
-    rootsForModule(activeModule).forEach(watchNode)
+    treeRootsForFileRoot(activeRootId).forEach(watchNode)
     return () => {
       for (const dispose of disposers) dispose()
     }
-  }, [activeModule, invalidateSection])
+  }, [activeRootId, invalidateSection])
 
   React.useEffect(() => {
-    const sectionId = defaultExpandedSection(activeModule)
+    const sectionId = defaultExpandedRootSection(activeRootId)
     if (!sectionId) return
     setExpanded((prev) => {
       if (prev.has(sectionId)) return prev
@@ -262,10 +278,10 @@ export default function SidebarTree() {
       next.add(sectionId)
       return next
     })
-  }, [activeModule])
+  }, [activeRootId])
 
   React.useEffect(() => {
-    const roots = rootsForModule(activeModule)
+    const roots = treeRootsForFileRoot(activeRootId)
     for (const root of roots) {
       if (root.id === "section:notes") continue
       if (!expanded.has(root.id)) continue
@@ -276,19 +292,19 @@ export default function SidebarTree() {
         void loadResourceChildren(root.id, root.childResourceQuery)
       }
     }
-  }, [activeModule, expanded, nodeCache, resourceCache, loadNodes, loadResourceChildren])
+  }, [activeRootId, expanded, nodeCache, resourceCache, loadNodes, loadResourceChildren])
 
   const roots = React.useMemo(() => {
-    if (activeModule === "agent") {
-      const base = staticTreeRoots("agent").filter(
+    if (activeRootId === "workspace") {
+      const base = treeRootsForFileRoot("workspace").filter(
         (n) => mode === "local" || n.id !== "section:workspaces",
       )
       const wsSection = base.find((n) => n.id === "section:workspaces")
       if (wsSection) wsSection.hasChildren = wsState.workspaces.length > 0
       return base
     }
-    return rootsForModule(activeModule)
-  }, [activeModule, mode, wsState.workspaces.length])
+    return treeRootsForFileRoot(activeRootId)
+  }, [activeRootId, mode, wsState.workspaces.length])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
@@ -312,7 +328,7 @@ export default function SidebarTree() {
             activeWorkspaceId={activeWorkspaceId}
             nodeCache={nodeCache}
             resourceCache={resourceCache}
-            workspaces={activeModule === "agent" ? wsState.workspaces : undefined}
+            workspaces={activeRootId === "workspace" ? wsState.workspaces : undefined}
             activeModule={activeModule}
             onToggle={toggleExpand}
             onLoadNodes={loadNodes}

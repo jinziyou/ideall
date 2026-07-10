@@ -149,6 +149,8 @@ function actionLabel(id: ResourceActionId): string {
       return "移动"
     case "read-blob":
       return "读取文件"
+    case "write-blob":
+      return "写入文件"
   }
 }
 

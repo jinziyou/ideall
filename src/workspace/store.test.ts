@@ -28,6 +28,7 @@ import {
   getTransientId,
   getMode,
   getActiveModule,
+  getActiveRootId,
   getTabs,
   type ActiveSource,
 } from "./store"
@@ -35,6 +36,11 @@ import type { NodeRef } from "./node-ref"
 import { tabDescriptor } from "./tab-definitions"
 import { clearVfsProvidersForTest, registerVfsProvider } from "@/vfs/registry"
 import type { VfsProvider } from "@/vfs/types"
+import { registerBuiltInEngines } from "@/engines/builtin"
+import { parseFileEngineTabParams } from "./file-tab"
+import { resourceTab } from "./resource-tab"
+
+registerBuiltInEngines()
 
 // —— 标签描述符夹具 (本地/连接各取一个 + 跨模式工具) ——
 const HOME = tabDescriptor("home-overview")
@@ -61,7 +67,7 @@ test("openTarget node resource 默认来源 user; 传 agent 标记 agent", () =>
   assert.equal(getActiveSource(), "agent", "agent 经 ui.openTab 自激活 → 来源 agent")
 })
 
-test("openTarget(resource): node Resource 打开统一 resource 标签并写入新 resource 深链", () => {
+test("openTarget(resource): 兼容输入同步打开统一 file + engine 标签", () => {
   closeAllTabs()
   assert.equal(
     openTarget(
@@ -76,22 +82,38 @@ test("openTarget(resource): node Resource 打开统一 resource 标签并写入�
     true,
   )
   const tab = getTabs()[0]
-  assert.equal(tab.kind, "resource")
-  assert.deepEqual(tab.params, {
-    resource: resourceKey({ scheme: "node", kind: "file", id: "r1" }),
+  assert.equal(tab.kind, "file-engine")
+  assert.deepEqual(parseFileEngineTabParams(tab.params), {
+    ref: { fileSystemId: "ideall.core", fileId: "resource:node%3Afile%3Ar1" },
+    engineId: "ideall.code",
   })
   assert.equal(tab.title, "readme.md")
-  assert.ok(tab.path?.startsWith("/home/notes?resource="))
+  assert.equal(tab.rootId, "files")
+  assert.ok(tab.path?.startsWith("/home?file="))
   assert.equal(getTransientId(), tab.id)
   assert.equal(getActiveSource(), "agent")
   assert.equal(
     openTarget({ type: "resource", ref: { scheme: "tool", kind: "search", id: "default" } }),
     true,
   )
-  assert.equal(getTabs().at(-1)?.kind, "resource")
-  assert.deepEqual(getTabs().at(-1)?.params, {
-    resource: resourceKey({ scheme: "tool", kind: "search", id: "default" }),
+  const tool = getTabs().at(-1)
+  assert.equal(tool?.kind, "file-engine")
+  const toolTarget = parseFileEngineTabParams(tool?.params)
+  assert.deepEqual(toolTarget?.ref, {
+    fileSystemId: "ideall.core",
+    fileId: "resource:tool%3Asearch%3Adefault",
   })
+  assert.ok(toolTarget?.engineId)
+  assert.equal(tool?.rootId, "tool")
+})
+
+test("openTab(resource descriptor): 旧模块入口也折叠为 file + engine 标签", () => {
+  closeAllTabs()
+  openTab(resourceTab({ scheme: "browser", kind: "page", id: "https://example.test" }, "例子"))
+  const tab = getTabs()[0]
+  assert.equal(tab.kind, "file-engine")
+  assert.equal(parseFileEngineTabParams(tab.params)?.engineId, "ideall.browser")
+  assert.equal(tab.rootId, "browser")
 })
 
 test("openTarget(resource): refreshes descriptor title from VFS metadata", async () => {
@@ -140,6 +162,37 @@ test("openTarget(resource): refreshes descriptor title from VFS metadata", async
     unregister()
     clearVfsProvidersForTest()
   }
+})
+
+test("openTarget(file): canonical marker reuses the opened tab's file-tree root", () => {
+  closeAllTabs()
+  openTarget({
+    type: "resource",
+    ref: { scheme: "node", kind: "file", id: "rooted" },
+    title: "rooted.ts",
+  })
+  const opened = parseFileEngineTabParams(getTabs()[0]?.params)
+  assert.ok(opened)
+  assert.equal(getActiveRootId(), "files")
+
+  openTab(HOME)
+  assert.equal(getActiveRootId(), "home")
+  openTarget({
+    type: "file",
+    ref: opened.ref,
+    engineId: opened.engineId,
+    file: {
+      ref: opened.ref,
+      kind: "file",
+      name: "rooted.ts",
+      mediaType: "text/plain",
+      capabilities: ["read"],
+      source: { kind: "local", id: "test" },
+    },
+  })
+
+  assert.equal(getActiveRootId(), "files")
+  assert.equal(getTabs().filter((tab) => tab.kind === "file-engine").length, 1)
 })
 
 test("用户点回 agent 开的标签 → 来源转 user (用户主动看 = 同意)", () => {

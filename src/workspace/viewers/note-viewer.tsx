@@ -8,6 +8,7 @@ import { getNote, getAncestors } from "@/files/stores/notes-store"
 import type { Note, NoteMeta } from "@protocol/files"
 import { openTarget, renameNodeTab, promoteActiveTab } from "../store"
 import type { NodeViewerProps } from "../node-kind-ui"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
 
 const NoteEditor = dynamic(() => import("@/modules/home/notes/note-editor"), {
   ssr: false,
@@ -65,9 +66,10 @@ export default function NoteViewer({ nodeId }: NodeViewerProps) {
                 type="button"
                 onClick={() =>
                   openTarget({
-                    type: "resource",
-                    ref: { scheme: "node", kind: "note", id: a.id },
+                    type: "file",
+                    ref: resourceFileRef({ scheme: "node", kind: "note", id: a.id }),
                     title: a.title || "无标题",
+                    rootId: "notes",
                   })
                 }
                 className="max-w-[10rem] shrink-0 truncate rounded px-1 py-0.5 hover:bg-accent"
