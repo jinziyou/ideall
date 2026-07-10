@@ -41,13 +41,20 @@ struct BrowserWinState {
     subclassed: std::sync::Mutex<Vec<isize>>,
 }
 
-/// Tauri invoke 在后台线程; with_webview / SetWindowRgn 必须在主线程同步完成。
-#[cfg(all(desktop, target_os = "windows"))]
+/// Tauri invoke 在后台线程; GTK / WebView2 / with_webview 必须在主线程同步完成。
+#[cfg(all(desktop, any(target_os = "windows", target_os = "linux")))]
 fn run_on_main_thread_sync<R, F>(app: &AppHandle, f: F) -> Result<R, String>
 where
     R: Send + 'static,
     F: FnOnce(&AppHandle) -> Result<R, String> + Send + 'static,
 {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::glib::MainContext;
+        if MainContext::default().is_owner() {
+            return f(app);
+        }
+    }
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
     let app = app.clone();
     let app2 = app.clone();
@@ -458,7 +465,7 @@ fn browser_eval_json(app: AppHandle, js: String) -> Result<serde_json::Value, St
             let state = app.state::<browser_cdp::BrowserCdpState>();
             return tauri::async_runtime::block_on(browser_cdp::eval_json(&state, &js));
         }
-        browser_linux::eval_json(&js)
+        return run_on_main_thread_sync(&app, move |_app| browser_linux::eval_json(&js));
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -551,6 +558,7 @@ fn open_browser_view_impl(app: &AppHandle, url: String, b: Bounds) -> Result<(),
 /// 必须为 async 命令: Windows 上 add_child 创建 WebView2 子窗口需创建它的 UI(主)线程持续泵消息才能完成,
 /// 同步命令会阻塞该线程的消息泵 → 控制器创建回调永不触发 → add_child 死锁不返回 → 事件循环停摆 →
 /// 之后所有 invoke(含窗控)挂起。async 命令在独立运行时线程执行, 主线程得以正常泵消息完成创建。
+/// Linux 上 GTK/WebKit 仅允许主线程操作, 故在 async 命令内再经 run_on_main_thread_sync 派发。
 /// (见 Tauri WebviewWindowBuilder 文档「Known issues」与 tauri#4121。)
 #[cfg(desktop)]
 #[tauri::command]
@@ -560,7 +568,7 @@ async fn open_browser_view(
     b: Bounds,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::open(&app, url, b);
+    return run_on_main_thread_sync(&app, move |app| browser_linux::open(app, url, b));
 
     #[cfg(not(target_os = "linux"))]
     return open_browser_view_impl(&app, url, b);
@@ -593,7 +601,7 @@ fn browser_set_bounds(
     b: Bounds,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::set_bounds(&app, b);
+    return run_on_main_thread_sync(&app, move |app| browser_linux::set_bounds(app, b));
 
     #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
     return run_on_main_thread_sync(&app, move |app| browser_set_bounds_impl(app, b));
@@ -635,8 +643,14 @@ fn browser_present_impl(app: &AppHandle, b: Bounds) -> Result<(), String> {
 fn browser_present(app: AppHandle, b: Bounds) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        browser_linux::set_bounds(&app, b)?;
-        return browser_linux::show(&app);
+        let r = run_on_main_thread_sync(&app, move |app| {
+            browser_linux::set_bounds(app, b)?;
+            browser_linux::show(app)
+        });
+        if let Err(e) = &r {
+            eprintln!("[ideall] browser_present 失败: {e} (b={b:?})");
+        }
+        return r;
     }
 
     #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
@@ -660,7 +674,7 @@ fn browser_navigate(
     url: String,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::navigate(&app, &url);
+    return run_on_main_thread_sync(&app, move |app| browser_linux::navigate(app, &url));
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -676,7 +690,7 @@ fn browser_navigate(
 #[tauri::command]
 fn browser_back(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::back(&app);
+    return run_on_main_thread_sync(&app, |app| browser_linux::back(app));
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -690,7 +704,7 @@ fn browser_back(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_forward(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::forward(&app);
+    return run_on_main_thread_sync(&app, |app| browser_linux::forward(app));
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -704,7 +718,7 @@ fn browser_forward(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_reload(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::reload(&app);
+    return run_on_main_thread_sync(&app, |app| browser_linux::reload(app));
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -720,7 +734,7 @@ fn browser_reload(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_hide(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::hide(&app);
+    return run_on_main_thread_sync(&app, |app| browser_linux::hide(app));
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -735,7 +749,7 @@ fn browser_hide(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_show(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::show(&app);
+    return run_on_main_thread_sync(&app, |app| browser_linux::show(app));
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -770,7 +784,7 @@ async fn browser_get_backend(app: AppHandle) -> Result<BrowserBackendInfo, Strin
 fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
     #[cfg(target_os = "linux")]
     {
-        browser_linux::get_content(&app)
+        return run_on_main_thread_sync(&app, |app| browser_linux::get_content(app));
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -911,7 +925,7 @@ fn browser_close_impl(app: &AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_close(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return browser_linux::close(&app);
+    return run_on_main_thread_sync(&app, |app| browser_linux::close(app));
 
     #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
     return run_on_main_thread_sync(&app, |app| browser_close_impl(app));

@@ -1,4 +1,5 @@
 // Linux/WSL 内嵌浏览器: 默认 WebKitGTK (wry) 嵌在窗口内; IDEALL_BROWSER_CDP=1 时改用 CDP 独立 Chrome。
+// 所有公开函数须在 GTK 主线程调用 (lib.rs 经 run_on_main_thread_sync 派发); thread_local 状态亦绑定主线程。
 
 use gtk::prelude::*;
 use std::cell::RefCell;
