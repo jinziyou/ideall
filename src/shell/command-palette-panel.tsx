@@ -154,7 +154,10 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
     router.push(href)
   }
 
-  function switchWorkspace(kind: "files" | "audio" | "development", tool?: "git" | "shell") {
+  function switchWorkspace(
+    kind: "files" | "audio" | "development",
+    tool?: "git" | "shell" | "database",
+  ) {
     setOpen(false)
     setWorkspaceKind(kind)
     if (tool) setDevelopmentTool(tool)
@@ -269,6 +272,13 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
             开发 · Git
           </CommandItem>
           <CommandItem
+            value="> 工作区 开发 数据库 database"
+            onSelect={() => switchWorkspace("development", "database")}
+          >
+            <Database className="h-4 w-4" />
+            开发 · 数据库
+          </CommandItem>
+          <CommandItem
             value="> 工作区 开发 终端 Shell"
             onSelect={() => switchWorkspace("development", "shell")}
           >
@@ -298,13 +308,6 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
               <LayoutGrid className="h-4 w-4" />
               应用
               <CommandShortcut className="font-mono">/apps</CommandShortcut>
-            </CommandItem>
-          )}
-          {isDesktop && (
-            <CommandItem value="> 数据库 database table db" onSelect={() => go("/database")}>
-              <Database className="h-4 w-4" />
-              数据库
-              <CommandShortcut className="font-mono">/database</CommandShortcut>
             </CommandItem>
           )}
           {isDesktop && (

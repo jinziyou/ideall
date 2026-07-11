@@ -9,7 +9,7 @@ export type WsMode = "local" | "connected"
 export type WorkspaceKind = "files" | "audio" | "development"
 
 /** 开发工作区内当前展示的辅助工具。 */
-export type DevelopmentTool = "git" | "shell"
+export type DevelopmentTool = "git" | "shell" | "database"
 
 export type ModuleId =
   | "home"

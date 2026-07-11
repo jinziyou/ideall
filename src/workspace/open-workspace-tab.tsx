@@ -53,6 +53,10 @@ function OpenWorkspaceTabInner() {
         setWorkspaceKind("development")
         setDevelopmentTool("git")
       }
+      if (p === "/database") {
+        setWorkspaceKind("development")
+        setDevelopmentTool("database")
+      }
       if (p === "/shell") {
         setWorkspaceKind("development")
         setDevelopmentTool("shell")

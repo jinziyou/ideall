@@ -282,6 +282,12 @@ test("resource filesystem: AI threads are linked from Home while the legacy work
   assert.ok(
     home.entries.some((entry) => entry.target.fileId === resourceFileRef(thread.ref).fileId),
   )
+  for (const place of ["bookmarks", "files", "notes"] as const) {
+    assert.ok(
+      home.entries.some((entry) => entry.target.fileId === corePlaceRef(place).fileId),
+      `Home should nest ${place}`,
+    )
+  }
   assert.equal((await fs.stat(corePlaceRef("workspace"), ctx))?.kind, "directory")
 })
 

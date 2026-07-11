@@ -32,22 +32,11 @@ test("root entries: 合成根保持完整，Display 按本地/连接镜头过滤
 
   assert.deepEqual(
     rootEntriesForMode(entries, "local").map((item) => item.entryId),
-    [
-      "home",
-      "subscriptions",
-      "bookmarks",
-      "files",
-      "notes",
-      "apps",
-      "tool",
-      "system",
-      "mount.local",
-      "mount.shared",
-    ],
+    ["home", "subscriptions", "apps", "tool", "mount.local", "mount.shared"],
   )
   assert.deepEqual(
     rootEntriesForMode(entries, "connected").map((item) => item.entryId),
-    ["info", "community", "tool", "browser", "mount.connected", "mount.shared"],
+    ["info", "community", "browser", "tool", "mount.connected", "mount.shared"],
   )
   assert.equal(entries.length, CORE_FILE_ROOTS.length + 3, "过滤不能修改合成根目录")
 })

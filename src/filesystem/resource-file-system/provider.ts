@@ -98,12 +98,18 @@ function entry(parent: FileRef, file: IdeallFile, index: number): DirectoryEntry
   }
 }
 
+/** Home 二级树下挂载的本机资料目录 (活动栏不再单独占位)。 */
+const HOME_NESTED_PLACES = ["bookmarks", "files", "notes"] as const satisfies readonly CorePlaceId[]
+
 async function listPlaceFiles(
   place: CorePlaceId,
   ctx: FileSystemAccessContext,
   recursive = false,
 ): Promise<IdeallFile[]> {
   const files = PANELS[place].map(fileFromPanel)
+  if (place === "home") {
+    files.push(...HOME_NESTED_PLACES.map(placeFile))
+  }
   const remoteRef =
     place === "info"
       ? remoteInfoDirectoryRef

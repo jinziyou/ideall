@@ -260,8 +260,27 @@ export async function main(argv = process.argv.slice(2), cwd = process.cwd()) {
     } catch {
       warm = true
     }
-    if (warm) await warmupHome(homeUrl)
-    else console.log("[app:dev] Frontend already warm. Launching Tauri…")
+    if (warm) {
+      // 自启 Next 允许长预热；复用外来端口时若无响应应快速失败，避免假 Next 卡死 15 分钟。
+      if (!nextChild) {
+        try {
+          const status = await request(homeUrl, { method: "GET", timeoutMs: 20_000 })
+          if (status < 200 || status >= 500) {
+            throw new Error(`Warmup got HTTP ${status}`)
+          }
+          console.log(`[app:dev] Frontend ready (reused). Launching Tauri…`)
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error)
+          throw new Error(
+            `端口 ${port} 已被占用，但 ${homeUrl} 无可用响应 (${detail})。\n` +
+              `当前监听方不是 Next 开发服。请释放该端口，或换端口启动：\n` +
+              `  pnpm app:dev --config "{\\"build\\":{\\"devUrl\\":\\"http://localhost:5021\\"}}"`,
+          )
+        }
+      } else {
+        await warmupHome(homeUrl)
+      }
+    } else console.log("[app:dev] Frontend already warm. Launching Tauri…")
 
     // Next dev 依赖 eval + HMR WebSocket；仅开发 wrapper 放宽 CSP，生产仍使用 tauri.conf.json。
     const devCsp =

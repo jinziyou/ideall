@@ -189,12 +189,10 @@ function MainWorkspaceShell({
   const startupRequestedRef = React.useRef(false)
   const isMdUp = useMediaQuery("(min-width: 768px)")
   const isLg = useMediaQuery("(min-width: 1024px)")
-  const isXl = useMediaQuery("(min-width: 1280px)")
   // 仅移动全屏 AI 覆盖 (<md) 时对主内容 inert; md+ 活动栏/侧栏/标签条始终可点。
   const aiMainInert = rightPanelOpen && !isMdUp
   // md–lg AI 右侧浮层: 给主列留位, 避免标签条右侧被盖住点不到。
   const aiDockMargin = rightPanelOpen && isMdUp && !isLg
-  const collapseSidebarForAi = rightPanelOpen && isMdUp && !isXl
 
   // 客户端挂载后恢复上次的标签。
   React.useEffect(() => {
@@ -246,7 +244,7 @@ function MainWorkspaceShell({
         <div className="flex min-h-0 flex-1">
           <div className="relative z-10 flex min-w-0 flex-1">
             <ActivityBar />
-            <SecondarySidebar collapsed={sidebarCollapsed || collapseSidebarForAi} />
+            <SecondarySidebar collapsed={sidebarCollapsed} />
             <div
               inert={aiMainInert}
               className={

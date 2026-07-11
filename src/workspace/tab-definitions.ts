@@ -14,7 +14,7 @@ type TabDefinition = {
 export const TAB_DEFINITIONS = {
   "home-overview": {
     module: "home",
-    title: "概览",
+    title: "我的",
     path: "/home",
     layout: "padded",
     viewType: "overview",

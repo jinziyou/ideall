@@ -31,7 +31,7 @@ function validWorkspaceKind(value: unknown): WorkspaceKind {
 }
 
 function validDevelopmentTool(value: unknown): DevelopmentTool {
-  return value === "shell" || value === "git" ? value : "git"
+  return value === "shell" || value === "git" || value === "database" ? value : "git"
 }
 
 function readPersistedWorkspace(): PersistedWorkspace | null {

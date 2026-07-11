@@ -96,8 +96,8 @@ export function builtinAppSurfaceForLegacyPanel(
 export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
   {
     id: "home",
-    label: "Home",
-    sidebarTitle: "Home",
+    label: "我的",
+    sidebarTitle: "我的",
     icon: Home,
     module: "home",
     modes: LOCAL_MODE,
@@ -120,6 +120,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     icon: Bookmark,
     module: "home",
     modes: LOCAL_MODE,
+    navigationHidden: true,
     defaultFile: panelFileRef("bookmarks"),
   },
   {
@@ -129,6 +130,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     icon: FolderOpen,
     module: "home",
     modes: LOCAL_MODE,
+    navigationHidden: true,
     defaultFile: panelFileRef("files"),
   },
   {
@@ -138,6 +140,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     icon: FileText,
     module: "home",
     modes: LOCAL_MODE,
+    navigationHidden: true,
     defaultFile: panelFileRef("notes"),
   },
   {
@@ -180,16 +183,6 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     defaultFile: resource({ scheme: "community", kind: "home", id: "default" }),
   },
   {
-    id: "tool",
-    label: "工具",
-    sidebarTitle: "工具",
-    icon: Compass,
-    module: "tool",
-    modes: ALL_MODES,
-    colorClass: "text-spoke-tool",
-    defaultFile: resource({ scheme: "tool", kind: "search", id: "default" }),
-  },
-  {
     id: "browser",
     label: "浏览器",
     sidebarTitle: "浏览器",
@@ -200,12 +193,23 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     defaultFile: resource({ scheme: "browser", kind: "page", id: "default" }),
   },
   {
+    id: "tool",
+    label: "工具",
+    sidebarTitle: "工具",
+    icon: Compass,
+    module: "tool",
+    modes: ALL_MODES,
+    colorClass: "text-spoke-tool",
+    defaultFile: resource({ scheme: "tool", kind: "search", id: "default" }),
+  },
+  {
     id: "system",
     label: "系统",
     sidebarTitle: "系统",
     icon: Settings,
     module: "home",
     modes: LOCAL_MODE,
+    navigationHidden: true,
     defaultFile: panelFileRef("settings"),
   },
 ] as const
@@ -273,7 +277,7 @@ export function fileRootRef(rootId: string): FileRef | null {
 
 export function defaultFileForPath(pathname: string): { ref: FileRef; rootId: string } | null {
   if (pathname.startsWith("/home/settings")) {
-    return { ref: panelFileRef("settings"), rootId: "system" }
+    return { ref: panelFileRef("settings"), rootId: "home" }
   }
   if (pathname.startsWith("/home/subscriptions")) {
     return { ref: panelFileRef("subscriptions"), rootId: "subscriptions" }
@@ -282,13 +286,13 @@ export function defaultFileForPath(pathname: string): { ref: FileRef; rootId: st
     return { ref: panelFileRef("publications"), rootId: "community" }
   }
   if (pathname.startsWith("/home/bookmarks")) {
-    return { ref: panelFileRef("bookmarks"), rootId: "bookmarks" }
+    return { ref: panelFileRef("bookmarks"), rootId: "home" }
   }
   if (pathname.startsWith("/home/resources")) {
-    return { ref: panelFileRef("files"), rootId: "files" }
+    return { ref: panelFileRef("files"), rootId: "home" }
   }
   if (pathname.startsWith("/home/notes")) {
-    return { ref: panelFileRef("notes"), rootId: "notes" }
+    return { ref: panelFileRef("notes"), rootId: "home" }
   }
   if (pathname.startsWith("/apps")) return { ref: panelFileRef("apps"), rootId: "apps" }
   if (pathname.startsWith("/info")) {

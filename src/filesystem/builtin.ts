@@ -12,7 +12,7 @@ import { trashFileSystem } from "./trash-file-system"
 export const IDEALL_ROOT_FILE_SYSTEM_ID = "ideall.root"
 
 const PLACE_LABELS: Record<CorePlaceId, string> = {
-  home: "Home",
+  home: "我的",
   subscriptions: "关注",
   bookmarks: "书签",
   files: "文件",
@@ -34,7 +34,16 @@ export const ideallRootFileSystem = new CompositeRootFileSystem({
     name: PLACE_LABELS[place],
     target: corePlaceRef(place),
     sortKey: String(index).padStart(3, "0"),
-    properties: { place, navigationHidden: place === "workspace" },
+    properties: {
+      place,
+      // 书签/文件/笔记挂在 Home 二级树下；系统走命令面板与顶栏入口，不占活动栏。
+      navigationHidden:
+        place === "workspace" ||
+        place === "bookmarks" ||
+        place === "files" ||
+        place === "notes" ||
+        place === "system",
+    },
   })),
 })
 

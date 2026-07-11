@@ -103,7 +103,10 @@ async function loadTables(): Promise<DataTable[]> {
   })
 }
 
-export default function DatabasePage({ initialTableId }: { initialTableId?: string } = {}) {
+export default function DatabasePage({
+  initialTableId,
+  embedded = false,
+}: { initialTableId?: string; embedded?: boolean } = {}) {
   const [tables, setTables] = React.useState<DataTable[]>([])
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const [rows, setRows] = React.useState<DataRow[]>([])
@@ -312,12 +315,19 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
   }, [filter, rows])
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
-      <PageHeader
-        busy={busy}
-        onImport={() => importInputRef.current?.click()}
-        onExport={() => void handleExportAll()}
-      />
+    <div
+      className={cn(
+        "mx-auto flex h-full w-full flex-col gap-4",
+        embedded ? "max-w-none p-3" : "max-w-6xl",
+      )}
+    >
+      {!embedded && (
+        <PageHeader
+          busy={busy}
+          onImport={() => importInputRef.current?.click()}
+          onExport={() => void handleExportAll()}
+        />
+      )}
       <input
         ref={importInputRef}
         type="file"

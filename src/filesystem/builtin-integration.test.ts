@@ -24,4 +24,11 @@ test("builtin filesystem: hidden root exposes core second-level subtrees", async
     page.entries.find((entry) => entry.entryId === "workspace")?.properties?.navigationHidden,
     true,
   )
+  for (const id of ["bookmarks", "files", "notes", "system"] as const) {
+    assert.equal(
+      page.entries.find((entry) => entry.entryId === id)?.properties?.navigationHidden,
+      true,
+      `${id} should stay off the activity bar`,
+    )
+  }
 })

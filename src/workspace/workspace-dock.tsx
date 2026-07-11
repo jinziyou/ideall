@@ -1,12 +1,20 @@
 "use client"
 
 import * as React from "react"
-import { AudioLines, GitBranch, Loader2, PanelBottomClose, Terminal } from "lucide-react"
+import {
+  AudioLines,
+  Database,
+  GitBranch,
+  Loader2,
+  PanelBottomClose,
+  Terminal,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { IconButton } from "@/ui/icon-button"
 import { setDevelopmentTool, setWorkspaceKind, useDevelopmentTool, useWorkspaceKind } from "./store"
 
 const AudioPage = React.lazy(() => import("@/plugins/audio/audio-page"))
+const DatabasePage = React.lazy(() => import("@/plugins/database/database-page"))
 const GitPage = React.lazy(() => import("@/plugins/git/git-page"))
 const ShellPage = React.lazy(() => import("@/plugins/shell/shell-page"))
 
@@ -57,6 +65,12 @@ export default function WorkspaceDock() {
               onClick={() => setDevelopmentTool("git")}
             />
             <DockTab
+              active={developmentTool === "database"}
+              icon={Database}
+              label="数据库"
+              onClick={() => setDevelopmentTool("database")}
+            />
+            <DockTab
               active={developmentTool === "shell"}
               icon={Terminal}
               label="终端"
@@ -90,6 +104,14 @@ export default function WorkspaceDock() {
             >
               <React.Suspense fallback={fallback}>
                 <GitPage embedded />
+              </React.Suspense>
+            </div>
+            <div
+              inert={developmentTool !== "database"}
+              className={cn("h-full overflow-auto", developmentTool !== "database" && "hidden")}
+            >
+              <React.Suspense fallback={fallback}>
+                <DatabasePage embedded />
               </React.Suspense>
             </div>
             <div
