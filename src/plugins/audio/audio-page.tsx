@@ -24,46 +24,115 @@ import { Button } from "@/ui/button"
 import { Slider } from "@/ui/slider"
 import { EmptyState } from "@/ui/empty-state"
 import {
-  addAudioTrack,
-  exportAudioLibraryJson,
-  importAudioLibraryJson,
-  isSupportedAudioFile,
-  listAudioTracks,
-  loadAudioPlaybackState,
-  removeAudioTrack,
-  saveAudioPlaybackState,
-  updateAudioTrack,
-  type AudioTrack,
-} from "./audio-store"
+  invokeFileAction,
+  readFile,
+  readFileDirectory,
+  statFile,
+  writeFile,
+} from "@/filesystem/registry"
+import { audioLibraryRootRef, audioTrackRef } from "./audio-file-system"
+import {
+  audioLibraryPlaybackKey,
+  type AudioPlaybackSource,
+  useAudioPlayback,
+} from "./audio-playback"
+import { isSupportedAudioFile, type AudioPlaybackState, type AudioTrack } from "./audio-store"
 
-export default function AudioPage() {
+const UI_READ_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
+const UI_DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
+const UI_WRITE_CONTEXT = { actor: "ui", permissions: [], intent: "write" } as const
+const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+
+async function loadAudioTracksFromFileSystem(): Promise<AudioTrack[]> {
+  const page = await readFileDirectory(audioLibraryRootRef, UI_DIRECTORY_CONTEXT)
+  return Promise.all(
+    page.entries.map(async (entry) => {
+      const [file, content] = await Promise.all([
+        statFile(entry.target, { actor: "ui", permissions: [], intent: "metadata" }),
+        readFile(entry.target, UI_READ_CONTEXT, { encoding: "binary" }),
+      ])
+      if (!file || !(content.data instanceof Blob)) {
+        throw new Error(`音频文件不可读: ${entry.name}`)
+      }
+      return {
+        id: entry.entryId,
+        title: file.name,
+        artist: typeof file.properties?.artist === "string" ? file.properties.artist : undefined,
+        album: typeof file.properties?.album === "string" ? file.properties.album : undefined,
+        mime: file.mediaType,
+        size: file.size ?? content.data.size,
+        duration:
+          typeof file.properties?.duration === "number" ? file.properties.duration : undefined,
+        blob: content.data,
+        createdAt: file.createdAt ?? 0,
+        updatedAt: file.updatedAt ?? (Number(file.version) || 0),
+      }
+    }),
+  )
+}
+
+async function loadAudioPlaybackFromFileSystem(): Promise<AudioPlaybackState> {
+  const result = await readFile(audioLibraryRootRef, UI_READ_CONTEXT, { encoding: "json" })
+  return result.data as AudioPlaybackState
+}
+
+function trackPlaybackSource(track: AudioTrack): AudioPlaybackSource {
+  return {
+    key: audioLibraryPlaybackKey(track.id),
+    kind: "library",
+    trackId: track.id,
+    title: track.title,
+    mediaType: track.mime,
+    blob: track.blob,
+  }
+}
+
+export default function AudioPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const {
+    source: activeSource,
+    isPlaying: controllerIsPlaying,
+    currentTime: controllerTime,
+    duration: controllerDuration,
+    volume,
+    repeat,
+    shuffle,
+    error: playbackError,
+    endedRevision,
+    metadataRevision,
+    activateSource,
+    toggleSource,
+    play,
+    seek,
+    setVolume,
+    setRepeat,
+    setShuffle,
+    clearSource,
+    consumeEnded,
+    consumeMetadata,
+  } = useAudioPlayback()
   const [tracks, setTracks] = React.useState<AudioTrack[]>([])
   const [currentId, setCurrentId] = React.useState<string | null>(null)
-  const [currentSrc, setCurrentSrc] = React.useState("")
-  const [isPlaying, setIsPlaying] = React.useState(false)
   const [currentTime, setCurrentTime] = React.useState(0)
   const [duration, setDuration] = React.useState(0)
-  const [volume, setVolume] = React.useState(0.8)
-  const [repeat, setRepeat] = React.useState<"none" | "one" | "all">("none")
-  const [shuffle, setShuffle] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
-  const audioRef = React.useRef<HTMLAudioElement | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const jsonInputRef = React.useRef<HTMLInputElement>(null)
-  const pendingTimeRef = React.useRef<number | null>(null)
   const shuffleSeedRef = React.useRef(0)
 
   const currentTrack = React.useMemo(
     () => tracks.find((t) => t.id === currentId) ?? null,
     [tracks, currentId],
   )
+  const currentSourceKey = currentTrack ? audioLibraryPlaybackKey(currentTrack.id) : null
+  const isCurrentTrackActive = activeSource?.key === currentSourceKey
+  const isPlaying = isCurrentTrackActive && controllerIsPlaying
 
   React.useEffect(() => {
     shuffleSeedRef.current = Math.floor(Math.random() * 1_000_000)
   }, [])
 
   const applyLibraryState = React.useCallback(
-    (savedTracks: AudioTrack[], state: Awaited<ReturnType<typeof loadAudioPlaybackState>>) => {
+    (savedTracks: AudioTrack[], state: AudioPlaybackState) => {
       setTracks(savedTracks)
       const savedTrack = state.currentTrackId
         ? savedTracks.find((t) => t.id === state.currentTrackId)
@@ -71,29 +140,34 @@ export default function AudioPage() {
       if (savedTrack) {
         setCurrentId(savedTrack.id)
         setCurrentTime(state.currentTime)
-        pendingTimeRef.current = state.currentTime
         setDuration(savedTrack.duration ?? 0)
+        void activateSource(trackPlaybackSource(savedTrack), {
+          startTime: state.currentTime,
+          ifIdle: true,
+        })
       } else {
         setCurrentId(null)
         setCurrentTime(0)
-        pendingTimeRef.current = null
         setDuration(0)
       }
       setVolume(state.volume)
       setRepeat(state.repeat)
       setShuffle(state.shuffle)
     },
-    [],
+    [activateSource, setRepeat, setShuffle, setVolume],
   )
 
   const loadLibrary = React.useCallback(async () => {
-    const [savedTracks, state] = await Promise.all([listAudioTracks(), loadAudioPlaybackState()])
+    const [savedTracks, state] = await Promise.all([
+      loadAudioTracksFromFileSystem(),
+      loadAudioPlaybackFromFileSystem(),
+    ])
     applyLibraryState(savedTracks, state)
   }, [applyLibraryState])
 
   React.useEffect(() => {
     let alive = true
-    Promise.all([listAudioTracks(), loadAudioPlaybackState()])
+    Promise.all([loadAudioTracksFromFileSystem(), loadAudioPlaybackFromFileSystem()])
       .then(([savedTracks, state]) => {
         if (!alive) return
         applyLibraryState(savedTracks, state)
@@ -107,75 +181,68 @@ export default function AudioPage() {
   }, [applyLibraryState])
 
   React.useEffect(() => {
-    saveAudioPlaybackState({ currentTrackId: currentId, currentTime, volume, repeat, shuffle })
-  }, [currentId, currentTime, volume, repeat, shuffle])
+    if (loading) return
+    void writeFile(
+      audioLibraryRootRef,
+      {
+        data: {
+          currentTrackId: currentId,
+          currentTime,
+          volume,
+          repeat,
+          shuffle,
+        },
+      },
+      UI_WRITE_CONTEXT,
+    ).catch(() => {})
+  }, [currentId, currentTime, loading, repeat, shuffle, volume])
 
   React.useEffect(() => {
-    if (!currentTrack) {
-      setCurrentSrc("")
-      return
-    }
-    const url = URL.createObjectURL(currentTrack.blob)
-    setCurrentSrc(url)
-    return () => URL.revokeObjectURL(url)
-  }, [currentTrack])
-
-  React.useEffect(() => {
-    setDuration(currentTrack?.duration ?? 0)
-  }, [currentTrack])
-
-  React.useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (!currentSrc) {
-      audio.removeAttribute("src")
-      audio.load()
-      return
-    }
-    if (audio.src !== currentSrc) audio.src = currentSrc
-    if (isPlaying) {
-      void audio.play().catch(() => setIsPlaying(false))
-    } else {
-      audio.pause()
-    }
-  }, [currentSrc, isPlaying])
-
-  React.useEffect(() => {
-    const audio = audioRef.current
-    if (audio) audio.volume = volume
-  }, [volume])
+    const activeTrackId = activeSource?.kind === "library" ? activeSource.trackId : null
+    if (!activeTrackId || !tracks.some((track) => track.id === activeTrackId)) return
+    setCurrentId(activeTrackId)
+    setCurrentTime(controllerTime)
+    setDuration(
+      controllerDuration || tracks.find((track) => track.id === activeTrackId)?.duration || 0,
+    )
+  }, [activeSource, controllerDuration, controllerTime, tracks])
 
   const refreshTracks = React.useCallback(async () => {
-    setTracks(await listAudioTracks())
+    setTracks(await loadAudioTracksFromFileSystem())
   }, [])
 
-  const playTrack = (id: string) => {
-    if (currentId === id) {
-      setIsPlaying((p) => !p)
-      return
-    }
-    setCurrentId(id)
-    pendingTimeRef.current = 0
-    setCurrentTime(0)
-    setDuration(tracks.find((t) => t.id === id)?.duration ?? 0)
-    setIsPlaying(true)
-  }
+  const playTrack = React.useCallback(
+    (id: string) => {
+      const track = tracks.find((item) => item.id === id)
+      if (!track) return
+      const selectedAlready = currentId === id
+      setCurrentId(id)
+      if (!selectedAlready) {
+        setCurrentTime(0)
+        setDuration(track.duration ?? 0)
+      }
+      void toggleSource(trackPlaybackSource(track), {
+        startTime: selectedAlready ? currentTime : 0,
+      })
+    },
+    [currentId, currentTime, toggleSource, tracks],
+  )
 
   const handleFiles = async (files: FileList | null) => {
     if (!files) return
     for (const file of Array.from(files)) {
       if (!isSupportedAudioFile(file)) continue
-      await addAudioTrack(file)
+      await invokeFileAction(audioLibraryRootRef, "add-track", file, UI_ACTION_CONTEXT)
     }
     if (fileInputRef.current) fileInputRef.current.value = ""
     await refreshTracks()
   }
 
   const handleRemove = async (id: string) => {
-    await removeAudioTrack(id)
+    await invokeFileAction(audioTrackRef(id), "delete", undefined, UI_ACTION_CONTEXT)
     if (currentId === id) {
+      clearSource(audioLibraryPlaybackKey(id))
       setCurrentId(null)
-      setIsPlaying(false)
       setCurrentTime(0)
       setDuration(0)
     }
@@ -184,7 +251,14 @@ export default function AudioPage() {
 
   const handleExportJson = async () => {
     try {
-      downloadTextFile(pluginDataFilename("ideall-audio"), await exportAudioLibraryJson())
+      const json = await invokeFileAction(
+        audioLibraryRootRef,
+        "export",
+        undefined,
+        UI_ACTION_CONTEXT,
+      )
+      if (typeof json !== "string") throw new Error("音频文件系统未返回导出内容")
+      downloadTextFile(pluginDataFilename("ideall-audio"), json)
       toast("已导出音频库 JSON")
     } catch (e) {
       toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
@@ -195,10 +269,14 @@ export default function AudioPage() {
     const file = files?.[0]
     if (!file) return
     try {
-      setIsPlaying(false)
-      const result = await importAudioLibraryJson(await file.text())
+      clearSource()
+      const result = (await invokeFileAction(
+        audioLibraryRootRef,
+        "import",
+        await file.text(),
+        UI_ACTION_CONTEXT,
+      )) as { tracks: number }
       await loadLibrary()
-      if (result.tracks === 0) setCurrentSrc("")
       toast(`已导入 ${result.tracks} 首音频`)
     } catch (e) {
       toast.error("导入失败", { description: e instanceof Error ? e.message : String(e) })
@@ -207,7 +285,7 @@ export default function AudioPage() {
     }
   }
 
-  const playNext = () => {
+  const playNext = React.useCallback(() => {
     if (tracks.length === 0) return
     if (shuffle) {
       const idx = Math.max(
@@ -223,55 +301,83 @@ export default function AudioPage() {
     const idx = tracks.findIndex((t) => t.id === currentId)
     const next = tracks[(idx + 1) % tracks.length]
     playTrack(next.id)
-  }
+  }, [currentId, playTrack, shuffle, tracks])
 
-  const playPrev = () => {
+  const playPrev = React.useCallback(() => {
     if (tracks.length === 0) return
     const idx = tracks.findIndex((t) => t.id === currentId)
     const prev = tracks[(idx - 1 + tracks.length) % tracks.length]
     playTrack(prev.id)
-  }
+  }, [currentId, playTrack, tracks])
 
-  const onEnded = () => {
-    if (repeat === "one") {
-      const audio = audioRef.current
-      if (audio) {
-        audio.currentTime = 0
-        void audio.play()
-      }
+  React.useEffect(() => {
+    if (
+      endedRevision === 0 ||
+      activeSource?.kind !== "library" ||
+      activeSource.trackId !== currentId
+    ) {
       return
     }
-    const idx = tracks.findIndex((t) => t.id === currentId)
+    if (!consumeEnded(endedRevision)) return
+    if (repeat === "one") {
+      seek(0)
+      void play()
+      return
+    }
+    const idx = tracks.findIndex((track) => track.id === currentId)
     if (repeat === "all" || (idx >= 0 && idx < tracks.length - 1)) {
       playNext()
       return
     }
-    setIsPlaying(false)
-    setCurrentTime(0)
-  }
+    seek(0)
+  }, [activeSource, consumeEnded, currentId, endedRevision, play, playNext, repeat, seek, tracks])
 
-  const onLoadedMetadata = async (e: React.SyntheticEvent<HTMLAudioElement>) => {
-    const audio = e.currentTarget
-    const nextDuration = Number.isFinite(audio.duration) ? audio.duration : 0
-    setDuration(nextDuration)
-    if (currentTrack && nextDuration && currentTrack.duration !== nextDuration) {
-      const updated = await updateAudioTrack(currentTrack.id, { duration: nextDuration })
-      if (updated) {
-        setTracks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
-      }
+  React.useEffect(() => {
+    if (
+      metadataRevision === 0 ||
+      activeSource?.kind !== "library" ||
+      !activeSource.trackId ||
+      !controllerDuration
+    ) {
+      return
     }
-    if (pendingTimeRef.current !== null) {
-      audio.currentTime = Math.min(pendingTimeRef.current, nextDuration || pendingTimeRef.current)
-      pendingTimeRef.current = null
-    }
-  }
+    const track = tracks.find((item) => item.id === activeSource.trackId)
+    if (!track || track.duration === controllerDuration) return
+    if (!consumeMetadata(metadataRevision)) return
+    void writeFile(
+      audioTrackRef(track.id),
+      { data: { duration: controllerDuration }, expectedVersion: String(track.updatedAt) },
+      UI_WRITE_CONTEXT,
+    )
+      .then((updated) => {
+        setTracks((previous) =>
+          previous.map((item) =>
+            item.id === track.id
+              ? {
+                  ...item,
+                  duration: controllerDuration,
+                  updatedAt: updated.updatedAt ?? (Number(updated.version) || Date.now()),
+                }
+              : item,
+          ),
+        )
+      })
+      .catch(() => {})
+  }, [activeSource, consumeMetadata, controllerDuration, metadataRevision, tracks])
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-4">
-      <PageHeader
-        onImport={() => jsonInputRef.current?.click()}
-        onExport={() => void handleExportJson()}
-      />
+    <div
+      className={cn(
+        "mx-auto flex h-full w-full flex-col",
+        embedded ? "max-w-none gap-3 p-3" : "max-w-5xl gap-4",
+      )}
+    >
+      {!embedded && (
+        <PageHeader
+          onImport={() => jsonInputRef.current?.click()}
+          onExport={() => void handleExportJson()}
+        />
+      )}
       <input
         ref={jsonInputRef}
         type="file"
@@ -351,7 +457,7 @@ export default function AudioPage() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => setShuffle((s) => !s)}
+                onClick={() => setShuffle(!shuffle)}
                 aria-label="随机播放"
                 aria-pressed={shuffle}
               >
@@ -363,7 +469,7 @@ export default function AudioPage() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={() =>
-                  setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"))
+                  setRepeat(repeat === "none" ? "all" : repeat === "all" ? "one" : "none")
                 }
                 aria-label="循环模式"
               >
@@ -380,10 +486,10 @@ export default function AudioPage() {
             value={[currentTime]}
             max={Math.max(duration, 1)}
             step={1}
-            disabled={!currentTrack}
+            disabled={!currentTrack || !isCurrentTrackActive}
             onValueChange={([v]: number[]) => {
               setCurrentTime(v)
-              if (audioRef.current) audioRef.current.currentTime = v
+              seek(v)
             }}
           />
 
@@ -414,7 +520,7 @@ export default function AudioPage() {
                 size="icon"
                 className="h-9 w-9"
                 disabled={!currentTrack}
-                onClick={() => setIsPlaying((p) => !p)}
+                onClick={() => currentTrack && playTrack(currentTrack.id)}
                 aria-label={isPlaying ? "暂停" : "播放"}
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -431,16 +537,11 @@ export default function AudioPage() {
               </Button>
             </div>
           </div>
+          {isCurrentTrackActive && playbackError && (
+            <p className="text-xs text-destructive">{playbackError}</p>
+          )}
         </div>
       </div>
-
-      <audio
-        ref={audioRef}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => void onLoadedMetadata(e)}
-        onEnded={onEnded}
-        preload="metadata"
-      />
     </div>
   )
 }

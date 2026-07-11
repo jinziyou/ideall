@@ -17,6 +17,7 @@ import {
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshot } from "@/files/stores/trash-store"
+import { nextUpdatedAt } from "@/files/version"
 
 type ThreadNode = NodeOfKind<"thread">
 
@@ -114,7 +115,8 @@ export async function saveThread(thread: Thread): Promise<void> {
   const all = await allThreadNodes()
   const cur = all.find((n) => n.id === thread.id)
   const sortKey = cur?.sortKey || nextKey(maxKey(all))
-  await idbPut(STORE_NODES, threadToNode({ ...thread, updatedAt: Date.now() }, sortKey))
+  const updatedAt = cur ? nextUpdatedAt(cur.updatedAt) : Date.now()
+  await idbPut(STORE_NODES, threadToNode({ ...thread, updatedAt }, sortKey))
   notifyFilesUpdated({ kind: "thread", id: thread.id })
 }
 
@@ -124,14 +126,22 @@ export async function deleteThread(id: string): Promise<void> {
   if (!n || n.kind !== "thread" || !isLive(n)) return
   const now = Date.now()
   await captureTrashSnapshot(n)
-  await idbPut(STORE_NODES, { ...n, deletedAt: now, updatedAt: now })
+  await idbPut(STORE_NODES, {
+    ...n,
+    deletedAt: now,
+    updatedAt: nextUpdatedAt(n.updatedAt, now),
+  })
   notifyFilesUpdated({ kind: "thread", id })
 }
 
 export async function renameThread(id: string, title: string): Promise<void> {
   const next = await idbReadModifyWrite<ThreadNode>(STORE_NODES, id, (current) =>
     current && current.kind === "thread"
-      ? { ...current, title: title.trim() || current.title, updatedAt: Date.now() }
+      ? {
+          ...current,
+          title: title.trim() || current.title,
+          updatedAt: nextUpdatedAt(current.updatedAt),
+        }
       : undefined,
   )
   if (next) notifyFilesUpdated({ kind: "thread", id })

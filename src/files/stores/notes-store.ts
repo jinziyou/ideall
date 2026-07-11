@@ -28,6 +28,10 @@ import {
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshots } from "@/files/stores/trash-store"
+import { noteText } from "@/files/note-text"
+import { nextUpdatedAt } from "@/files/version"
+
+export { noteText } from "@/files/note-text"
 
 /** 笔记的物理存储形态 = Note + kind 辨识位 (统一 nodes 仓库按 kind 收纳)。 */
 type NoteRow = Note & { kind: "note" }
@@ -74,25 +78,6 @@ function ensureBlocks(note: NoteRow): { content: NoteContent; blockMeta: BlockMe
 /** 空文档: 单个空段落 (Plate 段落块 type "p")。 */
 function emptyNoteContent(): NoteContent {
   return [{ type: "p", children: [{ text: "" }] }]
-}
-
-/**
- * 递归收集块文档里的纯文本 —— 用于搜索与列表摘要。
- * 零依赖, 不引 platejs: 任何带字符串 `text` 的节点取其文本, 带 `children` 数组的递归下钻。
- */
-export function noteText(content: NoteContent): string {
-  const parts: string[] = []
-  const walk = (node: unknown) => {
-    if (!node || typeof node !== "object") return
-    const n = node as { text?: unknown; children?: unknown }
-    if (typeof n.text === "string") parts.push(n.text)
-    if (Array.isArray(n.children)) {
-      for (const child of n.children) walk(child)
-    }
-  }
-  for (const block of content) walk(block)
-  // 块间以空格分隔, 折叠多余空白, 便于摘要与大小写无关搜索
-  return parts.join(" ").replace(/\s+/g, " ").trim()
 }
 
 /**
@@ -307,7 +292,7 @@ export async function updateNote(
 ): Promise<Note | undefined> {
   const next = await idbReadModifyWrite<NoteRow>(STORE_NODES, id, (current) => {
     if (!current || current.kind !== KIND_NOTE) return undefined // 不存在 / 非笔记 kind → 不写
-    const now = Date.now()
+    const now = nextUpdatedAt(current.updatedAt)
     const base = ensureBlocks(current) // 当前存量的 content+blockMeta (带稳定块 id)
     let content = base.content
     let blockMeta = base.blockMeta
@@ -351,7 +336,12 @@ export async function moveNote(
   const sortKey = computeSortKey(live, newParentId, pos, id)
   const next = await idbReadModifyWrite<NoteRow>(STORE_NODES, id, (current) =>
     current && current.kind === KIND_NOTE
-      ? { ...current, parentId: newParentId, sortKey, updatedAt: Date.now() }
+      ? {
+          ...current,
+          parentId: newParentId,
+          sortKey,
+          updatedAt: nextUpdatedAt(current.updatedAt),
+        }
       : undefined,
   )
   if (next) notifyFilesUpdated({ kind: "note", id })
@@ -377,7 +367,7 @@ export async function deleteNote(id: string): Promise<Note[]> {
     kind: "note",
     content: [],
     deletedAt: now,
-    updatedAt: now,
+    updatedAt: nextUpdatedAt(n.updatedAt, now),
   }))
   await idbBulkPut(STORE_NODES, tombstones)
   notifyFilesUpdated({ kind: "note", id })
@@ -391,8 +381,14 @@ export async function deleteNote(id: string): Promise<Note[]> {
 export async function restoreSubtree(notes: Note[]): Promise<void> {
   if (!notes.length) return
   const now = Date.now()
+  const currentById = new Map((await allNoteNodes()).map((note) => [note.id, note]))
   const revived = notes.map((n) => {
-    const copy: NoteRow = { ...n, kind: "note", updatedAt: now }
+    const previous = currentById.get(n.id)
+    const copy: NoteRow = {
+      ...n,
+      kind: "note",
+      updatedAt: nextUpdatedAt(previous?.updatedAt ?? n.updatedAt, now),
+    }
     delete copy.deletedAt
     return copy
   })

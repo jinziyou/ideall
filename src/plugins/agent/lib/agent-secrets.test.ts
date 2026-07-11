@@ -33,6 +33,7 @@ test("桌面密钥水合不再接受 localStorage 明文密钥值", async () => 
 
   assert.equal(resolveSecrets("${TOK}"), "${TOK}")
   assert.deepEqual(getSecrets(), [{ id: "TOK", value: "", secure: true }])
+  assert.equal(getSecrets(), getSecrets(), "useSyncExternalStore 快照引用保持稳定")
   assert.deepEqual(JSON.parse(mem.get(AGENT_SECRETS_STORAGE_KEY) ?? "[]"), [
     { id: "TOK", value: "", secure: true },
   ])

@@ -19,16 +19,44 @@ import { EmptyState } from "@/ui/empty-state"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
 import { formatBytes, formatTimestamp } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
-import {
-  emptyTrash,
-  listTrashItems,
-  purgeTrashItem,
-  restoreTrashItem,
-  type TrashItem,
-} from "@/files/stores/trash-store"
-import { refreshSidebarTree } from "@/workspace/tree/sidebar-tree-bus"
+import { trashItemRef, trashRootRef, type TrashFileItem } from "@/filesystem/trash-file-system"
+import { invokeFileAction, watchFile } from "@/filesystem/registry"
+import { readCompleteDirectory } from "@/filesystem/directory-walk"
 
-const KIND_LABEL: Record<TrashItem["kind"], string> = {
+const DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
+const ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
+const TRASH_KINDS: TrashFileItem["kind"][] = [
+  "folder",
+  "note",
+  "bookmark",
+  "file",
+  "feed",
+  "thread",
+]
+
+function parseTrashItem(value: Readonly<Record<string, unknown>> | undefined): TrashFileItem[] {
+  if (
+    !value ||
+    typeof value.id !== "string" ||
+    typeof value.kind !== "string" ||
+    !TRASH_KINDS.includes(value.kind as TrashFileItem["kind"]) ||
+    typeof value.title !== "string" ||
+    typeof value.deletedAt !== "number" ||
+    typeof value.updatedAt !== "number" ||
+    !(value.parentId === null || typeof value.parentId === "string") ||
+    !Array.isArray(value.tags) ||
+    !value.tags.every((tag) => typeof tag === "string") ||
+    typeof value.restorable !== "boolean" ||
+    typeof value.snapshot !== "boolean" ||
+    typeof value.detail !== "string"
+  ) {
+    return []
+  }
+  return [value as unknown as TrashFileItem]
+}
+
+const KIND_LABEL: Record<TrashFileItem["kind"], string> = {
   note: "笔记",
   bookmark: "书签",
   folder: "收藏夹",
@@ -37,7 +65,7 @@ const KIND_LABEL: Record<TrashItem["kind"], string> = {
   thread: "对话",
 }
 
-function KindIcon({ item }: { item: TrashItem }) {
+function KindIcon({ item }: { item: TrashFileItem }) {
   if (item.kind === "file") {
     return <FileTypeIcon name={item.title} type={item.mime} className="h-4 w-4" />
   }
@@ -57,36 +85,39 @@ function KindIcon({ item }: { item: TrashItem }) {
 }
 
 export default function TrashPage() {
-  const [items, setItems] = React.useState<TrashItem[]>([])
+  const [items, setItems] = React.useState<TrashFileItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [busyId, setBusyId] = React.useState<string | null>(null)
   const [emptying, setEmptying] = React.useState(false)
   const [confirming, setConfirming] = React.useState<
-    { kind: "purge"; item: TrashItem } | { kind: "empty" } | null
+    { kind: "purge"; item: TrashFileItem } | { kind: "empty" } | null
   >(null)
 
-  const refresh = React.useCallback(() => {
+  const refresh = React.useCallback(async () => {
     setLoading(true)
-    listTrashItems()
-      .then(setItems)
-      .catch((error) => {
-        setItems([])
-        toast.error("读取回收站失败", { description: String(error) })
-      })
-      .finally(() => setLoading(false))
+    try {
+      const entries = await readCompleteDirectory(trashRootRef, DIRECTORY_CONTEXT)
+      setItems(entries.flatMap((entry) => parseTrashItem(entry.properties)))
+    } catch (error) {
+      setItems([])
+      toast.error("读取回收站失败", { description: String(error) })
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   React.useEffect(() => {
-    refresh()
+    void refresh()
+    const handle = watchFile(trashRootRef, WATCH_CONTEXT, () => void refresh())
+    return () => handle?.dispose()
   }, [refresh])
 
-  async function restore(item: TrashItem) {
+  async function restore(item: TrashFileItem) {
     setBusyId(item.id)
     try {
-      await restoreTrashItem(item.id)
+      await invokeFileAction(trashItemRef(item.id), "restore", undefined, ACTION_CONTEXT)
       toast.success(`已恢复「${item.title}」`)
-      refreshSidebarTree()
-      refresh()
+      await refresh()
     } catch (error) {
       toast.error("恢复失败", {
         description: error instanceof Error ? error.message : String(error),
@@ -96,13 +127,12 @@ export default function TrashPage() {
     }
   }
 
-  async function purge(item: TrashItem) {
+  async function purge(item: TrashFileItem) {
     setBusyId(item.id)
     try {
-      await purgeTrashItem(item.id)
+      await invokeFileAction(trashItemRef(item.id), "purge", undefined, ACTION_CONTEXT)
       toast.success("已永久删除")
-      refreshSidebarTree()
-      refresh()
+      await refresh()
     } catch (error) {
       toast.error("永久删除失败", { description: String(error) })
     } finally {
@@ -114,10 +144,13 @@ export default function TrashPage() {
     if (items.length === 0) return
     setEmptying(true)
     try {
-      const count = await emptyTrash()
+      const result = await invokeFileAction(trashRootRef, "empty", undefined, ACTION_CONTEXT)
+      const count =
+        result != null && typeof result === "object" && "count" in result
+          ? Number(result.count) || 0
+          : 0
       toast.success(`已清空 ${count} 项`)
-      refreshSidebarTree()
-      refresh()
+      await refresh()
     } catch (error) {
       toast.error("清空失败", { description: String(error) })
     } finally {

@@ -1,13 +1,13 @@
 "use client"
 
 // 节点查看器: 文件。自取数 (useFilePreview) + 按 mime 分派预览 (FilePreviewBox) + 下载。
-// 复用 home/resources/file-preview 的核心 (与预览对话框同一逻辑, 不 fork)。onLoaded 回填标签标题。
+// 复用 home/resources/file-preview 的兼容核心。onLoaded 回填标签标题。
 import * as React from "react"
 import dynamic from "next/dynamic"
 import { Eye, Loader2, Pencil } from "lucide-react"
 import { toast } from "sonner"
+import { writeFile } from "@/filesystem/registry"
 import { fileTypeInfo } from "@/lib/format"
-import { updateFileContent } from "@/files/stores/files-store"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { useFilePreview, FilePreviewBox } from "@/modules/home/resources/file-preview"
 import { resourceTab } from "../resource-tab"
@@ -21,6 +21,8 @@ import { fileEngineTargetForTab } from "../file-tab"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
 
 export type FileViewerMode = "preview" | "edit"
+
+const UI_WRITE_CONTEXT = { actor: "ui", permissions: [], intent: "write" } as const
 
 const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
   ssr: false,
@@ -183,15 +185,15 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     if (!file || !type || !editable || preview.text === null || nextDraft === preview.text) return
     setSaving(true)
     try {
-      const saved = await updateFileContent(
-        file.id,
-        nextDraft,
-        mimeForSave(type.preview, file.type),
+      await writeFile(
+        preview.ref,
+        {
+          data: nextDraft,
+          mediaType: mimeForSave(type.preview, file.type),
+          expectedVersion: preview.version,
+        },
+        UI_WRITE_CONTEXT,
       )
-      if (!saved) {
-        toast.error("文件不存在或已删除")
-        return
-      }
       clearFileDraft(file.id)
       setDraftSavedAt(null)
       toast.success("已保存")
@@ -201,7 +203,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     } finally {
       setSaving(false)
     }
-  }, [editable, file, preview.text, type])
+  }, [editable, file, preview.ref, preview.text, preview.version, type])
 
   React.useEffect(() => {
     if (!active || !editable) return

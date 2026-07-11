@@ -112,6 +112,7 @@ function snapshotDescriptor(descriptor: EngineDescriptor): EngineDescriptor {
 export class EngineRegistry {
   readonly #descriptors = new Map<string, EngineDescriptor>()
   readonly #listeners = new Set<() => void>()
+  #revision = 0
 
   register(descriptor: EngineDescriptor): () => void {
     const stored = snapshotDescriptor(descriptor)
@@ -157,7 +158,12 @@ export class EngineRegistry {
     return () => this.#listeners.delete(listener)
   }
 
+  revision(): number {
+    return this.#revision
+  }
+
   #notify(): void {
+    this.#revision += 1
     for (const listener of this.#listeners) listener()
   }
 }

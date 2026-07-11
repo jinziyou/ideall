@@ -1,4 +1,4 @@
-import type { ModuleId, Tab, WsMode } from "./types"
+import type { DevelopmentTool, ModuleId, Tab, WorkspaceKind, WsMode } from "./types"
 import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 
 export { WORKSPACE_STORAGE_KEY }
@@ -10,6 +10,8 @@ export type WorkspacePersistSnapshot = {
   activeModule: ModuleId
   activeRootId: string
   mode: WsMode
+  workspaceKind: WorkspaceKind
+  developmentTool: DevelopmentTool
   sidebarCollapsed: boolean
   rightPanelOpen: boolean
 }
@@ -25,6 +27,8 @@ export function persistWorkspaceSnapshot(state: WorkspacePersistSnapshot, hydrat
       activeModule: state.activeModule,
       activeRootId: state.activeRootId,
       mode: state.mode,
+      workspaceKind: state.workspaceKind,
+      developmentTool: state.developmentTool,
       sidebarCollapsed: state.sidebarCollapsed,
       rightPanelOpen: state.rightPanelOpen,
     })

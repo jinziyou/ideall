@@ -34,6 +34,7 @@ export type ResourceRef =
 export type ResourceCapability =
   | "open"
   | "preview"
+  | "create"
   | "edit"
   | "delete"
   | "restore"

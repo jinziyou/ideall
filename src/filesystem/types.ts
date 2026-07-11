@@ -27,8 +27,6 @@ export type FileSystemAccessContext = {
   permissions: readonly string[]
   activeFile?: FileRef
   intent?: FileAccessIntent
-  /** 独立窗口等受限调用方可携带的短期令牌；provider 负责验证。 */
-  capabilityToken?: string
 }
 
 export type ReadDirectoryOptions = {
@@ -45,6 +43,7 @@ export type FileReadEncoding = "binary" | "text" | "json"
 
 export type FileReadOptions = {
   encoding?: FileReadEncoding
+  /** 以字节为单位的 end-exclusive 区间；不支持字节寻址的 provider 必须明确拒绝。 */
   range?: { start: number; end?: number }
 }
 

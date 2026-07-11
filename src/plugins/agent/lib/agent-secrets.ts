@@ -19,6 +19,8 @@ const store = createCollection<Secret>(AGENT_SECRETS_STORAGE_KEY)
 const secretCache = new Map<string, string>()
 let hydrated = false
 let hydrating: Promise<void> | null = null
+let snapshotSource: Secret[] | null = null
+let snapshot: Secret[] = []
 
 function secureKey(id: string): string {
   return `ideall:agent:secret:${id}`
@@ -32,7 +34,13 @@ function materialized(secret: Secret): Secret {
 }
 
 export const subscribeSecrets = store.subscribe
-export const getSecrets = () => store.get().map(materialized)
+export function getSecrets(): Secret[] {
+  const source = store.get()
+  if (source === snapshotSource) return snapshot
+  snapshotSource = source
+  snapshot = source.map(materialized)
+  return snapshot
+}
 export const getServerSecrets = store.getServer
 
 /** 名须与 ${NAME} 解析正则一致 (字母/数字/下划线), 否则存了也引用不到。 */
@@ -80,18 +88,27 @@ export async function hydrateAgentSecretsSecure(): Promise<void> {
   hydrating = (async () => {
     const current = store.get()
     let changed = false
+    let cacheChanged = false
     for (const secret of current) {
       const secureValue = await secureGet(secureKey(secret.id))
       if (secureValue) {
-        secretCache.set(secret.id, secureValue)
+        if (secretCache.get(secret.id) !== secureValue) {
+          secretCache.set(secret.id, secureValue)
+          cacheChanged = true
+        }
       } else if (!isTauri() && secret.value) {
-        secretCache.set(secret.id, secret.value)
+        if (secretCache.get(secret.id) !== secret.value) {
+          secretCache.set(secret.id, secret.value)
+          cacheChanged = true
+        }
         await secureSet(secureKey(secret.id), secret.value)
       }
       if (secret.value || !secret.secure) changed = true
     }
     if (changed) {
       store.replaceAll(current.map((secret) => ({ id: secret.id, value: "", secure: true })))
+    } else if (cacheChanged) {
+      store.replaceAll([...current])
     }
     hydrated = true
   })().finally(() => {

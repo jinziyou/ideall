@@ -24,7 +24,6 @@ import { getTabs, openTarget, useActiveId, useActiveRootId } from "../store"
 import { coreFileRoot, fileRootRef, isCoreFileRootId } from "../file-roots"
 import { fileEngineTargetForTab } from "../file-tab"
 import { onTreeArrowNav, focusTreeSibling, forwardTreeFocus } from "./tree-keynav"
-import { subscribeSidebarTreeRefresh } from "./sidebar-tree-bus"
 import { readAllDirectoryEntries } from "./directory-pagination"
 
 const EXPANDED_KEY = "ideall:file-system-tree:expanded"
@@ -56,7 +55,6 @@ export default function FileSystemSidebarTree() {
   const rootId = useActiveRootId()
   const directory = fileRootRef(rootId)
   const activeId = useActiveId()
-  const [refreshToken, setRefreshToken] = React.useState(0)
   const [expanded, setExpanded] = React.useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set()
     try {
@@ -74,11 +72,6 @@ export default function FileSystemSidebarTree() {
       /* storage unavailable */
     }
   }, [expanded])
-
-  React.useEffect(
-    () => subscribeSidebarTreeRefresh(() => setRefreshToken((value) => value + 1)),
-    [],
-  )
 
   const toggle = React.useCallback((ref: FileRef) => {
     const key = fileRefKey(ref)
@@ -106,7 +99,7 @@ export default function FileSystemSidebarTree() {
           rootId={rootId}
           expanded={expanded}
           onToggle={toggle}
-          refreshToken={refreshToken}
+          refreshKey="root"
         />
       ) : (
         <p className="px-3 py-2 text-xs text-muted-foreground">挂载已断开</p>
@@ -122,7 +115,7 @@ function DirectoryChildren({
   rootId,
   expanded,
   onToggle,
-  refreshToken,
+  refreshKey,
 }: {
   directory: FileRef
   depth: number
@@ -130,7 +123,7 @@ function DirectoryChildren({
   rootId: string
   expanded: Set<string>
   onToggle: (ref: FileRef) => void
-  refreshToken: number
+  refreshKey: string
 }) {
   const [items, setItems] = React.useState<LoadedEntry[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -151,8 +144,11 @@ function DirectoryChildren({
       ),
     )
       .then(async (directoryEntries) => {
+        const visibleEntries = directoryEntries.filter(
+          (entry) => entry.properties?.navigationHidden !== true,
+        )
         const loaded = await Promise.all(
-          directoryEntries.map(async (entry) => ({
+          visibleEntries.map(async (entry) => ({
             entry,
             file: await statFile(entry.target, {
               actor: "ui",
@@ -172,7 +168,7 @@ function DirectoryChildren({
     return () => {
       alive = false
     }
-  }, [fileId, fileSystemId, refreshToken, revision])
+  }, [fileId, fileSystemId, refreshKey, revision])
 
   React.useEffect(() => {
     try {
@@ -200,7 +196,7 @@ function DirectoryChildren({
       rootId={rootId}
       expanded={expanded}
       onToggle={onToggle}
-      refreshToken={refreshToken}
+      refreshKey={`${refreshKey}:${revision}`}
     />
   ))
 }
@@ -213,7 +209,7 @@ function FileTreeRow({
   rootId,
   expanded,
   onToggle,
-  refreshToken,
+  refreshKey,
 }: {
   entry: DirectoryEntry
   file: IdeallFile | null
@@ -222,7 +218,7 @@ function FileTreeRow({
   rootId: string
   expanded: Set<string>
   onToggle: (ref: FileRef) => void
-  refreshToken: number
+  refreshKey: string
 }) {
   const Icon = fileIcon(file)
   const expandable = file?.kind === "directory"
@@ -315,7 +311,7 @@ function FileTreeRow({
           rootId={rootId}
           expanded={expanded}
           onToggle={onToggle}
-          refreshToken={refreshToken}
+          refreshKey={refreshKey}
         />
       )}
     </div>

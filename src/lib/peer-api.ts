@@ -1,25 +1,34 @@
-// 用户(peer)发布层取数 facade —— 经 `@protocol/server-port` 的 ServerPort (官方实现为 HTTP 适配器)。
-// 公开发现/读取 + 带 token 的发布/删除。
-import { getServerPort, type PublishDraft } from "@protocol/server-port"
+// 用户(peer)发布层取数 facade —— 公开内容由 remote.server FileSystem 读取，
+// 发布与删除经同一 provider 的显式 action 执行。
+import type { Publication, PublishDraft } from "@protocol/server-port"
+import {
+  invokeRemoteServerAction,
+  readRemoteServerFile,
+  remotePeerPublicationsRef,
+  remotePeersRef,
+  type RemotePeerPublicationsResult,
+  type RemotePeersResult,
+} from "@/filesystem/remote-server-file-system"
+import type { ApiResult } from "@/lib/api"
 
 export type { Publication, PeerPublisher } from "@protocol/server-port"
 
 /** 社区发布者列表 (公开)。 */
 export function getPeers() {
-  return getServerPort().listPeers()
+  return readRemoteServerFile<RemotePeersResult>(remotePeersRef())
 }
 
 /** 某发布者的发布列表 (公开)。 */
 export function getPeerPublications(id: string) {
-  return getServerPort().getPeerPublications(id)
+  return readRemoteServerFile<RemotePeerPublicationsResult>(remotePeerPublicationsRef(id))
 }
 
 /** 发布一条 (需登录 token)。 */
 export function publish(token: string, input: PublishDraft) {
-  return getServerPort().publish(token, input)
+  return invokeRemoteServerAction<ApiResult<Publication>>("publish", { token, draft: input })
 }
 
 /** 删除自己的一条发布 (需登录 token)。 */
 export function deletePublication(token: string, id: number) {
-  return getServerPort().deletePublication(token, id)
+  return invokeRemoteServerAction<ApiResult<unknown>>("delete-publication", { token, id })
 }

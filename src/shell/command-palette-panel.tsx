@@ -3,21 +3,22 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import {
+  AudioLines,
   Bookmark,
   Braces,
+  Code2,
   Copy,
   Database,
   DownloadCloud,
-  FileAudio,
-  GitBranch,
+  Files,
   Globe,
   Hexagon,
   Layers,
   LayoutGrid,
   NotebookPen,
   RefreshCw,
-  Shell,
   SunMoon,
+  Terminal,
   Trash2,
   X,
 } from "lucide-react"
@@ -51,13 +52,14 @@ import {
   openTarget,
   requestCloseActiveTab,
   requestCloseOtherTabs,
+  setDevelopmentTool,
   setActiveTab,
+  setWorkspaceKind,
   useActiveId,
   useLru,
   useTabs,
 } from "@/workspace/store"
-import { refreshSidebarTree } from "@/workspace/tree/sidebar-tree-bus"
-import { addNote } from "@/files/stores/notes-store"
+import { createNoteFile } from "@/modules/home/notes/note-file-system"
 import { useShortcutLabel } from "@/lib/shortcuts"
 import { FileTypeIcon } from "@/shared/file-type-icon"
 
@@ -152,6 +154,12 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
     router.push(href)
   }
 
+  function switchWorkspace(kind: "files" | "audio" | "development", tool?: "git" | "shell") {
+    setOpen(false)
+    setWorkspaceKind(kind)
+    if (tool) setDevelopmentTool(tool)
+  }
+
   function toggleTheme() {
     setOpen(false)
     setThemeChoice(document.documentElement.classList.contains("dark") ? "light" : "dark")
@@ -185,12 +193,12 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
     setOpen(false)
     void (async () => {
       try {
-        const note = await addNote({ parentId: null })
-        refreshSidebarTree()
+        const note = await createNoteFile(null)
         openTarget({
-          type: "resource",
-          ref: { scheme: "node", kind: "note", id: note.id },
-          title: note.title || "无标题",
+          type: "file",
+          ref: note.ref,
+          file: note,
+          title: note.name || "无标题",
         })
       } catch (e) {
         toast.error("新建笔记失败", { description: String(e) })
@@ -244,6 +252,31 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
             <CommandSeparator />
           </>
         )}
+        <CommandGroup heading="工作区">
+          <CommandItem value="> 工作区 文件 默认" onSelect={() => switchWorkspace("files")}>
+            <Files className="h-4 w-4" />
+            文件
+          </CommandItem>
+          <CommandItem value="> 工作区 音频 播放" onSelect={() => switchWorkspace("audio")}>
+            <AudioLines className="h-4 w-4" />
+            音频
+          </CommandItem>
+          <CommandItem
+            value="> 工作区 开发 Git"
+            onSelect={() => switchWorkspace("development", "git")}
+          >
+            <Code2 className="h-4 w-4" />
+            开发 · Git
+          </CommandItem>
+          <CommandItem
+            value="> 工作区 开发 终端 Shell"
+            onSelect={() => switchWorkspace("development", "shell")}
+          >
+            <Terminal className="h-4 w-4" />
+            开发 · 终端
+          </CommandItem>
+        </CommandGroup>
+        <CommandSeparator />
         <CommandGroup heading="发现">
           {SPOKES.map((s) => (
             <CommandItem key={s.href} value={`> 发现 ${s.label}`} onSelect={() => go(s.href)}>
@@ -268,31 +301,10 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
             </CommandItem>
           )}
           {isDesktop && (
-            <CommandItem value="> 终端 shell terminal 命令行" onSelect={() => go("/shell")}>
-              <Shell className="h-4 w-4" />
-              终端
-              <CommandShortcut className="font-mono">/shell</CommandShortcut>
-            </CommandItem>
-          )}
-          {isDesktop && (
-            <CommandItem value="> Git git repository 仓库" onSelect={() => go("/git")}>
-              <GitBranch className="h-4 w-4" />
-              Git
-              <CommandShortcut className="font-mono">/git</CommandShortcut>
-            </CommandItem>
-          )}
-          {isDesktop && (
             <CommandItem value="> 数据库 database table db" onSelect={() => go("/database")}>
               <Database className="h-4 w-4" />
               数据库
               <CommandShortcut className="font-mono">/database</CommandShortcut>
-            </CommandItem>
-          )}
-          {isDesktop && (
-            <CommandItem value="> 音频 audio player 播放器" onSelect={() => go("/audio")}>
-              <FileAudio className="h-4 w-4" />
-              音频
-              <CommandShortcut className="font-mono">/audio</CommandShortcut>
             </CommandItem>
           )}
           {isDesktop && (

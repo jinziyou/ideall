@@ -16,18 +16,16 @@ import { TabContent, tabLayout } from "./registry"
 import { TabActiveContext } from "./tab-active-context"
 import { tabElId, tabPanelId } from "./tab-view-type"
 import type { Tab } from "./types"
-import { RESOURCE_TAB_KIND, isBrowserResourceTab, parseResourceTabParams } from "./resource-tab"
+import { isBrowserResourceTab, isEmbeddedResourceTab } from "./resource-tab"
 
 const MAX_ALIVE_FILL = 8 // 同时保持后台运行的 fill 查看器 (笔记等) 上限
 const MAX_ALIVE_IFRAME = 2 // 同时保持后台运行的嵌入应用 iframe 上限 (重新建立连接代价高, 上限防累积)
 
 /** 重型类别 (参与 LRU 逐出); padded 轻面板永久保持后台运行 → null。 */
 function heavyCat(tab: Tab): "fill" | "iframe" | null {
-  if (tab.kind === RESOURCE_TAB_KIND) {
-    const ref = parseResourceTabParams(tab.params)
-    if (ref?.scheme === "info" || ref?.scheme === "community") return "iframe"
+  if (isEmbeddedResourceTab(tab) || tab.kind === "info" || tab.kind === "community") {
+    return "iframe"
   }
-  if (tab.kind === "info" || tab.kind === "community") return "iframe"
   return tabLayout(tab) === "fill" ? "fill" : null
 }
 

@@ -1,21 +1,43 @@
 "use client"
 
 import * as React from "react"
-import { FileAudio, Pause, Play } from "lucide-react"
+import { FileAudio, LoaderCircle, Pause, Play, Volume2 } from "lucide-react"
 import type { IdeallFile } from "@protocol/file-system"
 import { readFile } from "@/filesystem/registry"
 import { base64ToBytes } from "@/lib/base64"
+import { audioTrackIdFromRef } from "@/plugins/audio/audio-file-system"
+import {
+  audioFilePlaybackKey,
+  audioLibraryPlaybackKey,
+  type AudioPlaybackSource,
+  useAudioPlayback,
+} from "@/plugins/audio/audio-playback"
 import { Button } from "@/ui/button"
+import { Slider } from "@/ui/slider"
+
+function playbackSource(file: IdeallFile, blob: Blob): AudioPlaybackSource {
+  const trackId = audioTrackIdFromRef(file.ref)
+  return {
+    key: trackId ? audioLibraryPlaybackKey(trackId) : audioFilePlaybackKey(file.ref, file.version),
+    kind: trackId ? "library" : "file",
+    trackId: trackId ?? undefined,
+    title: file.name,
+    mediaType: file.mediaType,
+    blob,
+  }
+}
 
 export default function AudioFileEngine({ file }: { file: IdeallFile }) {
-  const audioRef = React.useRef<HTMLAudioElement | null>(null)
-  const [src, setSrc] = React.useState("")
-  const [playing, setPlaying] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const playback = useAudioPlayback()
+  const [source, setSource] = React.useState<AudioPlaybackSource | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [readError, setReadError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     let alive = true
-    let url = ""
+    setSource(null)
+    setReadError(null)
+    setLoading(true)
     readFile(
       file.ref,
       { actor: "engine", permissions: [], activeFile: file.ref, intent: "content" },
@@ -39,62 +61,92 @@ export default function AudioFileEngine({ file }: { file: IdeallFile }) {
         } else {
           throw new Error("文件系统未返回可播放的音频 Blob")
         }
-        url = URL.createObjectURL(blob)
-        setSrc(url)
+        setSource(playbackSource(file, blob))
       })
       .catch((reason) => {
-        if (alive) setError(reason instanceof Error ? reason.message : String(reason))
+        if (alive) setReadError(reason instanceof Error ? reason.message : String(reason))
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
       })
     return () => {
       alive = false
-      if (url) URL.revokeObjectURL(url)
     }
   }, [file])
 
-  const toggle = async () => {
-    const audio = audioRef.current
-    if (!audio || !src) return
-    if (audio.paused) {
-      await audio.play()
-      setPlaying(true)
-    } else {
-      audio.pause()
-      setPlaying(false)
-    }
-  }
-
-  if (error) return <div className="p-6 text-sm text-destructive">{error}</div>
+  const active = source !== null && playback.source?.key === source.key
+  const playing = active && playback.isPlaying
+  const duration = active
+    ? playback.duration
+    : typeof file.properties?.duration === "number"
+      ? file.properties.duration
+      : 0
+  const currentTime = active ? playback.currentTime : 0
+  const error = readError ?? (active ? playback.error : null)
 
   return (
     <div className="flex h-full min-h-[320px] items-center justify-center p-6">
-      <div className="flex w-full max-w-xl flex-col items-center gap-5 rounded-xl border bg-card p-8 text-center shadow-sm">
+      <div className="flex w-full max-w-xl flex-col items-center gap-5 rounded-lg border bg-card p-8 text-center shadow-sm">
         <span className="grid h-20 w-20 place-items-center rounded-full bg-primary/10 text-primary">
           <FileAudio className="h-9 w-9" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-full">
           <h1 className="truncate text-lg font-semibold">{file.name}</h1>
           <p className="mt-1 text-xs text-muted-foreground">{file.mediaType}</p>
         </div>
-        <audio
-          ref={audioRef}
-          src={src || undefined}
-          controls
-          className="w-full"
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={() => setPlaying(false)}
-        />
+
+        <div className="flex w-full flex-col gap-3">
+          <Slider
+            value={[currentTime]}
+            max={Math.max(duration, 1)}
+            step={1}
+            disabled={!active || !duration}
+            aria-label="播放进度"
+            onValueChange={([value]: number[]) => playback.seek(value)}
+          />
+          <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground">
+            <span>
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+            <div className="flex items-center gap-2">
+              <Volume2 className="h-4 w-4" />
+              <Slider
+                className="w-28"
+                value={[playback.volume * 100]}
+                max={100}
+                step={1}
+                aria-label="音量"
+                onValueChange={([value]: number[]) => playback.setVolume(value / 100)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <Button
           type="button"
           size="lg"
           className="gap-2"
-          disabled={!src}
-          onClick={() => void toggle()}
+          disabled={!source || loading}
+          onClick={() => source && void playback.toggleSource(source)}
         >
-          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          {loading || (active && playback.isLoading) ? (
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+          ) : playing ? (
+            <Pause className="h-4 w-4" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
           {playing ? "暂停" : "播放"}
         </Button>
       </div>
     </div>
   )
+}
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "00:00"
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = Math.floor(seconds % 60)
+  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
 }

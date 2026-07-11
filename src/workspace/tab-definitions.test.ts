@@ -43,9 +43,11 @@ test("tab definitions: layout 与视图分类由 kind 单源推导", () => {
   assert.equal(tabDefinitionViewType("tool-search"), "panel")
 })
 
-test("workspace modules: 所有静态入口 kind 都在 Tab 定义表中", () => {
+test("workspace modules: 所有入口都是 Resource 文件或已注册静态 Tab", () => {
   const missing = MODULES.flatMap((module) =>
-    module.entries.filter((entry) => !isStaticTabKind(entry.descriptor.kind)),
+    module.entries.filter(
+      (entry) => entry.descriptor.kind !== "resource" && !isStaticTabKind(entry.descriptor.kind),
+    ),
   )
   assert.deepEqual(missing, [])
 })

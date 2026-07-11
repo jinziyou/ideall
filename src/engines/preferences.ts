@@ -4,6 +4,13 @@ import { normalizeMediaType } from "./matcher"
 
 export const ENGINE_PREFERENCES_VERSION = 1 as const
 export const ENGINE_PREFERENCES_STORAGE_KEY = "ideall:engine-preferences"
+export type EnginePreferenceScope = "files" | "audio" | "development"
+
+export function enginePreferencesStorageKey(scope: EnginePreferenceScope): string {
+  return scope === "files"
+    ? ENGINE_PREFERENCES_STORAGE_KEY
+    : `${ENGINE_PREFERENCES_STORAGE_KEY}:${scope}`
+}
 
 export type EnginePreferences = Readonly<{
   version: typeof ENGINE_PREFERENCES_VERSION

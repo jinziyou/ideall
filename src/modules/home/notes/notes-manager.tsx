@@ -11,10 +11,14 @@ import { Badge } from "@/ui/badge"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/format"
 import type { NoteMeta } from "@protocol/files"
-import { addNote, listNotes } from "@/files/stores/notes-store"
 import { openTarget } from "@/workspace/store"
-import { refreshSidebarTree, subscribeSidebarTreeRefresh } from "@/workspace/tree/sidebar-tree-bus"
 import { EmptyState } from "@/ui/empty-state"
+import { corePlaceRef, resourceRefForFile } from "@/filesystem/resource-file-system"
+import { watchFile } from "@/filesystem/registry"
+import { createNoteFile, listNoteFiles } from "./note-file-system"
+
+const NOTES_ROOT_REF = corePlaceRef("notes")
+const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 
 export default function NotesManager() {
   const [notes, setNotes] = React.useState<NoteMeta[]>([])
@@ -23,7 +27,7 @@ export default function NotesManager() {
 
   const reload = React.useCallback(async () => {
     try {
-      setNotes(await listNotes())
+      setNotes(await listNoteFiles(true))
     } catch (e) {
       toast.error("读取笔记失败", { description: String(e) })
     } finally {
@@ -33,9 +37,14 @@ export default function NotesManager() {
 
   React.useEffect(() => {
     void reload()
+    let watch: ReturnType<typeof watchFile> = null
+    try {
+      watch = watchFile(NOTES_ROOT_REF, WATCH_CONTEXT, () => void reload())
+    } catch {
+      // 首次读取仍可用于不支持 watch 的 provider。
+    }
+    return () => watch?.dispose()
   }, [reload])
-
-  React.useEffect(() => subscribeSidebarTreeRefresh(() => void reload()), [reload])
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -53,13 +62,17 @@ export default function NotesManager() {
 
   async function handleNewRoot() {
     try {
-      const note = await addNote({ parentId: null })
+      const note = await createNoteFile(null)
+      const resource = resourceRefForFile(note.ref)
+      if (!resource || resource.scheme !== "node" || resource.kind !== "note") {
+        throw new Error("文件系统返回了无效笔记引用")
+      }
       await reload()
-      refreshSidebarTree()
       openTarget({
-        type: "resource",
-        ref: { scheme: "node", kind: "note", id: note.id },
-        title: note.title || "无标题",
+        type: "file",
+        ref: note.ref,
+        file: note,
+        title: note.name || "无标题",
       })
     } catch (e) {
       toast.error("新建失败", { description: String(e) })

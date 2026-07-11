@@ -6,7 +6,7 @@
 //       <DT><A HREF="https://..." ADD_DATE="..." ICON="data:...">标题</A>
 //     </DL><p>
 //   </DL><p>
-import { NewBookmark } from "@/files/stores/bookmarks-store"
+import type { NewBookmark } from "@protocol/files"
 
 export type ParsedBookmark = NewBookmark & {
   /** 该书签在导出文件中所属的文件夹路径 (顶层在前), 用于重建收藏夹 */

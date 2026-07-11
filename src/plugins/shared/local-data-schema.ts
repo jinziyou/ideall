@@ -2,7 +2,7 @@ import { AUTH_TOKEN_SECURE_KEY } from "@/lib/auth/auth-store"
 import { SYNC_CODE_SECURE_KEY } from "@/lib/sync-code"
 import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
-import { ENGINE_PREFERENCES_STORAGE_KEY } from "@/engines/preferences"
+import { ENGINE_PREFERENCES_STORAGE_KEY, enginePreferencesStorageKey } from "@/engines/preferences"
 import { STARTUP_TARGET_STORAGE_KEY } from "@/lib/workspace-storage"
 import { AUDIO_DB_NAME, AUDIO_DB_VERSION } from "@/plugins/audio/audio-store"
 import { DATABASE_DB_NAME, DATABASE_DB_VERSION } from "@/plugins/database/database-store"
@@ -172,10 +172,34 @@ export const LOCAL_DATA_SCHEMAS: LocalDataSchema[] = [
   },
   {
     id: "display.engine-preferences",
-    label: "文件默认引擎关联",
+    label: "文件工作区默认引擎关联",
     owner: "display",
     storage: "localStorage",
     key: ENGINE_PREFERENCES_STORAGE_KEY,
+    currentVersion: 1,
+    portable: true,
+    parseAs: "json",
+    validate: isJsonObject,
+    repair: repairJsonObject,
+  },
+  {
+    id: "display.engine-preferences.audio",
+    label: "音频工作区默认引擎关联",
+    owner: "display",
+    storage: "localStorage",
+    key: enginePreferencesStorageKey("audio"),
+    currentVersion: 1,
+    portable: true,
+    parseAs: "json",
+    validate: isJsonObject,
+    repair: repairJsonObject,
+  },
+  {
+    id: "display.engine-preferences.development",
+    label: "开发工作区默认引擎关联",
+    owner: "display",
+    storage: "localStorage",
+    key: enginePreferencesStorageKey("development"),
     currentVersion: 1,
     portable: true,
     parseAs: "json",

@@ -13,7 +13,9 @@ import {
   cancelRouteFileOpen,
   openRouteFileTarget,
   openTab,
+  setDevelopmentTool,
   setRightPanel,
+  setWorkspaceKind,
   useHydrated,
 } from "./store"
 import { defaultFileForPath } from "./file-roots"
@@ -42,6 +44,15 @@ function OpenWorkspaceTabInner() {
       // /home/agent: AI 是右侧常驻对话栏, 不开标签 —— 呼出右栏即可。
       if (p.startsWith("/home/agent")) {
         setRightPanel(true)
+        return
+      }
+      if (p === "/audio") {
+        setWorkspaceKind("audio")
+        return
+      }
+      if (p === "/git" || p === "/shell") {
+        setWorkspaceKind("development")
+        setDevelopmentTool(p === "/git" ? "git" : "shell")
         return
       }
       // 路由驱动的打开 (移动底栏 / ⌘K / 深链 / 桌面 UrlSync 回写) 一律走「预览」(transient):

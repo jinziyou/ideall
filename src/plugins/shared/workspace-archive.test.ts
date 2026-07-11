@@ -54,6 +54,8 @@ test("workspace archive: 固定格式并可预检完整工作区归档", async (
           transientId: null,
           activeModule: "code",
           mode: "local",
+          workspaceKind: "development",
+          developmentTool: "shell",
           sidebarCollapsed: false,
           rightPanelOpen: false,
         },
@@ -71,7 +73,18 @@ test("workspace archive: 固定格式并可预检完整工作区归档", async (
   assert.equal(parsed.core.blobs[0].dataBase64, "YWJj")
   assert.equal(parsed.core.trashSnapshots[0].id, "n1")
   assert.equal(parsed.core.workspace?.tabs.length, 1)
+  assert.equal(parsed.core.workspace?.workspaceKind, "development")
+  assert.equal(parsed.core.workspace?.developmentTool, "shell")
   assert.equal(parsed.plugins.plugins[0].plugin.id, "git")
+
+  const legacy = JSON.parse(raw) as {
+    core: { workspace: Record<string, unknown> }
+  }
+  delete legacy.core.workspace.workspaceKind
+  delete legacy.core.workspace.developmentTool
+  const parsedLegacy = parseWorkspaceArchivePackage(JSON.stringify(legacy))
+  assert.equal(parsedLegacy.core.workspace?.workspaceKind, "files")
+  assert.equal(parsedLegacy.core.workspace?.developmentTool, "git")
 
   const preview = await previewWorkspaceArchiveImport(raw, "workspace.json")
   assert.equal(preview.ok, true)

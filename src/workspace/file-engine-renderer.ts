@@ -1,79 +1,108 @@
+import type { ReactNode } from "react"
+import type { EngineDescriptor } from "@protocol/engine"
 import type { IdeallFile } from "@protocol/file-system"
 
+export type FileEngineRenderContext = Readonly<{
+  file: IdeallFile
+  descriptor: EngineDescriptor
+}>
+
 /**
- * UI 层内置引擎的严格渲染目标。
- *
- * 这里刻意不做“按文件类型猜 Viewer”的兜底：文件类型只用于引擎匹配，真正打开后必须由
- * 已写入标签的 engineId 决定视图。否则手动选择 preview/code 时会被旧 Node/Panel Viewer
- * 截获，界面显示的引擎与实际 Renderer 不一致。
+ * Display implementation contributed by the workspace composition root or a third-party UI
+ * manifest. Engine matching remains pure in @/engines; this callback is the UI-side half of an
+ * engine registration.
  */
-export type FileEngineRenderer =
-  | "node-note"
-  | "node-bookmark"
-  | "node-feed"
-  | "node-thread"
-  | "directory"
-  | "audio-file"
-  | "audio-library"
-  | "database"
-  | "git"
-  | "shell"
-  | "browser"
-  | "code"
-  | "connected"
-  | "panel"
-  | "preview"
-  | "unsupported"
+export type FileEngineRenderer = (context: FileEngineRenderContext) => ReactNode
 
-function property(file: IdeallFile, key: string): unknown {
-  return file.properties?.[key]
-}
-
-function isNodeResource(file: IdeallFile, kind: string): boolean {
-  return property(file, "resourceScheme") === "node" && property(file, "resourceKind") === kind
-}
-
-/** 解析 engineId 对应的唯一 Renderer；不兼容时明确返回 unsupported，不借用其他引擎。 */
-export function resolveFileEngineRenderer(file: IdeallFile, engineId: string): FileEngineRenderer {
-  switch (engineId) {
-    case "ideall.note":
-      return isNodeResource(file, "note") ? "node-note" : "unsupported"
-    case "ideall.bookmark":
-      return isNodeResource(file, "bookmark") ? "node-bookmark" : "unsupported"
-    case "ideall.feed":
-      return isNodeResource(file, "feed") ? "node-feed" : "unsupported"
-    case "ideall.thread":
-      return isNodeResource(file, "thread") ? "node-thread" : "unsupported"
-    case "ideall.directory":
-      return file.kind === "directory" ? "directory" : "unsupported"
-    case "ideall.audio":
-      return property(file, "tabKind") === "audio" ? "audio-library" : "audio-file"
-    case "ideall.database":
-      return "database"
-    case "ideall.git":
-      return "git"
-    case "ideall.shell":
-      return "shell"
-    case "ideall.browser":
-      return typeof property(file, "url") === "string" ||
-        property(file, "resourceScheme") === "browser"
-        ? "browser"
-        : "unsupported"
-    case "ideall.code":
-      return "code"
-    case "ideall.connected":
-      return ["info", "community", "tool", "app"].includes(
-        typeof property(file, "resourceScheme") === "string"
-          ? (property(file, "resourceScheme") as string)
-          : "",
-      )
-        ? "connected"
-        : "unsupported"
-    case "ideall.panel":
-      return typeof property(file, "panelId") === "string" ? "panel" : "unsupported"
-    case "ideall.preview":
-      return "preview"
-    default:
-      return "unsupported"
+export class FileEngineRendererRegistryError extends Error {
+  constructor(
+    readonly code: "duplicate-renderer" | "invalid-renderer",
+    message: string,
+  ) {
+    super(message)
+    this.name = "FileEngineRendererRegistryError"
   }
+}
+
+export class FileEngineRendererRegistry {
+  readonly #renderers = new Map<string, FileEngineRenderer>()
+  readonly #listeners = new Set<() => void>()
+  #revision = 0
+
+  register(engineId: string, renderer: FileEngineRenderer): () => void {
+    if (!engineId.trim() || engineId !== engineId.trim() || typeof renderer !== "function") {
+      throw new FileEngineRendererRegistryError(
+        "invalid-renderer",
+        "Renderer engineId must be non-empty and have no surrounding whitespace",
+      )
+    }
+    if (this.#renderers.has(engineId)) {
+      throw new FileEngineRendererRegistryError(
+        "duplicate-renderer",
+        `Renderer already registered: ${engineId}`,
+      )
+    }
+
+    this.#renderers.set(engineId, renderer)
+    this.#notify()
+
+    return () => {
+      if (this.#renderers.get(engineId) !== renderer) return
+      this.#renderers.delete(engineId)
+      this.#notify()
+    }
+  }
+
+  get(engineId: string): FileEngineRenderer | null {
+    return this.#renderers.get(engineId) ?? null
+  }
+
+  list(): string[] {
+    return [...this.#renderers.keys()].sort()
+  }
+
+  revision(): number {
+    return this.#revision
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.#listeners.add(listener)
+    return () => this.#listeners.delete(listener)
+  }
+
+  clear(): void {
+    if (this.#renderers.size === 0) return
+    this.#renderers.clear()
+    this.#notify()
+  }
+
+  #notify(): void {
+    this.#revision += 1
+    for (const listener of this.#listeners) listener()
+  }
+}
+
+export const fileEngineRendererRegistry = new FileEngineRendererRegistry()
+
+export function registerFileEngineRenderer(
+  engineId: string,
+  renderer: FileEngineRenderer,
+): () => void {
+  return fileEngineRendererRegistry.register(engineId, renderer)
+}
+
+export function resolveFileEngineRenderer(engineId: string): FileEngineRenderer | null {
+  return fileEngineRendererRegistry.get(engineId)
+}
+
+export function subscribeFileEngineRenderers(listener: () => void): () => void {
+  return fileEngineRendererRegistry.subscribe(listener)
+}
+
+export function getFileEngineRendererRevision(): number {
+  return fileEngineRendererRegistry.revision()
+}
+
+export function clearFileEngineRenderersForTest(): void {
+  fileEngineRendererRegistry.clear()
 }

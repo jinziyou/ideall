@@ -14,14 +14,18 @@ import {
 } from "@/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { openExternal } from "@/lib/safe-url"
-import { invokeResourceAction } from "@/vfs/registry"
-import type { SaveToMineResult } from "@/vfs/save-to-mine-projector"
+import { invokeFileAction } from "@/filesystem"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { flowbackToast } from "./flowback-toast"
+
+type SaveToMineResult =
+  | { kind: "bookmark"; existed: boolean }
+  | { kind: "subscription"; existed: boolean }
 
 /**
  * 统一的「加入我的」基础组件 (feeders) —— 把发现模块上的任意条目 (文章 / 事件 / 链接) 加入本地的「我的」。
  * 按传入的能力渲染菜单项: 收藏到书签 / 关注发布者; 另带原文 / 全面报道 直达。
- * 经 VFS save-to-mine action 写入, 让保存映射集中在资源层。
+ * 经 FileSystem save-to-mine action 写入, 让保存映射集中在资源层。
  */
 export function SaveToMine({
   bookmark,
@@ -48,11 +52,11 @@ export function SaveToMine({
   async function doBookmark() {
     if (!bookmark) return
     try {
-      const result = (await invokeResourceAction(
-        { scheme: "browser", kind: "page", id: bookmark.url },
+      const result = (await invokeFileAction(
+        resourceFileRef({ scheme: "browser", kind: "page", id: bookmark.url }),
         "save-to-mine",
         bookmark,
-        { actor: "ui", permissions: [] },
+        { actor: "ui", permissions: [], intent: "action" },
       )) as SaveToMineResult
       if (result.kind === "bookmark" && result.existed) {
         toast.info("已在书签中")
@@ -69,11 +73,11 @@ export function SaveToMine({
     if (!publisher?.domain) return
     try {
       const title = publisher.name || publisher.domain
-      const result = (await invokeResourceAction(
-        { scheme: "info", kind: "publisher", id: publisher.domain },
+      const result = (await invokeFileAction(
+        resourceFileRef({ scheme: "info", kind: "publisher", id: publisher.domain }),
         "save-to-mine",
         { domain: publisher.domain, title },
-        { actor: "ui", permissions: [] },
+        { actor: "ui", permissions: [], intent: "action" },
       )) as SaveToMineResult
       if (result.kind === "subscription" && result.existed) {
         toast.info("已关注该发布者")

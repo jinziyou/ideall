@@ -100,6 +100,7 @@ export const BUILTIN_ENGINES = [
       mediaTypes: [
         "text/*",
         "application/json",
+        "application/vnd.ideall.database+json",
         "application/javascript",
         "application/typescript",
         "application/xml",
@@ -159,9 +160,25 @@ export const BUILTIN_ENGINES = [
     iconHint: "connected",
   },
   {
+    engineId: "ideall.panel-fill",
+    label: "ideall 面板",
+    match: {
+      mediaTypes: ["application/vnd.ideall.panel.*+json"],
+      properties: { panelLayout: "fill" },
+    },
+    priority: 451,
+    layout: "fill",
+    access: "read-only",
+    supportsStandaloneWindow: false,
+    iconHint: "panel",
+  },
+  {
     engineId: "ideall.panel",
     label: "ideall 面板",
-    match: { mediaTypes: ["application/vnd.ideall.panel.*+json"] },
+    match: {
+      mediaTypes: ["application/vnd.ideall.panel.*+json"],
+      properties: { panelLayout: "padded" },
+    },
     priority: 450,
     layout: "padded",
     access: "read-only",

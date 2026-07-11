@@ -37,6 +37,7 @@ export const STANDARD_FILE_CAPABILITIES = [
   "actions",
   "watch",
   "save-to-mine",
+  "standalone-window",
 ] as const
 
 export type StandardFileCapability = (typeof STANDARD_FILE_CAPABILITIES)[number]

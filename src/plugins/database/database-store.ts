@@ -6,6 +6,7 @@ import {
   type PluginDataPackage,
 } from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
+import { nextUpdatedAt } from "@/files/version"
 
 export const DATABASE_DB_NAME = "ideall:database"
 export const DATABASE_DB_VERSION = 1
@@ -248,7 +249,13 @@ export async function updateRow(
 ): Promise<DataRow> {
   const now = Date.now()
   const current = await databaseDb.get<DataRow>(STORE_ROWS, id)
-  const row: DataRow = { id, tableId, values, createdAt: current?.createdAt ?? now, updatedAt: now }
+  const row: DataRow = {
+    id,
+    tableId,
+    values,
+    createdAt: current?.createdAt ?? now,
+    updatedAt: current ? nextUpdatedAt(current.updatedAt, now) : now,
+  }
   await databaseDb.put(STORE_ROWS, row)
   return row
 }

@@ -55,6 +55,16 @@ export async function getResource(
   return providerForRef(ref).get(ref, ctx)
 }
 
+export async function createResource(
+  scheme: ResourceScheme,
+  input: unknown,
+  ctx: VfsAccessContext,
+): Promise<ResourceRecord> {
+  const provider = providerForScheme(scheme)
+  if (!provider.create) throw new VfsError("unsupported", `Provider cannot create: ${scheme}`)
+  return provider.create(input, ctx)
+}
+
 export async function resourceActions(
   ref: ResourceRef,
   ctx: VfsAccessContext,

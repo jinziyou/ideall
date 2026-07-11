@@ -5,7 +5,7 @@
 // layout: "fill" = 组件自管理全高/滚动 (笔记 / AI / 嵌入 iframe); "padded" = 居中限宽滚动容器。
 
 import * as React from "react"
-import { Check, ChevronDown, Loader2 } from "lucide-react"
+import { AppWindow, Check, ChevronDown, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { ErrorBoundary } from "@/ui/error-boundary"
 import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manifest"
@@ -21,11 +21,12 @@ import { resolveNodeResourceViewer, resourceLayout } from "./resource-engines"
 import { RESOURCE_TAB_KIND, nodeResourceRefForTab, parseResourceTabParams } from "./resource-tab"
 import type { ResourceRef } from "@protocol/resource"
 import type { FileRef, IdeallFile } from "@protocol/file-system"
-import { statFile } from "@/filesystem/registry"
+import { statFile, watchFile } from "@/filesystem/registry"
 import { panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { engineRegistry } from "@/engines/builtin"
 import {
   EnginePreferenceStore,
+  enginePreferencesStorageKey,
   getFileEnginePreference,
   getMediaTypeEnginePreference,
 } from "@/engines/preferences"
@@ -39,11 +40,19 @@ import {
 } from "@/ui/dropdown-menu"
 import { Button } from "@/ui/button"
 import { FILE_ENGINE_TAB_KIND, parseFileEngineTabParams } from "./file-tab"
-import { resolveFileEngineRenderer } from "./file-engine-renderer"
+import {
+  type FileEngineRenderer,
+  FileEngineRendererRegistry,
+  fileEngineRendererRegistry,
+  getFileEngineRendererRevision,
+  resolveFileEngineRenderer,
+  subscribeFileEngineRenderers,
+} from "./file-engine-renderer"
 import { openTarget } from "./store"
-import { useActiveRootId } from "./store"
+import { useActiveRootId, useWorkspaceKind } from "./store"
 import { writeStartupTarget } from "./startup-target"
 import NodeFileEngineToolbar from "./viewers/node-file-engine-toolbar"
+import { canOpenStandaloneWindow } from "./standalone-window-policy"
 
 // 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
 const FOLLOW_TYPES: SubscriptionType[] = ["publisher", "entity", "search", "peer"]
@@ -79,6 +88,7 @@ const AiTasks = React.lazy(() => import("@/plugins/agent/views/ai-tasks"))
 const AudioFileEngine = React.lazy(() => import("./viewers/audio-file-engine"))
 const FileDirectoryEngine = React.lazy(() => import("./viewers/file-directory-engine"))
 const GenericCodeEngine = React.lazy(() => import("./viewers/generic-code-engine"))
+const GenericPreviewEngine = React.lazy(() => import("./viewers/generic-preview-engine"))
 
 type Entry = { render: (tab: Tab) => React.ReactNode }
 
@@ -154,6 +164,7 @@ function renderPanelFile(file: IdeallFile): React.ReactNode {
     kind: panel.tabKind,
     module: panel.module as Tab["module"],
     title: panel.name,
+    params: panel.params ? { ...panel.params } : undefined,
   }
   return <React.Suspense fallback={Spinner}>{entry.render(tab)}</React.Suspense>
 }
@@ -168,96 +179,117 @@ function unsupportedEngine(file: IdeallFile, engineId: string): React.ReactNode 
   )
 }
 
-function renderGenericPreview(file: IdeallFile): React.ReactNode {
+function renderGenericPreview(
+  file: IdeallFile,
+  engineId: string,
+  readOnly: boolean,
+): React.ReactNode {
   const mediaType = file.mediaType.toLowerCase()
   if (mediaType.startsWith("audio/")) return <AudioFileEngine file={file} />
+  if (mediaType.startsWith("image/")) return <GenericPreviewEngine file={file} />
   if (
     mediaType.startsWith("text/") ||
     mediaType.includes("json") ||
     mediaType.includes("javascript") ||
     mediaType.includes("typescript") ||
-    mediaType.includes("xml") ||
-    mediaType === "image/svg+xml"
+    mediaType.includes("xml")
   ) {
-    return <GenericCodeEngine file={file} readOnly />
+    return <GenericCodeEngine file={file} engineId={engineId} readOnly={readOnly} />
   }
-  return (
-    <div className="mx-auto flex max-w-xl flex-col gap-3 p-6">
-      <h1 className="text-lg font-semibold">{file.name}</h1>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        <dt className="text-muted-foreground">类型</dt>
-        <dd>{file.mediaType}</dd>
-        <dt className="text-muted-foreground">来源</dt>
-        <dd>{file.source.label ?? file.source.id}</dd>
-        <dt className="text-muted-foreground">大小</dt>
-        <dd>{file.size == null ? "—" : `${file.size} bytes`}</dd>
-      </dl>
-    </div>
+  return <GenericPreviewEngine file={file} />
+}
+
+function registerRenderer(
+  registry: FileEngineRendererRegistry,
+  engineId: string,
+  renderer: FileEngineRenderer,
+): void {
+  if (!registry.get(engineId)) registry.register(engineId, renderer)
+}
+
+/** UI composition contribution for the built-in engine descriptors. */
+export function registerBuiltInFileEngineRenderers(
+  registry: FileEngineRendererRegistry = fileEngineRendererRegistry,
+): void {
+  const nodeRenderer =
+    (kind: "note" | "bookmark" | "feed" | "thread"): FileEngineRenderer =>
+    ({ file, descriptor }) => {
+      const resource = resourceRefForFile(file.ref)
+      return resource?.scheme === "node" && resource.kind === kind
+        ? renderNodeResource(resource)
+        : unsupportedEngine(file, descriptor.engineId)
+    }
+
+  registerRenderer(registry, "ideall.note", nodeRenderer("note"))
+  registerRenderer(registry, "ideall.bookmark", nodeRenderer("bookmark"))
+  registerRenderer(registry, "ideall.feed", nodeRenderer("feed"))
+  registerRenderer(registry, "ideall.thread", nodeRenderer("thread"))
+  registerRenderer(registry, "ideall.directory", ({ file }) => <FileDirectoryEngine file={file} />)
+  registerRenderer(registry, "ideall.audio", ({ file }) =>
+    file.properties?.tabKind === "audio" ? <AudioPage /> : <AudioFileEngine file={file} />,
+  )
+  registerRenderer(registry, "ideall.database", ({ file }) => {
+    const tableId =
+      typeof file.properties?.tableId === "string" ? file.properties.tableId : undefined
+    return <DatabasePage initialTableId={tableId} />
+  })
+  registerRenderer(registry, "ideall.git", ({ file }) => {
+    const path = typeof file.properties?.path === "string" ? file.properties.path : undefined
+    return <GitPage initialRepoPath={path} />
+  })
+  registerRenderer(registry, "ideall.shell", () => <ShellPage />)
+  registerRenderer(registry, "ideall.browser", ({ file, descriptor }) => {
+    const resource = resourceRefForFile(file.ref)
+    const propertyUrl = typeof file.properties?.url === "string" ? file.properties.url : undefined
+    const resourceUrl =
+      resource?.scheme === "browser" && resource.id !== "default" ? resource.id : undefined
+    return propertyUrl || resource?.scheme === "browser" ? (
+      <BrowserView initialUrl={propertyUrl ?? resourceUrl} />
+    ) : (
+      unsupportedEngine(file, descriptor.engineId)
+    )
+  })
+  registerRenderer(registry, "ideall.code", ({ file, descriptor }) => (
+    <GenericCodeEngine
+      file={file}
+      engineId={descriptor.engineId}
+      readOnly={descriptor.access === "read-only"}
+    />
+  ))
+  registerRenderer(registry, "ideall.connected", ({ file, descriptor }) => {
+    const resource = resourceRefForFile(file.ref)
+    return resource
+      ? renderConnectedResource(resource)
+      : unsupportedEngine(file, descriptor.engineId)
+  })
+  registerRenderer(registry, "ideall.panel", ({ file }) => renderPanelFile(file))
+  registerRenderer(registry, "ideall.panel-fill", ({ file }) => renderPanelFile(file))
+  registerRenderer(registry, "ideall.preview", ({ file, descriptor }) =>
+    file.kind === "directory" ? (
+      <FileDirectoryEngine file={file} />
+    ) : (
+      renderGenericPreview(file, descriptor.engineId, descriptor.access === "read-only")
+    ),
   )
 }
 
-function renderFileEngineBody(file: IdeallFile, engineId: string): React.ReactNode {
-  const resource = resourceRefForFile(file.ref)
-  const renderer = resolveFileEngineRenderer(file, engineId)
-
-  switch (renderer) {
-    case "node-note":
-      return resource?.scheme === "node" && resource.kind === "note"
-        ? renderNodeResource(resource)
-        : unsupportedEngine(file, engineId)
-    case "node-bookmark":
-      return resource?.scheme === "node" && resource.kind === "bookmark"
-        ? renderNodeResource(resource)
-        : unsupportedEngine(file, engineId)
-    case "node-feed":
-      return resource?.scheme === "node" && resource.kind === "feed"
-        ? renderNodeResource(resource)
-        : unsupportedEngine(file, engineId)
-    case "node-thread":
-      return resource?.scheme === "node" && resource.kind === "thread"
-        ? renderNodeResource(resource)
-        : unsupportedEngine(file, engineId)
-    case "directory":
-      return <FileDirectoryEngine file={file} />
-    case "audio-file":
-      return <AudioFileEngine file={file} />
-    case "audio-library":
-      return <AudioPage />
-    case "database": {
-      const tableId =
-        typeof file.properties?.tableId === "string" ? file.properties.tableId : undefined
-      return <DatabasePage initialTableId={tableId} />
-    }
-    case "git": {
-      const path = typeof file.properties?.path === "string" ? file.properties.path : undefined
-      return <GitPage initialRepoPath={path} />
-    }
-    case "shell":
-      return <ShellPage />
-    case "browser": {
-      const propertyUrl = typeof file.properties?.url === "string" ? file.properties.url : undefined
-      const resourceUrl =
-        resource?.scheme === "browser" && resource.id !== "default" ? resource.id : undefined
-      return <BrowserView initialUrl={propertyUrl ?? resourceUrl} />
-    }
-    case "code":
-      return <GenericCodeEngine file={file} />
-    case "connected":
-      return resource ? renderConnectedResource(resource) : unsupportedEngine(file, engineId)
-    case "panel":
-      return renderPanelFile(file)
-    case "preview":
-      return renderGenericPreview(file)
-    case "unsupported":
-      return unsupportedEngine(file, engineId)
-  }
+function renderFileEngineBody(
+  file: IdeallFile,
+  descriptor: NonNullable<ReturnType<typeof engineRegistry.get>>,
+): React.ReactNode {
+  const renderer = resolveFileEngineRenderer(descriptor.engineId)
+  return renderer ? renderer({ file, descriptor }) : unsupportedEngine(file, descriptor.engineId)
 }
 
 function useEnginePreferences() {
+  const workspace = useWorkspaceKind()
   const store = React.useMemo(
     () =>
-      new EnginePreferenceStore(typeof window === "undefined" ? undefined : window.localStorage),
-    [],
+      new EnginePreferenceStore(
+        typeof window === "undefined" ? undefined : window.localStorage,
+        enginePreferencesStorageKey(workspace),
+      ),
+    [workspace],
   )
   const [revision, setRevision] = React.useState(0)
   const preferences = React.useMemo(() => {
@@ -268,10 +300,30 @@ function useEnginePreferences() {
   return { store, preferences, refresh }
 }
 
+function subscribeEngineRegistry(listener: () => void): () => void {
+  return engineRegistry.subscribe(listener)
+}
+
+function getEngineRegistryRevision(): number {
+  return engineRegistry.revision()
+}
+
+function useEngineRegistryRevision(): void {
+  React.useSyncExternalStore(
+    subscribeEngineRegistry,
+    getEngineRegistryRevision,
+    getEngineRegistryRevision,
+  )
+}
+
 function EnginePicker({ file, engineId }: { file: IdeallFile; engineId: string }) {
+  useEngineRegistryRevision()
   const activeRootId = useActiveRootId()
   const { store, preferences, refresh } = useEnginePreferences()
   const candidates = engineRegistry.matching(file)
+  const standaloneCandidates = candidates.filter(({ descriptor }) =>
+    canOpenStandaloneWindow(file, descriptor),
+  )
   const current = engineRegistry.get(engineId)
   const fileDefault = getFileEnginePreference(preferences, file.ref)
   const mediaDefault = getMediaTypeEnginePreference(preferences, file.mediaType)
@@ -296,18 +348,18 @@ function EnginePicker({ file, engineId }: { file: IdeallFile; engineId: string }
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>打开方式</DropdownMenuLabel>
+        <DropdownMenuLabel>在当前工作区打开</DropdownMenuLabel>
         {candidates.map(({ descriptor }) => (
           <DropdownMenuItem
             key={descriptor.engineId}
-            disabled={descriptor.engineId === engineId || !descriptor.supportsStandaloneWindow}
+            disabled={descriptor.engineId === engineId}
             onSelect={() =>
               openTarget({
                 type: "file",
                 ref: file.ref,
                 file,
                 engineId: descriptor.engineId,
-                display: "window",
+                display: "tab",
               })
             }
           >
@@ -315,6 +367,30 @@ function EnginePicker({ file, engineId }: { file: IdeallFile; engineId: string }
             {descriptor.engineId === engineId && <Check className="h-3.5 w-3.5" />}
           </DropdownMenuItem>
         ))}
+        {standaloneCandidates.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>在独立窗口打开</DropdownMenuLabel>
+            {standaloneCandidates.map(({ descriptor }) => (
+              <DropdownMenuItem
+                key={descriptor.engineId}
+                onSelect={() =>
+                  openTarget({
+                    type: "file",
+                    ref: file.ref,
+                    file,
+                    engineId: descriptor.engineId,
+                    display: "window",
+                  })
+                }
+              >
+                <AppWindow className="mr-2 h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{descriptor.label}</span>
+                {descriptor.engineId === engineId && <Check className="h-3.5 w-3.5" />}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={setFileDefault}>
           <span className="min-w-0 flex-1">设为此文件默认</span>
@@ -342,7 +418,16 @@ function EnginePicker({ file, engineId }: { file: IdeallFile; engineId: string }
   )
 }
 
-export function FileEngineContent({ refValue, engineId }: { refValue: FileRef; engineId: string }) {
+export function FileEngineContent({
+  refValue,
+  engineId,
+  display = "tab",
+}: {
+  refValue: FileRef
+  engineId: string
+  display?: "tab" | "window"
+}) {
+  useEngineRegistryRevision()
   const [file, setFile] = React.useState<IdeallFile | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const { fileSystemId, fileId } = refValue
@@ -352,20 +437,47 @@ export function FileEngineContent({ refValue, engineId }: { refValue: FileRef; e
       ? "该文件不存在或已删除。"
       : "文件不存在或挂载已断开"
 
+  React.useSyncExternalStore(
+    subscribeFileEngineRenderers,
+    getFileEngineRendererRevision,
+    getFileEngineRendererRevision,
+  )
+
   React.useEffect(() => {
     let alive = true
+    let request = 0
     setError(null)
-    statFile({ fileSystemId, fileId }, { actor: "ui", permissions: [], intent: "metadata" })
-      .then((next) => {
-        if (!alive) return
-        if (next) setFile(next)
-        else setError(missingMessage)
-      })
-      .catch((reason) => {
-        if (alive) setError(reason instanceof Error ? reason.message : String(reason))
-      })
+    setFile(null)
+
+    const refresh = () => {
+      const currentRequest = ++request
+      void statFile({ fileSystemId, fileId }, { actor: "ui", permissions: [], intent: "metadata" })
+        .then((next) => {
+          if (!alive || currentRequest !== request) return
+          setFile(next)
+          setError(next ? null : missingMessage)
+        })
+        .catch((reason) => {
+          if (!alive || currentRequest !== request) return
+          setError(reason instanceof Error ? reason.message : String(reason))
+        })
+    }
+
+    refresh()
+    let watchHandle: ReturnType<typeof watchFile> = null
+    try {
+      watchHandle = watchFile(
+        { fileSystemId, fileId },
+        { actor: "ui", permissions: [], intent: "watch" },
+        refresh,
+      )
+    } catch {
+      // Watching is optional; the initial stat remains authoritative for providers without it.
+    }
+
     return () => {
       alive = false
+      watchHandle?.dispose()
     }
   }, [fileId, fileSystemId, missingMessage])
 
@@ -379,6 +491,9 @@ export function FileEngineContent({ refValue, engineId }: { refValue: FileRef; e
   if (!candidate) {
     return <div className="p-6 text-sm text-muted-foreground">该引擎不能处理此文件。</div>
   }
+  if (display === "window" && !canOpenStandaloneWindow(file, candidate.descriptor)) {
+    return <div className="p-6 text-sm text-destructive">此文件或引擎不允许在独立窗口中打开。</div>
+  }
   const isNodeFile = legacyResource?.scheme === "node" && legacyResource.kind === "file"
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -387,6 +502,7 @@ export function FileEngineContent({ refValue, engineId }: { refValue: FileRef; e
           file={file}
           enginePicker={<EnginePicker file={file} engineId={engineId} />}
           onFileChanged={setFile}
+          readOnly={candidate.descriptor.access === "read-only"}
         />
       ) : (
         <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-b bg-card px-3">
@@ -397,7 +513,9 @@ export function FileEngineContent({ refValue, engineId }: { refValue: FileRef; e
         </div>
       )}
       <div className="min-h-0 flex-1">
-        <React.Suspense fallback={Spinner}>{renderFileEngineBody(file, engineId)}</React.Suspense>
+        <React.Suspense fallback={Spinner}>
+          {renderFileEngineBody(file, candidate.descriptor)}
+        </React.Suspense>
       </div>
     </div>
   )
@@ -408,7 +526,7 @@ function renderFileEngineTab(tab: Tab): React.ReactNode {
   if (!target) {
     return <div className="p-6 text-sm text-muted-foreground">无法解析文件视图</div>
   }
-  return <FileEngineContent refValue={target.ref} engineId={target.engineId} />
+  return <FileEngineContent refValue={target.ref} engineId={target.engineId} display="tab" />
 }
 
 function renderNodeResource(ref: ResourceRef): React.ReactNode {

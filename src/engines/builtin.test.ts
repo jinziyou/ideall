@@ -45,11 +45,19 @@ test("builtin engines: user media-type preference overrides scenario priority", 
 
 test("builtin engines: semantic panel JSON is not captured by the code engine", () => {
   registerBuiltInEngines()
-  const panel = file("application/vnd.ideall.panel.home-overview+json")
+  const panel = file("application/vnd.ideall.panel.home-overview+json", "file", {
+    panelLayout: "padded",
+  })
   assert.equal(engineRegistry.resolve(panel)?.descriptor.engineId, "ideall.panel")
   assert.deepEqual(
     engineRegistry.matching(panel).map(({ descriptor }) => descriptor.engineId),
     ["ideall.panel", "ideall.preview"],
+  )
+  assert.equal(
+    engineRegistry.resolve(
+      file("application/vnd.ideall.panel.ai-tasks+json", "file", { panelLayout: "fill" }),
+    )?.descriptor.engineId,
+    "ideall.panel-fill",
   )
   assert.equal(engineRegistry.resolve(file("application/json"))?.descriptor.engineId, "ideall.code")
   assert.equal(engineRegistry.resolve(file("text/uri-list"))?.descriptor.engineId, "ideall.browser")
@@ -62,6 +70,12 @@ test("builtin engines: semantic panel JSON is not captured by the code engine", 
   assert.equal(
     engineRegistry.resolve(file("application/vnd.ideall.audio+json"))?.descriptor.engineId,
     "ideall.audio",
+  )
+  assert.deepEqual(
+    engineRegistry
+      .matching(file("application/vnd.ideall.database+json"))
+      .map(({ descriptor }) => descriptor.engineId),
+    ["ideall.database", "ideall.code", "ideall.preview"],
   )
   assert.equal(
     engineRegistry.resolve(file("application/vnd.ideall.git+json", "file", { git: true }))
@@ -78,6 +92,7 @@ test("builtin engines: privileged main-window viewers cannot be opened standalon
     "ideall.shell",
     "ideall.connected",
     "ideall.panel",
+    "ideall.panel-fill",
   ]) {
     assert.equal(engineRegistry.get(engineId)?.supportsStandaloneWindow, false, engineId)
   }

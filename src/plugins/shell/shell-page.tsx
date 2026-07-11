@@ -29,7 +29,7 @@ type HistoryItem = {
 
 const MAX_COMMAND_HISTORY = 50
 
-export default function ShellPage() {
+export default function ShellPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [history, setHistory] = React.useState<HistoryItem[]>([])
   const [commandHistory, setCommandHistory] = React.useState<string[]>([])
   const [historyCursor, setHistoryCursor] = React.useState<number | null>(null)
@@ -219,24 +219,26 @@ export default function ShellPage() {
 
   if (!isTauri()) {
     return (
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-        <PageHeader />
+      <div className={cn("mx-auto flex h-full w-full max-w-4xl flex-col gap-6", embedded && "p-3")}>
+        {!embedded && <PageHeader />}
         <EmptyState icon={Terminal} title="本地终端仅在桌面 App 中可用" bordered />
       </div>
     )
   }
 
   return (
-    <div className="h-full w-full overflow-hidden p-4 sm:p-6">
+    <div className={cn("h-full w-full overflow-hidden", embedded ? "p-3" : "p-4 sm:p-6")}>
       <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col gap-4">
-        <PageHeader />
+        {!embedded && <PageHeader />}
 
-        <SessionSummary
-          commandHistoryCount={commandHistory.length}
-          historyCount={history.length}
-          running={running}
-          stopping={stopping}
-        />
+        {!embedded && (
+          <SessionSummary
+            commandHistoryCount={commandHistory.length}
+            historyCount={history.length}
+            running={running}
+            stopping={stopping}
+          />
+        )}
 
         <SurfacePanel className="min-h-0 flex-1 border-border/60">
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">

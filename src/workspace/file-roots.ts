@@ -12,14 +12,19 @@ import {
   Settings,
   Users,
 } from "lucide-react"
-import { fileRefKey, parseFileRefKey, type FileRef } from "@protocol/file-system"
+import {
+  fileRefKey,
+  parseFileRefKey,
+  type DirectoryEntry,
+  type FileRef,
+} from "@protocol/file-system"
 import type { ResourceRef } from "@protocol/resource"
-import type { ModuleId } from "./types"
+import type { ModuleId, WsMode } from "./types"
 import { corePlaceRef, panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
 
 /**
  * 合成文件系统根目录的直接子树。根本身不进入活动栏；这些目录就是桌面端的
- * 一级空间锚点。ModuleId 只在旧标签迁移期保留，不再决定哪些根可见。
+ * 一级空间锚点。合成根始终包含全部来源，Display 再按 modes 提供本地/连接镜头。
  */
 export type CoreFileRootId =
   | "home"
@@ -41,9 +46,15 @@ export type CoreFileRoot = {
   sidebarTitle: string
   icon: ComponentType<{ className?: string }>
   module: ModuleId
+  modes: readonly WsMode[]
+  navigationHidden?: boolean
   colorClass?: string
   defaultFile?: FileRef
 }
+
+const LOCAL_MODE: readonly WsMode[] = ["local"]
+const CONNECTED_MODE: readonly WsMode[] = ["connected"]
+const ALL_MODES: readonly WsMode[] = ["local", "connected"]
 
 const resource = (ref: ResourceRef) => resourceFileRef(ref)
 
@@ -54,6 +65,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "Home",
     icon: Home,
     module: "home",
+    modes: LOCAL_MODE,
     defaultFile: panelFileRef("home"),
   },
   {
@@ -62,6 +74,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "关注",
     icon: Rss,
     module: "subscriptions",
+    modes: LOCAL_MODE,
     colorClass: "text-spoke-info",
     defaultFile: panelFileRef("subscriptions"),
   },
@@ -71,6 +84,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "书签",
     icon: Bookmark,
     module: "home",
+    modes: LOCAL_MODE,
     defaultFile: panelFileRef("bookmarks"),
   },
   {
@@ -79,6 +93,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "文件",
     icon: FolderOpen,
     module: "home",
+    modes: LOCAL_MODE,
     defaultFile: panelFileRef("files"),
   },
   {
@@ -87,6 +102,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "笔记",
     icon: FileText,
     module: "home",
+    modes: LOCAL_MODE,
     defaultFile: panelFileRef("notes"),
   },
   {
@@ -95,6 +111,8 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "工作区",
     icon: Boxes,
     module: "agent",
+    modes: ALL_MODES,
+    navigationHidden: true,
   },
   {
     id: "apps",
@@ -102,6 +120,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "应用",
     icon: AppWindow,
     module: "apps",
+    modes: LOCAL_MODE,
     colorClass: "text-spoke-tool",
     defaultFile: panelFileRef("apps"),
   },
@@ -111,6 +130,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "资讯",
     icon: Globe,
     module: "info",
+    modes: CONNECTED_MODE,
     colorClass: "text-spoke-info",
     defaultFile: resource({ scheme: "info", kind: "home", id: "default" }),
   },
@@ -120,6 +140,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "社区",
     icon: Users,
     module: "community",
+    modes: CONNECTED_MODE,
     colorClass: "text-spoke-community",
     defaultFile: resource({ scheme: "community", kind: "home", id: "default" }),
   },
@@ -129,6 +150,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "工具",
     icon: Compass,
     module: "tool",
+    modes: ALL_MODES,
     colorClass: "text-spoke-tool",
     defaultFile: resource({ scheme: "tool", kind: "search", id: "default" }),
   },
@@ -138,6 +160,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "浏览器",
     icon: Globe,
     module: "browser",
+    modes: CONNECTED_MODE,
     colorClass: "text-spoke-community",
     defaultFile: resource({ scheme: "browser", kind: "page", id: "default" }),
   },
@@ -147,6 +170,7 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
     sidebarTitle: "系统",
     icon: Settings,
     module: "home",
+    modes: LOCAL_MODE,
     defaultFile: panelFileRef("settings"),
   },
 ] as const
@@ -155,6 +179,50 @@ export const MOUNTED_FILE_ROOT_PREFIX = "mount:"
 
 export function isCoreFileRootId(value: string): value is CoreFileRootId {
   return CORE_FILE_ROOTS.some((root) => root.id === value)
+}
+
+function configuredEntryModes(entry: DirectoryEntry): readonly WsMode[] | null {
+  const value = entry.properties?.workspaceModes
+  if (!Array.isArray(value)) return null
+  const modes = value.filter(
+    (candidate): candidate is WsMode => candidate === "local" || candidate === "connected",
+  )
+  return modes.length > 0 ? modes : null
+}
+
+/** Display 镜头过滤；文件系统合成根本身始终保留完整目录。动态挂载默认属于本地模式。 */
+export function rootEntryVisibleInMode(entry: DirectoryEntry, mode: WsMode): boolean {
+  if (entry.properties?.navigationHidden === true) return false
+  if (isCoreFileRootId(entry.entryId)) {
+    const root = coreFileRoot(entry.entryId)
+    return !root.navigationHidden && root.modes.includes(mode)
+  }
+  return (configuredEntryModes(entry) ?? LOCAL_MODE).includes(mode)
+}
+
+export function rootEntriesForMode(
+  entries: readonly DirectoryEntry[],
+  mode: WsMode,
+): DirectoryEntry[] {
+  return entries.filter((entry) => rootEntryVisibleInMode(entry, mode))
+}
+
+export function coreFileRootMode(root: CoreFileRoot, current: WsMode): WsMode {
+  return root.modes.includes(current) ? current : root.modes[0]
+}
+
+export function coerceCoreFileRootIdForMode(
+  rootId: string,
+  mode: WsMode,
+  fallback?: string,
+): string {
+  if (!isCoreFileRootId(rootId)) return rootId
+  const root = coreFileRoot(rootId)
+  if (!root.navigationHidden && root.modes.includes(mode)) return rootId
+  if (fallback && (!isCoreFileRootId(fallback) || coreFileRoot(fallback).modes.includes(mode))) {
+    if (!isCoreFileRootId(fallback) || !coreFileRoot(fallback).navigationHidden) return fallback
+  }
+  return mode === "local" ? "home" : "info"
 }
 
 export function mountedFileRootId(ref: FileRef): string {

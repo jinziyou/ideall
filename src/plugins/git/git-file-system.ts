@@ -1,6 +1,7 @@
 import {
   DIRECTORY_MEDIA_TYPE,
   fileRefKey,
+  parseFileRefKey,
   sameFileRef,
   type FileRef,
   type IdeallFile,
@@ -8,118 +9,636 @@ import {
 import type {
   DirectoryPage,
   FileAction,
+  FileReadOptions,
   FileReadResult,
+  FileSystemAccessContext,
   FileSystemProvider,
+  FileSystemWatchEvent,
+  FileSystemWatchHandle,
+  FileWriteInput,
 } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
-import { loadGitRepos, removeGitRepo, saveGitRepos } from "./git-repos-store"
+import { base64ToBytes } from "@/lib/base64"
+import { fileTypeInfo } from "@/lib/file-type"
+import { randomId } from "@/lib/id"
+import {
+  guardedFsGrantInfo,
+  guardedFsList,
+  guardedFsPickRoot,
+  guardedFsRead,
+  guardedFsRevokeGrant,
+  guardedFsStat,
+  guardedFsWriteText,
+  type GuardedFsEntry,
+  type GuardedFsGrant,
+} from "@/lib/guarded-fs"
+import {
+  commitGit,
+  createGitBranch,
+  loadGitSnapshot,
+  runGitAction,
+  type GitAction,
+} from "./git-commands"
+import {
+  addGitRepo,
+  loadGitRepos,
+  removeGitRepo,
+  saveGitRepos,
+  type GitRepoMount,
+  type GrantedGitRepoMount,
+} from "./git-repos-store"
 
 export const GIT_FILE_SYSTEM_ID = "app.git-repositories"
-const ROOT_REF: FileRef = { fileSystemId: GIT_FILE_SYSTEM_ID, fileId: "root" }
+export const GIT_ROOT_REF: FileRef = { fileSystemId: GIT_FILE_SYSTEM_ID, fileId: "root" }
 
-function repoRef(path: string): FileRef {
-  return { fileSystemId: GIT_FILE_SYSTEM_ID, fileId: `repo:${encodeURIComponent(path)}` }
+export const GIT_ACTIONS = {
+  commit: "commit",
+  createBranch: "create-branch",
+  delete: "delete",
+  fetch: "fetch",
+  mount: "mount",
+  open: "open",
+  pull: "pull",
+  push: "push",
+} as const
+
+type GitTarget = {
+  mount: GrantedGitRepoMount
+  entryId: string | null
+  repoRoot: boolean
 }
 
-function repoPath(ref: FileRef): string | null {
-  if (ref.fileSystemId !== GIT_FILE_SYSTEM_ID || !ref.fileId.startsWith("repo:")) return null
+function repoRef(mountId: string): FileRef {
+  return { fileSystemId: GIT_FILE_SYSTEM_ID, fileId: `repo:${encodeURIComponent(mountId)}` }
+}
+
+function childRef(mountId: string, entryId: string): FileRef {
+  return {
+    fileSystemId: GIT_FILE_SYSTEM_ID,
+    fileId: `entry:${encodeURIComponent(mountId)}:${encodeURIComponent(entryId)}`,
+  }
+}
+
+function decode(value: string): string | null {
   try {
-    return decodeURIComponent(ref.fileId.slice("repo:".length)) || null
+    return decodeURIComponent(value) || null
   } catch {
     return null
   }
 }
 
-function repoFile(path: string): IdeallFile {
-  const name =
+function refParts(
+  ref: FileRef,
+): { mountId: string; entryId: string | null; repoRoot: boolean } | null {
+  if (ref.fileSystemId !== GIT_FILE_SYSTEM_ID) return null
+  if (ref.fileId.startsWith("repo:")) {
+    const mountId = decode(ref.fileId.slice("repo:".length))
+    return mountId ? { mountId, entryId: null, repoRoot: true } : null
+  }
+  if (!ref.fileId.startsWith("entry:")) return null
+  const raw = ref.fileId.slice("entry:".length)
+  const delimiter = raw.indexOf(":")
+  if (delimiter < 1 || delimiter === raw.length - 1) return null
+  const mountId = decode(raw.slice(0, delimiter))
+  const entryId = decode(raw.slice(delimiter + 1))
+  return mountId && entryId ? { mountId, entryId, repoRoot: false } : null
+}
+
+function repoName(path: string): string {
+  return (
     path
       .replace(/[\\/]+$/, "")
       .split(/[\\/]/)
       .pop() || path
+  )
+}
+
+function inferredMediaType(name: string): string {
+  const info = fileTypeInfo(name)
+  if (info.preview === "svg") return "image/svg+xml"
+  if (info.preview === "image") return `image/${info.ext || "*"}`
+  if (info.preview === "video") return `video/${info.ext || "*"}`
+  if (info.preview === "audio") return `audio/${info.ext || "*"}`
+  if (info.preview === "pdf") return "application/pdf"
+  if (info.preview === "json") return "application/json"
+  if (info.preview === "markdown") return "text/markdown"
+  if (info.preview === "csv") return "text/csv"
+  if (info.editable) return "text/plain"
+  return "application/octet-stream"
+}
+
+function repoFile(mount: GrantedGitRepoMount, entry?: GuardedFsEntry): IdeallFile {
   return {
-    ref: repoRef(path),
+    ref: repoRef(mount.id),
     kind: "directory",
-    name,
+    name: repoName(mount.path),
     mediaType: DIRECTORY_MEDIA_TYPE,
-    capabilities: ["read-directory", "read", "delete", "actions"],
+    capabilities: ["read-directory", "read", "delete", "actions", "watch"],
     source: { kind: "local", id: "git", label: "Git 仓库" },
-    properties: { git: true, path, explicitGrant: true },
+    size: entry?.size,
+    updatedAt: entry?.modifiedAt ?? undefined,
+    version: entry?.version,
+    properties: { git: true, path: mount.path, mountId: mount.id, explicitGrant: true },
   }
 }
 
-function requireRepo(ref: FileRef): string {
-  const path = repoPath(ref)
-  if (!path || !loadGitRepos().includes(path)) {
-    throw new FileSystemError("not-found", `Git repository not found: ${fileRefKey(ref)}`, ref)
+function childFile(mount: GrantedGitRepoMount, entry: GuardedFsEntry): IdeallFile {
+  const info = fileTypeInfo(entry.name)
+  const directory = entry.kind === "directory"
+  return {
+    ref: childRef(mount.id, entry.stableId),
+    kind: entry.kind,
+    name: entry.name,
+    mediaType: directory ? DIRECTORY_MEDIA_TYPE : inferredMediaType(entry.name),
+    capabilities: directory
+      ? ["read-directory", "read", "actions", "watch"]
+      : ["read", "actions", "watch", ...(info.editable ? (["write"] as const) : [])],
+    source: { kind: "local", id: "git", label: "Git 仓库" },
+    size: directory ? undefined : entry.size,
+    updatedAt: entry.modifiedAt ?? undefined,
+    version: entry.version,
+    properties: {
+      mountId: mount.id,
+      stableId: entry.stableId,
+      explicitGrant: true,
+    },
   }
-  return path
 }
 
-export const gitFileSystem: FileSystemProvider = {
-  descriptor: {
-    fileSystemId: GIT_FILE_SYSTEM_ID,
-    name: "Git 仓库",
-    root: ROOT_REF,
-    source: { kind: "local", id: "git", label: "Git 仓库" },
-    capabilities: ["read-directory", "read", "delete", "actions"],
-  },
-  async stat(ref) {
-    if (sameFileRef(ref, ROOT_REF)) {
-      return {
-        ref,
-        kind: "directory",
-        name: "Git 仓库",
-        mediaType: DIRECTORY_MEDIA_TYPE,
-        capabilities: ["read-directory", "actions"],
-        source: this.descriptor.source,
-        properties: { explicitGrant: true },
+export type GitFileSystemDeps = {
+  addRepo: typeof addGitRepo
+  commit: typeof commitGit
+  createMountId: () => string
+  createBranch: typeof createGitBranch
+  grantInfo: typeof guardedFsGrantInfo
+  list: typeof guardedFsList
+  loadRepos: typeof loadGitRepos
+  loadSnapshot: typeof loadGitSnapshot
+  pickRoot: typeof guardedFsPickRoot
+  read: typeof guardedFsRead
+  removeRepo: typeof removeGitRepo
+  revokeGrant: typeof guardedFsRevokeGrant
+  runAction: typeof runGitAction
+  saveRepos: typeof saveGitRepos
+  stat: typeof guardedFsStat
+  writeText: typeof guardedFsWriteText
+}
+
+const defaultDeps: GitFileSystemDeps = {
+  addRepo: addGitRepo,
+  commit: commitGit,
+  createMountId: randomId,
+  createBranch: createGitBranch,
+  grantInfo: guardedFsGrantInfo,
+  list: guardedFsList,
+  loadRepos: loadGitRepos,
+  loadSnapshot: loadGitSnapshot,
+  pickRoot: guardedFsPickRoot,
+  read: guardedFsRead,
+  removeRepo: removeGitRepo,
+  revokeGrant: guardedFsRevokeGrant,
+  runAction: runGitAction,
+  saveRepos: saveGitRepos,
+  stat: guardedFsStat,
+  writeText: guardedFsWriteText,
+}
+
+function requireTarget(ref: FileRef, deps: GitFileSystemDeps): GitTarget {
+  const parts = refParts(ref)
+  const mount = parts ? deps.loadRepos().find((candidate) => candidate.id === parts.mountId) : null
+  if (!parts || !mount?.grantId) {
+    throw new FileSystemError("not-found", `Git file not found: ${fileRefKey(ref)}`, ref)
+  }
+  return {
+    mount: { ...mount, grantId: mount.grantId },
+    entryId: parts.entryId,
+    repoRoot: parts.repoRoot,
+  }
+}
+
+async function resolveGrantedMount(
+  mount: GrantedGitRepoMount,
+  deps: GitFileSystemDeps,
+): Promise<GrantedGitRepoMount> {
+  const grant = await deps.grantInfo(mount.grantId)
+  return { ...mount, path: grant.path }
+}
+
+async function activeMounts(deps: GitFileSystemDeps): Promise<GrantedGitRepoMount[]> {
+  const mounts = await Promise.all(
+    deps.loadRepos().map(async (mount) => {
+      if (!mount.grantId) return null
+      try {
+        return await resolveGrantedMount({ ...mount, grantId: mount.grantId }, deps)
+      } catch {
+        return null
+      }
+    }),
+  )
+  return mounts.filter((mount): mount is GrantedGitRepoMount => mount != null)
+}
+
+function assertAccess(
+  ref: FileRef,
+  ctx: FileSystemAccessContext,
+  intent: "metadata" | "directory" | "content" | "write" | "action" | "watch",
+  permission: "fs:read" | "fs.blobs:read" | "fs:write",
+  allowActiveEngine = true,
+): void {
+  if (ctx.actor === "ui") return
+  if (
+    allowActiveEngine &&
+    ctx.actor === "engine" &&
+    ctx.activeFile != null &&
+    sameFileRef(ref, ctx.activeFile) &&
+    ctx.intent === intent
+  ) {
+    return
+  }
+  if (ctx.intent === intent && ctx.permissions.includes(permission)) return
+  throw new FileSystemError(
+    "permission-denied",
+    `The ${ctx.actor} actor requires ${permission} permission and ${intent} intent`,
+    ref,
+  )
+}
+
+function assertExpectedVersion(
+  ref: FileRef,
+  expectedVersion: string | null | undefined,
+  currentVersion: string,
+): void {
+  if (expectedVersion === undefined || expectedVersion === currentVersion) return
+  throw new FileSystemError(
+    "conflict",
+    `Git file version changed (expected ${expectedVersion ?? "no version"}, current ${currentVersion})`,
+    ref,
+  )
+}
+
+function normalizeRange(ref: FileRef, range: FileReadOptions["range"]): FileReadOptions["range"] {
+  if (!range) return undefined
+  if (
+    !Number.isSafeInteger(range.start) ||
+    range.start < 0 ||
+    (range.end != null && (!Number.isSafeInteger(range.end) || range.end < range.start))
+  ) {
+    throw new FileSystemError("invalid-input", "Invalid read range", ref)
+  }
+  return range
+}
+
+function rethrowGuardedError(error: unknown, ref: FileRef): never {
+  if (error instanceof FileSystemError) throw error
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.toLowerCase().includes("version conflict")) {
+    throw new FileSystemError("conflict", message, ref)
+  }
+  if (
+    message.includes("escapes") ||
+    message.includes("traversal") ||
+    message.includes("absolute")
+  ) {
+    throw new FileSystemError("permission-denied", message, ref)
+  }
+  if (message.includes("unavailable") || message.includes("not found")) {
+    throw new FileSystemError("not-found", message, ref)
+  }
+  throw new FileSystemError("unavailable", message, ref)
+}
+
+function objectInput(ref: FileRef, input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Git action input must be an object", ref)
+  }
+  return input as Record<string, unknown>
+}
+
+function stringInput(ref: FileRef, input: unknown, key: string): string {
+  const value = objectInput(ref, input)[key]
+  if (typeof value !== "string") {
+    throw new FileSystemError("invalid-input", `Git action requires ${key}`, ref)
+  }
+  return value
+}
+
+function gitAction(action: string): GitAction | null {
+  if (action === GIT_ACTIONS.fetch || action === GIT_ACTIONS.pull || action === GIT_ACTIONS.push) {
+    return action
+  }
+  return null
+}
+
+function isMutationAction(action: string): boolean {
+  return action !== GIT_ACTIONS.open
+}
+
+export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): FileSystemProvider {
+  const watchers = new Map<string, Set<(event: FileSystemWatchEvent) => void>>()
+  const emitOne = (ref: FileRef, type: FileSystemWatchEvent["type"]) => {
+    const event: FileSystemWatchEvent = { type, ref }
+    for (const notify of watchers.get(fileRefKey(ref)) ?? []) notify(event)
+  }
+  const emitMutation = (
+    ref: FileRef,
+    mountId?: string,
+    type: FileSystemWatchEvent["type"] = "changed",
+  ) => {
+    const affected = new Map<string, FileRef>([[fileRefKey(ref), ref]])
+    if (mountId) {
+      const mountRef = repoRef(mountId)
+      affected.set(fileRefKey(mountRef), mountRef)
+      for (const key of watchers.keys()) {
+        const watchedRef = parseFileRefKey(key)
+        if (watchedRef && refParts(watchedRef)?.mountId === mountId) {
+          affected.set(key, watchedRef)
+        }
       }
     }
-    return repoFile(requireRepo(ref))
-  },
-  async readDirectory(ref): Promise<DirectoryPage> {
-    if (!sameFileRef(ref, ROOT_REF)) {
-      requireRepo(ref)
-      // 现阶段只挂载用户授权的仓库根；真实 OS 子文件待受限 Tauri FS provider 提供。
-      return { entries: [] }
+    affected.set(fileRefKey(GIT_ROOT_REF), GIT_ROOT_REF)
+    for (const affectedRef of affected.values()) {
+      emitOne(affectedRef, sameFileRef(affectedRef, ref) ? type : "changed")
     }
-    const repos = loadGitRepos()
-    return {
-      entries: repos.map((path, index) => ({
-        entryId: path,
-        parent: ROOT_REF,
-        target: repoRef(path),
-        name: repoFile(path).name,
-        kind: "mount",
-        sortKey: String(index).padStart(4, "0"),
-      })),
-    }
-  },
-  async read(ref): Promise<FileReadResult> {
-    const path = requireRepo(ref)
-    return { data: { path }, mediaType: "application/vnd.ideall.git+json" }
-  },
-  async write(ref) {
-    throw new FileSystemError("unsupported", "Git repository content uses guarded Git actions", ref)
-  },
-  async actions(ref): Promise<FileAction[]> {
-    if (sameFileRef(ref, ROOT_REF)) return [{ id: "open", label: "打开" }]
-    requireRepo(ref)
-    return [
-      { id: "open", label: "打开" },
-      { id: "delete", label: "移除挂载", destructive: true, requires: ["delete"] },
-    ]
-  },
-  async invoke(ref, action) {
-    if (action === "open") return { ref }
-    if (action === "delete") {
-      const path = requireRepo(ref)
-      saveGitRepos(removeGitRepo(loadGitRepos(), path))
-      return { ref, deleted: true }
-    }
-    throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
-  },
+  }
+  return {
+    descriptor: {
+      fileSystemId: GIT_FILE_SYSTEM_ID,
+      name: "Git 仓库",
+      root: GIT_ROOT_REF,
+      source: { kind: "local", id: "git", label: "Git 仓库" },
+      capabilities: ["read-directory", "read", "write", "delete", "actions", "watch"],
+    },
+    async stat(ref, ctx) {
+      assertAccess(ref, ctx, "metadata", "fs:read")
+      if (sameFileRef(ref, GIT_ROOT_REF)) {
+        return {
+          ref,
+          kind: "directory",
+          name: "Git 仓库",
+          mediaType: DIRECTORY_MEDIA_TYPE,
+          capabilities: ["read-directory", "read", "create", "actions", "watch"],
+          source: this.descriptor.source,
+          properties: { explicitGrant: true },
+        }
+      }
+      try {
+        const target = requireTarget(ref, deps)
+        const mount = await resolveGrantedMount(target.mount, deps)
+        const entry = await deps.stat(mount.grantId, target.entryId ?? undefined)
+        if (!entry) return null
+        return target.repoRoot ? repoFile(mount, entry) : childFile(mount, entry)
+      } catch (error) {
+        if (error instanceof FileSystemError && error.code === "not-found") return null
+        const message = error instanceof Error ? error.message : String(error)
+        if (
+          message.includes("target is unavailable") ||
+          message.includes("grant is unavailable") ||
+          message.includes("grant root changed") ||
+          message.includes("not found")
+        )
+          return null
+        rethrowGuardedError(error, ref)
+      }
+    },
+    async readDirectory(ref, ctx): Promise<DirectoryPage> {
+      assertAccess(ref, ctx, "directory", "fs:read")
+      if (sameFileRef(ref, GIT_ROOT_REF)) {
+        const repos = await activeMounts(deps)
+        return {
+          entries: repos.map((mount, index) => ({
+            entryId: repoRef(mount.id).fileId,
+            parent: GIT_ROOT_REF,
+            target: repoRef(mount.id),
+            name: repoName(mount.path),
+            kind: "mount",
+            sortKey: String(index).padStart(4, "0"),
+          })),
+        }
+      }
+      const target = requireTarget(ref, deps)
+      try {
+        const mount = await resolveGrantedMount(target.mount, deps)
+        const entries = await deps.list(mount.grantId, target.entryId ?? undefined)
+        return {
+          entries: entries.map((entry, index) => {
+            const child = childFile(mount, entry)
+            return {
+              entryId: `dirent:${encodeURIComponent(mount.id)}:${encodeURIComponent(entry.stableId)}:${encodeURIComponent(entry.name)}`,
+              parent: ref,
+              target: child.ref,
+              name: child.name,
+              kind: "child",
+              sortKey: String(index).padStart(6, "0"),
+            }
+          }),
+        }
+      } catch (error) {
+        rethrowGuardedError(error, ref)
+      }
+    },
+    async read(ref, ctx, options?: FileReadOptions): Promise<FileReadResult> {
+      if (sameFileRef(ref, GIT_ROOT_REF)) {
+        assertAccess(ref, ctx, "content", "fs:read")
+        const repos = await activeMounts(deps)
+        return {
+          data: {
+            repos: repos.map((mount) => ({
+              id: mount.id,
+              path: mount.path,
+              ref: repoRef(mount.id),
+            })),
+          },
+          mediaType: "application/vnd.ideall.git.repositories+json",
+        }
+      }
+      const target = requireTarget(ref, deps)
+      if (target.repoRoot) {
+        assertAccess(ref, ctx, "content", "fs:read")
+        const mount = await resolveGrantedMount(target.mount, deps)
+        return {
+          data: await deps.loadSnapshot(mount.path),
+          mediaType: "application/vnd.ideall.git+json",
+        }
+      }
+      assertAccess(ref, ctx, "content", "fs.blobs:read")
+      if (!target.entryId) throw new FileSystemError("not-found", "Git entry not found", ref)
+      try {
+        const mount = await resolveGrantedMount(target.mount, deps)
+        const entry = await deps.stat(mount.grantId, target.entryId)
+        if (!entry) throw new FileSystemError("not-found", "Git entry not found", ref)
+        if (entry.kind === "directory") {
+          return {
+            data: { mountId: mount.id, entryId: target.entryId },
+            mediaType: DIRECTORY_MEDIA_TYPE,
+            version: entry.version,
+          }
+        }
+        const result = await deps.read(
+          mount.grantId,
+          target.entryId,
+          normalizeRange(ref, options?.range),
+        )
+        const bytes = base64ToBytes(result.base64)
+        return {
+          data:
+            options?.encoding === "text"
+              ? new TextDecoder().decode(bytes)
+              : { base64: result.base64, size: bytes.byteLength },
+          mediaType: inferredMediaType(entry.name),
+          size: bytes.byteLength,
+          version: result.version,
+        }
+      } catch (error) {
+        rethrowGuardedError(error, ref)
+      }
+    },
+    async write(ref, input: FileWriteInput, ctx) {
+      assertAccess(ref, ctx, "write", "fs:write")
+      const target = requireTarget(ref, deps)
+      if (target.repoRoot || typeof input.data !== "string") {
+        throw new FileSystemError("unsupported", "Git file writes require text file content", ref)
+      }
+      if (!target.entryId) throw new FileSystemError("not-found", "Git entry not found", ref)
+      try {
+        const mount = await resolveGrantedMount(target.mount, deps)
+        const current = await deps.stat(mount.grantId, target.entryId)
+        if (!current) throw new FileSystemError("not-found", "Git entry not found", ref)
+        if (current.kind !== "file" || !fileTypeInfo(current.name).editable) {
+          throw new FileSystemError("unsupported", "Git file is not text-editable", ref)
+        }
+        assertExpectedVersion(ref, input.expectedVersion, current.version)
+        const updated = await deps.writeText(
+          mount.grantId,
+          target.entryId,
+          input.data,
+          input.expectedVersion ?? undefined,
+        )
+        emitMutation(ref, mount.id)
+        return childFile(mount, updated)
+      } catch (error) {
+        rethrowGuardedError(error, ref)
+      }
+    },
+    async actions(ref, ctx): Promise<FileAction[]> {
+      assertAccess(ref, ctx, "action", "fs:read")
+      if (sameFileRef(ref, GIT_ROOT_REF)) {
+        return [
+          { id: GIT_ACTIONS.open, label: "打开" },
+          { id: GIT_ACTIONS.mount, label: "挂载仓库", requires: ["create"] },
+        ]
+      }
+      const target = requireTarget(ref, deps)
+      return target.repoRoot
+        ? [
+            { id: GIT_ACTIONS.open, label: "打开" },
+            { id: GIT_ACTIONS.fetch, label: "Fetch" },
+            { id: GIT_ACTIONS.pull, label: "Pull" },
+            { id: GIT_ACTIONS.push, label: "Push" },
+            { id: GIT_ACTIONS.createBranch, label: "新建分支" },
+            { id: GIT_ACTIONS.commit, label: "提交" },
+            {
+              id: GIT_ACTIONS.delete,
+              label: "移除挂载",
+              destructive: true,
+              requires: ["delete"],
+            },
+          ]
+        : [{ id: GIT_ACTIONS.open, label: "打开" }]
+    },
+    async invoke(ref, action, input, ctx) {
+      const mutation = isMutationAction(action)
+      assertAccess(ref, ctx, "action", mutation ? "fs:write" : "fs:read", !mutation)
+      if (action === GIT_ACTIONS.open) return { ref }
+      if (sameFileRef(ref, GIT_ROOT_REF)) {
+        if (action !== GIT_ACTIONS.mount) {
+          throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
+        }
+        let grant: GuardedFsGrant | null = null
+        try {
+          grant = await deps.pickRoot()
+          if (!grant) return { mounted: false, cancelled: true }
+          const root = await deps.stat(grant.grantId)
+          if (!root) throw new Error("filesystem grant root is unavailable")
+          await deps.loadSnapshot(grant.path)
+        } catch (error) {
+          const selectedGrantId = grant?.grantId
+          const alreadyMounted = selectedGrantId
+            ? deps.loadRepos().some((repo) => repo.grantId === selectedGrantId)
+            : false
+          if (grant && !alreadyMounted) await deps.revokeGrant(grant.grantId).catch(() => false)
+          rethrowGuardedError(error, ref)
+        }
+        if (!grant) throw new FileSystemError("unavailable", "Git grant is unavailable", ref)
+        const mount: GrantedGitRepoMount = {
+          id: deps.createMountId(),
+          grantId: grant.grantId,
+          path: grant.path,
+        }
+        const currentRepos = deps.loadRepos()
+        const existing = currentRepos.find((repo) => repo.grantId === mount.grantId)
+        if (existing) {
+          const mountedRef = repoRef(existing.id)
+          return { ref: mountedRef, id: existing.id, path: mount.path, mounted: true }
+        }
+        const repos = deps.addRepo(currentRepos, mount)
+        if (!deps.saveRepos(repos)) {
+          await deps.revokeGrant(mount.grantId).catch(() => false)
+          throw new FileSystemError("unavailable", "Unable to persist Git repository mount", ref)
+        }
+        const mountedRef = repoRef(mount.id)
+        emitMutation(mountedRef, undefined, "created")
+        return { ref: mountedRef, id: mount.id, path: mount.path, mounted: true }
+      }
+
+      const target = requireTarget(ref, deps)
+      if (!target.repoRoot) {
+        throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
+      }
+      if (action === GIT_ACTIONS.delete) {
+        await deps.revokeGrant(target.mount.grantId)
+        if (!deps.saveRepos(deps.removeRepo(deps.loadRepos(), target.mount.id))) {
+          throw new FileSystemError("unavailable", "Unable to remove Git repository mount", ref)
+        }
+        emitMutation(ref, target.mount.id, "deleted")
+        return { ref, deleted: true }
+      }
+      const mount = await resolveGrantedMount(target.mount, deps)
+      const remoteAction = gitAction(action)
+      if (remoteAction) {
+        const result = await deps.runAction(mount.path, remoteAction)
+        emitMutation(ref, mount.id)
+        return result
+      }
+      if (action === GIT_ACTIONS.createBranch) {
+        const result = await deps.createBranch(mount.path, stringInput(ref, input, "name"))
+        emitMutation(ref, mount.id)
+        return result
+      }
+      if (action === GIT_ACTIONS.commit) {
+        const result = await deps.commit(mount.path, stringInput(ref, input, "message"))
+        emitMutation(ref, mount.id)
+        return result
+      }
+      throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
+    },
+    watch(ref, ctx, notify): FileSystemWatchHandle {
+      assertAccess(ref, ctx, "watch", "fs:read")
+      if (!sameFileRef(ref, GIT_ROOT_REF)) requireTarget(ref, deps)
+      const key = fileRefKey(ref)
+      const listeners = watchers.get(key) ?? new Set<(event: FileSystemWatchEvent) => void>()
+      listeners.add(notify)
+      watchers.set(key, listeners)
+      return {
+        dispose() {
+          listeners.delete(notify)
+          if (listeners.size === 0) watchers.delete(key)
+        },
+      }
+    },
+  }
 }
+
+export const gitFileSystem = createGitFileSystem()
 
 let mounted = false
 

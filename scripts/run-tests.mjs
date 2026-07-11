@@ -1,10 +1,10 @@
-// 跑 src/ 下全部 *.test.ts —— 用 node:test 程序化 run({ files }),不走 CLI glob。
-// 原因: 部分发行版打包的 Node 22(如 Debian/Kali)缺内部模块 internal/deps/brace-expansion,
-// `node --test <pattern>` 连显式文件参数都会初始化内部 glob 而崩溃; run({ files }) 不经过 glob,
-// 官方与发行版 Node 都能跑。tsx loader 由父进程 execArgv 传递给测试 worker。
+// 跑 src/ 下全部 *.test.ts。每个文件直接交给 Node 执行，不使用 `node --test` 的 CLI glob，
+// 兼容缺少 internal/deps/brace-expansion 的发行版 Node。node:test 在普通 Node 进程中仍会
+// 执行并正确设置退出码；tsx loader 由父进程 execArgv 传给各子进程。
 // 用法: node --import tsx scripts/run-tests.mjs [路径过滤子串...] (即 pnpm test [子串])
 import { spawn } from "node:child_process"
 import { readdirSync } from "node:fs"
+import { availableParallelism } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -23,24 +23,6 @@ if (args.includes("--help") || args.includes("-h")) {
   console.log(HELP.trimEnd())
   process.exit(0)
 }
-
-const testWorkerSource = `
-import { run } from "node:test"
-import { spec } from "node:test/reporters"
-
-const concurrency = process.argv[1] === "true"
-const files = process.argv.slice(2)
-
-const stream = run({ files, concurrency })
-stream.on("test:fail", () => {
-  process.exitCode = 1
-})
-stream.on("error", (error) => {
-  console.error(error)
-  process.exitCode = 1
-})
-stream.compose(spec).pipe(process.stdout)
-`
 
 const srcDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src")
 const filters = args
@@ -62,24 +44,47 @@ function isSerialTestFile(file) {
 
 async function runBatch(batch, { concurrency }) {
   if (batch.length === 0) return
-  await new Promise((resolve, reject) => {
-    const child = spawn(
-      process.execPath,
-      [
-        ...process.execArgv,
-        "--input-type=module",
-        "-e",
-        testWorkerSource,
-        String(concurrency),
-        ...batch,
-      ],
-      { stdio: "inherit" },
-    )
-    child.on("error", reject)
-    child.on("exit", (code, signal) => {
-      if (code !== 0 || signal) process.exitCode = code ?? 1
-      resolve()
+  const workerCount = concurrency ? Math.min(batch.length, availableParallelism(), 8) : 1
+  let nextIndex = 0
+
+  async function worker() {
+    while (nextIndex < batch.length) {
+      const file = batch[nextIndex++]
+      const result = await runTestFile(file)
+      const relative = path.relative(process.cwd(), file)
+      if (result.code === 0 && !result.signal) {
+        console.log(`PASS ${relative}`)
+        if (result.stderr) process.stderr.write(result.stderr)
+        continue
+      }
+
+      process.exitCode = result.code ?? 1
+      console.error(`FAIL ${relative}${result.signal ? ` (${result.signal})` : ""}`)
+      if (result.stdout) process.stdout.write(result.stdout)
+      if (result.stderr) process.stderr.write(result.stderr)
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+}
+
+function runTestFile(file) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [...process.execArgv, file], {
+      stdio: ["ignore", "pipe", "pipe"],
     })
+    let stdout = ""
+    let stderr = ""
+    child.stdout.setEncoding("utf8")
+    child.stderr.setEncoding("utf8")
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk
+    })
+    child.on("error", reject)
+    child.on("exit", (code, signal) => resolve({ code, signal, stdout, stderr }))
   })
 }
 

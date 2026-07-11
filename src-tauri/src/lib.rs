@@ -30,6 +30,8 @@ mod window_placement;
 #[cfg(desktop)]
 mod installed_apps;
 #[cfg(desktop)]
+mod guarded_fs;
+#[cfg(desktop)]
 mod secure_store;
 
 #[cfg(all(desktop, not(target_os = "linux")))]
@@ -1383,11 +1385,14 @@ pub fn run() {
         // HTTP: App 内 fetch 经 Rust 侧发出, 绕过 webview CORS (agent 直连任意 LLM 端点)。
         .plugin(tauri_plugin_http::init())
         // Shell: 本地终端执行系统命令 (仅桌面; 权限由 capability 限定)。
-        .plugin(tauri_plugin_shell::init());
+        .plugin(tauri_plugin_shell::init())
+        // Dialog: Git 仓库授权只能由 Rust 侧原生目录选择器创建。
+        .plugin(tauri_plugin_dialog::init());
 
     // 多显示器: 未在 tauri.conf 指定 x/y 时, 等窗口尺寸就绪后居中到主屏 (见 window_placement.rs)。
     #[cfg(desktop)]
     let builder = builder.setup(|app| {
+        app.manage(guarded_fs::init_state(app.handle()));
         let conf = app
             .config()
             .app
@@ -1455,6 +1460,13 @@ pub fn run() {
             installed_apps::list_installed_apps,
             installed_apps::launch_installed_app,
             installed_apps::read_app_icon_data_url,
+            guarded_fs::guarded_fs_pick_root,
+            guarded_fs::guarded_fs_grant_info,
+            guarded_fs::guarded_fs_revoke_grant,
+            guarded_fs::guarded_fs_stat,
+            guarded_fs::guarded_fs_list,
+            guarded_fs::guarded_fs_read,
+            guarded_fs::guarded_fs_write_text,
             secure_store::secure_store_status,
             secure_store::secure_store_get,
             secure_store::secure_store_set,

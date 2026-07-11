@@ -15,8 +15,12 @@ import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
 import { Textarea } from "@/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
-import { Bookmark, BookmarkFolder } from "@protocol/files"
-import { addBookmark, updateBookmark } from "@/files/stores/bookmarks-store"
+import {
+  createBookmarkFile,
+  updateBookmarkFile,
+  type FileBookmark,
+  type FileBookmarkFolder,
+} from "./bookmark-file-system"
 
 const NONE_FOLDER = "__none__"
 
@@ -30,9 +34,9 @@ export default function BookmarkDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  folders: BookmarkFolder[]
+  folders: FileBookmarkFolder[]
   /** 编辑已有书签; 为 null 时是新增 */
-  editing: Bookmark | null
+  editing: FileBookmark | null
   /** 新增时默认归入的收藏夹 */
   defaultFolderId: string | null
   onSaved: () => void
@@ -63,8 +67,8 @@ function BookmarkForm({
   onClose,
   onSaved,
 }: {
-  folders: BookmarkFolder[]
-  editing: Bookmark | null
+  folders: FileBookmarkFolder[]
+  editing: FileBookmark | null
   defaultFolderId: string | null
   onClose: () => void
   onSaved: () => void
@@ -91,26 +95,34 @@ function BookmarkForm({
       .map((t) => t.trim())
       .filter(Boolean)
     const targetFolder = folderId === NONE_FOLDER ? null : folderId
+    const folder =
+      targetFolder === null ? null : (folders.find((item) => item.id === targetFolder) ?? null)
+    if (targetFolder !== null && !folder) {
+      toast.error("目标收藏夹不存在")
+      return
+    }
 
     setSaving(true)
     try {
       if (editing) {
-        await updateBookmark(editing.id, {
+        await updateBookmarkFile(editing, {
           url: normalized,
           title: title.trim() || normalized,
           description: description.trim(),
           tags: tagList,
-          folderId: targetFolder,
+          folder,
         })
         toast.success("已更新")
       } else {
-        await addBookmark({
-          url: normalized,
-          title: title.trim() || normalized,
-          description: description.trim(),
-          tags: tagList,
-          folderId: targetFolder,
-        })
+        await createBookmarkFile(
+          {
+            url: normalized,
+            title: title.trim() || normalized,
+            description: description.trim(),
+            tags: tagList,
+          },
+          folder,
+        )
         toast.success("已收藏")
       }
       onSaved()

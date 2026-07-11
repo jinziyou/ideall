@@ -5,18 +5,18 @@
 import * as React from "react"
 import { AppWindow, ChevronDown, RefreshCw, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  appIconSrc,
-  launchInstalledApp,
-  listInstalledApps,
-  type InstalledApp,
-} from "@/lib/installed-apps"
+import { appIconSrc, type InstalledApp } from "@/lib/installed-apps"
+import type { FileRef } from "@protocol/file-system"
+import { invokeFileAction, readFileDirectory, statFile } from "@/filesystem/registry"
 import { isTauri } from "@/lib/tauri"
 import { Input } from "@/ui/input"
 import { Button } from "@/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
 import { EmptyState } from "@/ui/empty-state"
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover"
+import { installedAppFromFile, installedAppsRootRef } from "./installed-app-file-system"
+
+type InstalledAppItem = InstalledApp & { fileRef: FileRef }
 
 /**
  * 标准分类的展示顺序。**手工同步约定**: 此列表必须与 src-tauri/src/installed_apps.rs 的 `category_label`
@@ -117,8 +117,8 @@ function AppIcon({ app, size = "md" }: { app: InstalledApp; size?: "md" | "lg" }
   )
 }
 
-function groupByPrimaryCategory(apps: InstalledApp[]): Map<string, InstalledApp[]> {
-  const map = new Map<string, InstalledApp[]>()
+function groupByPrimaryCategory<T extends InstalledApp>(apps: T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>()
   for (const app of apps) {
     const cat = primaryDisplayCategory(app)
     const list = map.get(cat) ?? []
@@ -172,9 +172,9 @@ function AppTile({
   launching,
   onLaunch,
 }: {
-  app: InstalledApp
+  app: InstalledAppItem
   launching: boolean
-  onLaunch: (app: InstalledApp) => void
+  onLaunch: (app: InstalledAppItem) => void
 }) {
   return (
     <button
@@ -207,7 +207,7 @@ function AppTile({
 }
 
 export default function AppsPage() {
-  const [apps, setApps] = React.useState<InstalledApp[]>([])
+  const [apps, setApps] = React.useState<InstalledAppItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState("")
@@ -218,8 +218,27 @@ export default function AppsPage() {
     setLoading(true)
     setError(null)
     try {
-      const list = await listInstalledApps()
-      setApps(list)
+      const page = await readFileDirectory(installedAppsRootRef, {
+        actor: "ui",
+        permissions: [],
+        intent: "directory",
+      })
+      const files = await Promise.all(
+        page.entries.map((entry) =>
+          statFile(entry.target, {
+            actor: "ui",
+            permissions: [],
+            intent: "metadata",
+          }).catch(() => null),
+        ),
+      )
+      setApps(
+        files.flatMap((file) => {
+          if (!file) return []
+          const app = installedAppFromFile(file)
+          return app ? [{ ...app, fileRef: file.ref }] : []
+        }),
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载应用列表失败")
     } finally {
@@ -271,10 +290,14 @@ export default function AppsPage() {
   const grouped = React.useMemo(() => groupByPrimaryCategory(filtered), [filtered])
   const showGrouped = !query.trim() && !category
 
-  const handleLaunch = async (app: InstalledApp) => {
+  const handleLaunch = async (app: InstalledAppItem) => {
     setLaunching(app.id)
     try {
-      await launchInstalledApp(app.id)
+      await invokeFileAction(app.fileRef, "open", undefined, {
+        actor: "ui",
+        permissions: [],
+        intent: "action",
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : "启动失败")
     } finally {

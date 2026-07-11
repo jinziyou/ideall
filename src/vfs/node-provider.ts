@@ -14,12 +14,14 @@ import {
   getNodeRaw,
   listNodeSummaries,
   moveNode,
+  readBlob,
   readBlobBase64,
+  restoreNode,
   updateNode,
   ALL_NODE_KINDS,
   type NodeSummary,
 } from "@/files/stores/nodes-store"
-import { updateFileContent } from "@/files/stores/files-store"
+import { addFile, updateFileContent } from "@/files/stores/files-store"
 import type {
   ResourceAction,
   ResourceActionId,
@@ -35,6 +37,7 @@ export type NodeVfsProviderDeps = {
   listNodeSummaries: (kinds: NodeKind[]) => Promise<NodeSummary[]>
   getNodeRaw: (id: string) => Promise<Node | undefined>
   createNode: (input: FsCreateInput) => Promise<Node>
+  createFile: typeof addFile
   updateNode: (kind: NodeKind, id: string, patch: FsWritePatch) => Promise<Node | undefined>
   moveNode: (
     kind: NodeKind,
@@ -43,6 +46,8 @@ export type NodeVfsProviderDeps = {
     afterSortKey?: string | null,
   ) => Promise<Node | undefined>
   deleteNode: (kind: NodeKind, id: string) => Promise<void>
+  restoreNode: (kind: NodeKind, id: string) => Promise<void>
+  readBlob: (id: string) => Promise<Blob | undefined>
   readBlobBase64: (
     id: string,
   ) => Promise<{ mime: string; size: number; base64: string } | undefined>
@@ -53,9 +58,12 @@ const defaultDeps: NodeVfsProviderDeps = {
   listNodeSummaries,
   getNodeRaw,
   createNode,
+  createFile: addFile,
   updateNode,
   moveNode,
   deleteNode,
+  restoreNode,
+  readBlob,
   readBlobBase64,
   updateFileContent,
 }
@@ -129,9 +137,9 @@ function asNodeRef(ref: ResourceRef): NodeResourceRef {
 function capabilitiesForKind(kind: NodeKind): ResourceCapability[] {
   switch (kind) {
     case "folder":
-      return ["open", "preview", "edit", "delete", "move", "sync"]
+      return ["open", "preview", "create", "edit", "delete", "move", "sync"]
     case "note":
-      return ["open", "preview", "edit", "delete", "move", "sync", "read-content"]
+      return ["open", "preview", "create", "edit", "delete", "move", "sync", "read-content"]
     case "bookmark":
       return ["open", "preview", "edit", "delete", "move", "sync", "navigate"]
     case "file":
@@ -216,6 +224,28 @@ function writePatch(input: unknown): FsWritePatch {
   }
 }
 
+function createInput(input: unknown): FsCreateInput {
+  const raw = objectInput(input)
+  if (typeof raw.kind !== "string" || !isNodeKind(raw.kind)) {
+    throw new VfsError("unsupported", "create requires a supported node kind")
+  }
+  if (
+    raw.tags !== undefined &&
+    (!Array.isArray(raw.tags) || !raw.tags.every((v) => typeof v === "string"))
+  ) {
+    throw new VfsError("unsupported", "create tags must be strings")
+  }
+  return {
+    kind: raw.kind,
+    ...(raw.parentId === null || typeof raw.parentId === "string"
+      ? { parentId: raw.parentId }
+      : {}),
+    ...(typeof raw.title === "string" ? { title: raw.title } : {}),
+    ...(Array.isArray(raw.tags) ? { tags: raw.tags as string[] } : {}),
+    ...(raw.content !== undefined ? { content: raw.content } : {}),
+  }
+}
+
 function blobWriteInput(input: unknown): { content: string; mime?: string } {
   const raw = objectInput(input)
   if (typeof raw.content !== "string") {
@@ -240,7 +270,7 @@ function moveInput(input: unknown): { parentId: string | null; afterSortKey?: st
 
 async function requireNode(deps: NodeVfsProviderDeps, ref: NodeResourceRef): Promise<Node> {
   const node = await deps.getNodeRaw(ref.id)
-  if (!node || node.kind !== ref.kind) {
+  if (!node || node.kind !== ref.kind || node.deletedAt != null) {
     throw new VfsError("not-found", `Node not found: ${resourceKey(ref)}`)
   }
   return node
@@ -251,6 +281,13 @@ function nodeActions(kind: NodeKind): ResourceAction[] {
     { id: "open", label: "打开", requires: ["open"] },
     { id: "preview", label: "预览", requires: ["preview"] },
   ]
+  if (kind === "note" || kind === "folder") {
+    actions.push({
+      id: "create",
+      label: kind === "note" ? "新建子页" : "新增书签",
+      requires: ["create"],
+    })
+  }
   if (kind !== "feed") actions.push({ id: "edit", label: "编辑", requires: ["edit"] })
   if (kind !== "feed" && kind !== "file" && kind !== "thread") {
     actions.push({ id: "move", label: "移动", requires: ["move"] })
@@ -284,6 +321,44 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
         })
       return paginate(metas, query.limit, query.cursor)
     },
+    async create(input, ctx) {
+      const raw = objectInput(input)
+      if (raw.kind === "file") {
+        if (!canWriteKind("file", ctx)) {
+          throw new VfsError("permission-denied", "Missing write permission")
+        }
+        if (!(raw.file instanceof Blob) || typeof (raw.file as Partial<File>).name !== "string") {
+          throw new VfsError("unsupported", "file creation requires a browser File")
+        }
+        if (
+          raw.tags !== undefined &&
+          (!Array.isArray(raw.tags) || !raw.tags.every((tag) => typeof tag === "string"))
+        ) {
+          throw new VfsError("unsupported", "file tags must be strings")
+        }
+        const created = await deps.createFile(
+          raw.file as File,
+          (raw.tags as string[] | undefined) ?? [],
+        )
+        const node = await requireNode(deps, nodeRef("file", created.id))
+        return { meta: nodeMeta(node), content: stripNode(node) }
+      }
+      const value = createInput(input)
+      if (!canWriteKind(value.kind, ctx)) {
+        throw new VfsError("permission-denied", "Missing write permission")
+      }
+      if (value.parentId) {
+        const parent = await deps.getNodeRaw(value.parentId)
+        const validParent =
+          parent != null &&
+          parent.deletedAt == null &&
+          ((value.kind === "note" && parent.kind === "note") ||
+            (value.kind === "bookmark" && parent.kind === "folder"))
+        if (!validParent) throw new VfsError("not-found", "Create parent does not exist")
+      }
+      const node = await deps.createNode(value)
+      return { meta: nodeMeta(node), content: node }
+    },
     async get(ref, ctx): Promise<ResourceRecord | null> {
       const nodeRefValue = asNodeRef(ref)
       assertCanReadMetadata(ctx)
@@ -316,6 +391,23 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
           }
           throw new VfsError("unsupported", `Action ${action} is not supported by ${node.kind}`)
         }
+        case "create": {
+          if (nodeRefValue.kind !== "note" && nodeRefValue.kind !== "folder") {
+            throw new VfsError("unsupported", "Node cannot contain created children")
+          }
+          await requireNode(deps, nodeRefValue)
+          const createdKind = nodeRefValue.kind === "note" ? "note" : "bookmark"
+          if (!canWriteKind(createdKind, ctx)) {
+            throw new VfsError("permission-denied", "Missing write permission")
+          }
+          const value = createInput({
+            ...objectInput(input),
+            kind: createdKind,
+            parentId: nodeRefValue.id,
+          })
+          const node = await deps.createNode(value)
+          return { meta: nodeMeta(node), content: node }
+        }
         case "read-blob": {
           if (nodeRefValue.kind !== "file") {
             throw new VfsError("unsupported", "read-blob only supports file nodes")
@@ -323,7 +415,11 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
           if (!canReadBlob(ctx)) {
             throw new VfsError("consent-required", "Reading file blob requires fs.blobs:read")
           }
-          const blob = await deps.readBlobBase64(nodeRefValue.id)
+          await requireNode(deps, nodeRefValue)
+          const blob =
+            ctx.actor === "ui"
+              ? await deps.readBlob(nodeRefValue.id)
+              : await deps.readBlobBase64(nodeRefValue.id)
           if (!blob) throw new VfsError("not-found", `Blob not found: ${resourceKey(nodeRefValue)}`)
           return blob
         }
@@ -334,6 +430,7 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new VfsError("permission-denied", "Missing write permission")
           }
+          await requireNode(deps, nodeRefValue)
           const inputValue = blobWriteInput(input)
           const updated = await deps.updateFileContent(
             nodeRefValue.id,
@@ -350,6 +447,7 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new VfsError("permission-denied", "Missing write permission")
           }
+          await requireNode(deps, nodeRefValue)
           const updated = await deps.updateNode(
             nodeRefValue.kind,
             nodeRefValue.id,
@@ -363,6 +461,7 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new VfsError("permission-denied", "Missing write permission")
           }
+          await requireNode(deps, nodeRefValue)
           const move = moveInput(input)
           const updated = await deps.moveNode(
             nodeRefValue.kind,
@@ -378,9 +477,17 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new VfsError("permission-denied", "Missing write permission")
           }
+          await requireNode(deps, nodeRefValue)
           await deps.deleteNode(nodeRefValue.kind, nodeRefValue.id)
           return { ref: nodeRefValue, deleted: true }
-        case "restore":
+        case "restore": {
+          if (!canWriteKind(nodeRefValue.kind, ctx)) {
+            throw new VfsError("permission-denied", "Missing write permission")
+          }
+          await deps.restoreNode(nodeRefValue.kind, nodeRefValue.id)
+          const restored = await requireNode(deps, nodeRefValue)
+          return { meta: nodeMeta(restored), content: restored }
+        }
         case "save-to-mine":
           throw new VfsError("unsupported", `Action ${action} is not supported by node provider`)
       }
@@ -388,8 +495,16 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
     watch(query, ctx, notify) {
       assertCanReadMetadata(ctx)
       const kinds = nodeKindsFromQuery(query)
+      const watchedId = query.id
       const dispose = onFilesUpdated((detail) => {
-        if (!detail?.kind || (isNodeKind(detail.kind) && kinds.includes(detail.kind))) notify()
+        // 缺少 kind/id 的旧事件只能保守刷新；结构化事件必须同时匹配 kind 与精确资源。
+        if (!detail?.kind) {
+          notify()
+          return
+        }
+        if (!isNodeKind(detail.kind) || !kinds.includes(detail.kind)) return
+        if (watchedId && detail.id && detail.id !== watchedId) return
+        notify()
       })
       return { dispose }
     },

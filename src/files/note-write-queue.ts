@@ -13,7 +13,11 @@
 // 落库失败不再静默 —— 指数退避自动重试, 且首次进入失败态 toast 一次 (编辑器可能已被 LRU 逐出,
 // 此时 toast 是唯一可见通道; 成功后复位)。
 import { toast } from "sonner"
-import { noteText, updateNote } from "@/files/stores/notes-store"
+import { writeFile } from "@/filesystem/registry"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
+import { noteText } from "@/files/note-text"
+
+const UI_WRITE_CONTEXT = { actor: "ui", permissions: [], intent: "write" } as const
 
 /** 一次落库后回传给列表的轻量元数据 (用于就地刷新卡片, 免整列表重取)。写队列是其产出方, 故类型在此自有定义。 */
 export type NoteEditorSaved = {
@@ -118,7 +122,7 @@ export function enqueueNoteDraft(noteId: string, draft: Draft): void {
   void drainQueue()
 }
 
-/** 串行消费 worker: 逐条 updateNote 落库, 落库后回调 onSaved (供列表卡片 / 标签标题就地刷新)。 */
+/** 串行消费 worker: 逐条经 FileSystem 落库, 落库后回调 onSaved。 */
 async function drainQueue(): Promise<void> {
   if (running) return
   running = true
@@ -126,13 +130,20 @@ async function drainQueue(): Promise<void> {
     while (pending.size > 0) {
       const noteId = pending.keys().next().value as string
       const draft = pending.get(noteId) as Draft
-      let saved
+      let savedAt = Date.now()
       try {
-        saved = await updateNote(noteId, {
-          title: draft.title,
-          content: draft.content,
-          tags: draft.tags,
-        })
+        const saved = await writeFile(
+          resourceFileRef({ scheme: "node", kind: "note", id: noteId }),
+          {
+            data: {
+              title: draft.title,
+              content: draft.content,
+              tags: draft.tags,
+            },
+          },
+          UI_WRITE_CONTEXT,
+        )
+        savedAt = saved.updatedAt ?? savedAt
       } catch {
         // 落库失败: 留在队列不丢; 状态转 error + 指数退避自动重试 + 首次失败 toast (不再静默)。
         setStatus(noteId, "error")
@@ -147,15 +158,15 @@ async function drainQueue(): Promise<void> {
       }
       retryDelay = RETRY_BASE_MS
       failureToasted = false
-      if (saved && draft.onSaved) {
-        const text = noteText(saved.content)
+      if (draft.onSaved) {
+        const text = noteText(draft.content)
         draft.onSaved({
-          id: saved.id,
-          title: saved.title,
+          id: noteId,
+          title: draft.title,
           excerpt: text.slice(0, 160),
           search: text,
-          tags: saved.tags,
-          updatedAt: saved.updatedAt,
+          tags: draft.tags,
+          updatedAt: savedAt,
         })
       }
     }

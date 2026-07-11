@@ -1,26 +1,37 @@
-// info 取数 facade —— 一律经 `@protocol/server-port` 的 ServerPort (官方实现为 HTTP 适配器)。
-// 保留历史函数名/签名/返回口径, 调用点无需改动; wire DTO 与 wonita 服务细节收敛在适配器内。
-import { getServerPort, type InfoQuery } from "@protocol/server-port"
+// info 取数 facade —— 远程对象先由 remote.server FileSystem 投影为文件，再读取其内容。
+// provider 内部仍消费可替换 ServerPort，保留同构与后端可换语义。
+import type { InfoQuery } from "@protocol/server-port"
+import {
+  readRemoteServerFile,
+  remoteEntityRef,
+  remoteInfoQueryRef,
+  remoteInfoRef,
+  remoteRelatedInfoRef,
+  type RemoteEntityResult,
+  type RemoteInfoQueryResult,
+  type RemoteInfoResult,
+  type RemoteRelatedInfoResult,
+} from "@/filesystem/remote-server-file-system"
 
 /** 信息查询参数 (= ServerPort 的 InfoQuery)。 */
 export type QueryParams = InfoQuery
 
 /** 最新信息列表。 */
 export function fetchLatestInfo(params: InfoQuery | Record<string, unknown>) {
-  return getServerPort().queryInfo(params as InfoQuery)
+  return readRemoteServerFile<RemoteInfoQueryResult>(remoteInfoQueryRef(params as InfoQuery))
 }
 
 /** 某条信息的「全面报道」(`GET /v1/articles/{id}/related`): 描述同一事件的其它来源。拿不到返回空数组。 */
 export function getRelatedInfo(url: string) {
-  return getServerPort().getRelatedInfo(url)
+  return readRemoteServerFile<RemoteRelatedInfoResult>(remoteRelatedInfoRef(url))
 }
 
 /** 实体详情聚合 (`GET /v1/entities/{label}/{name}`)。拿不到返回 null。 */
 export function getEntityDetail(label: string, name: string) {
-  return getServerPort().getEntityDetail(label, name)
+  return readRemoteServerFile<RemoteEntityResult>(remoteEntityRef(label, name))
 }
 
 /** 单条信息详情 (全面报道整页主链路)。返回 ApiResult: `ok:false` 取数失败可重试; `ok:true & data:null` 真不存在。 */
 export function getInfo(url: string) {
-  return getServerPort().getInfo(url)
+  return readRemoteServerFile<RemoteInfoResult>(remoteInfoRef(url))
 }

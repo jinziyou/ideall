@@ -26,6 +26,7 @@ import {
 } from "@/files/stores/subscriptions-store"
 import { deleteThread, renameThread } from "@/files/stores/threads-store"
 import { feedNodeId } from "@/files/feed-node"
+import { restoreTrashItem } from "@/files/stores/trash-store"
 
 /** 跨 kind 节点摘要 (侧栏文件树用): TreeItem + kind + 是否有活跃子节点。 */
 export interface NodeSummary extends TreeItem {
@@ -76,7 +77,7 @@ export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[
     id: n.id,
     kind: n.kind as NodeKind,
     title: n.title ?? "",
-    parentId: n.parentId ?? null,
+    parentId: effectiveParentId(n.id, n.parentId ?? null, parentOf),
     sortKey: n.sortKey ?? "",
     hasChildren: withChildren.has(n.id),
     mime: n.kind === "file" ? (n.blobRef?.mime ?? "") : undefined,
@@ -261,6 +262,35 @@ export async function deleteNode(kind: NodeKind, id: string): Promise<void> {
   }
 }
 
+/** 恢复节点；笔记删除是级联的，因此恢复同一棵仍处于回收站的子树。 */
+export async function restoreNode(kind: NodeKind, id: string): Promise<void> {
+  if (kind !== "note") {
+    await restoreTrashItem(id)
+    return
+  }
+  const notes = await nodesByKinds<Node>(["note"])
+  const deleted = notes.filter(
+    (node): node is Extract<Node, { kind: "note" }> =>
+      node.kind === "note" && node.deletedAt != null,
+  )
+  const children = new Map<string, string[]>()
+  for (const note of deleted) {
+    if (!note.parentId) continue
+    const values = children.get(note.parentId) ?? []
+    values.push(note.id)
+    children.set(note.parentId, values)
+  }
+  const queue = [id]
+  const seen = new Set<string>()
+  while (queue.length > 0) {
+    const current = queue.shift() as string
+    if (seen.has(current)) continue
+    seen.add(current)
+    queue.push(...(children.get(current) ?? []))
+    await restoreTrashItem(current)
+  }
+}
+
 /** fs.readBlob: 读文件二进制为 base64 (含 mime/size)。大文件拒读防 token 爆炸。 */
 const BLOB_READ_CAP = 1024 * 1024 // 1MB
 export async function readBlobBase64(
@@ -276,4 +306,9 @@ export async function readBlobBase64(
     size: f.size,
     base64: bytesToBase64(new Uint8Array(await f.blob.arrayBuffer())),
   }
+}
+
+/** UI/Engine 文件面读取原始 Blob；权限与范围限制由上层 FileSystem/VFS 执行。 */
+export async function readBlob(id: string): Promise<Blob | undefined> {
+  return (await getFile(id))?.blob
 }

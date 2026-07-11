@@ -24,6 +24,12 @@ const NO_APP = {
     "app/ 仅 Next 路由薄标记 (开标签); 复用/功能层不得反向 import 路由代码, 共享逻辑下沉 @/lib 或经 @protocol 端口注入",
 }
 
+const NO_UI_STORAGE_BYPASS = {
+  group: ["@/files/stores", "@/files/stores/**", "@/vfs/registry"],
+  message:
+    "活动 UI 不得直接访问 store/VFS registry; 数据与动作必须经 @/filesystem，旧 VFS/store 只作为 provider、同步或 port 的内部实现",
+}
+
 const config = [
   ...nextConfig,
   {
@@ -79,6 +85,22 @@ const config = [
     },
   },
 
+  // Display 与产品 UI 只能经 FileSystem 访问数据。测试可直接组装底层 provider 验证兼容边界。
+  {
+    files: [
+      "src/app/**/*.{ts,tsx}",
+      "src/shell/**/*.{ts,tsx}",
+      "src/workspace/**/*.{ts,tsx}",
+      "src/modules/**/*.{ts,tsx}",
+      "src/shared/**/*.{ts,tsx}",
+      "src/ui/**/*.{ts,tsx}",
+    ],
+    ignores: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [WIRE_DTO, NO_APP, NO_UI_STORAGE_BYPASS] }],
+    },
+  },
+
   // (4) modules 三应用互隔: info / community / tool 互不 import; 跨模块经 @protocol 协作 (内容解析在各自 manifest 注册)。
   ...[
     ["info", ["community", "tool"]],
@@ -93,6 +115,7 @@ const config = [
           patterns: [
             WIRE_DTO,
             NO_APP,
+            NO_UI_STORAGE_BYPASS,
             {
               group: siblings.flatMap((s) => [`@/modules/${s}`, `@/modules/${s}/**`]),
               message: `${self} 不得 import 其它应用模块 (${siblings.join("/")}); 三应用互隔, 跨模块经 @protocol 协作`,

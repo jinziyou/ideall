@@ -1,9 +1,15 @@
 // 工作区标签模型 (现代面板式多标签工作区)。
 // kind 唯一决定标签内容 (registry 查表)；同 kind(+params) 复用同一标签实例 (id=tabKey)。
 
-// 工作区模式视图 (可切换): 本机/我的 = 只存本机的个人数据; 连接/发现 = 联网的发现/工具/AI。
-// 活动栏按当前 mode 过滤展示哪一簇模块 (见 modules modulesForMode); 顶栏 ModeSwitch 切换视图。
+// 数据来源模式 (可切换): 本地 = 本机数据; 连接 = 远端服务与联网资源。
+// 活动栏按当前 mode 过滤合成根的可见入口；顶栏 ModeSwitch 切换数据镜头。
 export type WsMode = "local" | "connected"
+
+/** 工作区是正交于数据来源镜头的 Display 组合；切换时不改变文件、标签或根目录。 */
+export type WorkspaceKind = "files" | "audio" | "development"
+
+/** 开发工作区内当前展示的辅助工具。 */
+export type DevelopmentTool = "git" | "shell"
 
 export type ModuleId =
   | "home"

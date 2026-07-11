@@ -22,6 +22,7 @@ import {
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshot } from "@/files/stores/trash-store"
+import { nextUpdatedAt } from "@/files/version"
 
 type BookmarkNode = NodeOfKind<"bookmark">
 type FolderNode = NodeOfKind<"folder">
@@ -127,15 +128,21 @@ export async function addFolder(name: string): Promise<BookmarkFolder> {
     content: null,
   }
   await idbPut(STORE_NODES, node)
+  notifyFilesUpdated({ kind: "folder", id: node.id })
   return nodeToFolder(node)
 }
 
 export async function renameFolder(id: string, name: string): Promise<void> {
-  await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
+  const updated = await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
     current && current.kind === "folder"
-      ? { ...current, title: name.trim() || current.title, updatedAt: Date.now() }
+      ? {
+          ...current,
+          title: name.trim() || current.title,
+          updatedAt: nextUpdatedAt(current.updatedAt),
+        }
       : undefined,
   )
+  if (updated) notifyFilesUpdated({ kind: "folder", id })
 }
 
 /** 删除收藏夹 (软删标记); 夹内活跃书签移动到未分组 (parentId = null)。 */
@@ -146,13 +153,17 @@ export async function deleteFolder(id: string): Promise<void> {
   const orphans = (await allBookmarkNodes())
     .filter(isLive)
     .filter((n) => n.parentId === id)
-    .map((n) => ({ ...n, parentId: null, updatedAt: now }))
+    .map((n) => ({ ...n, parentId: null, updatedAt: nextUpdatedAt(n.updatedAt, now) }))
   if (orphans.length) await idbBulkPut(STORE_NODES, orphans)
-  await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
+  const deleted = await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
     current && current.kind === "folder"
-      ? { ...current, deletedAt: now, updatedAt: now }
+      ? { ...current, deletedAt: now, updatedAt: nextUpdatedAt(current.updatedAt, now) }
       : undefined,
   )
+  for (const orphan of orphans) {
+    notifyFilesUpdated({ kind: "bookmark", id: orphan.id })
+  }
+  if (deleted) notifyFilesUpdated({ kind: "folder", id })
 }
 
 // ---- 书签 ----
@@ -244,7 +255,11 @@ export async function updateBookmark(
     if (patch.url !== undefined) content.url = patch.url
     if (patch.description !== undefined) content.description = patch.description
     if (patch.favicon !== undefined) content.favicon = patch.favicon
-    const next: BookmarkNode = { ...current, content, updatedAt: Date.now() }
+    const next: BookmarkNode = {
+      ...current,
+      content,
+      updatedAt: nextUpdatedAt(current.updatedAt),
+    }
     if (patch.title !== undefined) next.title = patch.title
     if (patch.tags !== undefined) next.tags = patch.tags
     if (patch.folderId !== undefined) next.parentId = patch.folderId
@@ -263,7 +278,7 @@ export async function deleteBookmark(id: string): Promise<void> {
   }
   await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
     current && current.kind === "bookmark"
-      ? { ...current, deletedAt: now, updatedAt: now }
+      ? { ...current, deletedAt: now, updatedAt: nextUpdatedAt(current.updatedAt, now) }
       : undefined,
   )
   notifyFilesUpdated({ kind: "bookmark", id })
@@ -307,7 +322,12 @@ export async function moveBookmark(
   const sortKey = computeSiblingSortKey(live, newParentId, pos, id)
   await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
     current && current.kind === "bookmark"
-      ? { ...current, parentId: newParentId, sortKey, updatedAt: Date.now() }
+      ? {
+          ...current,
+          parentId: newParentId,
+          sortKey,
+          updatedAt: nextUpdatedAt(current.updatedAt),
+        }
       : undefined,
   )
   notifyFilesUpdated({ kind: "bookmark", id })
@@ -320,7 +340,12 @@ export async function moveFolder(id: string, pos?: InsertPos): Promise<void> {
   const sortKey = computeSiblingSortKey(live, null, pos, id)
   await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
     current && current.kind === "folder"
-      ? { ...current, parentId: null, sortKey, updatedAt: Date.now() }
+      ? {
+          ...current,
+          parentId: null,
+          sortKey,
+          updatedAt: nextUpdatedAt(current.updatedAt),
+        }
       : undefined,
   )
   notifyFilesUpdated({ kind: "folder", id })
@@ -341,7 +366,8 @@ export async function restoreBookmark(bookmark: Bookmark): Promise<void> {
       parentId: bookmark.folderId,
       tags: bookmark.tags,
       content: { url: bookmark.url, description: bookmark.description, favicon: bookmark.favicon },
-      updatedAt: now,
+      updatedAt:
+        current && current.kind === "bookmark" ? nextUpdatedAt(current.updatedAt, now) : now,
     }
     delete revived.deletedAt
     return revived

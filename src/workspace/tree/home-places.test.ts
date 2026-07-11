@@ -2,19 +2,31 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { HOME_PLACES, homePlaceById, homePlaceForNodeKind } from "./home-places"
 
-test("home places: 锁定「我的」区段顺序与特殊 descriptor", () => {
+test("home places: 锁定「我的」区段顺序与默认 FileRef", () => {
   assert.deepEqual(
     HOME_PLACES.map((place) => place.id),
     ["subscriptions", "bookmarks", "resources", "notes", "workspace"],
   )
 
   const subscriptions = homePlaceById("subscriptions")
-  assert.equal(subscriptions?.descriptor?.kind, "subscriptions")
-  assert.equal(subscriptions?.descriptor?.module, "home")
-  assert.equal(subscriptions?.descriptor?.path, undefined)
-  assert.deepEqual(subscriptions?.descriptor?.params, { in: "home" })
+  assert.deepEqual(subscriptions?.defaultFile, {
+    fileSystemId: "ideall.core",
+    fileId: "panel:subscriptions",
+  })
+  assert.deepEqual(homePlaceById("bookmarks")?.defaultFile, {
+    fileSystemId: "ideall.core",
+    fileId: "panel:bookmarks",
+  })
+  assert.deepEqual(homePlaceById("resources")?.defaultFile, {
+    fileSystemId: "ideall.core",
+    fileId: "panel:files",
+  })
+  assert.deepEqual(homePlaceById("notes")?.defaultFile, {
+    fileSystemId: "ideall.core",
+    fileId: "panel:notes",
+  })
 
-  assert.equal(homePlaceById("workspace")?.descriptor, undefined)
+  assert.equal(homePlaceById("workspace")?.defaultFile, undefined)
   assert.deepEqual(
     homePlaceById("workspace")?.staticChildren?.map((child) => ({
       id: child.id,

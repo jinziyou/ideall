@@ -41,6 +41,8 @@ type PersistedWorkspaceSnapshot = {
   transientId: string | null
   activeModule: string
   mode: "local" | "connected"
+  workspaceKind: "files" | "audio" | "development"
+  developmentTool: "git" | "shell"
   sidebarCollapsed: boolean
   rightPanelOpen: boolean
 }
@@ -288,12 +290,18 @@ function nullableWorkspaceString(value: unknown): string | null {
 
 function normalizeWorkspaceSnapshot(value: unknown): PersistedWorkspaceSnapshot | null {
   if (!isRecord(value) || !Array.isArray(value.tabs)) return null
+  const workspaceKind =
+    value.workspaceKind === "audio" || value.workspaceKind === "development"
+      ? value.workspaceKind
+      : "files"
   return {
     tabs: value.tabs.filter(isRecord),
     activeId: nullableWorkspaceString(value.activeId),
     transientId: nullableWorkspaceString(value.transientId),
     activeModule: typeof value.activeModule === "string" ? value.activeModule : "home",
     mode: value.mode === "connected" ? "connected" : "local",
+    workspaceKind,
+    developmentTool: value.developmentTool === "shell" ? "shell" : "git",
     sidebarCollapsed: value.sidebarCollapsed === true,
     rightPanelOpen: value.rightPanelOpen === true,
   }

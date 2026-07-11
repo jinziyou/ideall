@@ -20,4 +20,8 @@ test("builtin filesystem: hidden root exposes core second-level subtrees", async
     ["home", "subscriptions", "bookmarks", "files", "notes"],
   )
   assert.ok(page.entries.every((entry) => entry.parent.fileSystemId === "ideall.root"))
+  assert.equal(
+    page.entries.find((entry) => entry.entryId === "workspace")?.properties?.navigationHidden,
+    true,
+  )
 })

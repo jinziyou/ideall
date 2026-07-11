@@ -1,10 +1,13 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node"
-import type { NodeResourceRef } from "@protocol/resource"
+import type { NodeResourceRef, ResourceMeta } from "@protocol/resource"
 import { FILES_UPDATED } from "@protocol/flowback"
 import type { NodeSummary } from "@/files/stores/nodes-store"
+import { createResourceFileSystem, resourceFileRef } from "@/filesystem/resource-file-system"
+import { FileSystemError } from "@/filesystem/types"
 import { createNodeVfsProvider, type NodeVfsProviderDeps } from "./node-provider"
+import { clearVfsProvidersForTest, registerVfsProvider } from "./registry"
 import { VfsError, type VfsAccessContext } from "./types"
 
 const uiCtx: VfsAccessContext = { actor: "ui", permissions: [] }
@@ -95,6 +98,8 @@ function withWindow<T>(run: (target: EventTarget) => T): T {
 function makeDeps(nodes: Node[]): {
   deps: NodeVfsProviderDeps
   calls: {
+    create: FsCreateInput[]
+    createFile: File[]
     update: Array<{ kind: NodeKind; id: string; patch: FsWritePatch }>
     move: Array<{
       kind: NodeKind
@@ -103,11 +108,14 @@ function makeDeps(nodes: Node[]): {
       afterSortKey?: string | null
     }>
     delete: Array<{ kind: NodeKind; id: string }>
+    restore: string[]
     writeBlob: Array<{ id: string; content: string; mime?: string }>
   }
 } {
   const byId = new Map(nodes.map((node) => [node.id, node]))
   const calls = {
+    create: [] as FsCreateInput[],
+    createFile: [] as File[],
     update: [] as Array<{ kind: NodeKind; id: string; patch: FsWritePatch }>,
     move: [] as Array<{
       kind: NodeKind
@@ -116,6 +124,7 @@ function makeDeps(nodes: Node[]): {
       afterSortKey?: string | null
     }>,
     delete: [] as Array<{ kind: NodeKind; id: string }>,
+    restore: [] as string[],
     writeBlob: [] as Array<{ id: string; content: string; mime?: string }>,
   }
   return {
@@ -132,8 +141,24 @@ function makeDeps(nodes: Node[]): {
       async getNodeRaw(id) {
         return byId.get(id)
       },
-      async createNode(_input: FsCreateInput) {
-        throw new Error("not used")
+      async createNode(input: FsCreateInput) {
+        calls.create.push(input)
+        const created = note(`created-${calls.create.length}`, input.title ?? "", input.parentId)
+        byId.set(created.id, created)
+        return created
+      },
+      async createFile(file) {
+        calls.createFile.push(file)
+        const created = fileNode(`file-${calls.createFile.length}`, file.name)
+        byId.set(created.id, created)
+        return {
+          id: created.id,
+          name: created.title,
+          type: file.type,
+          size: file.size,
+          createdAt: created.createdAt,
+          tags: [],
+        }
       },
       async updateNode(kind, id, patch) {
         calls.update.push({ kind, id, patch })
@@ -153,6 +178,16 @@ function makeDeps(nodes: Node[]): {
       },
       async deleteNode(kind, id) {
         calls.delete.push({ kind, id })
+      },
+      async restoreNode(_kind, id) {
+        calls.restore.push(id)
+        const existing = byId.get(id)
+        if (!existing) return
+        const { deletedAt: _deletedAt, ...restored } = existing
+        byId.set(id, { ...restored, updatedAt: existing.updatedAt + 1 } as Node)
+      },
+      async readBlob(id) {
+        return byId.has(id) ? new Blob(["test"], { type: "text/plain" }) : undefined
       },
       async readBlobBase64(id) {
         return byId.has(id) ? { mime: "text/plain", size: 4, base64: "dGVzdA==" } : undefined
@@ -175,6 +210,49 @@ function makeDeps(nodes: Node[]): {
     },
   }
 }
+
+test("node provider: create owns root and child note creation", async () => {
+  const parent = note("parent")
+  const { deps, calls } = makeDeps([parent])
+  const provider = createNodeVfsProvider(deps)
+
+  await rejectCode(
+    provider.create?.(
+      { kind: "note", parentId: null },
+      { actor: "agent", permissions: [] },
+    ) as Promise<unknown>,
+    "permission-denied",
+  )
+
+  const root = await provider.create?.(
+    { kind: "note", title: "Root", parentId: null },
+    { actor: "agent", permissions: ["fs.notes:write"], intent: "action" },
+  )
+  assert.equal(root?.meta.ref.id, "created-1")
+
+  const child = await provider.invoke(
+    ref("note", parent.id),
+    "create",
+    { title: "Child" },
+    { actor: "ui", permissions: [], intent: "action" },
+  )
+  assert.equal((child as { meta: ResourceMeta }).meta.ref.id, "created-2")
+  assert.deepEqual(calls.create, [
+    { kind: "note", parentId: null, title: "Root" },
+    { kind: "note", parentId: parent.id, title: "Child" },
+  ])
+
+  const upload = Object.assign(new Blob(["body"], { type: "text/plain" }), {
+    name: "upload.txt",
+    lastModified: 1,
+  }) as File
+  const file = await provider.create?.(
+    { kind: "file", file: upload },
+    { actor: "ui", permissions: [], intent: "action" },
+  )
+  assert.equal(file?.meta.ref.kind, "file")
+  assert.equal(calls.createFile[0], upload)
+})
 
 test("node provider: list filters kind/parent/text and paginates metadata", async () => {
   const root = folder("root")
@@ -275,6 +353,9 @@ test("node provider: read-blob requires blob permission and only supports files"
     }),
     { mime: "text/plain", size: 4, base64: "dGVzdA==" },
   )
+  const uiBlob = await provider.invoke(ref("file", "f1"), "read-blob", null, uiCtx)
+  assert.ok(uiBlob instanceof Blob)
+  assert.equal(await uiBlob.text(), "test")
 })
 
 test("node provider: write-blob persists text under the existing write guard", async () => {
@@ -356,6 +437,58 @@ test("node provider: edit/move/delete enforce kind-specific write grants", async
   assert.deepEqual(calls.delete[0], { kind: "file", id: "f1" })
 })
 
+test("node provider: restore revives a deleted file through the write boundary", async () => {
+  const deleted = { ...fileNode("f1"), deletedAt: 5 } as Node
+  const { deps, calls } = makeDeps([deleted])
+  const provider = createNodeVfsProvider(deps)
+
+  await rejectCode(
+    provider.invoke(ref("file", "f1"), "restore", null, agentReadCtx),
+    "permission-denied",
+  )
+  const restored = await provider.invoke(ref("file", "f1"), "restore", null, {
+    actor: "agent",
+    permissions: ["fs:write"],
+  })
+
+  assert.deepEqual(calls.restore, ["f1"])
+  assert.equal((restored as { meta: ResourceMeta }).meta.ref.id, "f1")
+})
+
+test("node provider: tombstones are not found through FileSystem but remain restorable", async () => {
+  const deleted = { ...fileNode("f-deleted", "deleted.txt"), deletedAt: 5 } as Node
+  const { deps, calls } = makeDeps([deleted])
+  const provider = createNodeVfsProvider(deps)
+  const nodeRef = ref("file", deleted.id)
+
+  await rejectCode(provider.get(nodeRef, uiCtx), "not-found")
+  await rejectCode(provider.actions(nodeRef, uiCtx), "not-found")
+  await rejectCode(provider.invoke(nodeRef, "read-blob", null, uiCtx), "not-found")
+
+  clearVfsProvidersForTest()
+  const unregister = registerVfsProvider(provider)
+  try {
+    const fileSystem = createResourceFileSystem()
+    const fileRef = resourceFileRef(nodeRef)
+    const fileSystemUiCtx = { actor: "ui" as const, permissions: [] }
+    assert.equal(await fileSystem.stat(fileRef, fileSystemUiCtx), null)
+    await assert.rejects(
+      fileSystem.read(fileRef, { ...fileSystemUiCtx, intent: "content" }, { encoding: "binary" }),
+      (error) => error instanceof FileSystemError && error.code === "not-found",
+    )
+
+    await fileSystem.invoke(fileRef, "restore", null, {
+      ...fileSystemUiCtx,
+      intent: "action",
+    })
+    assert.deepEqual(calls.restore, [deleted.id])
+    assert.equal((await fileSystem.stat(fileRef, fileSystemUiCtx))?.ref.fileId, fileRef.fileId)
+  } finally {
+    unregister()
+    clearVfsProvidersForTest()
+  }
+})
+
 test("node provider: actions expose node capabilities without UI components", async () => {
   const provider = createNodeVfsProvider(makeDeps([fileNode("f1")]).deps)
   const actions = await provider.actions(ref("file", "f1"), agentReadCtx)
@@ -364,22 +497,40 @@ test("node provider: actions expose node capabilities without UI components", as
   assert.ok(actions.every((action) => typeof action.label === "string"))
 })
 
-test("node provider: watch forwards matching file update events", () => {
+test("node provider: watch filters exact resources by kind and id", () => {
   withWindow((target) => {
     const provider = createNodeVfsProvider(makeDeps([note("n1")]).deps)
-    let count = 0
-    const handle = provider.watch!({ scheme: "node", kind: "note" }, uiCtx, () => count++)
-    assert.ok(handle)
+    let collectionCount = 0
+    let exactCount = 0
+    const collectionHandle = provider.watch!(
+      { scheme: "node", kind: "note" },
+      uiCtx,
+      () => collectionCount++,
+    )
+    const exactHandle = provider.watch!(
+      { scheme: "node", kind: "note", id: "n1" },
+      uiCtx,
+      () => exactCount++,
+    )
+    assert.ok(collectionHandle)
+    assert.ok(exactHandle)
 
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "bookmark" } }))
-    assert.equal(count, 0)
+    assert.deepEqual([collectionCount, exactCount], [0, 0])
+    target.dispatchEvent(
+      new CustomEvent(FILES_UPDATED, { detail: { kind: "note", id: "another-note" } }),
+    )
+    assert.deepEqual([collectionCount, exactCount], [1, 0])
+    target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "note", id: "n1" } }))
+    assert.deepEqual([collectionCount, exactCount], [2, 1])
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "note" } }))
-    assert.equal(count, 1)
+    assert.deepEqual([collectionCount, exactCount], [3, 2])
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
-    assert.equal(count, 2)
+    assert.deepEqual([collectionCount, exactCount], [4, 3])
 
-    handle.dispose()
+    collectionHandle.dispose()
+    exactHandle.dispose()
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: { kind: "note" } }))
-    assert.equal(count, 2)
+    assert.deepEqual([collectionCount, exactCount], [4, 3])
   })
 })

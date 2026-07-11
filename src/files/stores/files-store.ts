@@ -21,6 +21,7 @@ import {
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshot } from "@/files/stores/trash-store"
+import { nextUpdatedAt } from "@/files/version"
 
 type FileNode = NodeOfKind<"file">
 type BlobRecord = { key: string; blob: Blob }
@@ -133,7 +134,7 @@ export async function updateFileMeta(
   // 单事务读-改-写; kind 守卫防误改其它 kind 节点。name→title 映射。
   await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) => {
     if (!current || current.kind !== "file") return undefined
-    const next: FileNode = { ...current, updatedAt: Date.now() }
+    const next: FileNode = { ...current, updatedAt: nextUpdatedAt(current.updatedAt) }
     if (patch.name !== undefined) next.title = patch.name
     if (patch.tags !== undefined) next.tags = patch.tags
     return next
@@ -151,7 +152,7 @@ export async function updateFileContent(
   const current = await idbGet<FileNode>(STORE_NODES, id)
   if (!current || current.kind !== "file" || !isLive(current)) return undefined
   const blob = new Blob([content], { type: mime || current.blobRef.mime || "text/plain" })
-  const now = Date.now()
+  const now = nextUpdatedAt(current.updatedAt)
   const next: FileNode = {
     ...current,
     updatedAt: now,
@@ -187,7 +188,9 @@ export async function deleteFile(id: string): Promise<void> {
   }
   // 先给节点打删除标记 (隐藏该文件), 再删大 Blob (删除标记只留轻量节点)。
   const tomb = await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "file" ? { ...current, deletedAt: now, updatedAt: now } : undefined,
+    current && current.kind === "file"
+      ? { ...current, deletedAt: now, updatedAt: nextUpdatedAt(current.updatedAt, now) }
+      : undefined,
   )
   if (tomb) await idbDelete(STORE_BLOBS, tomb.blobRef.key)
   notifyFilesUpdated({ kind: "file", id })
@@ -207,7 +210,7 @@ export async function restoreFile(file: StoredFile): Promise<void> {
     sortKey: tomb?.sortKey || nextKey(maxKey(existing)),
     tags: file.tags,
     createdAt: file.createdAt,
-    updatedAt: now,
+    updatedAt: tomb ? nextUpdatedAt(tomb.updatedAt, now) : now,
     blobRef: { store: "blobs", key: file.id, size: file.size, mime: file.type },
     content: null,
   }

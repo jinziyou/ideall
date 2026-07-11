@@ -14,6 +14,7 @@ export const databaseManifest = {
       mountFileSystem(fileSystemRegistry, ideallRootFileSystem, provider, {
         entryId: "app.database",
         name: "数据库",
+        properties: { workspaceModes: ["local"] },
       })
     })
   },

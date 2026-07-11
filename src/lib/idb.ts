@@ -201,6 +201,44 @@ export async function idbPutAcrossStores(
 }
 
 /**
+ * 在同一事务内读取主记录，并仅在 predicate 仍成立时删除主记录及其关联记录。
+ * 用于回收站永久删除：恢复与清理并发时，已恢复的 live node 不能被陈旧快照误删。
+ */
+export async function idbDeleteAcrossStoresIf<T>(
+  storeNames: string[],
+  primaryStore: string,
+  key: IDBValidKey,
+  predicate: (current: T) => boolean,
+  relatedDeletes: (current: T) => { store: string; key: IDBValidKey }[],
+): Promise<T | undefined> {
+  const stores = [...new Set([primaryStore, ...storeNames])]
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, "readwrite")
+    const getReq = tx.objectStore(primaryStore).get(key)
+    let deleted: T | undefined
+    getReq.onsuccess = () => {
+      try {
+        const current = getReq.result as T | undefined
+        if (!current || !predicate(current)) return
+        deleted = current
+        tx.objectStore(primaryStore).delete(key)
+        for (const item of relatedDeletes(current)) {
+          tx.objectStore(item.store).delete(item.key)
+        }
+      } catch (error) {
+        reject(error)
+        tx.abort()
+      }
+    }
+    getReq.onerror = () => reject(getReq.error)
+    tx.oncomplete = () => resolve(deleted)
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+/**
  * 单事务替换多个对象仓库: 先 clear 指定仓库, 再批量 put 新内容。
  * 用于完整工作区归档恢复, 避免 nodes/blobs/trash_snapshots 出现半导入状态。
  */

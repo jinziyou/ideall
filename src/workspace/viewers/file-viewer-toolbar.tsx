@@ -27,9 +27,11 @@ import { formatBytes, formatTime, type FileTypeInfo } from "@/lib/format"
 import type { StoredFile } from "@protocol/files"
 import type { FileViewerMode } from "./file-viewer"
 
-type Props = {
-  file: StoredFile | null
-  displayFile: StoredFile | null
+export type FileToolbarFile = Pick<StoredFile, "id" | "name" | "type" | "size">
+
+type Props<TFile extends FileToolbarFile> = {
+  file: TFile | null
+  displayFile: TFile | null
   displayName: string
   displayTags: string[]
   type: FileTypeInfo | null
@@ -40,7 +42,7 @@ type Props = {
   draftSavedAt: number | null
   onModeChange: (mode: FileViewerMode) => void
   onSave: () => void
-  onDownload: (file: StoredFile) => void
+  onDownload: (file: TFile) => void
   onRename: () => void
   onEditTags: () => void
   onClearTags: () => void
@@ -49,9 +51,11 @@ type Props = {
   onDiscardDraft: () => void
   onDelete: () => void
   extraActions?: ReactNode
+  allowMetadataEdit?: boolean
+  allowDelete?: boolean
 }
 
-export default function FileViewerToolbar({
+export default function FileViewerToolbar<TFile extends FileToolbarFile>({
   file,
   displayFile,
   displayName,
@@ -73,7 +77,9 @@ export default function FileViewerToolbar({
   onDiscardDraft,
   onDelete,
   extraActions,
-}: Props) {
+  allowMetadataEdit = true,
+  allowDelete = true,
+}: Props<TFile>) {
   const capability = type ? previewCapabilityLabel(type.preview, editable) : null
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
@@ -160,19 +166,23 @@ export default function FileViewerToolbar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={onRename}>
-                <Pencil className="mr-2 h-4 w-4" />
-                重命名
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onEditTags}>
-                <Tags className="mr-2 h-4 w-4" />
-                编辑标签
-              </DropdownMenuItem>
-              {displayTags.length > 0 && (
-                <DropdownMenuItem onClick={onClearTags}>
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  清空标签
-                </DropdownMenuItem>
+              {allowMetadataEdit && (
+                <>
+                  <DropdownMenuItem onClick={onRename}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    重命名
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onEditTags}>
+                    <Tags className="mr-2 h-4 w-4" />
+                    编辑标签
+                  </DropdownMenuItem>
+                  {displayTags.length > 0 && (
+                    <DropdownMenuItem onClick={onClearTags}>
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      清空标签
+                    </DropdownMenuItem>
+                  )}
+                </>
               )}
               <DropdownMenuItem onClick={onCopyName}>
                 <ClipboardCopy className="mr-2 h-4 w-4" />
@@ -188,14 +198,18 @@ export default function FileViewerToolbar({
                   丢弃草稿
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={onDelete}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                删除
-              </DropdownMenuItem>
+              {allowDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={onDelete}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    删除
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

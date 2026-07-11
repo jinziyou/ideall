@@ -1,15 +1,16 @@
 "use client"
 
 // 「我的 · 概览」仪表盘: 区段入口 (关注/书签/资源/笔记/工作区) + 最近动态。
-// 入口点击经 openTab 直接开/激活对应区段标签 (module:"home", 不切走「我的」侧栏)。
+// 入口点击经 openTarget 打开区段文件，由默认引擎生成对应 Display。
 // 全部本地优先: 计数与动态只读本机数据; 发布是连接模式下的远端身份动作。
 
 import * as React from "react"
 import { ArrowRight, Bot, Database, Inbox, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { onFilesUpdated } from "@protocol/flowback"
-import { openTab, setRightPanel } from "@/workspace/store"
+import { openTarget, setRightPanel } from "@/workspace/store"
 import { HOME_PLACES } from "@/workspace/tree/home-places"
+import { watchFileSet } from "@/filesystem/watch-set"
+import { corePlaceRef } from "@/filesystem/resource-file-system"
 import { Button } from "@/ui/button"
 import { Chip } from "@/ui/chip"
 import { EmptyState } from "@/ui/empty-state"
@@ -17,6 +18,11 @@ import { Panel } from "@/ui/panel"
 import { StatusDot } from "@/ui/status-dot"
 import { loadHomeOverviewData, type HomeOverviewData } from "./home-read-model"
 import { RecentActivity } from "./recent-activity"
+
+const OVERVIEW_ROOTS = ["subscriptions", "bookmarks", "files", "notes", "workspace"].map((place) =>
+  corePlaceRef(place as Parameters<typeof corePlaceRef>[0]),
+)
+const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 
 const SECTION_TONE = {
   subscriptions: "info",
@@ -46,8 +52,8 @@ const NEXT_ACTIONS = [
 
 function openHomeSection(id: string) {
   const place = HOME_PLACES.find((s) => s.id === id)
-  if (place?.descriptor) {
-    openTab(place.descriptor)
+  if (place?.defaultFile) {
+    openTarget({ type: "file", ref: place.defaultFile })
     return
   }
   setRightPanel(true)
@@ -69,16 +75,16 @@ export default function Overview() {
       setData(next)
     }
     load()
-    // 同会话内任意关注 / 跨端同步后刷新 (防抖合并密集写)。
+    // 合并多个目录的密集 watch 事件，避免一次批量同步触发重复全量投影。
     let timer: ReturnType<typeof setTimeout> | undefined
-    const off = onFilesUpdated(() => {
+    const watch = watchFileSet(OVERVIEW_ROOTS, WATCH_CONTEXT, () => {
       clearTimeout(timer)
       timer = setTimeout(load, 250)
     })
     return () => {
       alive = false
       clearTimeout(timer)
-      off()
+      watch?.dispose()
     }
   }, [])
 

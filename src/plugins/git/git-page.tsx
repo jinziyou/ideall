@@ -3,34 +3,118 @@
 import * as React from "react"
 import {
   Download,
+  FolderPlus,
   GitBranch,
   GitCommit,
   GitPullRequest,
   RefreshCw,
-  Save,
   Send,
   Trash2,
 } from "lucide-react"
+import { isFileRef, type FileRef } from "@protocol/file-system"
+import { invokeFileAction, readFile, watchFile } from "@/filesystem/registry"
 import { cn } from "@/lib/utils"
 import { isTauri } from "@/lib/tauri"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { Input } from "@/ui/input"
 import { Textarea } from "@/ui/textarea"
-import {
-  commitGit,
-  createGitBranch,
-  loadGitSnapshot,
-  runGitAction,
-  type GitAction,
-  type GitResult,
-  type GitSnapshot,
-  type GitStatusFile,
-} from "./git-commands"
-import { addGitRepo, loadGitRepos, removeGitRepo, saveGitRepos } from "./git-repos-store"
+import { GIT_ACTIONS, GIT_ROOT_REF } from "./git-file-system"
 
-export default function GitPage({ initialRepoPath }: { initialRepoPath?: string } = {}) {
-  const [repos, setRepos] = React.useState<string[]>([])
+type GitStatusFile = { status: string; path: string }
+type GitSnapshot = {
+  repoPath: string
+  branch: string
+  upstream?: string
+  files: GitStatusFile[]
+  log: string[]
+  remotes: string[]
+  diffStat: string
+  statusRaw: string
+}
+type GitAction = "fetch" | "pull" | "push"
+type GitResult = { command: string; stdout: string; stderr: string; code: number }
+type RepoMount = { id: string; path: string; ref: FileRef }
+
+const CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
+const ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+}
+
+function stringArray(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : null
+}
+
+function repoMounts(data: unknown): RepoMount[] {
+  if (!isRecord(data) || !Array.isArray(data.repos)) return []
+  return data.repos.flatMap((item) => {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.path !== "string" ||
+      !isFileRef(item.ref)
+    )
+      return []
+    return [{ id: item.id, path: item.path, ref: item.ref }]
+  })
+}
+
+function gitSnapshot(data: unknown): GitSnapshot | null {
+  if (!isRecord(data)) return null
+  const files = Array.isArray(data.files)
+    ? data.files.flatMap((file) =>
+        isRecord(file) && typeof file.status === "string" && typeof file.path === "string"
+          ? [{ status: file.status, path: file.path }]
+          : [],
+      )
+    : null
+  const log = stringArray(data.log)
+  const remotes = stringArray(data.remotes)
+  if (
+    typeof data.repoPath !== "string" ||
+    typeof data.branch !== "string" ||
+    (data.upstream !== undefined && typeof data.upstream !== "string") ||
+    typeof data.diffStat !== "string" ||
+    typeof data.statusRaw !== "string" ||
+    !files ||
+    !log ||
+    !remotes
+  ) {
+    return null
+  }
+  return {
+    repoPath: data.repoPath,
+    branch: data.branch,
+    ...(typeof data.upstream === "string" ? { upstream: data.upstream } : {}),
+    files,
+    log,
+    remotes,
+    diffStat: data.diffStat,
+    statusRaw: data.statusRaw,
+  }
+}
+
+function gitResult(data: unknown): GitResult | null {
+  if (
+    !isRecord(data) ||
+    typeof data.command !== "string" ||
+    typeof data.stdout !== "string" ||
+    typeof data.stderr !== "string" ||
+    typeof data.code !== "number"
+  ) {
+    return null
+  }
+  return { command: data.command, stdout: data.stdout, stderr: data.stderr, code: data.code }
+}
+
+export default function GitPage({
+  initialRepoPath,
+  embedded = false,
+}: { initialRepoPath?: string; embedded?: boolean } = {}) {
+  const [repos, setRepos] = React.useState<RepoMount[]>([])
   const [repoPath, setRepoPath] = React.useState(initialRepoPath ?? "")
   const [snapshot, setSnapshot] = React.useState<GitSnapshot | null>(null)
   const [lastResult, setLastResult] = React.useState<GitResult | null>(null)
@@ -39,29 +123,88 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
   const [busy, setBusy] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
-  React.useEffect(() => {
-    const saved = loadGitRepos()
-    setRepos(saved)
-    setRepoPath((current) => current || initialRepoPath || saved[0] || "")
+  const reloadRepos = React.useCallback(async () => {
+    const result = await readFile(GIT_ROOT_REF, CONTENT_CONTEXT)
+    const next = repoMounts(result.data)
+    setRepos(next)
+    setRepoPath((current) => current || initialRepoPath || next[0]?.path || "")
+    return next
   }, [initialRepoPath])
 
-  const persistRepos = (next: string[]) => {
-    setRepos(next)
-    saveGitRepos(next)
-  }
+  React.useEffect(() => {
+    let alive = true
+    reloadRepos().catch((reason) => {
+      if (alive) setError(reason instanceof Error ? reason.message : "Git 仓库读取失败")
+    })
+    const handle = watchFile(GIT_ROOT_REF, WATCH_CONTEXT, () => {
+      if (alive) void reloadRepos()
+    })
+    return () => {
+      alive = false
+      handle?.dispose()
+    }
+  }, [reloadRepos])
 
-  const saveRepo = () => {
-    persistRepos(addGitRepo(repos, repoPath))
-  }
+  const mountRepo = React.useCallback(async (): Promise<RepoMount | null> => {
+    const result = await invokeFileAction(
+      GIT_ROOT_REF,
+      GIT_ACTIONS.mount,
+      undefined,
+      ACTION_CONTEXT,
+    )
+    if (isRecord(result) && result.cancelled === true) return null
+    if (
+      !isRecord(result) ||
+      typeof result.id !== "string" ||
+      typeof result.path !== "string" ||
+      !isFileRef(result.ref)
+    ) {
+      throw new Error("Git 文件系统返回了无效挂载")
+    }
+    await reloadRepos()
+    return { id: result.id, path: result.path, ref: result.ref }
+  }, [reloadRepos])
 
-  const removeRepo = (path: string) => {
-    const next = removeGitRepo(repos, path)
-    persistRepos(next)
-    if (repoPath === path) {
-      setRepoPath(next[0] ?? "")
-      setSnapshot(null)
+  const saveRepo = async () => {
+    if (busy) return
+    setBusy("mount")
+    setError(null)
+    try {
+      const repo = await mountRepo()
+      if (repo) await readSnapshot(repo)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "挂载仓库失败")
+    } finally {
+      setBusy(null)
     }
   }
+
+  const removeRepo = async (repo: RepoMount) => {
+    if (busy) return
+    setBusy("delete")
+    setError(null)
+    try {
+      await invokeFileAction(repo.ref, GIT_ACTIONS.delete, undefined, ACTION_CONTEXT)
+      const next = await reloadRepos()
+      if (repoPath === repo.path) {
+        setRepoPath(next[0]?.path ?? "")
+        setSnapshot(null)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "移除仓库失败")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const readSnapshot = React.useCallback(async (repo: RepoMount) => {
+    const result = await readFile(repo.ref, CONTENT_CONTEXT)
+    const next = gitSnapshot(result.data)
+    if (!next) throw new Error("Git 文件系统返回了无效状态")
+    setSnapshot(next)
+    setRepoPath(repo.path)
+    return next
+  }, [])
 
   const refresh = React.useCallback(
     async (path = repoPath) => {
@@ -70,9 +213,9 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
       setBusy("refresh")
       setError(null)
       try {
-        const next = await loadGitSnapshot(target)
-        setSnapshot(next)
-        setRepoPath(target)
+        const repo = repos.find((item) => item.path === target)
+        if (!repo) throw new Error("仓库尚未挂载")
+        await readSnapshot(repo)
         setLastResult(null)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Git 读取失败")
@@ -80,7 +223,7 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
         setBusy(null)
       }
     },
-    [busy, repoPath],
+    [busy, readSnapshot, repoPath, repos],
   )
 
   const runAction = async (action: GitAction) => {
@@ -88,9 +231,13 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
     setBusy(action)
     setError(null)
     try {
-      const result = await runGitAction(repoPath, action)
-      setLastResult(result)
-      await refresh(repoPath)
+      const repo = repos.find((item) => item.path === repoPath)
+      if (!repo) throw new Error("仓库尚未挂载")
+      const result = await invokeFileAction(repo.ref, action, undefined, ACTION_CONTEXT)
+      const parsed = gitResult(result)
+      if (!parsed) throw new Error("Git 文件系统返回了无效命令结果")
+      setLastResult(parsed)
+      await readSnapshot(repo)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Git 命令失败")
     } finally {
@@ -103,10 +250,19 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
     setBusy("branch")
     setError(null)
     try {
-      const result = await createGitBranch(repoPath, branchName)
-      setLastResult(result)
+      const repo = repos.find((item) => item.path === repoPath)
+      if (!repo) throw new Error("仓库尚未挂载")
+      const result = await invokeFileAction(
+        repo.ref,
+        GIT_ACTIONS.createBranch,
+        { name: branchName },
+        ACTION_CONTEXT,
+      )
+      const parsed = gitResult(result)
+      if (!parsed) throw new Error("Git 文件系统返回了无效命令结果")
+      setLastResult(parsed)
       setBranchName("")
-      await refresh(repoPath)
+      await readSnapshot(repo)
     } catch (e) {
       setError(e instanceof Error ? e.message : "创建分支失败")
     } finally {
@@ -119,10 +275,19 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
     setBusy("commit")
     setError(null)
     try {
-      const result = await commitGit(repoPath, commitMessage)
-      setLastResult(result)
+      const repo = repos.find((item) => item.path === repoPath)
+      if (!repo) throw new Error("仓库尚未挂载")
+      const result = await invokeFileAction(
+        repo.ref,
+        GIT_ACTIONS.commit,
+        { message: commitMessage },
+        ACTION_CONTEXT,
+      )
+      const parsed = gitResult(result)
+      if (!parsed) throw new Error("Git 文件系统返回了无效命令结果")
+      setLastResult(parsed)
       setCommitMessage("")
-      await refresh(repoPath)
+      await readSnapshot(repo)
     } catch (e) {
       setError(e instanceof Error ? e.message : "提交失败")
     } finally {
@@ -132,40 +297,35 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
 
   if (!isTauri()) {
     return (
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-        <PageHeader />
+      <div className={cn("mx-auto flex h-full w-full max-w-4xl flex-col gap-6", embedded && "p-3")}>
+        {!embedded && <PageHeader />}
         <EmptyState icon={GitBranch} title="Git 工作台仅在桌面 App 中可用" bordered />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
-      <PageHeader />
+    <div
+      className={cn(
+        "mx-auto flex h-full w-full flex-col gap-4",
+        embedded ? "max-w-none p-3" : "max-w-6xl",
+      )}
+    >
+      {!embedded && <PageHeader />}
 
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="flex min-h-0 flex-col gap-3 rounded-lg border border-border/60 bg-card p-3">
-          <div className="flex items-center gap-2">
-            <Input
-              value={repoPath}
-              onChange={(e) => setRepoPath(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void refresh()
-              }}
-              placeholder="/path/to/repo"
-              className="h-9"
-            />
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="h-9 w-9 shrink-0"
-              onClick={saveRepo}
-              aria-label="保存仓库"
-            >
-              <Save className="h-4 w-4" />
-            </Button>
-          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={!!busy}
+            onClick={() => void saveRepo()}
+          >
+            <FolderPlus className="h-4 w-4" />
+            选择仓库
+          </Button>
           <Button
             type="button"
             size="sm"
@@ -180,30 +340,30 @@ export default function GitPage({ initialRepoPath }: { initialRepoPath?: string 
           <div className="min-h-0 flex-1 overflow-auto">
             {repos.length === 0 ? (
               <div className="rounded-md border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
-                暂无已保存仓库
+                暂无已授权仓库
               </div>
             ) : (
               <div className="flex flex-col gap-1">
-                {repos.map((path) => (
+                {repos.map((repo) => (
                   <div
-                    key={path}
+                    key={repo.ref.fileId}
                     className={cn(
                       "group flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors",
-                      path === repoPath ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
+                      repo.path === repoPath ? "bg-primary/10 text-primary" : "hover:bg-muted/60",
                     )}
                   >
                     <button
                       type="button"
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      onClick={() => void refresh(path)}
+                      onClick={() => void refresh(repo.path)}
                     >
                       <GitBranch className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{path}</span>
+                      <span className="min-w-0 flex-1 truncate">{repo.path}</span>
                     </button>
                     <button
                       type="button"
                       className="opacity-0 transition-opacity group-hover:opacity-100"
-                      onClick={() => removeRepo(path)}
+                      onClick={() => void removeRepo(repo)}
                       aria-label="移除仓库"
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />

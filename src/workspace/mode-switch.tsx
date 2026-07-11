@@ -1,7 +1,7 @@
 "use client"
 
-// 顶栏模式切换 (分段切换按钮): 本地 ⇄ 连接。两段并排, 激活段抬升 (bg-background + 阴影);
-// 点另一段即切视图 (活动栏据此过滤展示哪一簇模块, 见 store setMode / activity-bar)。
+// 数据来源镜头切换: 本地 ⇄ 连接。它只过滤文件位置，不改变当前工作区类型。
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useMode, setMode } from "./store"
 import type { WsMode } from "./types"
@@ -11,14 +11,18 @@ const MODES: { id: WsMode; label: string; dot: string }[] = [
   { id: "connected", label: "连接", dot: "bg-spoke-community" },
 ]
 
-export default function ModeSwitch() {
+export default function ModeSwitch({ className }: { className?: string }) {
   const mode = useMode()
+  const router = useRouter()
 
   return (
     <div
-      role="tablist"
-      aria-label="工作区模式"
-      className="flex shrink-0 items-center gap-0.5 rounded-shell bg-secondary/60 p-0.5"
+      role="group"
+      aria-label="数据来源模式"
+      className={cn(
+        "flex shrink-0 items-center gap-0.5 rounded-shell bg-secondary/60 p-0.5",
+        className,
+      )}
     >
       {MODES.map((m) => {
         const active = m.id === mode
@@ -26,12 +30,14 @@ export default function ModeSwitch() {
           <button
             key={m.id}
             type="button"
-            role="tab"
-            aria-selected={active}
+            aria-pressed={active}
             onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => setMode(m.id)}
+            onClick={() => {
+              setMode(m.id)
+              if (m.id !== mode) router.replace(m.id === "local" ? "/home" : "/info")
+            }}
             className={cn(
-              "flex items-center gap-1.5 rounded-shell px-2.5 py-1 text-sm font-medium transition-colors",
+              "flex flex-1 items-center justify-center gap-1.5 rounded-shell px-2.5 py-1 text-sm font-medium transition-colors",
               active
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",

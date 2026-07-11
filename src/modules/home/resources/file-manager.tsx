@@ -26,18 +26,18 @@ import {
 } from "@/ui/dropdown-menu"
 import { TextPromptDialog } from "@/shared/prompt-dialog"
 import { cn } from "@/lib/utils"
-import { FileMeta } from "@protocol/files"
-import { getFile, listFiles, restoreFile } from "@/files/stores/files-store"
-import { invokeResourceAction } from "@/vfs/registry"
-import type { VfsAccessContext } from "@/vfs/types"
-import { fileMetaActionInput, fileResourceRef } from "@/vfs/node-file-actions"
+import type { FileRef } from "@protocol/file-system"
+import type { FileMeta } from "@protocol/files"
+import { invokeFileAction, readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
+import { corePlaceRef, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import { fileTypeInfo, formatBytes, formatTime } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
-import FilePreviewDialog from "./file-preview-dialog"
 import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"
 import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
+import { downloadStoredFile, readStoredNodeFile } from "./file-preview"
+import { openTarget } from "@/workspace/store"
 
 // 类型筛选分组: 把细分 FileKind 归并为用户可理解的几类
 type TypeFilter = "all" | "image" | "code" | "doc" | "data" | "media" | "archive" | "other"
@@ -53,10 +53,38 @@ const TYPE_TABS: { value: TypeFilter; label: string }[] = [
   { value: "other", label: "其他" },
 ]
 
-const UI_RESOURCE_CONTEXT = {
-  actor: "ui",
-  permissions: [],
-} satisfies VfsAccessContext
+const FILES_ROOT_REF = corePlaceRef("files")
+const UI_DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
+const UI_METADATA_CONTEXT = { actor: "ui", permissions: [], intent: "metadata" } as const
+const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+const UI_WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
+
+type ManagedFile = FileMeta & { ref: FileRef }
+
+async function listManagedFiles(): Promise<ManagedFile[]> {
+  const page = await readFileDirectory(FILES_ROOT_REF, UI_DIRECTORY_CONTEXT)
+  const files = await Promise.all(
+    page.entries.map(async (entry): Promise<ManagedFile | null> => {
+      const resource = resourceRefForFile(entry.target)
+      if (resource?.scheme !== "node" || resource.kind !== "file") return null
+      const file = await statFile(entry.target, UI_METADATA_CONTEXT)
+      if (!file) return null
+      const tags = file.properties?.tags
+      return {
+        ref: entry.target,
+        id: resource.id,
+        name: file.name,
+        type: file.mediaType,
+        size: file.size ?? 0,
+        createdAt: file.createdAt ?? 0,
+        tags: Array.isArray(tags) && tags.every((tag) => typeof tag === "string") ? [...tags] : [],
+      }
+    }),
+  )
+  return files
+    .filter((file): file is ManagedFile => file !== null)
+    .sort((left, right) => right.createdAt - left.createdAt)
+}
 
 /** FileTypeInfo.group → 筛选分组 */
 function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
@@ -68,20 +96,6 @@ function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
 }
 
 type ViewMode = "grid" | "list"
-
-/** 触发浏览器下载一个 Blob */
-function downloadBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = name
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  // 延后释放: a.click() 触发的下载是异步发起的, 部分引擎 (WebKitGTK/Firefox) 若同步 revoke
-  // 会拿不到 blob 导致下载失败/空文件。本项目经 Tauri webview 分发 (Linux=WebKitGTK), 风险真实。
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 
 /**
  * 图片缩略图: 仅在缩略图滚入视口后才读取自身 Blob 并建 ObjectURL, 卸载时释放。
@@ -114,11 +128,13 @@ function Thumbnail({ id }: { id: string }) {
     if (!visible) return
     let url: string | null = null
     let active = true
-    getFile(id).then((f) => {
-      if (!active || !f) return
-      url = URL.createObjectURL(f.blob)
-      setSrc(url)
-    })
+    readStoredNodeFile(id)
+      .then((loaded) => {
+        if (!active || !loaded) return
+        url = URL.createObjectURL(loaded.file.blob)
+        setSrc(url)
+      })
+      .catch(() => {})
     return () => {
       active = false
       if (url) URL.revokeObjectURL(url)
@@ -136,21 +152,20 @@ function Thumbnail({ id }: { id: string }) {
 }
 
 export default function FileManager() {
-  const [files, setFiles] = React.useState<FileMeta[]>([])
+  const [files, setFiles] = React.useState<ManagedFile[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<TypeFilter>("all")
   const [view, setView] = React.useState<ViewMode>("grid")
   const [dragging, setDragging] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
-  const [previewId, setPreviewId] = React.useState<string | null>(null)
   // 重命名对话框状态 (替代 window.prompt): 以目标文件对象控制 open
-  const [renameTarget, setRenameTarget] = React.useState<FileMeta | null>(null)
+  const [renameTarget, setRenameTarget] = React.useState<ManagedFile | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   const refresh = React.useCallback(async () => {
     try {
-      setFiles(await listFiles())
+      setFiles(await listManagedFiles())
     } catch (e) {
       toast.error("读取文件失败", { description: String(e) })
     } finally {
@@ -163,7 +178,7 @@ export default function FileManager() {
     let active = true
     async function load() {
       try {
-        const list = await listFiles()
+        const list = await listManagedFiles()
         if (active) setFiles(list)
       } catch (e) {
         toast.error("读取文件失败", { description: String(e) })
@@ -171,9 +186,16 @@ export default function FileManager() {
         if (active) setLoading(false)
       }
     }
-    load()
+    void load()
+    let watch: ReturnType<typeof watchFile> = null
+    try {
+      watch = watchFile(FILES_ROOT_REF, UI_WATCH_CONTEXT, () => void load())
+    } catch {
+      // 首次目录读取仍可用于尚未实现 watch 的 provider。
+    }
     return () => {
       active = false
+      watch?.dispose()
     }
   }, [])
 
@@ -200,51 +222,41 @@ export default function FileManager() {
     [refresh],
   )
 
-  async function handleDelete(file: FileMeta) {
+  async function handleDelete(file: ManagedFile) {
     try {
-      // 列表只有元数据, 先取完整文件 (含 Blob) 供撤销原样写回
-      const full = await getFile(file.id)
-      await invokeResourceAction(fileResourceRef(file.id), "delete", undefined, {
-        ...UI_RESOURCE_CONTEXT,
-      })
+      await invokeFileAction(file.ref, "delete", undefined, UI_ACTION_CONTEXT)
       setFiles((prev) => prev.filter((f) => f.id !== file.id))
-      if (full) {
-        undoableDeleteToast(file.name, async () => {
-          await restoreFile(full)
-          setFiles((prev) =>
-            [file, ...prev.filter((f) => f.id !== file.id)].sort(
-              (a, b) => b.createdAt - a.createdAt,
-            ),
-          )
-        })
-      } else {
-        toast.success("已删除", { description: file.name })
-      }
+      undoableDeleteToast(file.name, async () => {
+        await invokeFileAction(file.ref, "restore", undefined, UI_ACTION_CONTEXT)
+        await refresh()
+      })
     } catch (e) {
       toast.error("删除失败", { description: String(e) })
     }
   }
 
-  async function handleRename(file: FileMeta, name: string) {
+  async function handleRename(file: ManagedFile, name: string) {
     if (name === file.name) return
     try {
-      await invokeResourceAction(fileResourceRef(file.id), "edit", fileMetaActionInput({ name }), {
-        ...UI_RESOURCE_CONTEXT,
-      })
+      await invokeFileAction(file.ref, "edit", { title: name }, UI_ACTION_CONTEXT)
       setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name } : f)))
     } catch (e) {
       toast.error("重命名失败", { description: String(e) })
     }
   }
 
-  async function handleDownload(file: FileMeta) {
+  async function handleDownload(file: ManagedFile) {
     try {
-      const full = await getFile(file.id)
-      if (!full) return
-      downloadBlob(full.blob, full.name)
+      const loaded = await readStoredNodeFile(file.id)
+      if (!loaded) return
+      downloadStoredFile(loaded.file)
     } catch (e) {
       toast.error("下载失败", { description: String(e) })
     }
+  }
+
+  function handlePreview(file: ManagedFile) {
+    openTarget({ type: "file", ref: file.ref, transient: true, rootId: "files" })
   }
 
   // 统计: 总占用 + 各分组数量
@@ -417,7 +429,7 @@ export default function FileManager() {
             <FileGridCard
               key={file.id}
               file={file}
-              onPreview={() => setPreviewId(file.id)}
+              onPreview={() => handlePreview(file)}
               onDownload={() => handleDownload(file)}
               onRename={() => setRenameTarget(file)}
               onDelete={() => handleDelete(file)}
@@ -431,7 +443,7 @@ export default function FileManager() {
               key={file.id}
               file={file}
               first={i === 0}
-              onPreview={() => setPreviewId(file.id)}
+              onPreview={() => handlePreview(file)}
               onDownload={() => handleDownload(file)}
               onRename={() => setRenameTarget(file)}
               onDelete={() => handleDelete(file)}
@@ -450,11 +462,6 @@ export default function FileManager() {
         </div>
       )}
 
-      <FilePreviewDialog
-        fileId={previewId}
-        onOpenChange={(open) => !open && setPreviewId(null)}
-        onDownload={(f) => downloadBlob(f.blob, f.name)}
-      />
       <TextPromptDialog
         open={renameTarget !== null}
         onOpenChange={(open) => {

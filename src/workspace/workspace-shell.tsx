@@ -9,6 +9,7 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { isTauri, browserRelease } from "@/lib/tauri"
+import { AudioPlaybackProvider } from "@/plugins/audio/audio-playback"
 import { Header } from "@/shell/header"
 import BottomTabBar from "@/shell/bottom-tab-bar"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
@@ -42,6 +43,7 @@ import { isBrowserResourceTab } from "./resource-tab"
 import { descriptorForFileEngineSearch, parseFileEngineSearch } from "./file-tab"
 import { FileEngineContent } from "./registry"
 import { defaultFileForPath } from "./file-roots"
+import WorkspaceDock from "./workspace-dock"
 
 function routeProvidesInitialView(pathname: string | null, search: string): boolean {
   if (parseFileEngineSearch(search) || descriptorForResource(search)) return true
@@ -187,10 +189,12 @@ function MainWorkspaceShell({
   const startupRequestedRef = React.useRef(false)
   const isMdUp = useMediaQuery("(min-width: 768px)")
   const isLg = useMediaQuery("(min-width: 1024px)")
+  const isXl = useMediaQuery("(min-width: 1280px)")
   // 仅移动全屏 AI 覆盖 (<md) 时对主内容 inert; md+ 活动栏/侧栏/标签条始终可点。
   const aiMainInert = rightPanelOpen && !isMdUp
   // md–lg AI 右侧浮层: 给主列留位, 避免标签条右侧被盖住点不到。
   const aiDockMargin = rightPanelOpen && isMdUp && !isLg
+  const collapseSidebarForAi = rightPanelOpen && isMdUp && !isXl
 
   // 客户端挂载后恢复上次的标签。
   React.useEffect(() => {
@@ -242,8 +246,9 @@ function MainWorkspaceShell({
         <div className="flex min-h-0 flex-1">
           <div className="relative z-10 flex min-w-0 flex-1">
             <ActivityBar />
-            <SecondarySidebar collapsed={sidebarCollapsed} />
+            <SecondarySidebar collapsed={sidebarCollapsed || collapseSidebarForAi} />
             <div
+              inert={aiMainInert}
               className={
                 aiDockMargin
                   ? "flex min-w-0 flex-1 flex-col md:max-lg:mr-[25rem]"
@@ -252,12 +257,10 @@ function MainWorkspaceShell({
             >
               <TabBar />
               <MobileDrillBar />
-              <div
-                inert={aiMainInert}
-                className="min-h-0 flex-1 pb-[calc(4rem+max(env(safe-area-inset-bottom),0.35rem))] md:pb-0"
-              >
+              <div className="min-h-0 flex-1 pb-[calc(4rem+max(env(safe-area-inset-bottom),0.35rem))] md:pb-0">
                 <TabHost />
               </div>
+              <WorkspaceDock />
             </div>
           </div>
           <DeferredRightAiPanel open={rightPanelOpen} />
@@ -278,7 +281,11 @@ function WorkspaceShellMode({ children }: { children: React.ReactNode }) {
   if (standaloneTarget) {
     return (
       <main className="h-[100dvh] min-h-0 bg-background">
-        <FileEngineContent refValue={standaloneTarget.ref} engineId={standaloneTarget.engineId} />
+        <FileEngineContent
+          refValue={standaloneTarget.ref}
+          engineId={standaloneTarget.engineId}
+          display="window"
+        />
       </main>
     )
   }
@@ -287,8 +294,12 @@ function WorkspaceShellMode({ children }: { children: React.ReactNode }) {
 
 export default function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return (
-    <React.Suspense fallback={<div className="h-[100dvh] animate-pulse bg-muted/25" aria-hidden />}>
-      <WorkspaceShellMode>{children}</WorkspaceShellMode>
-    </React.Suspense>
+    <AudioPlaybackProvider>
+      <React.Suspense
+        fallback={<div className="h-[100dvh] animate-pulse bg-muted/25" aria-hidden />}
+      >
+        <WorkspaceShellMode>{children}</WorkspaceShellMode>
+      </React.Suspense>
+    </AudioPlaybackProvider>
   )
 }

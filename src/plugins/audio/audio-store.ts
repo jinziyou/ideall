@@ -7,6 +7,7 @@ import {
 } from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
 import { base64ToBytes, bytesToBase64 } from "@/lib/base64"
+import { nextUpdatedAt } from "@/files/version"
 
 export const AUDIO_DB_NAME = "ideall:audio"
 export const AUDIO_DB_VERSION = 1
@@ -241,7 +242,7 @@ export async function updateAudioTrack(
 ): Promise<AudioTrack | null> {
   const current = await audioDb.get<AudioTrack>(STORE_TRACKS, id)
   if (!current) return null
-  const next = { ...current, ...patch, updatedAt: Date.now() }
+  const next = { ...current, ...patch, updatedAt: nextUpdatedAt(current.updatedAt) }
   await audioDb.put(STORE_TRACKS, next)
   return next
 }

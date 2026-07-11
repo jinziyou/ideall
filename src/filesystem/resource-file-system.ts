@@ -19,6 +19,8 @@ import {
 } from "@protocol/resource"
 import type { Node } from "@protocol/node"
 import {
+  createResource,
+  getVfsProvider,
   getResource,
   invokeResourceAction,
   listResources,
@@ -41,7 +43,14 @@ import type {
 } from "./types"
 import { FileSystemError } from "./types"
 import { fileTypeInfo } from "@/lib/file-type"
+import { base64ToBytes, bytesToBase64 } from "@/lib/base64"
 import { countTrashItems } from "@/files/stores/trash-store"
+import {
+  remoteCommunityDirectoryRef,
+  remoteInfoDirectoryRef,
+  remoteServerFileSystem,
+} from "./remote-server-file-system"
+import { withFileWriteLock } from "./write-lock"
 
 export const CORE_FILE_SYSTEM_ID = "ideall.core"
 export const CORE_ROOT_FILE_ID = "root"
@@ -68,9 +77,14 @@ type PanelFile = {
   name: string
   tabKind: string
   module: string
+  layout?: "padded" | "fill"
   mediaType?: string
+  params?: Readonly<Record<string, string>>
   properties?: Readonly<Record<string, unknown>>
 }
+
+const AI_TASKS_PANEL_ID_PREFIX = "ai-tasks:"
+const MAX_PANEL_PARAMETER_LENGTH = 256
 
 const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
   home: [{ id: "home", name: "Home", tabKind: "home-overview", module: "home" }],
@@ -81,10 +95,22 @@ const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
   files: [{ id: "files", name: "文件管理", tabKind: "home-resources", module: "home" }],
   notes: [{ id: "notes", name: "笔记", tabKind: "home-notes", module: "home" }],
   workspace: [
-    { id: "ai-settings", name: "AI 设置", tabKind: "ai-settings", module: "agent" },
-    { id: "ai-mcp", name: "MCP", tabKind: "ai-mcp", module: "agent" },
-    { id: "ai-skills", name: "Skills", tabKind: "ai-skills", module: "agent" },
-    { id: "ai-rules", name: "规则", tabKind: "ai-rules", module: "agent" },
+    {
+      id: "ai-settings",
+      name: "AI 设置",
+      tabKind: "ai-settings",
+      module: "agent",
+      layout: "fill",
+    },
+    { id: "ai-mcp", name: "MCP", tabKind: "ai-mcp", module: "agent", layout: "fill" },
+    {
+      id: "ai-skills",
+      name: "Skills",
+      tabKind: "ai-skills",
+      module: "agent",
+      layout: "fill",
+    },
+    { id: "ai-rules", name: "规则", tabKind: "ai-rules", module: "agent", layout: "fill" },
   ],
   apps: [{ id: "apps", name: "应用", tabKind: "apps", module: "apps" }],
   info: [],
@@ -106,6 +132,7 @@ const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
       tabKind: "shell",
       module: "shell",
       mediaType: "application/vnd.ideall.shell+json",
+      properties: { navigationHidden: true },
     },
     {
       id: "git",
@@ -113,7 +140,7 @@ const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
       tabKind: "git",
       module: "git",
       mediaType: "application/vnd.ideall.git+json",
-      properties: { git: true },
+      properties: { git: true, navigationHidden: true },
     },
     {
       id: "database",
@@ -128,6 +155,7 @@ const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
       tabKind: "audio",
       module: "audio",
       mediaType: "application/vnd.ideall.audio+json",
+      properties: { navigationHidden: true },
     },
     { id: "code", name: "Code", tabKind: "code", module: "code" },
     { id: "trash", name: "回收站", tabKind: "trash", module: "trash" },
@@ -151,11 +179,14 @@ const PLACE_NAMES: Record<CorePlaceId, string> = {
 
 type PlaceResourceQuery = {
   scheme: ResourceScheme
+  id?: string
   kinds?: readonly string[]
   rootOnly?: boolean
 }
 
 const PLACE_RESOURCE_QUERIES: Partial<Record<CorePlaceId, readonly PlaceResourceQuery[]>> = {
+  // AI 对话仍是普通文件；内部 workspace 根只作旧 FileRef 兼容，导航从 Home 提供链接。
+  home: [{ scheme: "node", kinds: ["thread"], rootOnly: true }],
   subscriptions: [{ scheme: "node", kinds: ["feed"] }],
   bookmarks: [{ scheme: "node", kinds: ["folder", "bookmark"], rootOnly: true }],
   files: [{ scheme: "node", kinds: ["file"] }],
@@ -183,6 +214,22 @@ export function panelFileRef(panelId: string): FileRef {
   return { fileSystemId: CORE_FILE_SYSTEM_ID, fileId: `panel:${panelId}` }
 }
 
+/** AI 任务页的文件身份只由工作区 id 决定；标题变化不会产生第二个文件或标签。 */
+export function aiTasksPanelFileRef(workspaceId: string): FileRef {
+  if (
+    !workspaceId ||
+    workspaceId !== workspaceId.trim() ||
+    workspaceId.length > MAX_PANEL_PARAMETER_LENGTH
+  ) {
+    throw new FileSystemError("invalid-input", "AI task panel requires a valid workspace id")
+  }
+  try {
+    return panelFileRef(`${AI_TASKS_PANEL_ID_PREFIX}${encodeURIComponent(workspaceId)}`)
+  } catch {
+    throw new FileSystemError("invalid-input", "AI task panel workspace id cannot be encoded")
+  }
+}
+
 export function resourceFileRef(ref: ResourceRef): FileRef {
   return {
     fileSystemId: CORE_FILE_SYSTEM_ID,
@@ -202,11 +249,36 @@ export function resourceRefForFile(ref: FileRef): ResourceRef | null {
 export function panelForFile(ref: FileRef): PanelFile | null {
   if (ref.fileSystemId !== CORE_FILE_SYSTEM_ID || !ref.fileId.startsWith("panel:")) return null
   const id = ref.fileId.slice("panel:".length)
-  return (
+  const panel =
     Object.values(PANELS)
       .flat()
-      .find((panel) => panel.id === id) ?? null
-  )
+      .find((candidate) => candidate.id === id) ?? null
+  if (panel) return panel
+  if (!id.startsWith(AI_TASKS_PANEL_ID_PREFIX)) return null
+
+  const encodedWorkspaceId = id.slice(AI_TASKS_PANEL_ID_PREFIX.length)
+  try {
+    const workspaceId = decodeURIComponent(encodedWorkspaceId)
+    if (
+      !workspaceId ||
+      workspaceId !== workspaceId.trim() ||
+      workspaceId.length > MAX_PANEL_PARAMETER_LENGTH ||
+      encodeURIComponent(workspaceId) !== encodedWorkspaceId
+    ) {
+      return null
+    }
+    return {
+      id,
+      name: "任务",
+      tabKind: "ai-tasks",
+      module: "agent",
+      layout: "fill",
+      params: { workspaceId },
+      properties: { workspaceId },
+    }
+  } catch {
+    return null
+  }
 }
 
 function placeForFile(ref: FileRef): CorePlaceId | null {
@@ -271,7 +343,8 @@ function capabilitiesForResource(capabilities: readonly ResourceCapability[]): F
   for (const capability of capabilities) {
     if (capability === "read-content" || capability === "read-blob" || capability === "open") {
       result.add("read")
-    } else if (capability === "edit") result.add("write")
+    } else if (capability === "create") result.add("create")
+    else if (capability === "edit") result.add("write")
     else if (capability === "move") result.add("move")
     else if (capability === "delete") result.add("delete")
     else if (capability === "save-to-mine") result.add("save-to-mine")
@@ -303,11 +376,15 @@ function fileFromResource(meta: ResourceMeta, record?: ResourceRecord | null): I
     capabilities: [
       ...capabilitiesForResource(meta.capabilities),
       ...(resourceIsDirectory(meta.ref) ? (["read-directory"] as const) : []),
-      "watch",
+      ...(meta.ref.scheme === "node" && meta.ref.kind === "note" ? (["create"] as const) : []),
+      ...(resourceCanWatch(meta.ref) ? (["watch"] as const) : []),
+      ...(meta.ref.scheme === "node" ? (["standalone-window"] as const) : []),
     ],
     source: sourceForResource(meta.ref),
     size: node?.kind === "file" ? node.blobRef.size : undefined,
+    createdAt: node?.createdAt,
     updatedAt: meta.updatedAt,
+    version: versionForResource(meta),
     properties: {
       resourceKey: resourceKey(meta.ref),
       resourceScheme: meta.ref.scheme,
@@ -315,6 +392,12 @@ function fileFromResource(meta: ResourceMeta, record?: ResourceRecord | null): I
       route: meta.route ?? null,
       iconHint: meta.iconHint ?? null,
       url: url ?? null,
+      tags: node?.tags ?? [],
+      parentId: meta.parent?.id ?? null,
+      sortKey: meta.sortKey ?? node?.sortKey ?? "",
+      hasChildren: meta.hasChildren ?? false,
+      subscriptionType: node?.kind === "feed" ? node.content.type : null,
+      subscriptionKey: node?.kind === "feed" ? node.content.key : null,
     },
   }
 }
@@ -331,27 +414,51 @@ function fileFromPanel(panel: PanelFile): IdeallFile {
       panelId: panel.id,
       tabKind: panel.tabKind,
       module: panel.module,
+      panelLayout: panel.layout ?? "padded",
+      ...(panel.params ? { params: { ...panel.params } } : {}),
       ...panel.properties,
     },
   }
 }
 
 function placeFile(place: CorePlaceId): IdeallFile {
+  const canCreate = place === "notes" || place === "bookmarks" || place === "files"
   return {
     ref: corePlaceRef(place),
     kind: "directory",
     name: PLACE_NAMES[place],
     mediaType: DIRECTORY_MEDIA_TYPE,
-    capabilities: ["read-directory", "read", "watch", "actions"],
+    capabilities: [
+      "read-directory",
+      "read",
+      "actions",
+      ...(canCreate ? (["create"] as const) : []),
+      ...(placeCanWatch(place) ? (["watch"] as const) : []),
+    ],
     source: CORE_SOURCE,
     properties: { place, rootChild: true },
   }
 }
 
-function toVfsContext(ctx: FileSystemAccessContext, intent = ctx.intent) {
+function isScopedEngineAccess(ref: FileRef, ctx: FileSystemAccessContext): boolean {
+  return (
+    ctx.actor === "engine" &&
+    ctx.activeFile != null &&
+    sameFileRef(ref, ctx.activeFile) &&
+    (ctx.intent === "metadata" || ctx.intent === "content" || ctx.intent === "write")
+  )
+}
+
+function toVfsContext(ctx: FileSystemAccessContext, target: FileRef | null, intent = ctx.intent) {
   const activeResource = ctx.activeFile ? resourceRefForFile(ctx.activeFile) : null
+  const actor =
+    ctx.actor === "ui" || (target != null && isScopedEngineAccess(target, ctx))
+      ? ("ui" as const)
+      : ctx.actor === "embed"
+        ? ("embed" as const)
+        : ("agent" as const)
   return {
-    actor: ctx.actor === "engine" || ctx.actor === "system" ? ("ui" as const) : ctx.actor,
+    actor,
     permissions: ctx.permissions,
     activeRef: activeResource ?? undefined,
     intent:
@@ -361,6 +468,151 @@ function toVfsContext(ctx: FileSystemAccessContext, intent = ctx.intent) {
           ? ("action" as const)
           : ("metadata" as const),
   }
+}
+
+function hasPermission(ctx: FileSystemAccessContext, permission: string): boolean {
+  return ctx.permissions.includes(permission)
+}
+
+function assertIntent(ctx: FileSystemAccessContext, intent: "write" | "action", ref: FileRef) {
+  if (ctx.actor !== "ui" && ctx.intent !== intent) {
+    throw new FileSystemError(
+      "permission-denied",
+      `The ${ctx.actor} actor requires ${intent} intent`,
+      ref,
+    )
+  }
+}
+
+function assertCanWrite(ref: FileRef, ctx: FileSystemAccessContext): void {
+  assertIntent(ctx, "write", ref)
+  if (
+    ctx.actor === "ui" ||
+    isScopedEngineAccess(ref, ctx) ||
+    hasPermission(ctx, "fs:write") ||
+    hasPermission(ctx, "fs.notes:write")
+  ) {
+    return
+  }
+  throw new FileSystemError("permission-denied", "Missing write permission", ref)
+}
+
+function assertCanInvoke(ref: FileRef, action: string, ctx: FileSystemAccessContext): void {
+  assertIntent(ctx, "action", ref)
+  if (ctx.actor === "ui") return
+
+  const activeEngine =
+    ctx.actor === "engine" && ctx.activeFile != null && sameFileRef(ref, ctx.activeFile)
+  if (["open", "preview", "navigate"].includes(action)) {
+    if (activeEngine || hasPermission(ctx, "fs:read")) return
+  } else if (action === "save-to-mine") {
+    if (
+      hasPermission(ctx, "hub.bookmarks:write") ||
+      hasPermission(ctx, "hub.subscriptions:write")
+    ) {
+      return
+    }
+  } else if (hasPermission(ctx, "fs:write") || hasPermission(ctx, "fs.notes:write")) {
+    return
+  }
+  throw new FileSystemError("permission-denied", `Missing permission for action: ${action}`, ref)
+}
+
+function assertCanListActions(ref: FileRef, ctx: FileSystemAccessContext): void {
+  assertIntent(ctx, "action", ref)
+  if (
+    ctx.actor === "ui" ||
+    (ctx.actor === "engine" && ctx.activeFile != null && sameFileRef(ref, ctx.activeFile)) ||
+    hasPermission(ctx, "fs:read")
+  ) {
+    return
+  }
+  throw new FileSystemError("permission-denied", "Missing fs:read permission", ref)
+}
+
+function versionForResource(meta: ResourceMeta): string | undefined {
+  return meta.updatedAt == null ? undefined : String(meta.updatedAt)
+}
+
+function assertExpectedVersion(
+  ref: FileRef,
+  expectedVersion: string | null | undefined,
+  currentVersion: string | undefined,
+): void {
+  if (expectedVersion === undefined) return
+  if (expectedVersion === (currentVersion ?? null)) return
+  throw new FileSystemError(
+    "conflict",
+    `File version changed (expected ${expectedVersion ?? "no version"}, current ${currentVersion ?? "no version"})`,
+    ref,
+  )
+}
+
+function normalizeRange(
+  ref: FileRef,
+  range: NonNullable<FileReadOptions["range"]>,
+): { start: number; end?: number } {
+  const { start, end } = range
+  if (
+    !Number.isSafeInteger(start) ||
+    start < 0 ||
+    (end != null && (!Number.isSafeInteger(end) || end < start))
+  ) {
+    throw new FileSystemError("invalid-input", "Invalid read range", ref)
+  }
+  return { start, ...(end == null ? {} : { end }) }
+}
+
+function rangeReadData(
+  ref: FileRef,
+  data: unknown,
+  range: FileReadOptions["range"],
+): { data: unknown; size?: number } {
+  if (!range) return { data }
+  const { start, end } = normalizeRange(ref, range)
+  if (data instanceof Blob) {
+    const blob = data.slice(start, end)
+    return { data: blob, size: blob.size }
+  }
+  if (typeof data === "string") {
+    const bytes = new TextEncoder().encode(data).slice(start, end)
+    return { data: new TextDecoder().decode(bytes), size: bytes.byteLength }
+  }
+  if (data instanceof ArrayBuffer) {
+    const value = data.slice(start, end)
+    return { data: value, size: value.byteLength }
+  }
+  if (ArrayBuffer.isView(data)) {
+    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice(start, end)
+    return { data: bytes, size: bytes.byteLength }
+  }
+  if (
+    data != null &&
+    typeof data === "object" &&
+    "base64" in data &&
+    typeof data.base64 === "string"
+  ) {
+    const bytes = base64ToBytes(data.base64).slice(start, end)
+    return {
+      data: { ...data, base64: bytesToBase64(bytes), size: bytes.byteLength },
+      size: bytes.byteLength,
+    }
+  }
+  throw new FileSystemError("unsupported", "Read ranges require byte-addressable content", ref)
+}
+
+function queryCanWatch(query: PlaceResourceQuery): boolean {
+  if (!getVfsProvider(query.scheme)?.watch) return false
+  if (query.scheme === "app" || query.scheme === "tool") return false
+  return true
+}
+
+function placeCanWatch(place: CorePlaceId): boolean {
+  return (PLACE_RESOURCE_QUERIES[place] ?? []).some(queryCanWatch)
+}
+
+function resourceCanWatch(ref: ResourceRef): boolean {
+  return queryCanWatch({ scheme: ref.scheme, kinds: [ref.kind] })
 }
 
 function rethrowFileSystemError(error: unknown, ref: FileRef): never {
@@ -385,13 +637,23 @@ function page<T>(items: T[], options: ReadDirectoryOptions): { items: T[]; nextC
 }
 
 function entry(parent: FileRef, file: IdeallFile, index: number): DirectoryEntry {
+  const projectedSortKey = file.properties?.sortKey
   return {
-    entryId: `${index}:${fileRefKey(file.ref)}`,
+    entryId: fileRefKey(file.ref),
     parent,
     target: file.ref,
     name: file.name,
     kind: "link",
-    sortKey: String(index).padStart(5, "0"),
+    sortKey:
+      typeof projectedSortKey === "string" ? projectedSortKey : String(index).padStart(5, "0"),
+    properties: {
+      ...file.properties,
+      mediaType: file.mediaType,
+      capabilities: [...file.capabilities],
+      createdAt: file.createdAt ?? null,
+      updatedAt: file.updatedAt ?? null,
+      version: file.version ?? null,
+    },
   }
 }
 
@@ -400,26 +662,39 @@ async function listPlaceFiles(
   ctx: FileSystemAccessContext,
 ): Promise<IdeallFile[]> {
   const panels = PANELS[place].map(fileFromPanel)
+  const remoteDirectories = await Promise.all(
+    (place === "info"
+      ? [remoteInfoDirectoryRef]
+      : place === "community"
+        ? [remoteCommunityDirectoryRef]
+        : []
+    ).map((ref) => remoteServerFileSystem.stat(ref, ctx)),
+  )
   const pages = await Promise.all(
     (PLACE_RESOURCE_QUERIES[place] ?? []).map(async (query) => {
       const result = await listResources(
         { scheme: query.scheme, kinds: query.kinds },
-        toVfsContext(ctx, "directory"),
+        toVfsContext(ctx, null, "directory"),
       )
       return Promise.all(
         result.items
           .filter((meta) => !query.rootOnly || !meta.parent)
           .map(async (meta) => {
-            const record = await getResource(meta.ref, toVfsContext(ctx, "metadata")).catch(
-              () => null,
-            )
+            const record = await getResource(
+              meta.ref,
+              toVfsContext(ctx, resourceFileRef(meta.ref), "metadata"),
+            ).catch(() => null)
             return fileFromResource(meta, record)
           }),
       )
     }),
   )
   const seen = new Set<string>()
-  return [...panels, ...pages.flat()].filter((file) => {
+  return [
+    ...panels,
+    ...remoteDirectories.filter((file): file is IdeallFile => file !== null),
+    ...pages.flat(),
+  ].filter((file) => {
     const key = fileRefKey(file.ref)
     if (seen.has(key)) return false
     seen.add(key)
@@ -437,11 +712,14 @@ async function listResourceChildren(
   const kinds = resource.kind === "note" ? ["note"] : ["folder", "bookmark"]
   const result = await listResources(
     { scheme: "node", kinds, parent: resource },
-    toVfsContext(ctx, "directory"),
+    toVfsContext(ctx, resourceFileRef(resource), "directory"),
   )
   return Promise.all(
     result.items.map(async (meta) => {
-      const record = await getResource(meta.ref, toVfsContext(ctx, "metadata")).catch(() => null)
+      const record = await getResource(
+        meta.ref,
+        toVfsContext(ctx, resourceFileRef(meta.ref), "metadata"),
+      ).catch(() => null)
       return fileFromResource(meta, record)
     }),
   )
@@ -453,7 +731,7 @@ export function createResourceFileSystem(): FileSystemProvider {
     name: "ideall core",
     root: coreRootRef(),
     source: CORE_SOURCE,
-    capabilities: ["read-directory", "read", "write", "actions", "watch"],
+    capabilities: ["read-directory", "read", "write", "create", "actions", "watch"],
   }
   return {
     descriptor,
@@ -464,7 +742,7 @@ export function createResourceFileSystem(): FileSystemProvider {
           kind: "directory",
           name: descriptor.name,
           mediaType: DIRECTORY_MEDIA_TYPE,
-          capabilities: descriptor.capabilities ?? [],
+          capabilities: ["read-directory", "read", "actions"],
           source: CORE_SOURCE,
           properties: { hidden: true },
         }
@@ -487,7 +765,7 @@ export function createResourceFileSystem(): FileSystemProvider {
       const resource = resourceRefForFile(ref)
       if (!resource) return null
       try {
-        const record = await getResource(resource, toVfsContext(ctx, "metadata"))
+        const record = await getResource(resource, toVfsContext(ctx, ref, "metadata"))
         return record ? fileFromResource(record.meta, record) : null
       } catch (error) {
         // FileSystem.stat 以 null 表达目标不存在；旧 VFS provider 可能用 not-found 异常表达
@@ -534,36 +812,46 @@ export function createResourceFileSystem(): FileSystemProvider {
         if (
           resource.scheme === "node" &&
           resource.kind === "file" &&
-          (options?.encoding === "binary" || options?.encoding === "text")
+          (options?.encoding === "binary" || options?.encoding === "text" || options?.range)
         ) {
           const data = await invokeResourceAction(
             resource,
             "read-blob",
             undefined,
-            toVfsContext(ctx, "content"),
+            toVfsContext(ctx, ref, "content"),
           )
-          const record = await getResource(resource, toVfsContext(ctx, "metadata"))
+          const record = await getResource(resource, toVfsContext(ctx, ref, "metadata"))
+          const ranged = rangeReadData(ref, data, options?.range)
           return {
-            data,
+            data: ranged.data,
             mediaType: inferredFileMediaType(
               record?.meta.title ?? resource.id,
               mediaTypeForResource(resource, record),
             ),
+            size:
+              ranged.size ??
+              (data != null && typeof data === "object" && "size" in data
+                ? Number(data.size)
+                : undefined),
+            version: record ? versionForResource(record.meta) : undefined,
           }
         }
-        const record = await getResource(resource, toVfsContext(ctx, "content"))
+        const record = await getResource(resource, toVfsContext(ctx, ref, "content"))
         if (!record)
           throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
+        const ranged = rangeReadData(ref, record.content, options?.range)
         return {
-          data: record.content,
+          data: ranged.data,
           mediaType:
             resource.scheme === "node" && resource.kind === "file"
               ? inferredFileMediaType(record.meta.title, mediaTypeForResource(resource, record))
               : mediaTypeForResource(resource, record),
           size:
-            (record.content as Node | undefined)?.kind === "file"
+            ranged.size ??
+            ((record.content as Node | undefined)?.kind === "file"
               ? (record.content as Extract<Node, { kind: "file" }>).blobRef.size
-              : undefined,
+              : undefined),
+          version: versionForResource(record.meta),
         }
       } catch (error) {
         rethrowFileSystemError(error, ref)
@@ -573,45 +861,67 @@ export function createResourceFileSystem(): FileSystemProvider {
       const resource = resourceRefForFile(ref)
       if (!resource) throw new FileSystemError("unsupported", "System panel is not writable", ref)
       try {
-        if (resource.scheme === "node" && resource.kind === "file") {
-          if (typeof input.data !== "string") {
-            throw new FileSystemError(
-              "unsupported",
-              "Node file adapter currently supports text writes only",
-              ref,
+        assertCanWrite(ref, ctx)
+        return await withFileWriteLock(ref, async () => {
+          const current = await getResource(resource, toVfsContext(ctx, ref, "metadata"))
+          if (!current)
+            throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
+          assertExpectedVersion(ref, input.expectedVersion, versionForResource(current.meta))
+          if (resource.scheme === "node" && resource.kind === "file") {
+            if (typeof input.data !== "string") {
+              throw new FileSystemError(
+                "unsupported",
+                "Node file adapter currently supports text writes only",
+                ref,
+              )
+            }
+            await invokeResourceAction(
+              resource,
+              "write-blob",
+              { content: input.data, mime: input.mediaType },
+              toVfsContext(ctx, ref, "write"),
             )
+            const next = await this.stat(ref, ctx)
+            if (!next)
+              throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
+            return next
           }
           await invokeResourceAction(
             resource,
-            "write-blob",
-            { content: input.data, mime: input.mediaType },
-            toVfsContext(ctx, "write"),
+            "edit",
+            typeof input.data === "object" && input.data !== null
+              ? input.data
+              : { content: input.data },
+            toVfsContext(ctx, ref, "write"),
           )
           const next = await this.stat(ref, ctx)
           if (!next)
             throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
           return next
-        }
-        await invokeResourceAction(
-          resource,
-          "edit",
-          typeof input.data === "object" && input.data !== null
-            ? input.data
-            : { content: input.data },
-          toVfsContext(ctx, "write"),
-        )
-        const next = await this.stat(ref, ctx)
-        if (!next) throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
-        return next
+        })
       } catch (error) {
         rethrowFileSystemError(error, ref)
       }
     },
     async actions(ref, ctx): Promise<FileAction[]> {
       const resource = resourceRefForFile(ref)
-      if (!resource) return [{ id: "open", label: "打开" }]
+      assertCanListActions(ref, ctx)
+      if (!resource) {
+        const place = placeForFile(ref)
+        return place === "notes" || place === "bookmarks" || place === "files"
+          ? [
+              { id: "open", label: "打开" },
+              {
+                id: "create",
+                label:
+                  place === "notes" ? "新建页面" : place === "bookmarks" ? "新增书签" : "添加文件",
+                requires: ["create"],
+              },
+            ]
+          : [{ id: "open", label: "打开" }]
+      }
       try {
-        const actions = await resourceActions(resource, toVfsContext(ctx, "action"))
+        const actions = await resourceActions(resource, toVfsContext(ctx, ref, "action"))
         return actions.map((action) => ({
           id: action.id,
           label: action.label,
@@ -624,15 +934,63 @@ export function createResourceFileSystem(): FileSystemProvider {
     },
     async invoke(ref, action, input, ctx) {
       const panel = panelForFile(ref)
-      if (panel && action === "open") return { panel }
+      if (panel && action === "open") {
+        assertCanInvoke(ref, action, ctx)
+        return { panel }
+      }
+      const place = placeForFile(ref)
+      if (
+        (place === "notes" || place === "bookmarks" || place === "files") &&
+        action === "create"
+      ) {
+        assertCanInvoke(ref, action, ctx)
+        try {
+          const raw =
+            input != null && typeof input === "object" && !Array.isArray(input)
+              ? (input as Record<string, unknown>)
+              : {}
+          const requestedKind =
+            place === "notes"
+              ? "note"
+              : place === "files"
+                ? "file"
+                : raw.kind === "folder"
+                  ? "folder"
+                  : "bookmark"
+          const created = await createResource(
+            "node",
+            { ...raw, kind: requestedKind, parentId: null },
+            toVfsContext(ctx, ref, "action"),
+          )
+          const file = fileFromResource(created.meta, created)
+          return { ref: file.ref, file }
+        } catch (error) {
+          rethrowFileSystemError(error, ref)
+        }
+      }
       const resource = resourceRefForFile(ref)
       if (!resource) throw new FileSystemError("unsupported", `Unsupported action: ${action}`, ref)
       try {
+        assertCanInvoke(ref, action, ctx)
+        if (
+          action === "create" &&
+          resource.scheme === "node" &&
+          (resource.kind === "note" || resource.kind === "folder")
+        ) {
+          const created = (await invokeResourceAction(
+            resource,
+            "create",
+            input,
+            toVfsContext(ctx, ref, "action"),
+          )) as ResourceRecord
+          const file = fileFromResource(created.meta, created)
+          return { ref: file.ref, file }
+        }
         return await invokeResourceAction(
           resource,
           action as never,
           input,
-          toVfsContext(ctx, "action"),
+          toVfsContext(ctx, ref, "action"),
         )
       } catch (error) {
         rethrowFileSystemError(error, ref)
@@ -640,12 +998,18 @@ export function createResourceFileSystem(): FileSystemProvider {
     },
     watch(ref, ctx, notify): FileSystemWatchHandle | null {
       const place = placeForFile(ref)
-      if (!place) return null
-      const handles = (PLACE_RESOURCE_QUERIES[place] ?? []).flatMap((query) => {
+      const resource = resourceRefForFile(ref)
+      const queries: PlaceResourceQuery[] = place
+        ? [...(PLACE_RESOURCE_QUERIES[place] ?? [])]
+        : resource
+          ? [{ scheme: resource.scheme, id: resource.id, kinds: [resource.kind] }]
+          : []
+      const handles = queries.flatMap((query) => {
+        if (!queryCanWatch(query)) return []
         try {
           const handle = watchResources(
-            { scheme: query.scheme, kinds: query.kinds },
-            toVfsContext(ctx, "watch"),
+            { scheme: query.scheme, id: query.id, kinds: query.kinds },
+            toVfsContext(ctx, ref, "watch"),
             () => {
               const event: FileSystemWatchEvent = { type: "changed", ref }
               notify(event)

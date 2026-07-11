@@ -5,6 +5,7 @@ import { isLive } from "@protocol/sync"
 import {
   idbBulkPut,
   idbDelete,
+  idbDeleteAcrossStoresIf,
   idbGet,
   idbGetAll,
   idbGetAllFromIndex,
@@ -16,6 +17,7 @@ import {
   STORE_TRASH_SNAPSHOTS,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
+import { nextUpdatedAt } from "@/files/version"
 
 type BlobRecord = { key: string; blob: Blob }
 
@@ -77,8 +79,11 @@ function canRestore(node: Node, snapshot?: TrashSnapshot): boolean {
   return true
 }
 
-function reviveNode(node: Node): Node {
-  const revived = { ...node, updatedAt: Date.now() } as Node
+function reviveNode(node: Node, previousUpdatedAt: number): Node {
+  const revived = {
+    ...node,
+    updatedAt: nextUpdatedAt(Math.max(node.updatedAt, previousUpdatedAt)),
+  } as Node
   delete revived.deletedAt
   return revived
 }
@@ -145,7 +150,7 @@ export async function restoreTrashItem(id: string): Promise<void> {
   if (node.kind === "file") {
     if (!snapshot?.blob) throw new Error("文件内容快照不存在, 无法恢复")
     const base = snapshot.node.kind === "file" ? snapshot.node : node
-    const revived = reviveNode(base) as NodeOfKind<"file">
+    const revived = reviveNode(base, node.updatedAt) as NodeOfKind<"file">
     await idbPutAcrossStores([
       {
         store: STORE_BLOBS,
@@ -154,23 +159,36 @@ export async function restoreTrashItem(id: string): Promise<void> {
       { store: STORE_NODES, value: revived },
     ])
   } else {
-    await idbPut(STORE_NODES, reviveNode(snapshot?.node ?? node))
+    await idbPut(STORE_NODES, reviveNode(snapshot?.node ?? node, node.updatedAt))
   }
   await idbDelete(STORE_TRASH_SNAPSHOTS, id)
   notifyFilesUpdated({ kind: node.kind, id })
 }
 
 export async function purgeTrashItem(id: string): Promise<void> {
-  const node = await idbGet<Node>(STORE_NODES, id)
-  if (node?.kind === "file") await idbDelete(STORE_BLOBS, node.blobRef.key)
-  await Promise.all([idbDelete(STORE_NODES, id), idbDelete(STORE_TRASH_SNAPSHOTS, id)])
-  notifyFilesUpdated(node ? { kind: node.kind, id } : undefined)
+  const node = await purgeTrashItemWithoutNotify(id)
+  if (node) notifyFilesUpdated({ kind: node.kind, id })
 }
 
 export async function emptyTrash(): Promise<number> {
   const items = await listTrashItems()
+  let deleted = 0
   for (const item of items) {
-    await purgeTrashItem(item.id)
+    if (await purgeTrashItemWithoutNotify(item.id)) deleted += 1
   }
-  return items.length
+  if (deleted > 0) notifyFilesUpdated()
+  return deleted
+}
+
+async function purgeTrashItemWithoutNotify(id: string): Promise<Node | undefined> {
+  return idbDeleteAcrossStoresIf<Node>(
+    [STORE_BLOBS, STORE_TRASH_SNAPSHOTS],
+    STORE_NODES,
+    id,
+    (node) => node.deletedAt != null,
+    (node) => [
+      { store: STORE_TRASH_SNAPSHOTS, key: id },
+      ...(node.kind === "file" ? [{ store: STORE_BLOBS, key: node.blobRef.key }] : []),
+    ],
+  )
 }

@@ -18,6 +18,12 @@ export const GIT_DATA_SPEC = {
   dataVersion: GIT_EXPORT_VERSION,
 } as const
 
+export type GitRepoMount = {
+  id: string
+  grantId: string | null
+  path: string
+}
+export type GrantedGitRepoMount = GitRepoMount & { grantId: string }
 export type RepoStorage = Pick<Storage, "getItem" | "setItem">
 export type GitReposPayload = { repos: string[] }
 export type GitReposExport = PluginDataPackage<
@@ -26,32 +32,74 @@ export type GitReposExport = PluginDataPackage<
   typeof GIT_EXPORT_VERSION
 >
 
-export function normalizeGitRepos(value: unknown, limit = MAX_GIT_REPOS): string[] {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+}
+
+function legacyMountId(path: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < path.length; index += 1) {
+    hash ^= path.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `legacy:${(hash >>> 0).toString(36)}`
+}
+
+function normalizedMount(value: unknown): GitRepoMount | null {
+  if (typeof value === "string") {
+    const path = value.trim()
+    return path ? { id: legacyMountId(path), grantId: null, path } : null
+  }
+  if (!isRecord(value) || typeof value.path !== "string") return null
+  const path = value.path.trim()
+  if (!path) return null
+  const grantId = typeof value.grantId === "string" ? value.grantId.trim() || null : null
+  const id = typeof value.id === "string" ? value.id.trim() : ""
+  return { id: id || grantId || legacyMountId(path), grantId, path }
+}
+
+export function normalizeGitRepos(value: unknown, limit = MAX_GIT_REPOS): GitRepoMount[] {
   if (!Array.isArray(value)) return []
-  const seen = new Set<string>()
-  const repos: string[] = []
+  const seenIds = new Set<string>()
+  const seenGrants = new Set<string>()
+  const seenLegacyPaths = new Set<string>()
+  const repos: GitRepoMount[] = []
   for (const item of value) {
-    if (typeof item !== "string") continue
-    const path = item.trim()
-    if (!path || seen.has(path)) continue
-    seen.add(path)
-    repos.push(path)
+    const mount = normalizedMount(item)
+    if (!mount || seenIds.has(mount.id)) continue
+    if (mount.grantId && seenGrants.has(mount.grantId)) continue
+    if (!mount.grantId && seenLegacyPaths.has(mount.path)) continue
+    seenIds.add(mount.id)
+    if (mount.grantId) seenGrants.add(mount.grantId)
+    else seenLegacyPaths.add(mount.path)
+    repos.push(mount)
     if (repos.length >= limit) break
   }
   return repos
 }
 
-export function addGitRepo(repos: string[], repoPath: string, limit = MAX_GIT_REPOS): string[] {
-  const path = repoPath.trim()
-  if (!path) return normalizeGitRepos(repos, limit)
-  return normalizeGitRepos([path, ...repos.filter((repo) => repo !== path)], limit)
+export function addGitRepo(
+  repos: GitRepoMount[],
+  mount: GrantedGitRepoMount,
+  limit = MAX_GIT_REPOS,
+): GitRepoMount[] {
+  return normalizeGitRepos(
+    [
+      mount,
+      ...repos.filter(
+        (repo) =>
+          repo.id !== mount.id && repo.grantId !== mount.grantId && repo.path !== mount.path,
+      ),
+    ],
+    limit,
+  )
 }
 
-export function removeGitRepo(repos: string[], repoPath: string): string[] {
-  return normalizeGitRepos(repos.filter((repo) => repo !== repoPath))
+export function removeGitRepo(repos: GitRepoMount[], mountId: string): GitRepoMount[] {
+  return normalizeGitRepos(repos.filter((repo) => repo.id !== mountId))
 }
 
-export function loadGitRepos(storage: RepoStorage | undefined = browserStorage()): string[] {
+export function loadGitRepos(storage: RepoStorage | undefined = browserStorage()): GitRepoMount[] {
   try {
     return normalizeGitRepos(JSON.parse(storage?.getItem(GIT_REPOS_STORAGE_KEY) ?? "[]"))
   } catch {
@@ -60,7 +108,7 @@ export function loadGitRepos(storage: RepoStorage | undefined = browserStorage()
 }
 
 export function saveGitRepos(
-  repos: string[],
+  repos: GitRepoMount[],
   storage: RepoStorage | undefined = browserStorage(),
 ): boolean {
   if (!storage) return false
@@ -73,10 +121,11 @@ export function saveGitRepos(
 }
 
 export function createGitReposExport(
-  repos: string[],
+  repos: GitRepoMount[],
   exportedAt = new Date().toISOString(),
 ): GitReposExport {
-  return createPluginDataPackage(GIT_DATA_SPEC, { repos: normalizeGitRepos(repos) }, exportedAt)
+  const paths = normalizeGitRepos(repos).map((repo) => repo.path)
+  return createPluginDataPackage(GIT_DATA_SPEC, { repos: paths }, exportedAt)
 }
 
 export function parseGitReposExport(raw: string): GitReposExport {
@@ -85,7 +134,8 @@ export function parseGitReposExport(raw: string): GitReposExport {
     pack.payload && typeof pack.payload === "object" && !Array.isArray(pack.payload)
       ? (pack.payload as { repos?: unknown })
       : {}
-  return createGitReposExport(normalizeGitRepos(payload.repos), pack.exportedAt)
+  const paths = normalizeGitRepos(payload.repos).map((repo) => repo.path)
+  return createPluginDataPackage(GIT_DATA_SPEC, { repos: paths }, pack.exportedAt)
 }
 
 export async function exportGitReposJson(): Promise<string> {
@@ -94,7 +144,7 @@ export async function exportGitReposJson(): Promise<string> {
 
 export async function importGitReposJson(raw: string): Promise<{ repos: number }> {
   const pack = parseGitReposExport(raw)
-  const repos = pack.payload.repos
+  const repos = normalizeGitRepos(pack.payload.repos)
   saveGitRepos(repos)
   return { repos: repos.length }
 }

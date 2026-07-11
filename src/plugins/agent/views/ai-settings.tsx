@@ -4,14 +4,16 @@
 // 复用 AI 重设计共享套件: AiPage 壳 + 公共 Panel/SettingRow/Switch/Chip 原语。
 
 import * as React from "react"
-import { SlidersHorizontal } from "lucide-react"
+import { Plug, ScrollText, SlidersHorizontal, Sparkles } from "lucide-react"
 
+import { Button } from "@/ui/button"
 import { Chip } from "@/ui/chip"
 import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
 import { Panel, SettingRow } from "@/ui/panel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
 import { Switch } from "@/ui/switch"
+import { getUiActions } from "@/lib/ui-actions"
 
 import { AiPage } from "./ui-kit"
 import {
@@ -58,6 +60,38 @@ export default function AiSettings() {
       }
     >
       <div className="space-y-8">
+        <Panel title="管理">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start gap-2"
+              onClick={() => getUiActions()?.openAiSection?.("ai-mcp")}
+            >
+              <Plug className="h-4 w-4" />
+              MCP
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start gap-2"
+              onClick={() => getUiActions()?.openAiSection?.("ai-skills")}
+            >
+              <Sparkles className="h-4 w-4" />
+              Skills
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start gap-2"
+              onClick={() => getUiActions()?.openAiSection?.("ai-rules")}
+            >
+              <ScrollText className="h-4 w-4" />
+              规则
+            </Button>
+          </div>
+        </Panel>
+
         {/* 1) 模型 */}
         <Panel title="模型">
           <div className="space-y-4">

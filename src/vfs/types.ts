@@ -10,6 +10,8 @@ export type { ResourceCapability, ResourceMeta, ResourceRecord, ResourceRef, Res
 
 export type ResourceQuery = {
   scheme: ResourceScheme
+  /** 精确监听单个资源时使用；list 查询通常不设置。 */
+  id?: string
   kind?: string
   kinds?: readonly string[]
   parent?: ResourceRef
@@ -26,6 +28,7 @@ export type ResourcePage = {
 export type ResourceActionId =
   | "open"
   | "preview"
+  | "create"
   | "edit"
   | "delete"
   | "restore"
@@ -57,6 +60,7 @@ export type VfsProvider = {
   scheme: ResourceScheme
   list(query: ResourceQuery, ctx: VfsAccessContext): Promise<ResourcePage>
   get(ref: ResourceRef, ctx: VfsAccessContext): Promise<ResourceRecord | null>
+  create?(input: unknown, ctx: VfsAccessContext): Promise<ResourceRecord>
   actions(ref: ResourceRef, ctx: VfsAccessContext): Promise<ResourceAction[]>
   invoke(
     ref: ResourceRef,

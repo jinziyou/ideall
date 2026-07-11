@@ -7,6 +7,7 @@ import { Bot, Hexagon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { HOME_HREF, HOME_LABEL, SPOKES } from "@/shell/nav-config"
 import { MODULE_META } from "@/workspace/module-meta"
+import { setRightPanel, useRightPanelOpen } from "@/workspace/store"
 import TabsSheet from "./tabs-sheet"
 import { useNodeCount } from "./use-node-count"
 
@@ -95,23 +96,24 @@ function TabItem({
  * 移动端底部标签栏 (md:hidden) —— 我的 / 关注 / [中央 AI] / 资讯 / 社区 / 标签。
  * 「关注」(关注流) 是发现内容汇入「我的」的汇合点 = 移动端最高频目的地, 占一级入口;
  * 「工具」退居浏览抽屉「发现」组与 ⌘K。最右「标签」为多标签切换器触发 (拇指区, 见 TabsSheet)。
- * 中央按钮直达 AI 对话 (/home/agent → 呼出右侧/全屏对话面板), 与桌面活动栏 Bot 钮语义一致
+ * 中央按钮直达 AI 对话 (/home/agent → 呼出右侧/全屏对话面板), 与桌面顶栏 AI 侧栏按钮语义一致
  * (两端 AI 主入口均首呼对话; 管理面走对话栏齿轮 / /ai 深链)。
  * 命令面板在移动端由顶栏的 CommandTrigger 提供, 不再与中央按钮混用。
  */
 export default function BottomTabBar() {
   const pathname = usePathname()
   const { count, flash } = useNodeCount()
-  const agentActive = isAgentActive(pathname)
+  const agentActive = useRightPanelOpen() || isAgentActive(pathname)
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around gap-1 border-t bg-card/95 px-1 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1 backdrop-blur md:hidden">
       <TabItem tab={TABS[0]} pathname={pathname} badge={count} flash={flash} />
       <TabItem tab={TABS[1]} pathname={pathname} />
-      <Link
-        href={AGENT_HREF}
+      <button
+        type="button"
+        onClick={() => setRightPanel(true)}
         aria-label="AI 智能体"
-        aria-current={agentActive ? "page" : undefined}
+        aria-pressed={agentActive}
         className="flex shrink-0 flex-col items-center justify-end gap-0.5 self-stretch px-1"
       >
         <span className="flex h-12 w-12 items-center justify-center rounded-shell bg-primary text-primary-foreground">
@@ -125,7 +127,7 @@ export default function BottomTabBar() {
         >
           AI
         </span>
-      </Link>
+      </button>
       <TabItem tab={TABS[2]} pathname={pathname} />
       <TabItem tab={TABS[3]} pathname={pathname} />
       {/* 多标签切换器 (底部弹出 = 拇指区; 触发器从顶栏移入底栏)。 */}

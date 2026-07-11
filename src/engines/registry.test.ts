@@ -101,11 +101,13 @@ test("engine registry: 多引擎注册、查询、通知和精确注销", () => 
   )
   assert.equal(registry.resolve(file)?.descriptor.engineId, "a")
   assert.equal(registry.matching(file).length, 2)
+  assert.equal(registry.revision(), 2)
   assert.equal(changes, 2)
 
   removeB()
   removeB()
   assert.equal(registry.get("b"), null)
+  assert.equal(registry.revision(), 3)
   assert.equal(changes, 3)
 })
 

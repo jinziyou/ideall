@@ -1,5 +1,6 @@
 import type { NodeResourceRef, ResourceMeta, ResourceRef } from "@protocol/resource"
 import { parseResourceKey, resourceKey, resourceQueryValue } from "@protocol/resource"
+import { parseFileRefKey } from "@protocol/file-system"
 import { isNodeKind } from "@protocol/node"
 import {
   connectedResourceTitle,
@@ -7,6 +8,7 @@ import {
 } from "@/vfs/connected-resource-manifest"
 import type { TabDescriptor } from "./types"
 import { moduleForNodeKind } from "./node-kind-config"
+import { resourceRefForFile } from "@/filesystem/resource-file-system"
 
 export const RESOURCE_TAB_KIND = "resource"
 
@@ -73,10 +75,27 @@ export function isBrowserResourceTab(tab: Pick<TabDescriptor, "kind" | "params">
   return parseResourceTabParams(tab.params)?.scheme === "browser"
 }
 
+export function isEmbeddedResourceTab(tab: Pick<TabDescriptor, "kind" | "params">): boolean {
+  let ref: ResourceRef | null = null
+  if (tab.kind === "file-engine") {
+    const fileRef = parseFileRefKey(tab.params?.file)
+    ref = fileRef ? resourceRefForFile(fileRef) : null
+  } else if (tab.kind === RESOURCE_TAB_KIND || tab.kind === "node") {
+    ref = parseResourceTabParams(tab.params)
+  }
+  return ref?.scheme === "info" || ref?.scheme === "community"
+}
+
 export function nodeResourceRefForTab(
   tab: Pick<TabDescriptor, "kind" | "params"> | null | undefined,
 ): NodeResourceRef | null {
-  if (!tab || (tab.kind !== RESOURCE_TAB_KIND && tab.kind !== "node")) return null
+  if (!tab) return null
+  if (tab.kind === "file-engine") {
+    const fileRef = parseFileRefKey(tab.params?.file)
+    const resource = fileRef ? resourceRefForFile(fileRef) : null
+    return resource?.scheme === "node" ? resource : null
+  }
+  if (tab.kind !== RESOURCE_TAB_KIND && tab.kind !== "node") return null
   const ref = parseResourceTabParams(tab.params)
   return ref?.scheme === "node" ? ref : null
 }

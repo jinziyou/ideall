@@ -87,7 +87,7 @@ export interface EntityDetail {
   weekly: EntityPeriodCount[]
 }
 
-/** 信息查询参数。分页 `[page_size, page_index]`; 时间区间 `[from, to]` epoch 毫秒闭区间。 */
+/** 信息查询参数。分页 `[page_size, item_offset]`; 时间区间 `[from, to]` epoch 毫秒闭区间。 */
 export interface InfoQuery {
   /** 实体筛选, 每项为 `(label, name)` */
   entity_label_name?: [string, string][] | null
@@ -95,7 +95,7 @@ export interface InfoQuery {
   publisher_domain?: string | null
   /** `[from, to]` epoch 毫秒闭区间 */
   timestamp_from_to?: [number, number] | null
-  /** 分页 `(page_size, page_index)` */
+  /** 分页 `(page_size, item_offset)` */
   page_size_offset?: [number, number] | null
 }
 

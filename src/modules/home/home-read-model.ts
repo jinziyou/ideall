@@ -1,9 +1,11 @@
-import type { Subscription } from "@protocol/subscription"
-import { listBookmarks } from "@/files/stores/bookmarks-store"
-import { listFiles } from "@/files/stores/files-store"
-import { listNotes } from "@/files/stores/notes-store"
-import { listSubscriptions } from "@/files/stores/subscriptions-store"
-import { listThreads } from "@/files/stores/threads-store"
+import type { DirectoryEntry } from "@protocol/file-system"
+import type { Subscription, SubscriptionType } from "@protocol/subscription"
+import { walkFileDirectory } from "@/filesystem/directory-walk"
+import {
+  corePlaceRef,
+  resourceRefForFile,
+  type CorePlaceId,
+} from "@/filesystem/resource-file-system"
 import { SUB_SPOKE_META } from "./subscriptions/subscription-meta"
 
 export type HomeActivityItem = {
@@ -100,13 +102,93 @@ export function createHomeOverviewData(input: HomeOverviewInput): HomeOverviewDa
   }
 }
 
+const DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
+const SUBSCRIPTION_TYPES: SubscriptionType[] = ["publisher", "entity", "tool", "search", "peer"]
+
+function timestamp(entry: DirectoryEntry, key: "createdAt" | "updatedAt"): number {
+  const value = entry.properties?.[key]
+  return typeof value === "number" ? value : 0
+}
+
+async function nodeEntries(
+  place: CorePlaceId,
+  descendKind?: "folder" | "note",
+): Promise<DirectoryEntry[]> {
+  return (
+    await walkFileDirectory(corePlaceRef(place), DIRECTORY_CONTEXT, (entry) => {
+      const resource = resourceRefForFile(entry.target)
+      return Boolean(descendKind && resource?.scheme === "node" && resource.kind === descendKind)
+    })
+  ).filter((entry) => resourceRefForFile(entry.target)?.scheme === "node")
+}
+
+function subscriptionFromEntry(entry: DirectoryEntry): Subscription | null {
+  const resource = resourceRefForFile(entry.target)
+  const type = entry.properties?.subscriptionType
+  const key = entry.properties?.subscriptionKey
+  if (
+    resource?.scheme !== "node" ||
+    resource.kind !== "feed" ||
+    typeof type !== "string" ||
+    !SUBSCRIPTION_TYPES.includes(type as SubscriptionType) ||
+    typeof key !== "string"
+  ) {
+    return null
+  }
+  return {
+    id: resource.id,
+    type: type as SubscriptionType,
+    key,
+    title: entry.name,
+    favicon: "",
+    createdAt: timestamp(entry, "createdAt"),
+    updatedAt: timestamp(entry, "updatedAt"),
+  }
+}
+
 export async function loadHomeOverviewData(): Promise<HomeOverviewData> {
-  const [subs, bookmarks, files, notes, threads] = await Promise.all([
-    listSubscriptions().catch(() => [] as Subscription[]),
-    listBookmarks().catch(() => []),
-    listFiles().catch(() => []),
-    listNotes({ text: false }).catch(() => []),
-    listThreads().catch(() => []),
+  const [subEntries, bookmarkEntries, fileEntries, noteEntries, threadEntries] = await Promise.all([
+    nodeEntries("subscriptions").catch(() => []),
+    nodeEntries("bookmarks", "folder").catch(() => []),
+    nodeEntries("files").catch(() => []),
+    nodeEntries("notes", "note").catch(() => []),
+    nodeEntries("workspace").catch(() => []),
   ])
+  const subs = subEntries.flatMap((entry) => {
+    const value = subscriptionFromEntry(entry)
+    return value ? [value] : []
+  })
+  const bookmarks = bookmarkEntries.flatMap((entry) => {
+    const resource = resourceRefForFile(entry.target)
+    return resource?.scheme === "node" && resource.kind === "bookmark"
+      ? [{ id: resource.id, title: entry.name, createdAt: timestamp(entry, "createdAt") }]
+      : []
+  })
+  const files = fileEntries.flatMap((entry) => {
+    const resource = resourceRefForFile(entry.target)
+    return resource?.scheme === "node" && resource.kind === "file"
+      ? [
+          {
+            id: resource.id,
+            name: entry.name,
+            type:
+              typeof entry.properties?.mediaType === "string"
+                ? entry.properties.mediaType
+                : "application/octet-stream",
+            createdAt: timestamp(entry, "createdAt"),
+          },
+        ]
+      : []
+  })
+  const notes = noteEntries.flatMap((entry) => {
+    const resource = resourceRefForFile(entry.target)
+    return resource?.scheme === "node" && resource.kind === "note"
+      ? [{ id: resource.id, title: entry.name, createdAt: timestamp(entry, "createdAt") }]
+      : []
+  })
+  const threads = threadEntries.filter((entry) => {
+    const resource = resourceRefForFile(entry.target)
+    return resource?.scheme === "node" && resource.kind === "thread"
+  })
   return createHomeOverviewData({ subs, bookmarks, files, notes, threads })
 }

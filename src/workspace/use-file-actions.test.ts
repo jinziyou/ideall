@@ -3,10 +3,9 @@ import assert from "node:assert/strict"
 import type { StoredFile } from "@protocol/files"
 import {
   createFileActionHandlers,
-  fileMetaActionInput,
   fileReference,
-  fileResourceRef,
   parseFileTags,
+  type FileActionMetadata,
   type FileActionDeps,
 } from "./use-file-actions"
 
@@ -30,7 +29,7 @@ function makeDeps(initialFiles: StoredFile[] = []) {
   const renamedTabs: Array<{ id: string; name: string }> = []
   const closedTabs: Array<{ id: string; label: string }> = []
   const deleted: string[] = []
-  const restored: StoredFile[] = []
+  const restored: string[] = []
   const clearedDrafts: string[] = []
   const downloads: StoredFile[] = []
   const clipboard: string[] = []
@@ -44,11 +43,12 @@ function makeDeps(initialFiles: StoredFile[] = []) {
       patches.push({ id, patch })
     },
     getFile: async (id) => files.get(id),
+    getFileMetadata: async (id) => files.get(id),
     deleteFile: async (id) => {
       deleted.push(id)
     },
-    restoreFile: async (file) => {
-      restored.push(file)
+    restoreFile: async (id) => {
+      restored.push(id)
     },
     renameFileTab: (id, name) => {
       renamedTabs.push({ id, name })
@@ -105,14 +105,6 @@ test("parseFileTags: 支持中英文逗号/换行并去重", () => {
 
 test("fileReference: 生成 fs 文件引用", () => {
   assert.equal(fileReference("abc"), "fs://file/abc")
-})
-
-test("file resource helpers: 生成 VFS ref 并映射文件元数据补丁", () => {
-  assert.deepEqual(fileResourceRef("abc"), { scheme: "node", kind: "file", id: "abc" })
-  assert.deepEqual(fileMetaActionInput({ name: "next.md", tags: ["doc"] }), {
-    title: "next.md",
-    tags: ["doc"],
-  })
 })
 
 test("rename: trim 名称后更新元数据、标签标题、刷新树并回调", async () => {
@@ -175,7 +167,7 @@ test("copyName / copyRef: 写入剪贴板并提示", async () => {
 
 test("remove: 删除文件、清草稿、关闭标签并支持撤销恢复", async () => {
   const file = storedFile("f1", "disk.txt")
-  const deletedFiles: StoredFile[] = []
+  const deletedFiles: FileActionMetadata[] = []
   const fakes = makeDeps([file])
   const actions = createFileActionHandlers(fakes.deps, {
     onDeleted: (deleted) => deletedFiles.push(deleted),
@@ -191,7 +183,7 @@ test("remove: 删除文件、清草稿、关闭标签并支持撤销恢复", asy
   assert.deepEqual(deletedFiles, [file])
 
   await fakes.undoDeletes[0].restore()
-  assert.deepEqual(fakes.restored, [file])
+  assert.deepEqual(fakes.restored, [file.id])
   assert.equal(fakes.refreshes, 2)
 })
 
@@ -205,7 +197,7 @@ test("remove: 可用传入的文件快照恢复且不关闭标签", async () => 
   assert.equal(fakes.undoDeletes[0].label, "display.txt")
 
   await fakes.undoDeletes[0].restore()
-  assert.deepEqual(fakes.restored, [displayed])
+  assert.deepEqual(fakes.restored, [displayed.id])
 })
 
 test("remove: 文件不存在时不删除", async () => {

@@ -1,14 +1,13 @@
 "use client"
 
-// 节点查看器: 笔记。自取数 + 面包屑导航 + NoteEditor; 标题变更同步标签栏。
+// 节点查看器: 笔记。经 FileSystem 取数 + 面包屑导航 + NoteEditor; 标题变更同步标签栏。
 import * as React from "react"
 import dynamic from "next/dynamic"
 import { ChevronRight, Loader2 } from "lucide-react"
-import { getNote, getAncestors } from "@/files/stores/notes-store"
-import type { Note, NoteMeta } from "@protocol/files"
 import { openTarget, renameNodeTab, promoteActiveTab } from "../store"
 import type { NodeViewerProps } from "../node-kind-ui"
 import { resourceFileRef } from "@/filesystem/resource-file-system"
+import { readNodeFile, useNodeFile } from "./use-node-file"
 
 const NoteEditor = dynamic(() => import("@/modules/home/notes/note-editor"), {
   ssr: false,
@@ -21,32 +20,46 @@ const NoteEditor = dynamic(() => import("@/modules/home/notes/note-editor"), {
 })
 
 export default function NoteViewer({ nodeId }: NodeViewerProps) {
-  const [note, setNote] = React.useState<Note | null>(null)
-  const [ancestors, setAncestors] = React.useState<NoteMeta[]>([])
-  const [missing, setMissing] = React.useState(false)
+  const { node: note, loading, missing, error } = useNodeFile("note", nodeId)
+  const [ancestors, setAncestors] = React.useState<Array<{ id: string; title: string }>>([])
 
   React.useEffect(() => {
+    if (!note) {
+      setAncestors([])
+      return
+    }
     let alive = true
-    Promise.all([getNote(nodeId), getAncestors(nodeId)])
-      .then(([n, chain]) => {
-        if (!alive) return
-        if (n) {
-          setNote(n)
-          setAncestors(chain)
-        } else setMissing(true)
-      })
-      .catch(() => {
-        if (alive) setMissing(true)
-      })
+    void (async () => {
+      const chain: Array<{ id: string; title: string }> = []
+      const seen = new Set([note.id])
+      let parentId = note.parentId
+      while (parentId && !seen.has(parentId)) {
+        seen.add(parentId)
+        const parent = await readNodeFile("note", parentId)
+        if (!parent) break
+        chain.unshift({ id: parent.id, title: parent.title })
+        parentId = parent.parentId
+      }
+      if (alive) setAncestors(chain)
+    })().catch(() => {
+      if (alive) setAncestors([])
+    })
     return () => {
       alive = false
     }
-  }, [nodeId])
+  }, [note])
+
+  React.useEffect(() => {
+    if (note) renameNodeTab({ kind: "note", id: note.id }, note.title || "无标题")
+  }, [note])
 
   if (missing) {
     return <div className="p-6 text-sm text-muted-foreground">该笔记不存在或已删除。</div>
   }
-  if (!note) {
+  if (error) {
+    return <div className="p-6 text-sm text-muted-foreground">笔记读取失败。</div>
+  }
+  if (loading || !note) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />

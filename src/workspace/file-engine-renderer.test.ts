@@ -1,53 +1,135 @@
-import { test } from "node:test"
 import assert from "node:assert/strict"
+import { test } from "node:test"
+import * as React from "react"
+import type { EngineDescriptor } from "@protocol/engine"
 import type { IdeallFile } from "@protocol/file-system"
-import { resolveFileEngineRenderer } from "./file-engine-renderer"
+import { BUILTIN_ENGINES } from "@/engines/builtin"
+import { EngineRegistry } from "@/engines/registry"
+import { FileEngineRendererRegistry, FileEngineRendererRegistryError } from "./file-engine-renderer"
+import { registerBuiltInFileEngineRenderers } from "./registry"
 
-function file(mediaType: string, properties: Readonly<Record<string, unknown>> = {}): IdeallFile {
+const file: IdeallFile = {
+  ref: { fileSystemId: "third-party.files", fileId: "fixture" },
+  kind: "file",
+  name: "fixture.demo",
+  mediaType: "application/x-demo",
+  capabilities: ["read", "write"],
+  source: { kind: "third-party", id: "demo" },
+  properties: {},
+}
+
+function descriptor(
+  engineId: string,
+  access: EngineDescriptor["access"] = "read-write",
+): EngineDescriptor {
   return {
-    ref: { fileSystemId: "ideall.core", fileId: "fixture" },
-    kind: "file",
-    name: "fixture",
-    mediaType,
-    capabilities: ["read", "write"],
-    source: { kind: "local", id: "test" },
-    properties,
+    engineId,
+    label: engineId,
+    match: { mediaTypes: [file.mediaType] },
+    layout: "fill",
+    access,
   }
 }
 
-test("file engine renderer: engine id wins over Node and panel provenance", () => {
-  const bookmark = file("application/vnd.ideall.bookmark+json", {
-    resourceScheme: "node",
-    resourceKind: "bookmark",
-    url: "https://example.com",
-  })
-  assert.equal(resolveFileEngineRenderer(bookmark, "ideall.bookmark"), "node-bookmark")
-  assert.equal(resolveFileEngineRenderer(bookmark, "ideall.browser"), "browser")
-  assert.equal(resolveFileEngineRenderer(bookmark, "ideall.preview"), "preview")
+test("file engine renderer registry: third-party engines contribute Display independently", () => {
+  const engines = new EngineRegistry()
+  const renderers = new FileEngineRendererRegistry()
+  const thirdParty = descriptor("demo.timeline")
+  engines.register(thirdParty)
+  renderers.register(
+    "demo.timeline",
+    ({ file: target, descriptor: engine }) => `${engine.engineId}:${target.ref.fileId}`,
+  )
 
-  const panel = file("application/vnd.ideall.panel.home-overview+json", {
-    panelId: "home",
-    tabKind: "home-overview",
-  })
-  assert.equal(resolveFileEngineRenderer(panel, "ideall.panel"), "panel")
-  assert.equal(resolveFileEngineRenderer(panel, "ideall.preview"), "preview")
-  assert.equal(resolveFileEngineRenderer(panel, "ideall.code"), "code")
+  const resolved = engines.resolve(file)
+  assert.equal(resolved?.descriptor.engineId, "demo.timeline")
+  assert.equal(
+    renderers.get(resolved!.descriptor.engineId)?.({
+      file,
+      descriptor: resolved!.descriptor,
+    }),
+    "demo.timeline:fixture",
+  )
 })
 
-test("file engine renderer: readable Resource text uses code, never the old file viewer", () => {
-  const resourceFile = file("text/typescript", {
-    resourceScheme: "node",
-    resourceKind: "file",
-  })
-  assert.equal(resolveFileEngineRenderer(resourceFile, "ideall.code"), "code")
-  assert.equal(resolveFileEngineRenderer(resourceFile, "ideall.preview"), "preview")
+test("file engine renderer registry: registration notifies and disposer is exact and idempotent", () => {
+  const registry = new FileEngineRendererRegistry()
+  let changes = 0
+  registry.subscribe(() => (changes += 1))
+  const renderer = () => "display"
+  const unregister = registry.register("demo.display", renderer)
+
+  assert.equal(registry.get("demo.display"), renderer)
+  assert.equal(registry.revision(), 1)
+  unregister()
+  unregister()
+  assert.equal(registry.get("demo.display"), null)
+  assert.equal(registry.revision(), 2)
+  assert.equal(changes, 2)
 })
 
-test("file engine renderer: semantic Node viewers cannot capture a different engine", () => {
-  const note = file("application/vnd.ideall.note+json", {
-    resourceScheme: "node",
-    resourceKind: "note",
+test("file engine renderer registry: duplicate and malformed ids are rejected", () => {
+  const registry = new FileEngineRendererRegistry()
+  registry.register("demo.display", () => null)
+  assert.throws(
+    () => registry.register("demo.display", () => null),
+    (error) =>
+      error instanceof FileEngineRendererRegistryError && error.code === "duplicate-renderer",
+  )
+  assert.throws(
+    () => registry.register(" demo.invalid", () => null),
+    (error) =>
+      error instanceof FileEngineRendererRegistryError && error.code === "invalid-renderer",
+  )
+})
+
+test("built-in Displays are idempotent and code rendering honors descriptor access", () => {
+  const registry = new FileEngineRendererRegistry()
+  registerBuiltInFileEngineRenderers(registry)
+  registerBuiltInFileEngineRenderers(registry)
+
+  assert.deepEqual(registry.list(), BUILTIN_ENGINES.map(({ engineId }) => engineId).sort())
+
+  const codeDescriptor = BUILTIN_ENGINES.find(({ engineId }) => engineId === "ideall.code")!
+  const codeRenderer = registry.get(codeDescriptor.engineId)!
+  const readOnlyElement = codeRenderer({
+    file: { ...file, mediaType: "text/plain" },
+    descriptor: { ...codeDescriptor, access: "read-only" },
   })
-  assert.equal(resolveFileEngineRenderer(note, "ideall.note"), "node-note")
-  assert.equal(resolveFileEngineRenderer(note, "ideall.bookmark"), "unsupported")
+  const readWriteElement = codeRenderer({
+    file: { ...file, mediaType: "text/plain" },
+    descriptor: codeDescriptor,
+  })
+
+  assert.ok(React.isValidElement(readOnlyElement))
+  assert.ok(React.isValidElement(readWriteElement))
+  assert.equal((readOnlyElement.props as { readOnly?: boolean }).readOnly, true)
+  assert.equal((readWriteElement.props as { readOnly?: boolean }).readOnly, false)
+})
+
+test("ideall.preview renders SVG as an image preview instead of a code editor", () => {
+  const registry = new FileEngineRendererRegistry()
+  registerBuiltInFileEngineRenderers(registry)
+  const previewDescriptor = BUILTIN_ENGINES.find(({ engineId }) => engineId === "ideall.preview")!
+  const renderer = registry.get(previewDescriptor.engineId)!
+  const svgElement = renderer({
+    file: { ...file, name: "fixture.svg", mediaType: "image/svg+xml" },
+    descriptor: previewDescriptor,
+  })
+  const binaryElement = renderer({
+    file: { ...file, mediaType: "application/octet-stream" },
+    descriptor: previewDescriptor,
+  })
+  const textElement = renderer({
+    file: { ...file, mediaType: "text/plain" },
+    descriptor: previewDescriptor,
+  })
+
+  assert.ok(React.isValidElement(svgElement))
+  assert.ok(React.isValidElement(binaryElement))
+  assert.ok(React.isValidElement(textElement))
+  assert.equal(svgElement.type, binaryElement.type)
+  assert.notEqual(svgElement.type, textElement.type)
+  assert.equal((svgElement.props as { readOnly?: boolean }).readOnly, undefined)
+  assert.equal((textElement.props as { readOnly?: boolean }).readOnly, true)
 })

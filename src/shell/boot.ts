@@ -9,13 +9,13 @@ import { registerActiveNode } from "@/lib/active-node"
 import { registerBuiltInVfsProviders } from "@/vfs/builtin"
 import { registerBuiltInFileSystems } from "@/filesystem/builtin"
 import { registerBuiltInEngines } from "@/engines/builtin"
+import { registerBuiltInFileEngineRenderers } from "@/workspace/registry"
 import { isTauri } from "@/lib/tauri"
 import { filesPort } from "@/files/files-port"
 import {
   openTarget,
-  closeTab,
+  closeFileTabs,
   closeNodeTabs,
-  tabKey,
   getActiveId,
   getActiveSource,
   getTabs,
@@ -25,10 +25,15 @@ import {
 } from "@/workspace/store"
 import { nodeResourceRefForTab } from "@/workspace/resource-tab"
 import { fileEngineTargetForTab } from "@/workspace/file-tab"
-import { resourceFileRef, resourceRefForFile } from "@/filesystem/resource-file-system"
+import {
+  aiTasksPanelFileRef,
+  resourceFileRef,
+  resourceRefForFile,
+} from "@/filesystem/resource-file-system"
 import { openInBrowserTab } from "@/workspace/browser-open"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
+import { appsManifest } from "@/modules/apps/manifest"
 import { syncManifest } from "@/plugins/sync/manifest"
 import { shellManifest } from "@/plugins/shell/manifest"
 import { gitManifest } from "@/plugins/git/manifest"
@@ -49,6 +54,7 @@ export function registerAll(): void {
   // 五层模型的统一文件系统。旧 Resource/VFS 作为首个存储适配器接入，迁移期并行存在。
   registerBuiltInFileSystems()
   registerBuiltInEngines()
+  registerBuiltInFileEngineRenderers()
   // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点打开为工作区标签 (守 components↛app 边界, 由 app 注入)。
   registerUiActions({
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
@@ -68,8 +74,7 @@ export function registerAll(): void {
     openAiSettings,
     openAiSection,
     openAiTasks,
-    closeAiTasks: (workspaceId) =>
-      closeTab(tabKey({ kind: "ai-tasks", module: "agent", title: "", params: { workspaceId } })),
+    closeAiTasks: (workspaceId) => closeFileTabs(aiTasksPanelFileRef(workspaceId)),
   })
   // 活动节点端口 (§6.5 对话即文件): 当前激活的节点标签 → NodeRef, 供 AI 栏作隐式上下文。
   // 隐私守卫: 仅当激活来源为 user 时回 NodeRef; agent 经 ui.openTab 自激活的节点回 null ——
@@ -88,6 +93,7 @@ export function registerAll(): void {
   }
   // 插件能力注册 (如 sync 的 SyncPort; shell/git/database/audio/code 视图由 workspace/registry 挂载)。
   for (const p of [
+    appsManifest,
     syncManifest,
     shellManifest,
     gitManifest,

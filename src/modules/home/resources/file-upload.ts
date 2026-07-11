@@ -1,4 +1,5 @@
-import { addFile } from "@/files/stores/files-store"
+import { invokeFileAction } from "@/filesystem/registry"
+import { corePlaceRef } from "@/filesystem/resource-file-system"
 
 export type SaveFileFn = (file: File) => Promise<unknown>
 
@@ -18,9 +19,20 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+
+export function saveUploadedFile(file: File): Promise<unknown> {
+  return invokeFileAction(
+    corePlaceRef("files"),
+    "create",
+    { kind: "file", file },
+    UI_ACTION_CONTEXT,
+  )
+}
+
 export async function saveUploadedFiles(
   fileList: FileList | File[],
-  saveFile: SaveFileFn = addFile,
+  saveFile: SaveFileFn = saveUploadedFile,
 ): Promise<FileUploadSummary> {
   let ok = 0
   let failed = 0

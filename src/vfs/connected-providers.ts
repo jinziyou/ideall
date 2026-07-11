@@ -135,6 +135,8 @@ function actionLabel(id: ResourceActionId): string {
       return "打开"
     case "preview":
       return "预览"
+    case "create":
+      return "新建"
     case "navigate":
       return "访问"
     case "save-to-mine":

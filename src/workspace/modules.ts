@@ -1,5 +1,5 @@
 // 工作区模块配置 (桌面工作区壳的唯一数据来源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
-// 活动栏按当前「本地/连接」模式视图过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
+// 活动栏按当前「本地/连接」数据来源模式过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
 //   本机/我的(local): 我的(home) · 关注(subscriptions) · [轨底] 插件 · 应用 · 回收站
 //   连接/发现(connected): 资讯(info) · 社区(community) · 发布(publications) · 工具(tool) · 浏览器(browser)
 //   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (见 store isModeNeutralModule)。
@@ -27,7 +27,7 @@ export type SidebarEntry = {
 
 export type ModuleConfig = {
   id: ModuleId
-  /** 所属工作区模式视图 (本机/我的 vs 连接/发现); 活动栏按当前 mode 过滤展示。 */
+  /** 所属数据来源模式 (本地 vs 连接); 活动栏按当前 mode 过滤展示。 */
   mode: WsMode
   /** 跨模式常驻: 本地/连接活动栏均展示, 打开时不翻 mode (见 store isModeNeutralModule)。 */
   crossMode?: boolean
@@ -191,7 +191,7 @@ export const MODULES: ModuleConfig[] = [
         descriptor: resourceTab({ scheme: "tool", kind: "search", id: "default" }, "搜索"),
       },
       {
-        // 「AI 网站」= 外部 AI 站点启动器 (ChatGPT/Claude/…), 与内置 AI 对话 (活动栏 Bot 钮) 区分。
+        // 「AI 网站」= 外部 AI 站点启动器 (ChatGPT/Claude/…), 与文件工作区的内置 AI 对话区分。
         label: "AI 网站",
         icon: Bot,
         descriptor: resourceTab({ scheme: "tool", kind: "ai", id: "default" }, "AI 网站"),
@@ -219,7 +219,7 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
-  // 注: "agent" 刻意不在 MODULES 内, 由顶栏 AI 入口 + ai-* 区段标签
+  // 注: "agent" 刻意不在 MODULES 内, 由顶栏 AI 侧栏入口 + ai-* 区段标签
   //     (ai-settings/ai-mcp/ai-skills/ai-rules/ai-tasks, 见 registry) 出现, 外加右侧常驻对话栏 (right-ai-panel.tsx)。
 ]
 
@@ -271,7 +271,7 @@ const ALL_ENTRIES = MODULES.flatMap((m) => m.entries)
 export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (!pathname || pathname === "/") return homeEntries[0].descriptor
   // 精确匹配
-  const exact = ALL_ENTRIES.find((e) => e.descriptor.path === pathname)
+  const exact = ALL_ENTRIES.find((entry) => entry.descriptor.path?.split("?", 1)[0] === pathname)
   if (exact) return exact.descriptor
   // /home/agent 是「打开右侧 AI 栏」的虚拟命令路由, 不对应任何标签 → 显式 null。
   if (pathname.startsWith("/home/agent")) return null

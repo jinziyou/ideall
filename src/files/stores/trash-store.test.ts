@@ -8,6 +8,7 @@ import {
   restoreTrashItem,
   purgeTrashItem,
 } from "./trash-store"
+import { updateFileMeta } from "./files-store"
 import { idbGet, idbPut, STORE_BLOBS, STORE_NODES, STORE_TRASH_SNAPSHOTS } from "@/lib/idb"
 
 type FakeStore = {
@@ -366,12 +367,27 @@ test("restoreTrashItem: 用快照恢复笔记、文件 Blob 与对话", async ()
     | undefined
 
   assert.equal(restoredNote?.deletedAt, undefined)
+  assert.ok((restoredNote?.updatedAt ?? 0) > deletedAt)
   assert.equal(restoredNoteBlock?.children?.[0]?.text, "body-n-restore")
   assert.equal(await restoredFileBlob?.blob.text(), "file-body")
   assert.equal(restoredThreadMessage?.content, "message-t-restore")
+  assert.ok((restoredThread?.updatedAt ?? 0) > deletedAt)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, fullNote.id), undefined)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, fullFile.id), undefined)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, fullThread.id), undefined)
+})
+
+test("updateFileMeta: 快速连续更新仍产生严格递增版本", async () => {
+  const initialVersion = Date.now() + 1_000_000
+  await idbPut(STORE_NODES, { ...fileNode("f-version"), updatedAt: initialVersion })
+
+  await updateFileMeta("f-version", { name: "first.md" })
+  const first = await idbGet<NodeOfKind<"file">>(STORE_NODES, "f-version")
+  await updateFileMeta("f-version", { name: "second.md" })
+  const second = await idbGet<NodeOfKind<"file">>(STORE_NODES, "f-version")
+
+  assert.equal(first?.updatedAt, initialVersion + 1)
+  assert.equal(second?.updatedAt, initialVersion + 2)
 })
 
 test("restoreTrashItem: 文件缺少 Blob 快照时不可恢复", async () => {
@@ -397,4 +413,15 @@ test("purgeTrashItem: 永久删除节点、Blob 与回收站快照", async () =>
   assert.equal(await idbGet(STORE_BLOBS, deletedFile.id), undefined)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, deletedFile.id), undefined)
   assert.equal(await countTrashItems(), 0)
+})
+
+test("purgeTrashItem: 恢复后的 live 节点不会被陈旧清理请求删除", async () => {
+  const live = noteNode("n-live")
+  await idbPut(STORE_NODES, live)
+  await captureTrashSnapshot({ ...live, deletedAt: 800 })
+
+  await purgeTrashItem(live.id)
+
+  assert.deepEqual(await idbGet(STORE_NODES, live.id), live)
+  assert.ok(await idbGet(STORE_TRASH_SNAPSHOTS, live.id))
 })

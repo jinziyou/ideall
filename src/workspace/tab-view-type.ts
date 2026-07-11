@@ -4,7 +4,8 @@
 import type { Tab } from "./types"
 import { tabDefinitionViewType, type TabViewType } from "./tab-definitions"
 import { RESOURCE_TAB_KIND } from "./resource-tab"
-import { FILE_ENGINE_TAB_KIND } from "./file-tab"
+import { FILE_ENGINE_TAB_KIND, fileEngineTargetForTab } from "./file-tab"
+import { panelForFile } from "@/filesystem/resource-file-system"
 
 export type { TabViewType }
 
@@ -22,12 +23,12 @@ export const TAB_VIEW_LABEL: Record<TabViewType, string> = {
 
 /** 由已打开标签推导视图类型 (概览 / 面板 / 配置 / 内容)。 */
 export function tabViewType(tab: Tab): TabViewType {
-  if (
-    tab.kind === FILE_ENGINE_TAB_KIND ||
-    tab.kind === RESOURCE_TAB_KIND ||
-    tab.kind === "node" ||
-    tab.kind === "browser-view"
-  ) {
+  if (tab.kind === FILE_ENGINE_TAB_KIND) {
+    const target = fileEngineTargetForTab(tab)
+    const panel = target ? panelForFile(target.ref) : null
+    return panel ? (tabDefinitionViewType(panel.tabKind) ?? "content") : "content"
+  }
+  if (tab.kind === RESOURCE_TAB_KIND || tab.kind === "node" || tab.kind === "browser-view") {
     return "content"
   }
   return tabDefinitionViewType(tab.kind) ?? "panel"

@@ -20,6 +20,7 @@ import {
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { captureTrashSnapshot } from "@/files/stores/trash-store"
+import { nextUpdatedAt } from "@/files/version"
 
 type FeedNode = NodeOfKind<"feed">
 
@@ -99,6 +100,7 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
   if (input.type === "tool" && !safeHref(key)) {
     throw new Error("工具链接必须是 http(s) 地址")
   }
+  const now = Date.now()
   const sub: Subscription = {
     id: `${input.type}:${key}`,
     type: input.type,
@@ -118,8 +120,8 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
       ? { searchKeyword: input.searchKeyword, searchDomain: input.searchDomain }
       : {}),
     // 恢复被软删的记录时保留原 createdAt (概念上同一关注又回来了); 全新关注则取 now。
-    createdAt: existing?.createdAt ?? Date.now(),
-    updatedAt: Date.now(), // 新 updatedAt 保证 LWW 胜过删除标记 (恢复) / 旧远端项
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: existing ? nextUpdatedAt(existing.updatedAt, now) : now,
   }
   // sub 无 deletedAt → subToFeedNode 不写删除标记位 = 恢复; 复用删除标记 sortKey, 全新则追加。
   const node = subToFeedNode(sub, existing?.sortKey || nextKey(maxKey(await allFeedNodes())))
@@ -138,7 +140,11 @@ export async function removeSubscription(type: SubscriptionType, key: string): P
   if (!existing || existing.kind !== "feed" || !isLive(existing)) return // 未关注 / 已删除标记 → 幂等
   const now = Date.now()
   await captureTrashSnapshot(existing)
-  await idbPut(STORE_NODES, { ...existing, deletedAt: now, updatedAt: now })
+  await idbPut(STORE_NODES, {
+    ...existing,
+    deletedAt: now,
+    updatedAt: nextUpdatedAt(existing.updatedAt, now),
+  })
   notifyFilesUpdated({ kind: "feed", id, subType: type })
 }
 

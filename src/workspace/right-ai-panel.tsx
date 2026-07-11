@@ -78,6 +78,7 @@ export default function RightAiPanel() {
       return
     }
     openAiSettings()
+    setRightPanel(false)
   }, [panelWorkspace])
 
   const [everOpened, setEverOpened] = React.useState(false)
@@ -91,9 +92,20 @@ export default function RightAiPanel() {
 
   const isMobileOverlay = open && !isMdUp
   const sentinelRef = React.useRef(false)
+  const sentinelCleanupRef = React.useRef<number | null>(null)
   React.useEffect(() => {
     if (!isMobileOverlay) return
-    window.history.pushState({ ideallAiPanel: true }, "", window.location.href)
+    if (sentinelCleanupRef.current !== null) {
+      window.clearTimeout(sentinelCleanupRef.current)
+      sentinelCleanupRef.current = null
+    }
+    if (window.history.state?.ideallAiPanel !== true) {
+      window.history.pushState(
+        { ...window.history.state, ideallAiPanel: true },
+        "",
+        window.location.href,
+      )
+    }
     sentinelRef.current = true
     const onPop = () => {
       sentinelRef.current = false
@@ -103,10 +115,12 @@ export default function RightAiPanel() {
     return () => {
       window.removeEventListener("popstate", onPop)
       if (sentinelRef.current) {
-        sentinelRef.current = false
-        if (window.matchMedia("(max-width: 767px)").matches) {
-          window.history.back()
-        }
+        sentinelCleanupRef.current = window.setTimeout(() => {
+          sentinelCleanupRef.current = null
+          if (!sentinelRef.current) return
+          sentinelRef.current = false
+          if (window.matchMedia("(max-width: 767px)").matches) window.history.back()
+        }, 0)
       }
     }
   }, [isMobileOverlay])
@@ -121,7 +135,6 @@ export default function RightAiPanel() {
       ref={asideRef}
       tabIndex={showFixed ? -1 : undefined}
       role={showFixed ? "dialog" : undefined}
-      aria-modal={showFixed ? true : undefined}
       aria-label="AI 智能体"
       aria-hidden={!open}
       onKeyDown={(e) => {

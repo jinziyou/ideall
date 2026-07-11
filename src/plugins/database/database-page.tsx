@@ -12,26 +12,96 @@ import {
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
+import type { DirectoryEntry, FileRef } from "@protocol/file-system"
+import { invokeFileAction, readFile, readFileDirectory } from "@/filesystem/registry"
 import { cn } from "@/lib/utils"
 import { downloadTextFile } from "@/lib/browser-download"
 import { pluginDataFilename } from "@/plugins/shared/plugin-data"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { Input } from "@/ui/input"
-import {
-  addRow,
-  createTable,
-  deleteRow,
-  deleteTable,
-  exportDatabaseJson,
-  importDatabaseJson,
-  listRows,
-  listTables,
-  normalizeColumns,
-  rowValuesForColumns,
-  type DataRow,
-  type DataTable,
-} from "./database-store"
+import { DATABASE_ACTIONS, DATABASE_ROOT_REF } from "./database-file-system"
+
+type DataTable = {
+  ref: FileRef
+  id: string
+  name: string
+  columns: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+type DataRow = {
+  id: string
+  tableId: string
+  values: Record<string, string>
+  createdAt: number
+  updatedAt: number
+}
+
+const DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
+const CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
+const ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+}
+
+function tableFromEntry(entry: DirectoryEntry): DataTable | null {
+  const properties = entry.properties
+  const id = properties?.tableId
+  const columns = properties?.columns
+  if (typeof id !== "string" || !Array.isArray(columns)) return null
+  if (!columns.every((column): column is string => typeof column === "string")) return null
+  return {
+    ref: entry.target,
+    id,
+    name: entry.name,
+    columns,
+    createdAt: typeof properties?.createdAt === "number" ? properties.createdAt : 0,
+    updatedAt: typeof properties?.updatedAt === "number" ? properties.updatedAt : 0,
+  }
+}
+
+function rowFromData(value: unknown): DataRow | null {
+  if (!isRecord(value) || !isRecord(value.values)) return null
+  if (
+    typeof value.id !== "string" ||
+    typeof value.tableId !== "string" ||
+    typeof value.createdAt !== "number" ||
+    typeof value.updatedAt !== "number"
+  ) {
+    return null
+  }
+  const values = Object.fromEntries(
+    Object.entries(value.values).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  )
+  return {
+    id: value.id,
+    tableId: value.tableId,
+    values,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  }
+}
+
+function rowsFromReadData(data: unknown): DataRow[] {
+  if (!isRecord(data) || !Array.isArray(data.rows)) return []
+  return data.rows.flatMap((row) => {
+    const parsed = rowFromData(row)
+    return parsed ? [parsed] : []
+  })
+}
+
+async function loadTables(): Promise<DataTable[]> {
+  const page = await readFileDirectory(DATABASE_ROOT_REF, DIRECTORY_CONTEXT)
+  return page.entries.flatMap((entry) => {
+    const table = tableFromEntry(entry)
+    return table ? [table] : []
+  })
+}
 
 export default function DatabasePage({ initialTableId }: { initialTableId?: string } = {}) {
   const [tables, setTables] = React.useState<DataTable[]>([])
@@ -52,7 +122,7 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
 
   React.useEffect(() => {
     let alive = true
-    listTables()
+    loadTables()
       .then((next) => {
         if (!alive) return
         setTables(next)
@@ -72,13 +142,15 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
       return
     }
     let alive = true
-    listRows(activeId).then((next) => {
-      if (alive) setRows(next)
+    const table = tables.find((item) => item.id === activeId)
+    if (!table) return
+    readFile(table.ref, CONTENT_CONTEXT).then((result) => {
+      if (alive) setRows(rowsFromReadData(result.data))
     })
     return () => {
       alive = false
     }
-  }, [activeId])
+  }, [activeId, tables])
 
   React.useEffect(() => {
     if (!activeTable) {
@@ -89,7 +161,7 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
   }, [activeTable])
 
   const reloadTables = async (selectId?: string | null) => {
-    const next = await listTables()
+    const next = await loadTables()
     setTables(next)
     if (selectId !== undefined) {
       setActiveId(selectId)
@@ -102,17 +174,24 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
   }
 
   const reloadRows = async () => {
-    if (!activeId) return
-    setRows(await listRows(activeId))
+    if (!activeTable) return
+    const result = await readFile(activeTable.ref, CONTENT_CONTEXT)
+    setRows(rowsFromReadData(result.data))
   }
 
   const handleCreateTable = async () => {
     if (busy) return
     setBusy(true)
     try {
-      const table = await createTable(tableName, normalizeColumns(columnsInput))
+      const result = await invokeFileAction(
+        DATABASE_ROOT_REF,
+        DATABASE_ACTIONS.createTable,
+        { name: tableName, columns: columnsInput },
+        ACTION_CONTEXT,
+      )
+      const table = isRecord(result) && isRecord(result.table) ? result.table : null
       setTableName("")
-      await reloadTables(table.id)
+      await reloadTables(table && typeof table.id === "string" ? table.id : undefined)
       toast("已创建表")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "建表失败")
@@ -125,7 +204,12 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
     if (!activeTable || busy) return
     setBusy(true)
     try {
-      await deleteTable(activeTable.id)
+      await invokeFileAction(
+        activeTable.ref,
+        DATABASE_ACTIONS.deleteTable,
+        undefined,
+        ACTION_CONTEXT,
+      )
       setRows([])
       await reloadTables(null)
       toast("已删除表")
@@ -140,8 +224,12 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
     if (!activeTable || busy) return
     setBusy(true)
     try {
-      const values = rowValuesForColumns(activeTable.columns, draft)
-      await addRow(activeTable.id, values)
+      await invokeFileAction(
+        activeTable.ref,
+        DATABASE_ACTIONS.addRow,
+        { values: draft },
+        ACTION_CONTEXT,
+      )
       setDraft(Object.fromEntries(activeTable.columns.map((column) => [column, ""])))
       await reloadRows()
     } catch (e) {
@@ -152,14 +240,25 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
   }
 
   const handleDeleteRow = async (id: string) => {
-    await deleteRow(id)
-    await reloadRows()
+    if (!activeTable) return
+    try {
+      await invokeFileAction(activeTable.ref, DATABASE_ACTIONS.deleteRow, { id }, ACTION_CONTEXT)
+      await reloadRows()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "删除失败")
+    }
   }
 
   const handleExport = async () => {
     if (!activeTable) return
-    const payload = JSON.stringify({ table: activeTable, rows }, null, 2)
     try {
+      const payload = await invokeFileAction(
+        activeTable.ref,
+        DATABASE_ACTIONS.export,
+        undefined,
+        ACTION_CONTEXT,
+      )
+      if (typeof payload !== "string") throw new Error("数据库文件系统返回了无效导出")
       await navigator.clipboard.writeText(payload)
       toast("已复制 JSON")
     } catch {
@@ -169,7 +268,14 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
 
   const handleExportAll = async () => {
     try {
-      downloadTextFile(pluginDataFilename("ideall-database"), await exportDatabaseJson())
+      const payload = await invokeFileAction(
+        DATABASE_ROOT_REF,
+        DATABASE_ACTIONS.export,
+        undefined,
+        ACTION_CONTEXT,
+      )
+      if (typeof payload !== "string") throw new Error("数据库文件系统返回了无效导出")
+      downloadTextFile(pluginDataFilename("ideall-database"), payload)
       toast("已导出数据库 JSON")
     } catch (e) {
       toast.error("导出失败", { description: e instanceof Error ? e.message : String(e) })
@@ -181,10 +287,16 @@ export default function DatabasePage({ initialTableId }: { initialTableId?: stri
     if (!file || busy) return
     setBusy(true)
     try {
-      const result = await importDatabaseJson(await file.text())
+      const result = await invokeFileAction(
+        DATABASE_ROOT_REF,
+        DATABASE_ACTIONS.import,
+        { content: await file.text() },
+        ACTION_CONTEXT,
+      )
+      const imported = isRecord(result) ? result : {}
       setRows([])
       await reloadTables()
-      toast(`已导入 ${result.tables} 张表、${result.rows} 行`)
+      toast(`已导入 ${Number(imported.tables) || 0} 张表、${Number(imported.rows) || 0} 行`)
     } catch (e) {
       toast.error("导入失败", { description: e instanceof Error ? e.message : String(e) })
     } finally {

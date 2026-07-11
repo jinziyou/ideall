@@ -1,62 +1,45 @@
-import { afterEach, test } from "node:test"
+import { test } from "node:test"
 import assert from "node:assert/strict"
-import type { ResourceMeta } from "@protocol/resource"
-import { clearVfsProvidersForTest, registerVfsProvider } from "@/vfs/registry"
-import type { ResourceQuery, VfsProvider } from "@/vfs/types"
-import { loadLocalSearchItems } from "./local-search-items"
+import type { DirectoryEntry } from "@protocol/file-system"
+import {
+  corePlaceRef,
+  resourceFileRef,
+  resourceRefForFile,
+} from "@/filesystem/resource-file-system"
+import {
+  loadLocalSearchItems,
+  type LoadLocalSearchItemsOptions,
+  type LocalSearchSource,
+} from "./local-search-items"
 
-afterEach(() => {
-  clearVfsProvidersForTest()
-})
+function entry(
+  kind: "note" | "feed" | "bookmark" | "file" | "thread",
+  id: string,
+  name: string,
+  mediaType?: string,
+): DirectoryEntry {
+  return {
+    entryId: `${kind}:${id}`,
+    parent: corePlaceRef("home"),
+    target: resourceFileRef({ scheme: "node", kind, id }),
+    name,
+    kind: "link",
+    properties: mediaType ? { mediaType } : undefined,
+  }
+}
 
-test("local search: builds content items from VFS resources", async () => {
-  const metas: ResourceMeta[] = [
-    {
-      ref: { scheme: "node", kind: "note", id: "n1" },
-      title: "Alpha Note",
-      capabilities: ["open"],
-    },
-    {
-      ref: { scheme: "node", kind: "feed", id: "feed:entity:alpha" },
-      title: "Alpha Feed",
-      capabilities: ["open"],
-    },
-    {
-      ref: { scheme: "node", kind: "bookmark", id: "b1" },
-      title: "Alpha Bookmark",
-      capabilities: ["open"],
-    },
-    {
-      ref: { scheme: "node", kind: "file", id: "f1" },
-      title: "readme.md",
-      iconHint: "text/markdown",
-      capabilities: ["open"],
-    },
-    {
-      ref: { scheme: "node", kind: "thread", id: "t1" },
-      title: "Alpha Thread",
-      capabilities: ["open"],
-    },
+test("local search: builds content items from FileSystem directory entries", async () => {
+  const entries = [
+    entry("note", "n1", "Alpha Note"),
+    entry("feed", "feed:entity:alpha", "Alpha Feed"),
+    entry("bookmark", "b1", "Alpha Bookmark"),
+    entry("file", "f1", "readme.md", "text/markdown"),
+    entry("thread", "t1", "Alpha Thread"),
   ]
 
-  const provider: VfsProvider = {
-    scheme: "node",
-    async list(query) {
-      return { items: metas.filter((meta) => meta.ref.kind === query.kind) }
-    },
-    async get() {
-      return null
-    },
-    async actions() {
-      return []
-    },
-    async invoke() {
-      return null
-    },
-  }
-  registerVfsProvider(provider)
-
-  const items = await loadLocalSearchItems()
+  const items = await loadLocalSearchItems({}, async (source) =>
+    entries.filter((item) => resourceRefForFile(item.target)?.kind === source.kind),
+  )
 
   assert.deepEqual(
     items.map((item) => item.group),
@@ -80,37 +63,23 @@ test("local search: builds content items from VFS resources", async () => {
   })
 })
 
-test("local search: pushes text and limit into VFS queries", async () => {
-  const queries: ResourceQuery[] = []
-  const provider: VfsProvider = {
-    scheme: "node",
-    async list(query) {
-      queries.push(query)
-      return { items: [] }
-    },
-    async get() {
-      return null
-    },
-    async actions() {
-      return []
-    },
-    async invoke() {
-      return null
-    },
-  }
-  registerVfsProvider(provider)
+test("local search: passes normalized source groups and options to the FileSystem loader", async () => {
+  const calls: Array<{ source: LocalSearchSource; options: LoadLocalSearchItemsOptions }> = []
+  await loadLocalSearchItems({ text: "  Alpha  ", limitPerGroup: 7 }, async (source, options) => {
+    calls.push({ source, options })
+    return []
+  })
 
-  await loadLocalSearchItems({ text: "  Alpha  ", limitPerGroup: 7 })
-
-  assert.equal(queries.length, 5)
   assert.deepEqual(
-    queries.map((query) => ({ kind: query.kind, text: query.text, limit: query.limit })),
+    calls.map(({ source }) => ({ group: source.group, place: source.place, kind: source.kind })),
     [
-      { kind: "note", text: "Alpha", limit: 7 },
-      { kind: "feed", text: "Alpha", limit: 7 },
-      { kind: "bookmark", text: "Alpha", limit: 7 },
-      { kind: "file", text: "Alpha", limit: 7 },
-      { kind: "thread", text: "Alpha", limit: 7 },
+      { group: "笔记", place: "notes", kind: "note" },
+      { group: "关注", place: "subscriptions", kind: "feed" },
+      { group: "书签", place: "bookmarks", kind: "bookmark" },
+      { group: "资源", place: "files", kind: "file" },
+      { group: "对话", place: "workspace", kind: "thread" },
     ],
   )
+  assert.ok(calls.every(({ options }) => options.text === "  Alpha  "))
+  assert.ok(calls.every(({ options }) => options.limitPerGroup === 7))
 })
