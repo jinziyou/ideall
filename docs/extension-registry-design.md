@@ -5,7 +5,7 @@
 >
 > **本稿经三视角对抗式红队审查（安全/信任 · 同步/迁移/类型安全 · 可行性/自洽）修正。** 方向（复用既有原语、最小解冻、分期）经审查成立；但初稿把多处**尚未实现的净新机制**误述为「已有不变量」，并有数处对代码的事实性误判。下文已纠正，并在 §0 汇总红队结论，让「已成立 / 须新建 / 事实纠错」一目了然。
 >
-> **状态更新（2026-07）：两项「须新建」已落地** —— ① tier 门：`grant.ts` 已有 `TIER_RANK`/`tierAtLeast`/`PERMISSION_MIN_TIER`/`effectivePermissions`，`grant.tier` 已被强制读取执行（`local-mcp-server` 走 `effectivePermissions`，并有「低信任档剥 `web:*`」的测试锁定）；② kind 单源：`node.ts` 的 `NODE_KINDS` 已是唯一真相源，`tools.ts` zod enum 与 `nodes-store` 均从其派生。文中 `文件:行号` 锚点是红队审查时的快照、可能已漂移，以符号名为准。
+> **状态更新（2026-07）**：① tier 门已落地：`grant.ts` 的 `TIER_RANK`/`tierAtLeast`/`PERMISSION_MIN_TIER`/`effectivePermissions` 已在能力创建时执行；② kind 单源已落地：`node.ts` 的 `NODE_KINDS` 是唯一真相源；③五层模型的可信运行时组合注册已落地：package 走宿主注入的 `discover -> verify -> consent/restore -> activate`，Catalog 用一次性内存 permit 调用 Registry，严格 v2 receipt 记录不承载代码；激活、撤销、卸载、在途中止、隔离与清理重试均有状态和设置 UI。它仍不等于从任意包执行代码：实际包发现、平台签名/来源验证、consent authority 与 connector 进程由发行/宿主提供，缺省 fail closed。文中 `文件:行号` 锚点是红队审查时的快照、可能已漂移，以符号名为准。
 
 ## 0. 红队结论速览（先看这条）
 

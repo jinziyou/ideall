@@ -44,7 +44,7 @@ src/ 已按终端分层重组: 路由薄标记 / 终端外壳 / 一切皆标签 
 | **app** | `@/app/*` | Next 路由层 —— 仅「开标签」薄标记 (page.tsx 几乎全是 re-export `@/workspace/open-workspace-tab`; 唯一例外 `app/auth/page.tsx` 是独立登录页, 渲染 `@/shell/auth-form`) + 根 layout/error/loading/not-found + globals.css |
 | **shell** | `@/shell/*` | 终端外壳 —— 命令台 / header / bottom-tab-bar / 主题 (theme/theme-applier) / account / mobile-nav / nav-config + `boot` (组合根, 能力/boot manifest 的唯一注册处; embed 的视图挂载 manifest 是既有例外, 且并非每个插件都有 boot manifest —— 如 agent 无) / `boot-gate` (启动闸) |
 | **workspace** | `@/workspace/*` | 一切皆标签 —— `tab-host` (keep-alive 多标签) / `registry` (resource 与静态面板渲染) / `resource-tab` / `resource-engines` / store / `viewers` (按 kind: note/file/bookmark/feed/thread) / `modules` (模块配置单一真相源) / node-ref / `tree/` (跨 kind Resource 文件树: sidebar-tree / sidebar-tree-data / draggable-node-forest, 根命名空间 places 概念) / local-search-items (⌘K 统一面板的 VFS 本机内容源), 以及活动栏 / 二级侧栏 / 标签条 / 状态栏 4 件 IDE chrome |
-| **files** | `@/files/*` | 一切皆文件 —— 统一 Node 数据层。`stores/` (各 kind store + `nodes-store` 跨 kind 协调层); 顶层 Node 原语: note-blocks / sort-key / notes-tree-util / note-write-queue / flowback / feed-node (关注↔feed 节点投影) / `files-port` (FilesPort 实现) / bookmark-import |
+| **files** | `@/files/*` | 一切皆文件 —— 统一 Node 数据层。`stores/` (各 kind store + `nodes-store` 跨 kind 协调层); 顶层 Node 原语: note-blocks / sort-key / notes-tree-util / note-write-queue / flowback / feed-node (关注↔feed 节点投影) / `files-port` (经 FileSystem registry 的兼容外观) / `storage-sync-port` (同步专用原子存储面) / bookmark-import |
 | **modules** | `@/modules/*` | 功能模块 —— `home` (「我的」: 本机笔记/书签/资源/关注/对话的功能 UI = overview/notes/bookmarks/resources/publications/subscriptions) / `info` / `community` / `tool` / `apps` (本机已安装应用启动器, Tauri 桌面 / 本地模式; 由 `src-tauri/src/installed_apps.rs` + `src/lib/installed-apps.ts` 支撑) |
 | **plugins** | `@/plugins/*` | 插件 —— `agent` (AI 环境层, BYO-key) / `sync` (跨端 E2E 同步) / `embed` (嵌入页 + AI 共用的 Grant→`createLocalMcpServer` 能力链路) / `code` / `git` / `shell` / `audio` / `database`，公共插件数据能力在 `plugins/shared` |
 | **protocol** | `@protocol/*` | 契约 / 端口 (纯类型 / 纯函数, 不含 UI): node (统一 Node 联合) / files (FilesPort + 投影域类型 Note/Bookmark/StoredFile/Subscription/Thread) / note-merge / subscription / content / flowback / sync (SyncPort) / server-port (ServerPort) / peer / auth |
@@ -66,7 +66,7 @@ ESLint 强制五条边界:
 - **内容 feed**: 「我的」关注流调 `@protocol/content` 的 `resolveSubscription`; info/community 在各自 `manifest.ts`
   注册 resolver (info 管 publisher/entity/search, community 管 peer)。
 - **本机文件数据**: 反馈组件 (`@/shared/feeders`) 与 agent 插件经 `@protocol/files` 的 `getFilesPort()`
-  (FilesPort, 在 boot 注册实现) 读写关注/书签/资源, 不直接依赖底层 Node 存储。
+  使用兼容领域 DTO；普通 CRUD 由该外观继续分派到 FileSystem registry，不直接依赖底层 Node 存储。只有 sync 经 `StorageSyncPort` 使用含墓碑快照与原子 bulk。
 - **跨端同步**: 「我的」同步面板调 `@protocol/sync` 的 `getSyncPort()`; sync 插件 `manifest.ts` 注册 SyncPort。
 - **后端取数 (wonita 服务数据服务)**: 所有信息/发布/鉴权取数经 `@protocol/server-port` 的 `getServerPort()`
   (ServerPort, 后端数据服务契约 + 自有领域类型), 默认实现是 `@/lib/server` 的 HTTP 适配器
