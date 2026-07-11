@@ -82,7 +82,7 @@ test("installed apps filesystem: directory pagination reuses one scan and refres
   assert.equal(scans, 2)
 })
 
-test("installed apps filesystem: open action launches through the provider permission boundary", async () => {
+test("installed apps filesystem: launch action crosses the provider permission boundary", async () => {
   const launched: string[] = []
   const fs = createInstalledAppsFileSystem({
     async listInstalledApps() {
@@ -94,10 +94,20 @@ test("installed apps filesystem: open action launches through the provider permi
   })
   const ref = installedAppFileRef("alpha")
   const actions = await fs.actions(ref, { actor: "ui", permissions: [], intent: "action" })
-  assert.deepEqual(actions, [{ id: "open", label: "启动", requires: ["apps:launch"] }])
+  assert.deepEqual(actions, [
+    {
+      id: "launch",
+      label: "启动",
+      requires: ["apps:launch"],
+      kind: "invoke",
+      risk: "caution",
+      idempotent: false,
+      uiHints: { confirmDescription: "将启动本机安装的应用。" },
+    },
+  ])
 
   await assert.rejects(
-    fs.invoke(ref, "open", undefined, {
+    fs.invoke(ref, "launch", undefined, {
       actor: "engine",
       permissions: [],
       activeFile: ref,
@@ -108,7 +118,7 @@ test("installed apps filesystem: open action launches through the provider permi
   assert.deepEqual(launched, [])
 
   assert.deepEqual(
-    await fs.invoke(ref, "open", undefined, {
+    await fs.invoke(ref, "launch", undefined, {
       actor: "system",
       permissions: ["apps:launch"],
       intent: "action",

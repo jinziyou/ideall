@@ -178,14 +178,32 @@ export function createTrashFileSystem(
       assertAccess(ref, ctx, "action", "fs:read")
       if (sameFileRef(ref, trashRootRef)) {
         return [
-          { id: "open", label: "打开" },
-          { id: "empty", label: "清空回收站", destructive: true, requires: ["delete"] },
+          { id: "open", label: "打开", kind: "display" },
+          {
+            id: "empty",
+            label: "清空回收站",
+            kind: "invoke",
+            risk: "destructive",
+            idempotent: true,
+            requires: ["delete"],
+          },
         ]
       }
       const item = await requireItem(ref, deps)
       return [
-        ...(item.restorable ? [{ id: "restore", label: "恢复" }] : []),
-        { id: "purge", label: "永久删除", destructive: true, requires: ["delete"] },
+        ...(item.restorable
+          ? ([
+              { id: "restore", label: "恢复", kind: "invoke", idempotent: false },
+            ] satisfies FileAction[])
+          : []),
+        {
+          id: "purge",
+          label: "永久删除",
+          kind: "invoke",
+          risk: "destructive",
+          idempotent: true,
+          requires: ["delete"],
+        },
       ]
     },
     async invoke(ref, action, _input, ctx) {

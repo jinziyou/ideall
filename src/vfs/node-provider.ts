@@ -12,6 +12,7 @@ import {
   createNode,
   deleteNode,
   getNodeRaw,
+  getNodesRaw,
   listNodeSummaries,
   moveNode,
   readBlob,
@@ -36,6 +37,7 @@ import { VfsError } from "./types"
 export type NodeVfsProviderDeps = {
   listNodeSummaries: (kinds: NodeKind[]) => Promise<NodeSummary[]>
   getNodeRaw: (id: string) => Promise<Node | undefined>
+  getNodesRaw: (ids: readonly string[]) => Promise<Array<Node | undefined>>
   createNode: (input: FsCreateInput) => Promise<Node>
   createFile: typeof addFile
   updateNode: (kind: NodeKind, id: string, patch: FsWritePatch) => Promise<Node | undefined>
@@ -57,6 +59,7 @@ export type NodeVfsProviderDeps = {
 const defaultDeps: NodeVfsProviderDeps = {
   listNodeSummaries,
   getNodeRaw,
+  getNodesRaw,
   createNode,
   createFile: addFile,
   updateNode,
@@ -276,10 +279,23 @@ async function requireNode(deps: NodeVfsProviderDeps, ref: NodeResourceRef): Pro
   return node
 }
 
+function readableNodeRecord(
+  node: Node,
+  ref: NodeResourceRef,
+  ctx: VfsAccessContext,
+): ResourceRecord {
+  const meta = nodeMeta(node)
+  if (isPrivateKind(node.kind) && !canReadPrivateContent(ref, ctx)) {
+    if (ctx.intent === "metadata") return { meta, content: stripNode(node) }
+    throw new VfsError("consent-required", "Reading note/thread content requires consent")
+  }
+  return { meta, content: node }
+}
+
 function nodeActions(kind: NodeKind): ResourceAction[] {
   const actions: ResourceAction[] = [
-    { id: "open", label: "打开", requires: ["open"] },
-    { id: "preview", label: "预览", requires: ["preview"] },
+    { id: "open", label: "打开", requires: ["open"], invocation: "display" },
+    { id: "preview", label: "预览", requires: ["preview"], invocation: "display" },
   ]
   if (kind === "note" || kind === "folder") {
     actions.push({
@@ -363,12 +379,23 @@ export function createNodeVfsProvider(deps: NodeVfsProviderDeps = defaultDeps): 
       const nodeRefValue = asNodeRef(ref)
       assertCanReadMetadata(ctx)
       const node = await requireNode(deps, nodeRefValue)
-      const meta = nodeMeta(node)
-      if (isPrivateKind(node.kind) && !canReadPrivateContent(nodeRefValue, ctx)) {
-        if (ctx.intent === "metadata") return { meta, content: stripNode(node) }
-        throw new VfsError("consent-required", "Reading note/thread content requires consent")
+      return readableNodeRecord(node, nodeRefValue, ctx)
+    },
+    async getMany(refs, ctx): Promise<Array<ResourceRecord | null>> {
+      assertCanReadMetadata(ctx)
+      const nodeRefs = refs.map(asNodeRef)
+      const nodes = await deps.getNodesRaw(nodeRefs.map((ref) => ref.id))
+      if (nodes.length !== nodeRefs.length) {
+        throw new VfsError(
+          "unsupported",
+          `Node storage returned ${nodes.length} batch results for ${nodeRefs.length} refs`,
+        )
       }
-      return { meta, content: node }
+      return nodeRefs.map((ref, index) => {
+        const node = nodes[index]
+        if (!node || node.kind !== ref.kind || node.deletedAt != null) return null
+        return readableNodeRecord(node, ref, ctx)
+      })
     },
     async actions(ref, ctx) {
       const nodeRefValue = asNodeRef(ref)

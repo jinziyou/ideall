@@ -150,11 +150,14 @@ function DirectoryChildren({
         const loaded = await Promise.all(
           visibleEntries.map(async (entry) => ({
             entry,
-            file: await statFile(entry.target, {
-              actor: "ui",
-              permissions: [],
-              intent: "metadata",
-            }).catch(() => null),
+            file:
+              entry.file && sameFileRef(entry.file.ref, entry.target)
+                ? entry.file
+                : await statFile(entry.target, {
+                    actor: "ui",
+                    permissions: [],
+                    intent: "metadata",
+                  }).catch(() => null),
           })),
         )
         if (alive) setItems(loaded)

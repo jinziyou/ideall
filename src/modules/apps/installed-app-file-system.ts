@@ -300,10 +300,22 @@ export function createInstalledAppsFileSystem(
       assertReadAccess(ref, ctx, "action")
       if (sameFileRef(ref, installedAppsRootRef)) return []
       await requireApp(ref)
-      return [{ id: "open", label: "启动", requires: ["apps:launch"] }]
+      return [
+        {
+          id: "launch",
+          label: "启动",
+          requires: ["apps:launch"],
+          kind: "invoke",
+          risk: "caution",
+          idempotent: false,
+          uiHints: {
+            confirmDescription: "将启动本机安装的应用。",
+          },
+        },
+      ]
     },
     async invoke(ref, action, _input, ctx): Promise<unknown> {
-      if (action !== "open") {
+      if (action !== "launch") {
         assertReadAccess(ref, ctx, "action")
         await requireApp(ref)
         throw new FileSystemError("unsupported", `Unsupported installed app action: ${action}`, ref)

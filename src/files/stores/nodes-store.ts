@@ -5,7 +5,7 @@ import { NODE_KINDS } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import { bytesToBase64 } from "@/lib/base64"
 import { safeHref } from "@/lib/safe-url"
-import { idbGet, idbGetAllFromIndex, INDEX_NODES_KIND, STORE_NODES } from "@/lib/idb"
+import { idbGet, idbGetAllFromIndex, idbGetMany, INDEX_NODES_KIND, STORE_NODES } from "@/lib/idb"
 import { buildParentOf, effectiveParentId, type TreeItem } from "@/files/notes-tree-util"
 import { addNote, updateNote, moveNote, deleteNote } from "@/files/stores/notes-store"
 import {
@@ -24,7 +24,7 @@ import {
   removeSubscription,
   getSubscription,
 } from "@/files/stores/subscriptions-store"
-import { deleteThread, renameThread } from "@/files/stores/threads-store"
+import { createThread, deleteThread, renameThread, saveThread } from "@/files/stores/threads-store"
 import { feedNodeId } from "@/files/feed-node"
 import { restoreTrashItem } from "@/files/stores/trash-store"
 
@@ -101,9 +101,16 @@ export async function getNodeRaw(id: string): Promise<Node | undefined> {
   return n
 }
 
+/** 按 id 输入顺序在同一 IndexedDB 事务读取活跃节点；未知或已删除节点保留为 undefined。 */
+export async function getNodesRaw(ids: readonly string[]): Promise<Array<Node | undefined>> {
+  const nodes = await idbGetMany<Node>(STORE_NODES, ids)
+  return nodes.map((node) => (node?.deletedAt == null ? node : undefined))
+}
+
 // ---- AI fs.* 写 (§6.1): 跨 kind 写按 kind 分派到各 kind 专属 store, 回读为 Node。 ----
 // content 用各 kind 的 Node content 形态 (note=Plate Value 数组; bookmark={url,description,favicon};
-// feed={type,key,...}; thread/folder/file 不经 fs.create)。写后用 getNodeRaw 回读统一 Node。
+// feed={type,key,...})。thread 只供 FilesPort→FileSystem 的新会话动作内部创建，公开 fs.create
+// 仍在兼容外观拒绝 thread/file。写后用 getNodeRaw 回读统一 Node。
 
 /** fs.create: 按 kind 新建节点, 回读为 Node。file 不可经此创建 (需二进制上传)。 */
 export async function createNode(input: FsCreateInput): Promise<Node> {
@@ -163,7 +170,8 @@ export async function createNode(input: FsCreateInput): Promise<Node> {
       break
     }
     case "thread":
-      throw new Error("thread 由 AI 会话自动创建, 不经 fs.create")
+      id = (await createThread()).id
+      break
     case "file":
       throw new Error("file 不可经 fs.create 创建 (需二进制上传)")
     default:
@@ -210,9 +218,27 @@ export async function updateNode(
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
       })
       break
-    case "thread":
-      if (patch.title !== undefined) await renameThread(id, patch.title)
+    case "thread": {
+      const current = await getNodeRaw(id)
+      if (!current || current.kind !== "thread") return undefined
+      const rawContent = patch.content as { messages?: unknown } | undefined
+      const messages = rawContent?.messages
+      if (messages !== undefined && !Array.isArray(messages)) {
+        throw new Error("thread content.messages 必须是数组")
+      }
+      if (Array.isArray(messages)) {
+        await saveThread({
+          id: current.id,
+          title: patch.title ?? current.title,
+          messages,
+          createdAt: current.createdAt,
+          updatedAt: current.updatedAt,
+        })
+      } else if (patch.title !== undefined) {
+        await renameThread(id, patch.title)
+      }
       break
+    }
     default:
       return undefined // feed 无字段级更新 (关注由 add/remove 管理)
   }

@@ -88,6 +88,121 @@ test("resource filesystem: note roots and child pages are created through VFS ac
   })
 })
 
+test("resource filesystem: recursive place entries preserve each descendant parent FileRef", async () => {
+  const root: ResourceMeta = {
+    ref: { scheme: "node", kind: "note", id: "root" },
+    title: "Root",
+    capabilities: ["open", "read-content"],
+  }
+  const child: ResourceMeta = {
+    ref: { scheme: "node", kind: "note", id: "child" },
+    title: "Child",
+    parent: root.ref,
+    capabilities: ["open", "read-content"],
+  }
+  registerVfsProvider({
+    scheme: "node",
+    async list() {
+      return { items: [root, child] }
+    },
+    async get(ref) {
+      const meta = ref.id === child.ref.id ? child : root
+      return { meta, content: null }
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      throw new Error("unsupported")
+    },
+  })
+  const fs = createResourceFileSystem()
+  const page = await fs.readDirectory(
+    corePlaceRef("notes"),
+    { actor: "ui", permissions: [], intent: "directory" },
+    { recursive: true },
+  )
+  const rootEntry = page.entries.find(
+    (entry) => entry.target.fileId === resourceFileRef(root.ref).fileId,
+  )
+  const childEntry = page.entries.find(
+    (entry) => entry.target.fileId === resourceFileRef(child.ref).fileId,
+  )
+
+  assert.deepEqual(rootEntry?.parent, corePlaceRef("notes"))
+  assert.deepEqual(childEntry?.parent, resourceFileRef(root.ref))
+  assert.deepEqual(rootEntry?.file?.ref, rootEntry?.target)
+  assert.deepEqual(childEntry?.file?.ref, childEntry?.target)
+})
+
+test("resource filesystem: readMany delegates ordered node reads to one VFS batch", async () => {
+  const metas: ResourceMeta[] = ["first", "second"].map((id) => ({
+    ref: { scheme: "node", kind: "note", id },
+    title: id,
+    capabilities: ["open", "read-content"],
+  }))
+  const batches: string[][] = []
+  registerVfsProvider({
+    scheme: "node",
+    async list() {
+      return { items: metas }
+    },
+    async get() {
+      throw new Error("batchable reads must not fan out through get")
+    },
+    async getMany(refs, access) {
+      assert.equal(access.intent, "content")
+      batches.push(refs.map((ref) => ref.id))
+      return refs.map((ref) => {
+        const meta = metas.find((candidate) => candidate.ref.id === ref.id)
+        return meta
+          ? {
+              meta,
+              content: {
+                id: ref.id,
+                kind: "note",
+                title: meta.title,
+                parentId: null,
+                sortKey: ref.id,
+                tags: [],
+                createdAt: 1,
+                updatedAt: 1,
+                content: [],
+              },
+            }
+          : null
+      })
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      throw new Error("unsupported")
+    },
+  })
+  const fs = createResourceFileSystem()
+  const refs = [
+    resourceFileRef(metas[1]!.ref),
+    resourceFileRef({ scheme: "node", kind: "note", id: "missing" }),
+    resourceFileRef(metas[0]!.ref),
+  ]
+  const values = await fs.readMany!(
+    refs,
+    {
+      actor: "system",
+      permissions: ["fs:read", "fs.notes:read"],
+      intent: "content",
+    },
+    { encoding: "json", concurrency: 2 },
+  )
+
+  assert.deepEqual(batches, [["second", "missing", "first"]])
+  assert.deepEqual(
+    values.map((value) => (value?.data as { id?: string } | undefined)?.id ?? null),
+    ["second", null, "first"],
+  )
+})
+
 test("resource filesystem: system panels are files under a core directory", async () => {
   const fs = createResourceFileSystem()
   const page = await fs.readDirectory(corePlaceRef("system"), ctx)
@@ -98,6 +213,13 @@ test("resource filesystem: system panels are files under a core directory", asyn
   assert.equal(file?.mediaType, "application/vnd.ideall.shell+json")
   assert.equal(file?.properties?.tabKind, "shell")
   assert.equal(shell.properties?.navigationHidden, true)
+  for (const legacyId of ["git", "database", "audio"]) {
+    assert.equal(
+      page.entries.some((entry) => entry.target.fileId === panelFileRef(legacyId).fileId),
+      false,
+      `${legacyId} should navigate through its mounted App FileSystem root`,
+    )
+  }
 })
 
 test("resource filesystem: AI threads are linked from Home while the legacy workspace root remains", async () => {

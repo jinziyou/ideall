@@ -2,69 +2,280 @@
 
 import * as React from "react"
 import { File, Folder, RefreshCw } from "lucide-react"
-import type { DirectoryEntry, IdeallFile } from "@protocol/file-system"
+import { sameFileRef, type DirectoryEntry, type IdeallFile } from "@protocol/file-system"
 import { readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
+import type { FileSystemWatchEvent } from "@/filesystem/types"
 import { Button } from "@/ui/button"
+import {
+  DirectoryWatchRequestGate,
+  directoryWatchEntryKey,
+  planDirectoryWatchEvent,
+} from "../directory-watch-plan"
 import { openTarget, useActiveRootId } from "../store"
-import { readAllDirectoryEntries } from "../tree/directory-pagination"
+import { DIRECTORY_PAGE_SIZE } from "../tree/directory-pagination"
 
 type LoadedEntry = { entry: DirectoryEntry; file: IdeallFile | null }
+
+function replaceKnownVersions(
+  versions: Map<string, string>,
+  entries: readonly LoadedEntry[],
+): void {
+  versions.clear()
+  for (const item of entries) {
+    if (item.file?.version === undefined) continue
+    versions.set(directoryWatchEntryKey(item.entry.entryId, item.entry.target), item.file.version)
+  }
+}
 
 export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
   const activeRootId = useActiveRootId()
   const [entries, setEntries] = React.useState<LoadedEntry[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [nextCursor, setNextCursor] = React.useState<string | undefined>()
   const [error, setError] = React.useState<string | null>(null)
   const [revision, setRevision] = React.useState(0)
+  const loadEpoch = React.useRef(0)
+  const mountedRef = React.useRef(false)
+  const entriesRef = React.useRef<LoadedEntry[]>([])
+  const nextCursorRef = React.useRef<string | undefined>(undefined)
+  const watchReadyRef = React.useRef(false)
+  const knownVersionsRef = React.useRef(new Map<string, string>())
+  const watchRequestsRef = React.useRef(new DirectoryWatchRequestGate())
   const { fileSystemId, fileId } = file.ref
 
   React.useEffect(() => {
-    let alive = true
-    setLoading(true)
-    setError(null)
-    const directoryRef = { fileSystemId, fileId }
-    readAllDirectoryEntries((options) =>
-      readFileDirectory(
+    const watchRequests = watchRequestsRef.current
+    mountedRef.current = true
+    watchRequests.activate()
+    return () => {
+      mountedRef.current = false
+      watchReadyRef.current = false
+      watchRequests.dispose()
+    }
+  }, [])
+
+  const readPage = React.useCallback(
+    async (cursor?: string): Promise<{ entries: LoadedEntry[]; nextCursor?: string }> => {
+      const directoryRef = { fileSystemId, fileId }
+      const page = await readFileDirectory(
         directoryRef,
         { actor: "ui", permissions: [], intent: "directory" },
-        options,
-      ),
-    )
-      .then(async (directoryEntries) => {
-        const loaded = await Promise.all(
-          directoryEntries.map(async (entry) => ({
-            entry,
-            file: await statFile(entry.target, {
-              actor: "ui",
-              permissions: [],
-              intent: "metadata",
-            }).catch(() => null),
-          })),
-        )
-        if (alive) setEntries(loaded)
+        { limit: DIRECTORY_PAGE_SIZE, ...(cursor === undefined ? {} : { cursor }) },
+      )
+      if (cursor !== undefined && page.nextCursor === cursor) {
+        throw new Error(`Directory pagination cursor loop detected at ${JSON.stringify(cursor)}`)
+      }
+      const loaded = await Promise.all(
+        page.entries.map(async (entry) => ({
+          entry,
+          file:
+            entry.file && sameFileRef(entry.file.ref, entry.target)
+              ? entry.file
+              : await statFile(entry.target, {
+                  actor: "ui",
+                  permissions: [],
+                  intent: "metadata",
+                }).catch(() => null),
+        })),
+      )
+      return { entries: loaded, nextCursor: page.nextCursor }
+    },
+    [fileId, fileSystemId],
+  )
+
+  React.useEffect(() => {
+    const epoch = ++loadEpoch.current
+    const watchRequests = watchRequestsRef.current
+    let loaded = false
+    watchReadyRef.current = false
+    watchRequests.reset()
+    entriesRef.current = []
+    nextCursorRef.current = undefined
+    knownVersionsRef.current.clear()
+    setLoading(true)
+    setLoadingMore(false)
+    setEntries([])
+    setNextCursor(undefined)
+    setError(null)
+    void readPage()
+      .then((page) => {
+        if (loadEpoch.current !== epoch) return
+        loaded = true
+        entriesRef.current = page.entries
+        nextCursorRef.current = page.nextCursor
+        replaceKnownVersions(knownVersionsRef.current, page.entries)
+        setEntries(page.entries)
+        setNextCursor(page.nextCursor)
       })
       .catch((reason) => {
-        if (alive) setError(reason instanceof Error ? reason.message : String(reason))
+        if (loadEpoch.current === epoch) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+        }
       })
       .finally(() => {
-        if (alive) setLoading(false)
+        if (loadEpoch.current === epoch) {
+          watchReadyRef.current = loaded
+          setLoading(false)
+        }
       })
     return () => {
-      alive = false
+      if (loadEpoch.current === epoch) {
+        loadEpoch.current += 1
+        watchReadyRef.current = false
+        watchRequests.reset()
+      }
     }
-  }, [fileId, fileSystemId, revision])
+  }, [readPage, revision])
+
+  const loadMore = async () => {
+    const cursor = nextCursor
+    if (cursor === undefined || loadingMore) return
+    const epoch = loadEpoch.current
+    watchReadyRef.current = false
+    setLoadingMore(true)
+    setError(null)
+    try {
+      const page = await readPage(cursor)
+      if (loadEpoch.current !== epoch) return
+      const nextEntries = (() => {
+        const current = entriesRef.current
+        const seen = new Set(current.map((item) => item.entry.entryId))
+        const added = page.entries.filter((item) => {
+          if (seen.has(item.entry.entryId)) return false
+          seen.add(item.entry.entryId)
+          return true
+        })
+        return [...current, ...added]
+      })()
+      entriesRef.current = nextEntries
+      nextCursorRef.current = page.nextCursor
+      replaceKnownVersions(knownVersionsRef.current, nextEntries)
+      setEntries(nextEntries)
+      setNextCursor(page.nextCursor)
+    } catch (reason) {
+      if (loadEpoch.current === epoch) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
+    } finally {
+      if (loadEpoch.current === epoch) {
+        watchReadyRef.current = true
+        setLoadingMore(false)
+      }
+    }
+  }
+
+  const requestFullRefresh = React.useCallback(() => {
+    if (!mountedRef.current) return
+    // Invalidate both directory/page loads and per-entry stat requests immediately; waiting for
+    // the next render would leave a window where an older async result could commit.
+    loadEpoch.current += 1
+    watchReadyRef.current = false
+    watchRequestsRef.current.reset()
+    setRevision((value) => value + 1)
+  }, [])
+
+  const handleWatchEvent = React.useCallback(
+    (event: FileSystemWatchEvent) => {
+      if (!mountedRef.current) return
+      const effectiveVersions = new Map(knownVersionsRef.current)
+      for (const [key, version] of watchRequestsRef.current.pendingVersions()) {
+        effectiveVersions.set(key, version)
+      }
+      const plan = planDirectoryWatchEvent({
+        directory: { fileSystemId, fileId },
+        loaded: entriesRef.current,
+        event,
+        paginationRisk: !watchReadyRef.current || nextCursorRef.current !== undefined,
+        knownVersions: effectiveVersions,
+      })
+      if (plan.type === "ignore") return
+      if (plan.type === "refresh") {
+        requestFullRefresh()
+        return
+      }
+
+      for (const operation of plan.operations) {
+        if (operation.type === "remove") {
+          watchRequestsRef.current.invalidate(operation.key)
+          knownVersionsRef.current.delete(operation.key)
+          const current = entriesRef.current
+          const index = current.findIndex(
+            (item) =>
+              item.entry.entryId === operation.entryId &&
+              sameFileRef(item.entry.target, operation.target),
+          )
+          if (index < 0) {
+            requestFullRefresh()
+            return
+          }
+          const next = [...current.slice(0, index), ...current.slice(index + 1)]
+          entriesRef.current = next
+          setEntries(next)
+          continue
+        }
+
+        const token = watchRequestsRef.current.start(operation.key, operation.version)
+        if (!token) return
+        void statFile(operation.target, {
+          actor: "ui",
+          permissions: [],
+          intent: "metadata",
+        })
+          .then((nextFile) => {
+            if (!mountedRef.current || !watchRequestsRef.current.accepts(token)) return
+            watchRequestsRef.current.invalidate(operation.key)
+            if (!nextFile || !sameFileRef(nextFile.ref, operation.target)) {
+              requestFullRefresh()
+              return
+            }
+            const current = entriesRef.current
+            const index = current.findIndex(
+              (item) =>
+                item.entry.entryId === operation.entryId &&
+                sameFileRef(item.entry.target, operation.target),
+            )
+            if (index < 0) {
+              requestFullRefresh()
+              return
+            }
+            const next = [...current]
+            const previous = current[index] as LoadedEntry
+            next[index] = {
+              entry: {
+                ...previous.entry,
+                ...(previous.entry.kind === "child" ? { name: nextFile.name } : {}),
+                file: nextFile,
+              },
+              file: nextFile,
+            }
+            entriesRef.current = next
+            const version = nextFile.version ?? operation.version
+            if (version === undefined) knownVersionsRef.current.delete(operation.key)
+            else knownVersionsRef.current.set(operation.key, version)
+            setEntries(next)
+          })
+          .catch(() => {
+            if (!mountedRef.current || !watchRequestsRef.current.accepts(token)) return
+            watchRequestsRef.current.invalidate(operation.key)
+            requestFullRefresh()
+          })
+      }
+    },
+    [fileId, fileSystemId, requestFullRefresh],
+  )
 
   React.useEffect(() => {
     try {
       return watchFile(
         { fileSystemId, fileId },
         { actor: "ui", permissions: [], intent: "watch" },
-        () => setRevision((value) => value + 1),
+        handleWatchEvent,
       )?.dispose
     } catch {
       return undefined
     }
-  }, [fileId, fileSystemId])
+  }, [fileId, fileSystemId, handleWatchEvent])
 
   return (
     <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-4 overflow-y-auto p-4 sm:p-6">
@@ -75,12 +286,12 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
             {file.source.label ?? file.source.id}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setRevision((value) => value + 1)}>
+        <Button variant="outline" size="sm" onClick={requestFullRefresh}>
           <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
           刷新
         </Button>
       </div>
-      {error ? (
+      {error && entries.length === 0 ? (
         <div className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive">
           {error}
         </div>
@@ -126,6 +337,19 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
               </button>
             )
           })}
+          {error ? <div className="border-t p-3 text-sm text-destructive">{error}</div> : null}
+          {nextCursor !== undefined ? (
+            <div className="border-t p-2 text-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore ? "加载中…" : "加载更多"}
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

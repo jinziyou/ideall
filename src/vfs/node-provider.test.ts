@@ -141,6 +141,9 @@ function makeDeps(nodes: Node[]): {
       async getNodeRaw(id) {
         return byId.get(id)
       },
+      async getNodesRaw(ids) {
+        return ids.map((id) => byId.get(id))
+      },
       async createNode(input: FsCreateInput) {
         calls.create.push(input)
         const created = note(`created-${calls.create.length}`, input.title ?? "", input.parentId)
@@ -329,6 +332,46 @@ test("node provider: note content requires notes permission or active resource c
 
   const byUi = await provider.get(nodeRef, uiCtx)
   assert.deepEqual((byUi?.content as Node & { kind: "note" }).content, node.content)
+})
+
+test("node provider: getMany preserves order, unknowns, and per-node privacy guards", async () => {
+  const privateNote = note("n-batch", "Private batch")
+  const publicBookmark = bookmark("b-batch", "Public batch")
+  const { deps } = makeDeps([privateNote, publicBookmark])
+  const getNodesRaw = deps.getNodesRaw
+  const batches: string[][] = []
+  deps.getNodesRaw = async (ids) => {
+    batches.push([...ids])
+    return getNodesRaw(ids)
+  }
+  deps.getNodeRaw = async () => {
+    throw new Error("getMany must not open one storage read per ref")
+  }
+  const provider = createNodeVfsProvider(deps)
+  const refs = [
+    ref("bookmark", publicBookmark.id),
+    ref("note", privateNote.id),
+    ref("bookmark", privateNote.id),
+    ref("note", "missing"),
+  ]
+
+  const metadata = await provider.getMany!(refs, { ...agentReadCtx, intent: "metadata" })
+  assert.deepEqual(batches, [["b-batch", "n-batch", "n-batch", "missing"]])
+  assert.deepEqual(
+    metadata.map((record) => record?.meta.ref.id ?? null),
+    ["b-batch", "n-batch", null, null],
+  )
+  assert.deepEqual((metadata[1]?.content as Extract<Node, { kind: "note" }>).content, [])
+
+  await rejectCode(provider.getMany!(refs.slice(0, 2), agentReadCtx), "consent-required")
+  const granted = await provider.getMany!(refs.slice(0, 2), {
+    ...agentReadCtx,
+    permissions: ["fs:read", "fs.notes:read"],
+  })
+  assert.deepEqual(
+    (granted[1]?.content as Extract<Node, { kind: "note" }>).content,
+    privateNote.content,
+  )
 })
 
 test("node provider: read-blob requires blob permission and only supports files", async () => {

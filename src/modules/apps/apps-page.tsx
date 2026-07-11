@@ -84,13 +84,19 @@ function AppIcon({ app, size = "md" }: { app: InstalledApp; size?: "md" | "lg" }
   React.useEffect(() => {
     let cancelled = false
     setFailed(false)
-    void appIconSrc(app.iconPath).then((url) => {
+    if (!app.iconPath) {
+      setSrc(null)
+      return () => {
+        cancelled = true
+      }
+    }
+    void appIconSrc(app.id).then((url) => {
       if (!cancelled) setSrc(url)
     })
     return () => {
       cancelled = true
     }
-  }, [app.iconPath])
+  }, [app.iconPath, app.id])
 
   if (src && !failed) {
     return (
@@ -293,7 +299,7 @@ export default function AppsPage() {
   const handleLaunch = async (app: InstalledAppItem) => {
     setLaunching(app.id)
     try {
-      await invokeFileAction(app.fileRef, "open", undefined, {
+      await invokeFileAction(app.fileRef, "launch", undefined, {
         actor: "ui",
         permissions: [],
         intent: "action",

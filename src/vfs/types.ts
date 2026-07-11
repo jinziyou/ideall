@@ -43,6 +43,7 @@ export type ResourceAction = {
   label: string
   destructive?: boolean
   requires?: ResourceCapability[]
+  invocation?: "display" | "parameterless"
 }
 
 export type VfsActor = "ui" | "agent" | "embed"
@@ -60,6 +61,11 @@ export type VfsProvider = {
   scheme: ResourceScheme
   list(query: ResourceQuery, ctx: VfsAccessContext): Promise<ResourcePage>
   get(ref: ResourceRef, ctx: VfsAccessContext): Promise<ResourceRecord | null>
+  /** 结果与 refs 一一对应且保持顺序；未知资源为 null，其它授权/离线错误继续抛出。 */
+  getMany?(
+    refs: readonly ResourceRef[],
+    ctx: VfsAccessContext,
+  ): Promise<Array<ResourceRecord | null>>
   create?(input: unknown, ctx: VfsAccessContext): Promise<ResourceRecord>
   actions(ref: ResourceRef, ctx: VfsAccessContext): Promise<ResourceAction[]>
   invoke(

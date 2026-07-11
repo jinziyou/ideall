@@ -78,6 +78,8 @@ export class CompositeRootFileSystem implements FileSystemProvider {
   private readonly entries = new Map<string, StoredEntry>()
   private readonly entryNames = new Map<string, string>()
   private readonly watchers = new Set<(event: FileSystemWatchEvent) => void>()
+  private readonly pendingMountEvents = new Set<string>()
+  private batchDepth = 0
 
   constructor(options: CompositeRootOptions = {}) {
     const fileSystemId = options.fileSystemId ?? "ideall.root"
@@ -124,6 +126,14 @@ export class CompositeRootFileSystem implements FileSystemProvider {
   }
 
   private emit(entryId: string): void {
+    if (this.batchDepth > 0) {
+      this.pendingMountEvents.add(entryId)
+      return
+    }
+    this.emitNow(entryId)
+  }
+
+  private emitNow(entryId: string): void {
     const event: FileSystemWatchEvent = {
       type: "mount-changed",
       ref: this.descriptor.root,
@@ -134,6 +144,21 @@ export class CompositeRootFileSystem implements FileSystemProvider {
         notify(event)
       } catch {
         // 观察者故障不能回滚一个已经完成的挂载，也不能阻断其它观察者。
+      }
+    }
+  }
+
+  /** 同步组合事务内延迟 mount 通知；观察者只在最终状态确定后重新读取合成根。 */
+  batch<T>(operation: () => T): T {
+    this.batchDepth += 1
+    try {
+      return operation()
+    } finally {
+      this.batchDepth -= 1
+      if (this.batchDepth === 0 && this.pendingMountEvents.size > 0) {
+        const entries = [...this.pendingMountEvents]
+        this.pendingMountEvents.clear()
+        for (const entryId of entries) this.emitNow(entryId)
       }
     }
   }

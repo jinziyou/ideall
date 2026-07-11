@@ -18,6 +18,10 @@ import type {
   FileWriteInput,
 } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
+import {
+  GIT_FILE_SYSTEM_ID as BUILTIN_GIT_FILE_SYSTEM_ID,
+  GIT_ROOT_REF as BUILTIN_GIT_ROOT_REF,
+} from "@/filesystem/builtin-app-roots"
 import { base64ToBytes } from "@/lib/base64"
 import { fileTypeInfo } from "@/lib/file-type"
 import { randomId } from "@/lib/id"
@@ -48,8 +52,8 @@ import {
   type GrantedGitRepoMount,
 } from "./git-repos-store"
 
-export const GIT_FILE_SYSTEM_ID = "app.git-repositories"
-export const GIT_ROOT_REF: FileRef = { fileSystemId: GIT_FILE_SYSTEM_ID, fileId: "root" }
+export const GIT_FILE_SYSTEM_ID = BUILTIN_GIT_FILE_SYSTEM_ID
+export const GIT_ROOT_REF: FileRef = BUILTIN_GIT_ROOT_REF
 
 export const GIT_ACTIONS = {
   commit: "commit",
@@ -375,10 +379,10 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
           ref,
           kind: "directory",
           name: "Git 仓库",
-          mediaType: DIRECTORY_MEDIA_TYPE,
+          mediaType: "application/vnd.ideall.git.repositories+json",
           capabilities: ["read-directory", "read", "create", "actions", "watch"],
           source: this.descriptor.source,
-          properties: { explicitGrant: true },
+          properties: { git: true, explicitGrant: true },
         }
       }
       try {
@@ -523,27 +527,76 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
       assertAccess(ref, ctx, "action", "fs:read")
       if (sameFileRef(ref, GIT_ROOT_REF)) {
         return [
-          { id: GIT_ACTIONS.open, label: "打开" },
-          { id: GIT_ACTIONS.mount, label: "挂载仓库", requires: ["create"] },
+          { id: GIT_ACTIONS.open, label: "打开", kind: "display" },
+          {
+            id: GIT_ACTIONS.mount,
+            label: "挂载仓库",
+            kind: "invoke",
+            risk: "caution",
+            idempotent: false,
+            requires: ["create"],
+            uiHints: { confirmDescription: "将打开系统目录选择器并授权访问所选仓库。" },
+          },
         ]
       }
       const target = requireTarget(ref, deps)
       return target.repoRoot
         ? [
-            { id: GIT_ACTIONS.open, label: "打开" },
-            { id: GIT_ACTIONS.fetch, label: "Fetch" },
-            { id: GIT_ACTIONS.pull, label: "Pull" },
-            { id: GIT_ACTIONS.push, label: "Push" },
-            { id: GIT_ACTIONS.createBranch, label: "新建分支" },
-            { id: GIT_ACTIONS.commit, label: "提交" },
+            { id: GIT_ACTIONS.open, label: "打开", kind: "display" },
+            { id: GIT_ACTIONS.fetch, label: "Fetch", kind: "invoke", idempotent: true },
+            {
+              id: GIT_ACTIONS.pull,
+              label: "Pull",
+              kind: "invoke",
+              risk: "caution",
+              idempotent: false,
+            },
+            {
+              id: GIT_ACTIONS.push,
+              label: "Push",
+              kind: "invoke",
+              risk: "caution",
+              idempotent: false,
+            },
+            {
+              id: GIT_ACTIONS.createBranch,
+              label: "新建分支",
+              kind: "invoke",
+              idempotent: false,
+              input: {
+                type: "object",
+                properties: {
+                  name: { type: "string", title: "分支名称", minLength: 1 },
+                },
+                required: ["name"],
+                additionalProperties: false,
+              },
+            },
+            {
+              id: GIT_ACTIONS.commit,
+              label: "提交",
+              kind: "invoke",
+              risk: "caution",
+              idempotent: false,
+              input: {
+                type: "object",
+                properties: {
+                  message: { type: "string", title: "提交信息", minLength: 1 },
+                },
+                required: ["message"],
+                additionalProperties: false,
+              },
+            },
             {
               id: GIT_ACTIONS.delete,
               label: "移除挂载",
-              destructive: true,
+              kind: "invoke",
+              risk: "destructive",
+              idempotent: true,
               requires: ["delete"],
             },
           ]
-        : [{ id: GIT_ACTIONS.open, label: "打开" }]
+        : [{ id: GIT_ACTIONS.open, label: "打开", kind: "display" }]
     },
     async invoke(ref, action, input, ctx) {
       const mutation = isMutationAction(action)

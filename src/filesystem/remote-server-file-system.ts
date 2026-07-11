@@ -354,18 +354,26 @@ export const remoteServerFileSystem: FileSystemProvider = {
     assertAccess(ctx, ref, "action", "remote:read")
     if (sameFileRef(ref, remoteCommunityDirectoryRef)) {
       return [
-        { id: "publish", label: "发布", requires: ["remote:write"] },
+        {
+          id: "publish",
+          label: "发布",
+          requires: ["remote:write"],
+          kind: "specialized",
+          reason: "需在发布界面完成鉴权与内容确认",
+        },
         {
           id: "delete-publication",
           label: "删除发布",
-          destructive: true,
+          risk: "destructive",
           requires: ["remote:write"],
+          kind: "specialized",
+          reason: "需在发布管理界面确认身份",
         },
       ]
     }
     const operation = parseOperation(ref)
     if (!operation) return []
-    return [{ id: "open", label: "打开", requires: ["read"] }]
+    return [{ id: "open", label: "打开", requires: ["read"], kind: "display" }]
   },
   async invoke(ref, action, input, ctx): Promise<unknown> {
     if (action === "open") {

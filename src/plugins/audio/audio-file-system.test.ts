@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { FileSystemError } from "@/filesystem/types"
+import type { FileSystemWatchEvent } from "@/filesystem/types"
 import { audioTrackRef, createAudioFileSystem } from "./audio-file-system"
 import type { AudioTrack } from "./audio-store"
 
@@ -154,6 +155,79 @@ test("audio filesystem: concurrent writes atomically enforce a shared expectedVe
   assert.equal(rejected[0].reason.code, "conflict")
   assert.equal(current.title, fulfilled[0].value)
   assert.equal(current.updatedAt, 11)
+})
+
+test("audio filesystem: root watch receives parent-scoped incremental track events", async () => {
+  let tracks = [track("linked")]
+  const fs = createAudioFileSystem({
+    async listTracks() {
+      return tracks
+    },
+    async updateTrack(id, patch) {
+      const current = tracks.find((item) => item.id === id)
+      if (!current) return null
+      const updated = { ...current, ...patch, updatedAt: current.updatedAt + 1 }
+      tracks = tracks.map((item) => (item.id === id ? updated : item))
+      return updated
+    },
+    async removeTrack(id) {
+      tracks = tracks.filter((item) => item.id !== id)
+    },
+  })
+  const ref = audioTrackRef("linked")
+  const rootEvents: FileSystemWatchEvent[] = []
+  const trackEvents: FileSystemWatchEvent[] = []
+  const rootWatch = fs.watch?.(
+    fs.descriptor.root,
+    { actor: "ui", permissions: [], intent: "watch" },
+    (event) => rootEvents.push(event),
+  )
+  const trackWatch = fs.watch?.(ref, { actor: "ui", permissions: [], intent: "watch" }, (event) =>
+    trackEvents.push(event),
+  )
+
+  await fs.write(
+    ref,
+    { data: { title: "next" }, expectedVersion: "10" },
+    { actor: "ui", permissions: [], intent: "write" },
+  )
+  await fs.invoke(ref, "delete", undefined, {
+    actor: "ui",
+    permissions: [],
+    intent: "action",
+  })
+
+  assert.deepEqual(
+    rootEvents.map((event) => ({
+      type: event.type,
+      entryId: event.entryId,
+      oldParent: event.oldParent?.fileId,
+      newParent: event.newParent?.fileId,
+      version: event.version,
+    })),
+    [
+      {
+        type: "changed",
+        entryId: "linked",
+        oldParent: undefined,
+        newParent: "root",
+        version: "11",
+      },
+      {
+        type: "deleted",
+        entryId: "linked",
+        oldParent: "root",
+        newParent: undefined,
+        version: undefined,
+      },
+    ],
+  )
+  assert.deepEqual(
+    trackEvents.map((event) => event.type),
+    ["changed", "deleted"],
+  )
+  rootWatch?.dispose()
+  trackWatch?.dispose()
 })
 
 test("audio filesystem: deleting requires write permission and never trusts active engine alone", async () => {

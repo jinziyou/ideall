@@ -138,6 +138,30 @@ test("composite root: 名称冲突会回滚 provider 注册", () => {
   assert.equal(registry.get("third-party.files"), null)
 })
 
+test("composite root: batch 只在组合事务提交后通知最终挂载状态", () => {
+  const root = new CompositeRootFileSystem()
+  const snapshots: string[][] = []
+  root.watch(root.descriptor.root, ctx, () => {
+    snapshots.push(root.listEntries().map((entry) => entry.entryId))
+  })
+
+  root.batch(() => {
+    root.mount({
+      entryId: "temporary",
+      name: "Temporary",
+      target: { fileSystemId: "app.temporary", fileId: "root" },
+    })()
+    root.mount({
+      entryId: "committed",
+      name: "Committed",
+      target: { fileSystemId: "app.committed", fileId: "root" },
+    })
+    assert.deepEqual(snapshots, [])
+  })
+
+  assert.deepEqual(snapshots, [["committed"], ["committed"]])
+})
+
 test("composite root: 非根读取与非法分页参数返回结构化错误", async () => {
   const root = new CompositeRootFileSystem()
   await assert.rejects(

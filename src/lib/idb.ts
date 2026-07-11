@@ -125,6 +125,29 @@ export async function idbGet<T>(storeName: string, key: IDBValidKey): Promise<T 
   return withStore<T | undefined>(storeName, "readonly", (store) => store.get(key))
 }
 
+/** 按输入 key 顺序在同一 readonly 事务内批量读取，避免逐项打开 IndexedDB 事务。 */
+export async function idbGetMany<T>(
+  storeName: string,
+  keys: readonly IDBValidKey[],
+): Promise<Array<T | undefined>> {
+  if (keys.length === 0) return []
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly")
+    const store = tx.objectStore(storeName)
+    const results = new Array<T | undefined>(keys.length)
+    for (let index = 0; index < keys.length; index += 1) {
+      const request = store.get(keys[index] as IDBValidKey)
+      request.onsuccess = () => {
+        results[index] = request.result as T | undefined
+      }
+    }
+    tx.oncomplete = () => resolve(results)
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
 export async function idbPut<T>(storeName: string, value: T): Promise<void> {
   await withStore(storeName, "readwrite", (store) => store.put(value))
 }

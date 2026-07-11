@@ -28,17 +28,25 @@ export async function launchInstalledApp(id: string): Promise<void> {
 
 const iconCache = new Map<string, string | null>()
 
-/** 读取应用图标为 data URL (Rust 侧读文件, 不依赖 asset 协议 scope)。 */
-export async function appIconSrc(iconPath: string | null | undefined): Promise<string | null> {
-  if (!iconPath || !isTauri()) return null
-  if (iconCache.has(iconPath)) return iconCache.get(iconPath) ?? null
+export function installedAppIconRequest(appId: string): {
+  command: "read_app_icon_data_url"
+  args: { id: string }
+} {
+  return { command: "read_app_icon_data_url", args: { id: appId } }
+}
+
+/** 按 opaque app id 读取图标；canonical 路径只在 Rust 侧重解析，不进入命令参数。 */
+export async function appIconSrc(appId: string | null | undefined): Promise<string | null> {
+  if (!appId || !isTauri()) return null
+  if (iconCache.has(appId)) return iconCache.get(appId) ?? null
   try {
     const { invoke } = await import("@tauri-apps/api/core")
-    const url = await invoke<string | null>("read_app_icon_data_url", { path: iconPath })
-    iconCache.set(iconPath, url)
+    const request = installedAppIconRequest(appId)
+    const url = await invoke<string | null>(request.command, request.args)
+    iconCache.set(appId, url)
     return url
   } catch {
-    iconCache.set(iconPath, null)
+    iconCache.set(appId, null)
     return null
   }
 }

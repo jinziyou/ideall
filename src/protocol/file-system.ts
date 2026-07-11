@@ -77,6 +77,11 @@ export type DirectoryEntry = {
   name: string
   kind: DirectoryEntryKind
   sortKey?: string
+  /**
+   * provider 已在目录查询中取得的目标 metadata 快照。Display 可直接使用它，避免随后逐项 stat；
+   * 快照的 ref 必须等于 target，实时一致性仍由 watch 或显式 stat 保证。
+   */
+  file?: IdeallFile
   properties?: Readonly<Record<string, unknown>>
 }
 

@@ -1,10 +1,4 @@
-import {
-  DIRECTORY_MEDIA_TYPE,
-  fileRefKey,
-  sameFileRef,
-  type FileRef,
-  type IdeallFile,
-} from "@protocol/file-system"
+import { fileRefKey, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import type {
   DirectoryPage,
   FileAction,
@@ -12,12 +6,16 @@ import type {
   FileReadResult,
   FileSystemAccessContext,
   FileSystemProvider,
-  FileSystemWatchEvent,
   FileSystemWatchHandle,
   FileWriteInput,
 } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
+import { FileSystemWatchEventHub } from "@/filesystem/watch-set"
 import { withFileWriteLock } from "@/filesystem/write-lock"
+import {
+  AUDIO_FILE_SYSTEM_ID as BUILTIN_AUDIO_FILE_SYSTEM_ID,
+  AUDIO_LIBRARY_ROOT_REF,
+} from "@/filesystem/builtin-app-roots"
 import {
   addAudioTrack,
   exportAudioLibraryJson,
@@ -31,8 +29,8 @@ import {
   type AudioTrack,
 } from "./audio-store"
 
-export const AUDIO_FILE_SYSTEM_ID = "app.audio-library"
-export const audioLibraryRootRef: FileRef = { fileSystemId: AUDIO_FILE_SYSTEM_ID, fileId: "root" }
+export const AUDIO_FILE_SYSTEM_ID = BUILTIN_AUDIO_FILE_SYSTEM_ID
+export const audioLibraryRootRef: FileRef = AUDIO_LIBRARY_ROOT_REF
 
 export function audioTrackRef(id: string): FileRef {
   return { fileSystemId: AUDIO_FILE_SYSTEM_ID, fileId: `track:${encodeURIComponent(id)}` }
@@ -160,13 +158,7 @@ export function createAudioFileSystem(
   overrides: Partial<AudioFileSystemDeps> = {},
 ): FileSystemProvider {
   const deps: AudioFileSystemDeps = { ...defaultDeps, ...overrides }
-  const watchers = new Map<string, Set<(event: FileSystemWatchEvent) => void>>()
-  const emit = (event: FileSystemWatchEvent) => {
-    const keys = new Set([fileRefKey(event.ref), fileRefKey(audioLibraryRootRef)])
-    for (const key of keys) {
-      for (const notify of watchers.get(key) ?? []) notify(event)
-    }
-  }
+  const watchEvents = new FileSystemWatchEventHub()
 
   return {
     descriptor: {
@@ -183,7 +175,7 @@ export function createAudioFileSystem(
           ref,
           kind: "directory",
           name: "音频库",
-          mediaType: DIRECTORY_MEDIA_TYPE,
+          mediaType: "application/vnd.ideall.audio.library+json",
           capabilities: ["read-directory", "read", "write", "create", "actions", "watch"],
           source: this.descriptor.source,
         }
@@ -238,12 +230,12 @@ export function createAudioFileSystem(
             )
           }
           await deps.savePlayback(input.data as AudioPlaybackState)
-          emit({ type: "changed", ref })
+          watchEvents.emit({ type: "changed", ref })
           return {
             ref,
             kind: "directory",
             name: "音频库",
-            mediaType: DIRECTORY_MEDIA_TYPE,
+            mediaType: "application/vnd.ideall.audio.library+json",
             capabilities: ["read-directory", "read", "write", "create", "actions", "watch"],
             source: this.descriptor.source,
           }
@@ -259,7 +251,13 @@ export function createAudioFileSystem(
         const updated = await deps.updateTrack(track.id, patch)
         if (!updated) throw new FileSystemError("not-found", "Audio file disappeared", ref)
         const file = trackFile(updated)
-        emit({ type: "changed", ref: file.ref })
+        watchEvents.emit({
+          type: "changed",
+          ref: file.ref,
+          entryId: updated.id,
+          newParent: audioLibraryRootRef,
+          version: String(updated.updatedAt),
+        })
         return file
       })
     },
@@ -267,16 +265,52 @@ export function createAudioFileSystem(
       assertAccess(ref, ctx, "action", "fs:read")
       if (sameFileRef(ref, audioLibraryRootRef)) {
         return [
-          { id: "open", label: "打开" },
-          { id: "add-track", label: "添加音频", requires: ["create"] },
-          { id: "import", label: "导入音频库", requires: ["write"] },
-          { id: "export", label: "导出音频库", requires: ["read"] },
+          { id: "open", label: "打开", kind: "display" },
+          {
+            id: "add-track",
+            label: "添加音频",
+            kind: "invoke",
+            input: { type: "string", title: "音频文件", format: "binary" },
+            idempotent: false,
+            requires: ["create"],
+          },
+          {
+            id: "import",
+            label: "导入音频库",
+            kind: "invoke",
+            risk: "caution",
+            input: {
+              type: "string",
+              title: "音频库 JSON",
+              format: "multiline",
+              minLength: 2,
+            },
+            uiHints: {
+              confirmDescription: "导入会合并并更新当前音频库。",
+            },
+            requires: ["write"],
+          },
+          {
+            id: "export",
+            label: "导出音频库",
+            kind: "invoke",
+            output: { type: "string", mediaType: "application/json" },
+            idempotent: true,
+            requires: ["read"],
+          },
         ]
       }
       await requireTrack(ref, deps)
       return [
-        { id: "open", label: "打开" },
-        { id: "delete", label: "删除", destructive: true, requires: ["delete"] },
+        { id: "open", label: "打开", kind: "display" },
+        {
+          id: "delete",
+          label: "删除",
+          kind: "invoke",
+          risk: "destructive",
+          idempotent: true,
+          requires: ["delete"],
+        },
       ]
     },
     async invoke(ref, action, input, ctx) {
@@ -288,7 +322,13 @@ export function createAudioFileSystem(
           throw new FileSystemError("invalid-input", "add-track requires an audio File", ref)
         }
         const track = await deps.addTrack(input as File)
-        emit({ type: "created", ref: audioTrackRef(track.id) })
+        watchEvents.emit({
+          type: "created",
+          ref: audioTrackRef(track.id),
+          entryId: track.id,
+          newParent: audioLibraryRootRef,
+          version: String(track.updatedAt),
+        })
         return trackFile(track)
       }
       if (action === "import" && sameFileRef(ref, audioLibraryRootRef)) {
@@ -296,7 +336,7 @@ export function createAudioFileSystem(
           throw new FileSystemError("invalid-input", "Audio import requires JSON text", ref)
         }
         const result = await deps.importLibrary(input)
-        emit({ type: "changed", ref: audioLibraryRootRef })
+        watchEvents.emit({ type: "changed", ref: audioLibraryRootRef })
         return result
       }
       if (action === "export" && sameFileRef(ref, audioLibraryRootRef)) {
@@ -305,23 +345,19 @@ export function createAudioFileSystem(
       if (action === "delete") {
         const track = await requireTrack(ref, deps)
         await deps.removeTrack(track.id)
-        emit({ type: "deleted", ref })
+        watchEvents.emit({
+          type: "deleted",
+          ref,
+          entryId: track.id,
+          oldParent: audioLibraryRootRef,
+        })
         return { ref, deleted: true }
       }
       throw new FileSystemError("unsupported", `Unsupported audio action: ${action}`, ref)
     },
     watch(ref, ctx, notify): FileSystemWatchHandle | null {
       assertAccess(ref, ctx, "watch", "fs:read")
-      const key = fileRefKey(ref)
-      const listeners = watchers.get(key) ?? new Set()
-      listeners.add(notify)
-      watchers.set(key, listeners)
-      return {
-        dispose: () => {
-          listeners.delete(notify)
-          if (listeners.size === 0) watchers.delete(key)
-        },
-      }
+      return watchEvents.watch(ref, notify)
     },
   }
 }

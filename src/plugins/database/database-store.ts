@@ -185,6 +185,11 @@ export async function listTables(): Promise<DataTable[]> {
   return tables.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+/** 按主键读取单表，供 FileSystem.stat/read 避免为一个 FileRef 扫描全部表。 */
+export async function getTable(id: string): Promise<DataTable | undefined> {
+  return databaseDb.get<DataTable>(STORE_TABLES, id)
+}
+
 export async function createTable(name: string, columns: string[]): Promise<DataTable> {
   const draft = validateTableDraft(name, columns)
   const now = Date.now()
@@ -227,6 +232,11 @@ export async function listRows(tableId: string): Promise<DataRow[]> {
     tx.objectStore(STORE_ROWS).index("tableId").getAll(tableId),
   )
   return rows.sort((a, b) => b.createdAt - a.createdAt)
+}
+
+/** 按主键读取单行；调用方仍须校验 tableId，防止伪造 row FileRef 跨表寻址。 */
+export async function getRow(id: string): Promise<DataRow | undefined> {
+  return databaseDb.get<DataRow>(STORE_ROWS, id)
 }
 
 export async function addRow(tableId: string, values: Record<string, string>): Promise<DataRow> {
