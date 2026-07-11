@@ -192,8 +192,12 @@ export interface FilesPort {
 let port: FilesPort | null = null
 
 /** core 在启动时注册其 FilesPort 实现。 */
-export function registerFilesPort(p: FilesPort): void {
+export function registerFilesPort(p: FilesPort): () => void {
+  const previous = port
   port = p
+  return () => {
+    if (port === p) port = previous
+  }
 }
 
 /** 取「我的」数据端口 (插件用); 未注册 (BootGate 未挂载) 时抛错。 */

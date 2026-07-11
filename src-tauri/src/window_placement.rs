@@ -10,9 +10,7 @@ use std::time::Duration;
 use tauri::utils::config::WindowConfig;
 // 用 Window 而非 Window: 主窗口挂上 browser 子 webview 后 get_webview_window("main")
 // 恒为 None (is_webview_window 检查不过), Window 无此限制。
-use tauri::{
-    LogicalSize, Monitor, PhysicalPosition, PhysicalRect, PhysicalSize, Window,
-};
+use tauri::{LogicalSize, Monitor, PhysicalPosition, PhysicalRect, PhysicalSize, Window};
 
 const CORNER_TOLERANCE_PX: i32 = 48;
 const MAX_PLACE_ATTEMPTS: u8 = 8;
@@ -114,7 +112,10 @@ pub fn place_main_window(window: &Window, conf: &WindowConfig) -> Result<bool, S
     let primary = pick_primary_screen(window, &screens)?;
     let size = placement_size(window, conf)?;
     if size.width < 200 || size.height < 200 {
-        eprintln!("[ideall] 窗口尚未就绪 ({}×{}), 跳过定位", size.width, size.height);
+        eprintln!(
+            "[ideall] 窗口尚未就绪 ({}×{}), 跳过定位",
+            size.width, size.height
+        );
         return Ok(false);
     }
     normalize_window_state(window, conf, &primary)?;
@@ -246,11 +247,7 @@ fn try_fix_expanded_on_primary(window: &Window, attempts: Option<&AtomicU8>) {
     }
 }
 
-fn try_place_window(
-    window: &Window,
-    conf: &WindowConfig,
-    attempts: Option<&AtomicU8>,
-) {
+fn try_place_window(window: &Window, conf: &WindowConfig, attempts: Option<&AtomicU8>) {
     if attempts.is_some_and(|a| a.load(Ordering::Relaxed) >= MAX_PLACE_ATTEMPTS) {
         return;
     }
@@ -298,9 +295,7 @@ fn try_place_window(
 fn normalize_on_close(window: &Window) -> Result<(), String> {
     WSL_PSEUDO_MAX.store(false, Ordering::Relaxed);
     if window.is_fullscreen().unwrap_or(false) {
-        window
-            .set_fullscreen(false)
-            .map_err(|e| e.to_string())?;
+        window.set_fullscreen(false).map_err(|e| e.to_string())?;
     }
     if window.is_maximized().unwrap_or(false) {
         window.unmaximize().map_err(|e| e.to_string())?;
@@ -378,10 +373,7 @@ fn gtk_placement_offset() -> (i32, i32) {
 
 /// WSLg 下 set_size 异步生效; 尺寸未收敛就 move_ 会导致 WM 拒绝贴边 (尤其最大化到 0,0)。
 #[cfg(target_os = "linux")]
-fn settle_window_size_for_wsl(
-    window: &Window,
-    target: &PhysicalSize<u32>,
-) -> Result<(), String> {
+fn settle_window_size_for_wsl(window: &Window, target: &PhysicalSize<u32>) -> Result<(), String> {
     if !running_under_wsl() {
         return Ok(());
     }
@@ -400,18 +392,12 @@ fn settle_window_size_for_wsl(
 }
 
 #[cfg(not(target_os = "linux"))]
-fn settle_window_size_for_wsl(
-    _window: &Window,
-    _target: &PhysicalSize<u32>,
-) -> Result<(), String> {
+fn settle_window_size_for_wsl(_window: &Window, _target: &PhysicalSize<u32>) -> Result<(), String> {
     Ok(())
 }
 
 /// 设置窗口位置。WSLg Wayland 忽略坐标; X11 下走 gtk move_ (不做读回补偿 —— 立即读回常为旧坐标)。
-fn apply_window_position(
-    window: &Window,
-    pos: PhysicalPosition<i32>,
-) -> Result<(), String> {
+fn apply_window_position(window: &Window, pos: PhysicalPosition<i32>) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         let scale = window.scale_factor().unwrap_or(1.0);
@@ -463,9 +449,7 @@ fn read_window_position(window: &Window) -> Result<PhysicalPosition<i32>, String
 // ── 1. 识别屏幕 ──────────────────────────────────────────────────────────────
 
 fn enumerate_screens(window: &Window) -> Result<Vec<Monitor>, String> {
-    let all = window
-        .available_monitors()
-        .map_err(|e| e.to_string())?;
+    let all = window.available_monitors().map_err(|e| e.to_string())?;
     let physical: Vec<Monitor> = all
         .iter()
         .filter(|m| !is_likely_spanning_desktop(m))
@@ -544,7 +528,11 @@ fn log_all_screens(screens: &[Monitor]) {
         let w = m.work_area();
         eprintln!(
             "[ideall] 屏 {i}: {}×{} @ ({}, {}), scale={}",
-            w.size.width, w.size.height, w.position.x, w.position.y, m.scale_factor()
+            w.size.width,
+            w.size.height,
+            w.position.x,
+            w.position.y,
+            m.scale_factor()
         );
     }
 }
@@ -561,7 +549,14 @@ fn log_placement_target(primary: &Monitor, size: PhysicalSize<u32>, pos: Physica
     let w = primary.work_area();
     eprintln!(
         "[ideall] 目标位置: ({}, {}), 窗口 {}×{}, 主屏 {}×{} @ ({}, {})",
-        pos.x, pos.y, size.width, size.height, w.size.width, w.size.height, w.position.x, w.position.y
+        pos.x,
+        pos.y,
+        size.width,
+        size.height,
+        w.size.width,
+        w.size.height,
+        w.position.x,
+        w.position.y
     );
 }
 
@@ -586,10 +581,7 @@ fn work_area_pixels(m: &Monitor) -> u64 {
 }
 
 fn largest_work_area_monitor(monitors: &[Monitor]) -> Option<Monitor> {
-    monitors
-        .iter()
-        .max_by_key(|m| work_area_pixels(m))
-        .cloned()
+    monitors.iter().max_by_key(|m| work_area_pixels(m)).cloned()
 }
 
 fn center_in_work_area(monitor: &Monitor, size: PhysicalSize<u32>) -> PhysicalPosition<i32> {
@@ -695,16 +687,10 @@ fn window_rect_fits_in_work_area(
         && pos.y + size.height as i32 <= work.position.y + work.size.height as i32
 }
 
-fn rects_overlap(
-    a: (i32, i32, u32, u32),
-    b: (i32, i32, u32, u32),
-) -> bool {
+fn rects_overlap(a: (i32, i32, u32, u32), b: (i32, i32, u32, u32)) -> bool {
     let (ax, ay, aw, ah) = a;
     let (bx, by, bw, bh) = b;
-    ax < bx + bw as i32
-        && ax + aw as i32 > bx
-        && ay < by + bh as i32
-        && ay + ah as i32 > by
+    ax < bx + bw as i32 && ax + aw as i32 > bx && ay < by + bh as i32 && ay + ah as i32 > by
 }
 
 fn straddles_screens(
@@ -712,8 +698,7 @@ fn straddles_screens(
     size: PhysicalSize<u32>,
     screens: &[Monitor],
 ) -> bool {
-    let areas: Vec<PhysicalRect<i32, u32>> =
-        screens.iter().map(|m| *m.work_area()).collect();
+    let areas: Vec<PhysicalRect<i32, u32>> = screens.iter().map(|m| *m.work_area()).collect();
     straddles_work_areas(pos, size, &areas)
 }
 

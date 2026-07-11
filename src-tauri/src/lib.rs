@@ -15,24 +15,24 @@ use tauri::{Emitter, LogicalPosition, LogicalSize, Rect};
 // ACP (Agent Client Protocol) 外部智能体传输 —— 子进程 stdin/stdout 哑管道 (NDJSON 行框定), 仅桌面。
 #[cfg(desktop)]
 mod acp_transport;
-#[cfg(desktop)]
-mod oauth_callback;
 #[cfg(all(desktop, target_os = "linux"))]
 mod browser_cdp;
-#[cfg(desktop)]
-mod browser_scripts;
 #[cfg(all(desktop, target_os = "linux"))]
 mod browser_linux;
+#[cfg(desktop)]
+mod browser_scripts;
 #[cfg(all(desktop, target_os = "windows"))]
 mod browser_win;
 #[cfg(desktop)]
-mod window_placement;
+mod guarded_fs;
 #[cfg(desktop)]
 mod installed_apps;
 #[cfg(desktop)]
-mod guarded_fs;
+mod oauth_callback;
 #[cfg(desktop)]
 mod secure_store;
+#[cfg(desktop)]
+mod window_placement;
 
 #[cfg(all(desktop, not(target_os = "linux")))]
 const BROWSER_LABEL: &str = "browser_view";
@@ -105,10 +105,7 @@ fn sanitize_browser_bounds(app: &AppHandle, mut b: Bounds) -> Result<Bounds, Str
         ));
     }
     if b.x < MIN_X {
-        return Err(format!(
-            "浏览器区域过左 (x={}), 会遮挡侧栏",
-            b.x.round()
-        ));
+        return Err(format!("浏览器区域过左 (x={}), 会遮挡侧栏", b.x.round()));
     }
     let main = main_window(app)?;
     let scale = main.scale_factor().unwrap_or(1.0);
@@ -384,7 +381,9 @@ fn validate_css_selector(sel: &str) -> Result<String, String> {
     if s.is_empty() || s.len() > 500 {
         return Err("invalid-selector".into());
     }
-    if s.chars().any(|c| c == '\n' || c == '\r' || c == ';' || c == '\0') {
+    if s.chars()
+        .any(|c| c == '\n' || c == '\r' || c == ';' || c == '\0')
+    {
         return Err("invalid-selector".into());
     }
     Ok(s)
@@ -401,8 +400,18 @@ fn validate_fill_text(text: &str) -> Result<String, String> {
 #[cfg(desktop)]
 fn validate_press_key(key: &str) -> Result<String, String> {
     const ALLOWED: &[&str] = &[
-        "Enter", "Tab", "Escape", "Backspace", "Delete", "Space",
-        "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End",
+        "Enter",
+        "Tab",
+        "Escape",
+        "Backspace",
+        "Delete",
+        "Space",
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "Home",
+        "End",
     ];
     let k = key.trim();
     if ALLOWED.contains(&k) {
@@ -469,7 +478,7 @@ fn browser_eval_json(app: AppHandle, js: String) -> Result<serde_json::Value, St
             let state = app.state::<browser_cdp::BrowserCdpState>();
             return tauri::async_runtime::block_on(browser_cdp::eval_json(&state, &js));
         }
-        return run_on_main_thread_sync(&app, move |_app| browser_linux::eval_json(&js));
+        run_on_main_thread_sync(&app, move |_app| browser_linux::eval_json(&js))
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -566,11 +575,7 @@ fn open_browser_view_impl(app: &AppHandle, url: String, b: Bounds) -> Result<(),
 /// (见 Tauri WebviewWindowBuilder 文档「Known issues」与 tauri#4121。)
 #[cfg(desktop)]
 #[tauri::command]
-async fn open_browser_view(
-    app: AppHandle,
-    url: String,
-    b: Bounds,
-) -> Result<(), String> {
+async fn open_browser_view(app: AppHandle, url: String, b: Bounds) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return run_on_main_thread_sync(&app, move |app| browser_linux::open(app, url, b));
 
@@ -600,10 +605,7 @@ fn browser_set_bounds_impl(app: &AppHandle, b: Bounds) -> Result<(), String> {
 /// 同步子 webview 矩形 (内容区随窗口缩放/侧栏折叠变化时调用)。
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_set_bounds(
-    app: AppHandle,
-    b: Bounds,
-) -> Result<(), String> {
+fn browser_set_bounds(app: AppHandle, b: Bounds) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     return run_on_main_thread_sync(&app, move |app| browser_linux::set_bounds(app, b));
 
@@ -654,7 +656,7 @@ fn browser_present(app: AppHandle, b: Bounds) -> Result<(), String> {
         if let Err(e) = &r {
             eprintln!("[ideall] browser_present 失败: {e} (b={b:?})");
         }
-        return r;
+        r
     }
 
     #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
@@ -663,30 +665,31 @@ fn browser_present(app: AppHandle, b: Bounds) -> Result<(), String> {
         if let Err(e) = &r {
             eprintln!("[ideall] browser_present 失败: {e} (b={b:?})");
         }
-        return r;
+        r
     }
 
     #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
-    return browser_present_impl(&app, b);
+    {
+        browser_present_impl(&app, b)
+    }
 }
 
 /// 地址栏导航到新 url。
 #[cfg(desktop)]
 #[tauri::command]
-fn browser_navigate(
-    app: AppHandle,
-    url: String,
-) -> Result<(), String> {
+fn browser_navigate(app: AppHandle, url: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return run_on_main_thread_sync(&app, move |app| browser_linux::navigate(app, &url));
+    {
+        run_on_main_thread_sync(&app, move |app| browser_linux::navigate(app, &url))
+    }
 
     #[cfg(not(target_os = "linux"))]
     {
-    let parsed = parse_http_url(&url)?;
-    app.get_webview(BROWSER_LABEL)
-        .ok_or("浏览器视图不存在")?
-        .navigate(parsed)
-        .map_err(|e| e.to_string())
+        let parsed = parse_http_url(&url)?;
+        app.get_webview(BROWSER_LABEL)
+            .ok_or("浏览器视图不存在")?
+            .navigate(parsed)
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -694,7 +697,9 @@ fn browser_navigate(
 #[tauri::command]
 fn browser_back(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return run_on_main_thread_sync(&app, |app| browser_linux::back(app));
+    {
+        run_on_main_thread_sync(&app, browser_linux::back)
+    }
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -708,7 +713,9 @@ fn browser_back(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_forward(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return run_on_main_thread_sync(&app, |app| browser_linux::forward(app));
+    {
+        run_on_main_thread_sync(&app, browser_linux::forward)
+    }
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -722,7 +729,9 @@ fn browser_forward(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_reload(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return run_on_main_thread_sync(&app, |app| browser_linux::reload(app));
+    {
+        run_on_main_thread_sync(&app, browser_linux::reload)
+    }
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -738,7 +747,9 @@ fn browser_reload(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_hide(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return run_on_main_thread_sync(&app, |app| browser_linux::hide(app));
+    {
+        run_on_main_thread_sync(&app, browser_linux::hide)
+    }
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -753,7 +764,9 @@ fn browser_hide(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_show(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return run_on_main_thread_sync(&app, |app| browser_linux::show(app));
+    {
+        run_on_main_thread_sync(&app, browser_linux::show)
+    }
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -769,7 +782,7 @@ async fn browser_get_backend(app: AppHandle) -> Result<BrowserBackendInfo, Strin
     #[cfg(target_os = "linux")]
     {
         let state = app.state::<browser_cdp::BrowserCdpState>();
-        return Ok(state.backend_info().await);
+        Ok(state.backend_info().await)
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -788,7 +801,7 @@ async fn browser_get_backend(app: AppHandle) -> Result<BrowserBackendInfo, Strin
 fn browser_get_content(app: AppHandle) -> Result<BrowserPageContent, String> {
     #[cfg(target_os = "linux")]
     {
-        return run_on_main_thread_sync(&app, |app| browser_linux::get_content(app));
+        run_on_main_thread_sync(&app, browser_linux::get_content)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -929,13 +942,19 @@ fn browser_close_impl(app: &AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn browser_close(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    return run_on_main_thread_sync(&app, |app| browser_linux::close(app));
+    {
+        run_on_main_thread_sync(&app, browser_linux::close)
+    }
 
     #[cfg(all(not(target_os = "linux"), target_os = "windows"))]
-    return run_on_main_thread_sync(&app, |app| browser_close_impl(app));
+    {
+        run_on_main_thread_sync(&app, browser_close_impl)
+    }
 
     #[cfg(all(not(target_os = "linux"), not(target_os = "windows")))]
-    return browser_close_impl(&app);
+    {
+        browser_close_impl(&app)
+    }
 }
 
 #[cfg(desktop)]
@@ -1242,7 +1261,10 @@ async fn agent_guarded_fetch(args: AgentFetchArgs) -> Result<AgentFetchResult, S
         .host_str()
         .ok_or_else(|| "invalid-url".to_string())?
         .to_string();
-    let host_clean = host.trim_start_matches('[').trim_end_matches(']').to_string();
+    let host_clean = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_string();
 
     // 解析 + 全局性校验 (fail closed: 任一解析 IP 落非全局段即拒, 杜绝多 A 记录混入私网)。
     let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host_clean.as_str(), port))
@@ -1280,10 +1302,14 @@ async fn agent_guarded_fetch(args: AgentFetchArgs) -> Result<AgentFetchResult, S
         req = req.body(b);
     }
 
-    let mut resp = req
-        .send()
-        .await
-        .map_err(|e| if e.is_timeout() { "timeout" } else { "fetch-failed" }.to_string())?;
+    let mut resp = req.send().await.map_err(|e| {
+        if e.is_timeout() {
+            "timeout"
+        } else {
+            "fetch-failed"
+        }
+        .to_string()
+    })?;
 
     let status = resp.status().as_u16();
     let final_url = resp.url().to_string();
@@ -1316,7 +1342,12 @@ async fn agent_guarded_fetch(args: AgentFetchArgs) -> Result<AgentFetchResult, S
             }
             Ok(None) => break,
             Err(e) => {
-                return Err(if e.is_timeout() { "timeout" } else { "fetch-failed" }.to_string());
+                return Err(if e.is_timeout() {
+                    "timeout"
+                } else {
+                    "fetch-failed"
+                }
+                .to_string());
             }
         }
     }
@@ -1401,7 +1432,10 @@ pub fn run() {
             .find(|w| w.label == "main")
             .or_else(|| app.config().app.windows.first())
             .cloned();
-        if conf.as_ref().is_some_and(|w| w.x.is_none() && w.y.is_none()) {
+        if conf
+            .as_ref()
+            .is_some_and(|w| w.x.is_none() && w.y.is_none())
+        {
             if let Some(window) = app.get_window("main") {
                 window_placement::schedule_initial_placement(&window, conf.unwrap());
             }
@@ -1424,59 +1458,58 @@ pub fn run() {
     let builder = builder.manage(BrowserWinState::default());
 
     #[cfg(desktop)]
-    let builder = builder
-        .invoke_handler(tauri::generate_handler![
-            agent_guarded_fetch,
-            open_browser_view,
-            browser_set_bounds,
-            browser_present,
-            browser_navigate,
-            browser_back,
-            browser_forward,
-            browser_reload,
-            browser_hide,
-            browser_show,
-            browser_close,
-            browser_get_backend,
-            browser_get_content,
-            browser_click,
-            browser_fill,
-            browser_press,
-            browser_list_interactive,
-            browser_wait,
-            browser_wait_for_selector,
-            acp_transport::acp_spawn,
-            acp_transport::acp_send,
-            acp_transport::acp_close,
-            acp_transport::acp_listen_start,
-            acp_transport::acp_listen_stop,
-            acp_transport::acp_server_send,
-            acp_transport::acp_server_close,
-            acp_transport::acp_which,
-            acp_transport::acp_script_path,
-            acp_transport::acp_run_once,
-            oauth_callback::oauth_callback_start,
-            oauth_callback::oauth_callback_stop,
-            installed_apps::list_installed_apps,
-            installed_apps::launch_installed_app,
-            installed_apps::read_app_icon_data_url,
-            guarded_fs::guarded_fs_pick_root,
-            guarded_fs::guarded_fs_grant_info,
-            guarded_fs::guarded_fs_revoke_grant,
-            guarded_fs::guarded_fs_stat,
-            guarded_fs::guarded_fs_list,
-            guarded_fs::guarded_fs_read,
-            guarded_fs::guarded_fs_write_text,
-            secure_store::secure_store_status,
-            secure_store::secure_store_get,
-            secure_store::secure_store_set,
-            secure_store::secure_store_delete,
-            window_minimize,
-            window_close,
-            window_toggle_maximize,
-            window_query_maximized,
-            open_engine_window,
-        ]);
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        agent_guarded_fetch,
+        open_browser_view,
+        browser_set_bounds,
+        browser_present,
+        browser_navigate,
+        browser_back,
+        browser_forward,
+        browser_reload,
+        browser_hide,
+        browser_show,
+        browser_close,
+        browser_get_backend,
+        browser_get_content,
+        browser_click,
+        browser_fill,
+        browser_press,
+        browser_list_interactive,
+        browser_wait,
+        browser_wait_for_selector,
+        acp_transport::acp_spawn,
+        acp_transport::acp_send,
+        acp_transport::acp_close,
+        acp_transport::acp_listen_start,
+        acp_transport::acp_listen_stop,
+        acp_transport::acp_server_send,
+        acp_transport::acp_server_close,
+        acp_transport::acp_which,
+        acp_transport::acp_script_path,
+        acp_transport::acp_run_once,
+        oauth_callback::oauth_callback_start,
+        oauth_callback::oauth_callback_stop,
+        installed_apps::list_installed_apps,
+        installed_apps::launch_installed_app,
+        installed_apps::read_app_icon_data_url,
+        guarded_fs::guarded_fs_pick_root,
+        guarded_fs::guarded_fs_grant_info,
+        guarded_fs::guarded_fs_revoke_grant,
+        guarded_fs::guarded_fs_stat,
+        guarded_fs::guarded_fs_list,
+        guarded_fs::guarded_fs_read,
+        guarded_fs::guarded_fs_write_text,
+        secure_store::secure_store_status,
+        secure_store::secure_store_get,
+        secure_store::secure_store_set,
+        secure_store::secure_store_delete,
+        window_minimize,
+        window_close,
+        window_toggle_maximize,
+        window_query_maximized,
+        open_engine_window,
+    ]);
     #[cfg(not(desktop))]
     let builder = builder.invoke_handler(tauri::generate_handler![agent_guarded_fetch]);
 
@@ -1517,7 +1550,7 @@ mod tests {
             "169.254.169.254", // 云元数据
             "169.254.0.1",
             "0.0.0.0",
-            "100.64.0.1",   // CGNAT
+            "100.64.0.1", // CGNAT
             "255.255.255.255",
             "::1",
             "::",

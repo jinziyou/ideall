@@ -29,8 +29,12 @@ export interface SyncPort {
 let syncPort: SyncPort | null = null
 
 /** sync 插件在启动时注册其实现。 */
-export function registerSyncPort(p: SyncPort): void {
+export function registerSyncPort(p: SyncPort): () => void {
+  const previous = syncPort
   syncPort = p
+  return () => {
+    if (syncPort === p) syncPort = previous
+  }
 }
 
 /** 取同步端口 (core 的同步面板用); 未注册 (无 sync 插件) 时为 null。 */

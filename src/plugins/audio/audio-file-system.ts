@@ -364,10 +364,17 @@ export function createAudioFileSystem(
 
 export const audioFileSystem = createAudioFileSystem()
 
-let mounted = false
+let mounted: (() => void) | null = null
 
-export function registerAudioFileSystem(mount: (provider: FileSystemProvider) => void): void {
-  if (mounted) return
-  mount(audioFileSystem)
-  mounted = true
+export function registerAudioFileSystem(
+  mount: (provider: FileSystemProvider) => () => void,
+): () => void {
+  if (mounted) return () => {}
+  const dispose = mount(audioFileSystem)
+  mounted = dispose
+  return () => {
+    if (mounted !== dispose) return
+    mounted = null
+    dispose()
+  }
 }

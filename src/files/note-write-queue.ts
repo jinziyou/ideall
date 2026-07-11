@@ -175,12 +175,6 @@ async function drainQueue(): Promise<void> {
   }
 }
 
-/** 逐出 / 卸载前调用 (P1b LRU 用): 若该 note 仍有待落库草稿, await 消费完成 (无则立即 resolve)。 */
-export async function flushNode(noteId: string): Promise<void> {
-  if (!pending.has(noteId)) return
-  await drainQueue()
-}
-
 let visibilityInstalled = false
 function installVisibilityFlush(): void {
   if (visibilityInstalled || typeof document === "undefined") return

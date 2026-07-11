@@ -35,8 +35,9 @@ import {
   resourceRefForFile,
 } from "@/filesystem/resource-file-system"
 import { fileSystemRegistry, type FileSystemRegistry } from "@/filesystem/registry"
-import type { DirectoryPage, FileSystemAccessContext } from "@/filesystem/types"
+import type { FileSystemAccessContext } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
+import { iterateDirectoryPages } from "@/filesystem/directory-pagination"
 
 export type FileSystemFilesGateway = Pick<
   FileSystemRegistry,
@@ -220,27 +221,12 @@ export function createFileSystemFilesPort(
       NonNullable<Parameters<FileSystemFilesGateway["readDirectory"]>[2]>,
       "recursive"
     > = {},
-  ): AsyncGenerator<DirectoryPage["entries"]> {
-    let cursor: string | undefined
-    const seen = new Set<string>()
-    do {
-      const page = await gateway.readDirectory(ref, access("directory"), {
-        ...(cursor ? { cursor } : {}),
-        ...options,
-        limit: directoryPageSize,
-      })
-      yield page.entries
-      if (!page.nextCursor) return
-      if (seen.has(page.nextCursor)) {
-        throw new FileSystemError(
-          "unavailable",
-          `Directory cursor did not advance: ${page.nextCursor}`,
-          ref,
-        )
-      }
-      seen.add(page.nextCursor)
-      cursor = page.nextCursor
-    } while (cursor)
+  ) {
+    yield* iterateDirectoryPages(
+      (pageOptions) =>
+        gateway.readDirectory(ref, access("directory"), { ...pageOptions, ...options }),
+      { pageSize: directoryPageSize, ref },
+    )
   }
 
   async function readNode(ref: FileRef): Promise<Node | undefined> {

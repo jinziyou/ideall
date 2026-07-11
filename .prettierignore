@@ -21,3 +21,8 @@ pnpm-lock.yaml
 public
 *.md
 docs/*.html
+
+# 设计系统同步生成物（含打包后的 React/vendor 代码）
+ds-bundle
+.ds-sync
+.design-sync

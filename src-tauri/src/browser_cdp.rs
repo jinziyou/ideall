@@ -2,11 +2,11 @@
 // 默认不启用 (内嵌 WebKitGTK); 设 IDEALL_BROWSER_CDP=1 时启用 —— Agent 自动化更强, 但会弹出系统 Chrome。
 
 use chromiumoxide::browser::{Browser, BrowserConfig};
-use chromiumoxide::Page;
 use chromiumoxide::cdp::browser_protocol::browser::{
     Bounds as CdpWindowBounds, GetWindowForTargetParams, SetWindowBoundsParams, WindowId,
     WindowState,
 };
+use chromiumoxide::Page;
 use futures::StreamExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,7 +14,10 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::browser_scripts::{self, CONTENT_JS, LIST_INTERACTIVE_JS};
-use crate::{parse_list_interactive, BrowserBackendInfo, BrowserInteractiveResult, BrowserPageContent, Bounds};
+use crate::{
+    parse_list_interactive, Bounds, BrowserBackendInfo, BrowserInteractiveResult,
+    BrowserPageContent,
+};
 
 pub struct BrowserCdpState {
     pub chrome_path: Option<PathBuf>,
@@ -68,10 +71,7 @@ impl BrowserCdpState {
             },
             cdp_available: self.chrome_available(),
             running,
-            chrome_path: self
-                .chrome_path
-                .as_ref()
-                .map(|p| p.display().to_string()),
+            chrome_path: self.chrome_path.as_ref().map(|p| p.display().to_string()),
         }
     }
 }
@@ -119,10 +119,7 @@ async fn apply_window_bounds(
         builder = builder.window_state(state);
     }
     browser
-        .execute(SetWindowBoundsParams::new(
-            window_id,
-            builder.build(),
-        ))
+        .execute(SetWindowBoundsParams::new(window_id, builder.build()))
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -260,9 +257,7 @@ pub async fn open(
         .await
         .map_err(|e| format!("启动 Chrome 失败: {e}"))?;
 
-    let handler_task = tokio::spawn(async move {
-        while handler.next().await.is_some() {}
-    });
+    let handler_task = tokio::spawn(async move { while handler.next().await.is_some() {} });
 
     let pages = browser.pages().await.map_err(|e| e.to_string())?;
     let page = if let Some(p) = pages.into_iter().next() {
@@ -373,7 +368,11 @@ pub async fn get_content(state: &BrowserCdpState) -> Result<BrowserPageContent, 
         .await
         .map_err(|e| e.to_string())?
         .unwrap_or_default();
-    let title = page.get_title().await.map_err(|e| e.to_string())?.unwrap_or_default();
+    let title = page
+        .get_title()
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or_default();
     let v = eval_json_page(&page, CONTENT_JS).await?;
     if let Some(err) = v.get("error").and_then(|x| x.as_str()) {
         if !err.is_empty() {

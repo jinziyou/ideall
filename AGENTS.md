@@ -2,7 +2,7 @@
 
 ## 项目结构与模块组织
 
-ideall 是基于 Next.js 与 Tauri 的本地优先个人信息终端。源码位于 `src/`：`app/` 是薄路由入口，`shell/` 是终端外壳，`workspace/` 负责标签页编排，`files/` 是本地 Node 数据层，`modules/` 放产品分区，`plugins/` 放 agent/sync/embed 功能，`protocol/` 放纯契约，`ui/` 放基础组件，`shared/` 放共享 UI，`lib/` 放工具与适配器。Tauri 与 Rust 代码位于 `src-tauri/`。测试以 `*.test.ts` 形式就近放在 `src/` 下。架构与设计文档在 `docs/`，API schema 源文件是 `openapi/server.json`。
+ideall 是基于 Next.js 与 Tauri 的本地优先个人信息终端。源码位于 `src/`：`app/` 是薄路由入口，`shell/` 是终端外壳与组合根，`workspace/` 负责 Display/标签页编排，`filesystem/` 管理挂载和 provider，并在 `src/filesystem/resource-sources/` 收口 Resource source/provider 兼容适配，`engines/` 负责文件到视图的匹配，`files/` 是本地 Node 数据层，`modules/` 放产品分区，`plugins/` 放 agent/sync/embed 等功能，`protocol/` 放纯契约，`ui/` 放基础组件，`shared/` 放共享 UI，`lib/` 放工具与适配器。Tauri 与 Rust 代码位于 `src-tauri/`。业务测试以 `*.test.ts` 形式就近放在 `src/`，维护脚本测试位于 `scripts/*.test.mjs`。文档入口是 `docs/README.md`，API schema 源文件是 `openapi/server.json`。
 
 ## 构建、测试与开发命令
 
@@ -11,8 +11,11 @@ ideall 是基于 Next.js 与 Tauri 的本地优先个人信息终端。源码位
 - `pnpm app:dev`：启动 Tauri 桌面壳，并加载开发服务。
 - `pnpm build` 或 `pnpm app:export`：生成用于 App 打包的静态导出。
 - `pnpm app:build`：构建 Tauri App；需要 Rust 与平台工具链。
-- `pnpm lint`、`pnpm typecheck`、`pnpm test`：分别运行 ESLint 边界检查、TypeScript 检查与 Node 测试。
-- `pnpm verify`：运行基础 CI 检查，包括格式、lint、测试、API 生成校验与构建。
+- `pnpm lint`、`pnpm lint:deps`、`pnpm lint:docs`、`pnpm typecheck`、`pnpm test`：分别运行架构边界、依赖使用、文档链接、TypeScript 与业务测试。
+- `pnpm test:coverage`：为选定的核心源码生成 c8 text/lcov 报告，并执行仓库基线覆盖率门槛。
+- `pnpm verify:checks`：运行不含生产构建的 CI 质量门禁，包含依赖 lint；`pnpm version:check` 校验四处项目版本一致。
+- `pnpm verify:bundle`：检查已有 `out/` 中 JavaScript chunk 的 raw/gzip bundle 预算，应在生产构建后运行。
+- `pnpm verify`：等同 `pnpm verify:base`，依次运行 `verify:checks`、生产构建和 `verify:bundle`。
 
 ## 代码风格与命名约定
 
@@ -20,7 +23,7 @@ ideall 是基于 Next.js 与 Tauri 的本地优先个人信息终端。源码位
 
 ## 测试指南
 
-测试通过 `scripts/run-tests.mjs` 使用 `node:test`，文件命名遵循 `*.test.ts`。运行全部测试用 `pnpm test`；也可传入子串过滤，例如 `pnpm test sort-key`。修改 protocol 逻辑、store、同步、安全守卫或插件行为时，应补充聚焦测试。
+业务测试通过 `scripts/run-tests.mjs` 使用 `node:test`，文件命名遵循 `*.test.ts`。运行全部业务测试用 `pnpm test`；也可传入子串过滤，例如 `pnpm test sort-key`。维护脚本测试运行 `pnpm test:scripts`。修改 protocol 逻辑、store、同步、安全守卫、provider 或部署脚本时，应补充聚焦测试。
 
 ## 提交与 Pull Request 指南
 

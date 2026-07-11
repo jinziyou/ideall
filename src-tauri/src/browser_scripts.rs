@@ -52,16 +52,14 @@ pub const LIST_INTERACTIVE_JS: &str = r#"
 "#;
 
 pub fn js_element_exists(selector: &str) -> Result<String, String> {
-    let sel_json =
-        serde_json::to_string(selector).map_err(|e| format!("selector-json: {e}"))?;
+    let sel_json = serde_json::to_string(selector).map_err(|e| format!("selector-json: {e}"))?;
     Ok(format!(
         "(function(){{try{{return JSON.stringify({{ok:!!document.querySelector({sel_json})}});}}catch(e){{return JSON.stringify({{ok:false}});}}}})()"
     ))
 }
 
 pub fn js_click(selector: &str) -> Result<String, String> {
-    let sel_json =
-        serde_json::to_string(selector).map_err(|e| format!("selector-json: {e}"))?;
+    let sel_json = serde_json::to_string(selector).map_err(|e| format!("selector-json: {e}"))?;
     Ok(format!(
         "(function(){{try{{var el=document.querySelector({sel_json});if(!el)return JSON.stringify({{ok:false,error:'not-found'}});el.click();return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"
     ))
@@ -75,8 +73,7 @@ pub fn js_press(key: &str) -> Result<String, String> {
 }
 
 pub fn js_fill(selector: &str, text: &str) -> Result<String, String> {
-    let sel_json =
-        serde_json::to_string(selector).map_err(|e| format!("selector-json: {e}"))?;
+    let sel_json = serde_json::to_string(selector).map_err(|e| format!("selector-json: {e}"))?;
     let val_json = serde_json::to_string(text).map_err(|e| format!("text-json: {e}"))?;
     Ok(format!(
         "(function(){{try{{var el=document.querySelector({sel_json});if(!el)return JSON.stringify({{ok:false,error:'not-found'}});el.focus();if('value' in el)el.value={val_json};else el.textContent={val_json};el.dispatchEvent(new Event('input',{{bubbles:true}}));el.dispatchEvent(new Event('change',{{bubbles:true}}));return JSON.stringify({{ok:true}});}}catch(e){{return JSON.stringify({{ok:false,error:String(e)}});}}}})()"

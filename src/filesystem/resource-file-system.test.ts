@@ -1,9 +1,12 @@
 import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
 import type { ResourceMeta } from "@protocol/resource"
-import { clearVfsProvidersForTest, registerVfsProvider } from "@/vfs/registry"
-import type { VfsProvider } from "@/vfs/types"
-import { VfsError } from "@/vfs/types"
+import {
+  clearResourceSourcesForTest,
+  registerResourceSource,
+} from "@/filesystem/resource-sources/registry"
+import type { ResourceSourceProvider } from "@/filesystem/resource-sources/types"
+import { ResourceSourceError } from "@/filesystem/resource-sources/types"
 import { FileSystemError } from "./types"
 import {
   aiTasksPanelFileRef,
@@ -17,16 +20,46 @@ import {
 
 const ctx = { actor: "ui", permissions: [], intent: "metadata" } as const
 
-afterEach(() => clearVfsProvidersForTest())
+afterEach(() => clearResourceSourcesForTest())
 
-test("resource filesystem: note roots and child pages are created through VFS actions", async () => {
+test("resource filesystem: directory pagination uses strict canonical inputs", async () => {
+  const fs = createResourceFileSystem()
+  const directoryCtx = { actor: "ui", permissions: [], intent: "directory" } as const
+
+  const first = await fs.readDirectory(fs.descriptor.root, directoryCtx, { limit: 2 })
+  assert.equal(first.entries.length, 2)
+  assert.equal(first.nextCursor, "2")
+
+  const second = await fs.readDirectory(fs.descriptor.root, directoryCtx, {
+    cursor: first.nextCursor,
+    limit: 2,
+  })
+  assert.equal(second.entries.length, 2)
+  assert.equal(second.nextCursor, "4")
+  assert.equal(second.entries[0]?.sortKey, "00002", "分页后仍保留全目录排序位置")
+
+  for (const options of [
+    { cursor: "1x" },
+    { cursor: "-1" },
+    { cursor: "9007199254740992" },
+    { limit: 0 },
+    { limit: Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    await assert.rejects(
+      fs.readDirectory(fs.descriptor.root, directoryCtx, options),
+      (error) => error instanceof FileSystemError && error.code === "invalid-input",
+    )
+  }
+})
+
+test("resource filesystem: note roots and child pages are created through resource source actions", async () => {
   const parentMeta: ResourceMeta = {
     ref: { scheme: "node", kind: "note", id: "parent" },
     title: "Parent",
     capabilities: ["open", "create", "read-content"],
   }
   const createdInputs: unknown[] = []
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: [parentMeta] }
@@ -100,7 +133,7 @@ test("resource filesystem: recursive place entries preserve each descendant pare
     parent: root.ref,
     capabilities: ["open", "read-content"],
   }
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: [root, child] }
@@ -135,14 +168,14 @@ test("resource filesystem: recursive place entries preserve each descendant pare
   assert.deepEqual(childEntry?.file?.ref, childEntry?.target)
 })
 
-test("resource filesystem: readMany delegates ordered node reads to one VFS batch", async () => {
+test("resource filesystem: readMany delegates ordered node reads to one resource source batch", async () => {
   const metas: ResourceMeta[] = ["first", "second"].map((id) => ({
     ref: { scheme: "node", kind: "note", id },
     title: id,
     capabilities: ["open", "read-content"],
   }))
   const batches: string[][] = []
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: metas }
@@ -228,7 +261,7 @@ test("resource filesystem: AI threads are linked from Home while the legacy work
     title: "对话",
     capabilities: ["open", "read-content"],
   }
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list(query) {
       return { items: query.kinds?.includes("thread") ? [thread] : [] }
@@ -307,7 +340,7 @@ test("resource filesystem: legacy resource identity and root hierarchy are prese
     parent: rootMeta.ref,
     capabilities: rootMeta.capabilities,
   }
-  const provider: VfsProvider = {
+  const provider: ResourceSourceProvider = {
     scheme: "node",
     async list(query) {
       return { items: query.parent ? [childMeta] : [rootMeta, childMeta] }
@@ -336,7 +369,7 @@ test("resource filesystem: legacy resource identity and root hierarchy are prese
       return null
     },
   }
-  registerVfsProvider(provider)
+  registerResourceSource(provider)
   const fs = createResourceFileSystem()
   const roots = await fs.readDirectory(corePlaceRef("notes"), ctx)
   const noteEntries = roots.entries.filter((entry) => entry.target.fileId.startsWith("resource:"))
@@ -351,13 +384,13 @@ test("resource filesystem: legacy resource identity and root hierarchy are prese
 })
 
 test("resource filesystem: stat normalizes legacy not-found errors to null", async () => {
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: [] }
     },
     async get() {
-      throw new VfsError("not-found", "legacy provider detail")
+      throw new ResourceSourceError("not-found", "legacy provider detail")
     },
     async actions() {
       return []
@@ -380,7 +413,7 @@ test("resource filesystem: bookmark directory links share one file identity acro
     title: "Example",
     capabilities: ["open", "preview", "navigate"],
   }
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list(query) {
       return { items: query.kinds?.includes("bookmark") ? [meta] : [] }
@@ -435,7 +468,7 @@ test("resource filesystem: directory entry ids survive provider reordering", asy
     },
   ]
   let reversed = false
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: reversed ? [...metas].reverse() : metas }
@@ -470,7 +503,7 @@ test("resource filesystem: range reads preserve version and expectedVersion reje
   }
   const actors: string[] = []
   let writes = 0
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: [meta] }
@@ -534,7 +567,7 @@ test("resource filesystem: range reads preserve version and expectedVersion reje
     { actor: "system", permissions: ["fs:write"], intent: "write" },
   )
   assert.equal(writes, 1)
-  assert.equal(actors.at(-1), "agent", "system is never promoted to the VFS ui actor")
+  assert.equal(actors.at(-1), "agent", "system is never promoted to the resource source ui actor")
 })
 
 test("resource filesystem: concurrent writes atomically enforce a shared expectedVersion", async () => {
@@ -545,7 +578,7 @@ test("resource filesystem: concurrent writes atomically enforce a shared expecte
     capabilities: ["open", "read-blob", "edit"],
   }
   let content = "base"
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: [meta] }
@@ -611,7 +644,7 @@ test("resource filesystem: engine access is scoped to its active file", async ()
     capabilities: ["open", "read-blob", "edit", "delete"],
   }
   const actors: string[] = []
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: [meta] }
@@ -681,9 +714,9 @@ test("resource filesystem: watch is advertised only for watchable targets", asyn
     title: "Watched",
     capabilities: ["open", "read-content"],
   }
-  let notifyVfs: (() => void) | undefined
+  let notifySource: (() => void) | undefined
   let watchedId: string | undefined
-  registerVfsProvider({
+  registerResourceSource({
     scheme: "node",
     async list() {
       return { items: [meta] }
@@ -699,7 +732,7 @@ test("resource filesystem: watch is advertised only for watchable targets", asyn
     },
     watch(query, _access, notify) {
       watchedId = query.id
-      notifyVfs = notify
+      notifySource = notify
       return { dispose() {} }
     },
   })
@@ -713,6 +746,6 @@ test("resource filesystem: watch is advertised only for watchable targets", asyn
   const handle = fs.watch?.(ref, { ...ctx, intent: "watch" }, () => events++)
   assert.ok(handle)
   assert.equal(watchedId, "watched")
-  notifyVfs?.()
+  notifySource?.()
   assert.equal(events, 1)
 })

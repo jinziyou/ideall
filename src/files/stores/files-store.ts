@@ -76,11 +76,6 @@ export async function listFiles(): Promise<FileMeta[]> {
   return files.sort((a, b) => b.createdAt - a.createdAt)
 }
 
-/** 活跃文件数 (过滤删除标记) —— 数量徽标用。 */
-export async function countFiles(): Promise<number> {
-  return (await allFileNodes()).filter(isLive).length
-}
-
 /** 读取单个完整文件 (含 Blob); 删除标记 / 非文件 kind / Blob 缺失视为不存在。 */
 export async function getFile(id: string): Promise<StoredFile | undefined> {
   const node = await idbGet<FileNode>(STORE_NODES, id)

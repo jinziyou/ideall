@@ -173,18 +173,6 @@ export async function listBookmarks(): Promise<Bookmark[]> {
   return items.sort((a, b) => b.createdAt - a.createdAt)
 }
 
-/** 活跃书签数 (过滤删除标记) —— 数量徽标用。 */
-export async function countBookmarks(): Promise<number> {
-  return (await allBookmarkNodes()).filter(isLive).length
-}
-
-/** 读取单条书签 (映射); 删除标记 / 非书签 kind 视为不存在。供书签查看器自取数。 */
-export async function getBookmark(id: string): Promise<Bookmark | undefined> {
-  const n = await idbGet<BookmarkNode>(STORE_NODES, id)
-  if (!n || n.kind !== "bookmark" || !isLive(n)) return undefined
-  return nodeToBookmark(n)
-}
-
 export type NewBookmark = {
   title: string
   url: string
@@ -215,33 +203,6 @@ export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
   await idbPut(STORE_NODES, node)
   notifyFilesUpdated({ kind: "bookmark", id: node.id })
   return nodeToBookmark(node)
-}
-
-/** 批量导入 (浏览器书签导入用), 一次事务写入 */
-export async function bulkAddBookmarks(inputs: NewBookmark[]): Promise<Bookmark[]> {
-  const existing = await allBookmarkNodes()
-  const now = Date.now()
-  const keys = nextKeys(maxKey(existing), inputs.length)
-  const nodes: BookmarkNode[] = inputs.map((input, i) => ({
-    // 批量导入在同一毫秒内生成, 追加下标 i 保证批内 ID 一定互不相同 (genId 随机后缀无法杜绝同毫秒碰撞)。
-    id: `${genId("bm")}_${i}`,
-    kind: "bookmark",
-    title: input.title.trim() || input.url,
-    parentId: input.folderId ?? null,
-    sortKey: keys[i],
-    tags: input.tags ?? [],
-    // 保持导入顺序, 后导入的略晚
-    createdAt: now + i,
-    updatedAt: now + i,
-    content: {
-      url: input.url.trim(),
-      description: input.description?.trim() ?? "",
-      favicon: input.favicon || faviconForUrl(input.url),
-    },
-  }))
-  await idbBulkPut(STORE_NODES, nodes)
-  notifyFilesUpdated({ kind: "bookmark" })
-  return nodes.map(nodeToBookmark)
 }
 
 export async function updateBookmark(

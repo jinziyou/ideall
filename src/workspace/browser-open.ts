@@ -3,6 +3,7 @@
 // 触发方: 插件 host.openExternal、宿主 UI 的 openExternal、全局 target=_blank 拦截。
 import { isTauri, browserNavigate } from "@/lib/tauri"
 import { safeHref } from "@/lib/safe-url"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { openTarget } from "./store"
 
 let pendingUrl: string | null = null
@@ -40,9 +41,10 @@ export async function navigateExternal(
   if (newTab) {
     pendingUrl = href
     openTarget({
-      type: "resource",
-      ref: { scheme: "browser", kind: "page", id: href },
+      type: "file",
+      ref: resourceFileRef({ scheme: "browser", kind: "page", id: href }),
       title: href,
+      rootId: "browser",
     })
   }
 

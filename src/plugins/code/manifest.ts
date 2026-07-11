@@ -6,6 +6,8 @@ export const codeManifest = {
   engines: ["ideall.code"] as const,
   register() {
     const descriptor = BUILTIN_ENGINES.find((engine) => engine.engineId === "ideall.code")
-    if (descriptor && !engineRegistry.get(descriptor.engineId)) engineRegistry.register(descriptor)
+    return descriptor && !engineRegistry.get(descriptor.engineId)
+      ? engineRegistry.register(descriptor)
+      : () => {}
   },
 }

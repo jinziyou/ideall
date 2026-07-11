@@ -10,7 +10,7 @@ import {
   type PluginImportResult,
   type WorkspaceBackupPackage,
 } from "./plugin-data"
-import { PLUGIN_DATA_PORTS } from "./plugin-data-registry"
+import { listPluginDataPorts } from "./plugin-data-registry"
 
 const WORKSPACE_BACKUP_ID = "workspace"
 const WORKSPACE_BACKUP_LABEL = "全部插件"
@@ -181,7 +181,7 @@ async function createImportBackup(port: PluginDataPort): Promise<PluginDataImpor
 }
 
 async function createWorkspaceImportBackup(
-  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+  ports: readonly PluginDataPort[] = listPluginDataPorts(),
 ): Promise<PluginDataImportBackup> {
   const raw = await exportWorkspaceBackupJson(ports)
   return {
@@ -197,7 +197,7 @@ async function createWorkspaceImportBackup(
 
 export function pluginDataPortForPackage(
   pack: Pick<PluginDataPackage, "plugin">,
-  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+  ports: readonly PluginDataPort[] = listPluginDataPorts(),
 ): PluginDataPort | undefined {
   return ports.find(
     (port) =>
@@ -210,7 +210,7 @@ export function pluginDataPortForPackage(
 export async function previewPluginDataImport(
   raw: string,
   filename?: string,
-  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+  ports: readonly PluginDataPort[] = listPluginDataPorts(),
 ): Promise<PluginDataImportPreview> {
   if (isWorkspaceBackupRaw(raw)) {
     let pack: WorkspaceBackupPackage
@@ -282,7 +282,7 @@ export async function previewPluginDataImport(
 export async function importPluginDataPackage(
   raw: string,
   filename?: string,
-  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+  ports: readonly PluginDataPort[] = listPluginDataPorts(),
 ): Promise<PluginDataImportExecution> {
   if (isWorkspaceBackupRaw(raw)) {
     return importWorkspaceBackupPackage(raw, filename, ports)
@@ -312,7 +312,7 @@ export async function importPluginDataPackage(
 }
 
 export async function exportWorkspaceBackupJson(
-  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+  ports: readonly PluginDataPort[] = listPluginDataPorts(),
 ): Promise<string> {
   const plugins = await Promise.all(
     ports.map(async (port) => parsePluginDataPackage(await port.exportJson())),
@@ -339,7 +339,7 @@ async function applyWorkspaceBackupPackage(
 export async function importWorkspaceBackupPackage(
   raw: string,
   filename?: string,
-  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+  ports: readonly PluginDataPort[] = listPluginDataPorts(),
 ): Promise<PluginDataImportExecution> {
   const preview = await previewPluginDataImport(raw, filename, ports)
   if (!preview.ok || !preview.package) {
@@ -363,7 +363,7 @@ export async function importWorkspaceBackupPackage(
 
 export async function restorePluginDataBackup(
   backup: PluginDataImportBackup,
-  ports: readonly PluginDataPort[] = PLUGIN_DATA_PORTS,
+  ports: readonly PluginDataPort[] = listPluginDataPorts(),
 ): Promise<PluginDataRestoreExecution> {
   if (isWorkspaceBackupRaw(backup.raw)) {
     const pack = parseWorkspaceBackupPackage(backup.raw)

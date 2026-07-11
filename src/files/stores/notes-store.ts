@@ -247,12 +247,6 @@ export async function getNote(id: string): Promise<Note | undefined> {
   return { ...note, content, blockMeta }
 }
 
-/** 活跃笔记数 (过滤删除标记) —— 数量徽标用。目录页也计入 (「目录也是文件」)。 */
-export async function countNotes(): Promise<number> {
-  const all = await allNoteNodes()
-  return all.filter(isLive).length
-}
-
 // ---- 笔记 (写) ----
 
 export async function addNote(input: NewNote = {}): Promise<Note> {

@@ -498,8 +498,8 @@ fn entry_from_metadata(
         stable_id: entry_id,
         kind,
         size: metadata.len(),
-        modified_at: modified_at(&metadata),
-        version: version(&metadata),
+        modified_at: modified_at(metadata),
+        version: version(metadata),
     })
 }
 

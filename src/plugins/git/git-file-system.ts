@@ -693,10 +693,17 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
 
 export const gitFileSystem = createGitFileSystem()
 
-let mounted = false
+let mounted: (() => void) | null = null
 
-export function registerGitFileSystem(mount: (provider: FileSystemProvider) => void): void {
-  if (mounted) return
-  mount(gitFileSystem)
-  mounted = true
+export function registerGitFileSystem(
+  mount: (provider: FileSystemProvider) => () => void,
+): () => void {
+  if (mounted) return () => {}
+  const dispose = mount(gitFileSystem)
+  mounted = dispose
+  return () => {
+    if (mounted !== dispose) return
+    mounted = null
+    dispose()
+  }
 }

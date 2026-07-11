@@ -127,7 +127,7 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
     }
   }, [])
 
-  // 仅在用户输入内容搜索时按 query 下推到 VFS; 避免打开面板即全量加载本机数据。
+  // 仅在用户输入内容搜索时按 query 下推到 FileSystem; 避免打开面板即全量加载本机数据。
   React.useEffect(() => {
     const text = query.trim()
     if (!open || commandMode || !text) return

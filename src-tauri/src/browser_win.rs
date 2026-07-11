@@ -155,11 +155,7 @@ pub fn remove_hit_pass_tree(hwnds: &[isize]) {
             continue;
         }
         unsafe {
-            let _ = RemoveWindowSubclass(
-                HWND(raw as _),
-                Some(hit_subclass_proc),
-                HIT_SUBCLASS_ID,
-            );
+            let _ = RemoveWindowSubclass(HWND(raw as _), Some(hit_subclass_proc), HIT_SUBCLASS_ID);
         }
     }
 }

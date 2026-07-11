@@ -62,7 +62,7 @@ pnpm app:dev        # 桌面开发壳：复用或启动上面的 dev 服
 # 构建
 pnpm build          # 静态导出 → out/（= pnpm app:export）
 pnpm app:export     # 静态导出 → out/（= pnpm build）
-pnpm app:build      # 多平台打包（依赖 app:export + 平台工具链/图标）
+pnpm app:build      # 为当前宿主平台打包（依赖 app:export + 平台工具链/图标）
 
 # 本地基础门禁
 pnpm verify:base
@@ -98,6 +98,8 @@ pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026","beforeDevComm
 | `NEXT_PUBLIC_XSTATE_INSPECT` | 开发态 XState Inspector；设为 `0` 关闭 | 开启 |
 | `IDEALL_BROWSER_CDP` | Linux/WSL 内嵌浏览器后端；设为 `1` 启用 CDP 模式 | WebKit 内嵌 |
 
+`NEXT_PUBLIC_EMBED_BASE` 会在构建期写入前端，但它本身不会放宽 Tauri 的 CSP。改用自建 portal 时还必须把对应 origin 加入 `src-tauri/tauri.conf.json` 的 `frame-src`，并让 portal 的 `frame-ancestors` 放行 ideall，然后重新打包 App。仅修改环境变量会使 iframe 被 WebView 拒绝。
+
 ## 平台矩阵
 
 | 平台 | Tauri 目标 | 构建机要求 | 产物 |
@@ -112,29 +114,33 @@ pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026","beforeDevComm
 
 CI 分三层：
 
-- `.github/workflows/ci.yml`：format / lint / workflow lint / typecheck / test / API drift / build。
-- `.github/workflows/rust.yml`：`src-tauri/**` 改动时跑 cargo check、clippy 零警告和 cargo test。
+- `.github/workflows/ci.yml`：单一 quality job 运行 `verify:checks`，build job 独立复用 Next 缓存，避免每项检查重复安装依赖。
+- `.github/workflows/rust.yml`：`src-tauri/**` 改动时跑 rustfmt、cargo check、clippy 零警告和 cargo test。
 - `.github/workflows/smoke.yml`：应用面改动时跑静态导出生产形态的浏览器冒烟；本地等价入口是 `pnpm verify:smoke:static`。
 
 App 发布由 `.github/workflows/app-build.yml` 负责：
 
 - push `main` → 滚动预发布 `app-edge`。
 - push `app-v*` tag → 正式 Release 草稿（人工 review 后发布）。
-- workflow_dispatch → 手动构建。
-- 桌面 matrix 产出 macOS / Linux / Windows 安装包，并生成 `SHA256SUMS`。
+- workflow_dispatch → 仅允许从 `main` 手动构建 `app-edge`。
+- 桌面 matrix 只构建并上传 1 天保留的 workflow artifacts，不直接写 GitHub Release。最终 publish job 要求四个平台安装包、updater 签名、`latest.json` 与 `SHA256SUMS` 全部校验通过，才创建正式 draft 或切换 `app-edge`。
 - Android 仅 tag / 手动时产出 debug APK；iOS 需 Apple 证书与 macOS 构建机，未纳入 CI。
+- 所有 edge/tag 构建都会重新执行 JavaScript 质量门禁；tag、手动构建及涉及 `src-tauri/**` 的 push 还会执行 Rust 门禁。tag 另会确认提交已包含在 `main`。
+- 发布采用 artifact-first：平台构建或 staging 上传失败不会改动旧 `app-edge`；最终切换使用备份 tag，并在 promotion 失败时回滚旧 Release。正式 tag 仍保持 draft，edge 仍保持 prerelease。
 
 静态导出地址由 GitHub 仓库变量注入；未设置时回退到生产默认：
 
 - `NEXT_PUBLIC_SERVER_ADDR`
 - `NEXT_PUBLIC_EMBED_BASE`
 
+仓库变量同样不能动态改写已编译的 Tauri CSP；CI 构建自建 embed 源前须先在源码中维护匹配的 `frame-src`。
+
 ## 签名 / 自动更新
 
 **自动更新（桌面，已启用）**：
 
 - `tauri-plugin-updater` 已配置，endpoint 指向 GitHub 最新正式 Release 的 `latest.json`。
-- `bundle.createUpdaterArtifacts: true` + CI 注入 `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 后，tauri-action 为安装包生成 `.sig` 与 `latest.json`。
+- `bundle.createUpdaterArtifacts: true` + CI 注入 `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 后，tauri-action 为安装包生成 `.sig`；publish job 根据四个平台的已验证资产确定性聚合 `latest.json`。
 - 自动更新只认已发布的「非草稿、非预发布」正式 tag 版。
 
 发版流程：
@@ -145,7 +151,7 @@ git tag app-v<x.y.z>
 git push origin main app-v<x.y.z>
 ```
 
-CI 会检查 `app-v*` tag 与 `package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` 版本一致；不一致直接失败。
+CI 会检查 `app-v*` tag 与 `package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml` / `Cargo.lock` 版本一致，并确认 tag 提交已进入 `main`；不一致直接失败。
 
 **OS 代码签名 / 公证（待证书，当前出未签名包）**：
 
@@ -157,7 +163,7 @@ CI 会检查 `app-v*` tag 与 `package.json` / `src-tauri/tauri.conf.json` / `sr
 | Android release | ⏳ | keystore（`*.jks`）+ 别名/口令 |
 | iOS | ⏳ | Apple 证书 + 描述文件 |
 
-> 要出未签名包就**不要**把 `APPLE_*` / `TAURI_SIGNING_*` 以空字符串注入 env；Tauri 会据「env 存在」尝试签名并失败。未启用的签名项整组不注入。
+> `app-build` 的 preflight 会实际签名临时文件，验证 `TAURI_SIGNING_PRIVATE_KEY`、密码及 `tauri.conf.json` 公钥的 key id 匹配，并验证 embed origin 已进入 Tauri CSP；不是只检查 secret 是否非空。该密钥只签 updater 产物，不等于 macOS/Windows 的 OS 代码签名；未启用的 `APPLE_*` / Windows 证书变量仍应整组不注入。
 
 ## 风险与注意
 

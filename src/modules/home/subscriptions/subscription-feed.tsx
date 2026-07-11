@@ -12,10 +12,11 @@ import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
-import type { DirectoryEntry, FileRef } from "@protocol/file-system"
+import type { FileRef } from "@protocol/file-system"
 import type { NodeOfKind } from "@protocol/node"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
-import { invokeFileAction, readFile, readFileDirectory, watchFile } from "@/filesystem/registry"
+import { invokeFileAction, readFile, watchFile } from "@/filesystem/registry"
+import { readCompleteDirectory } from "@/filesystem/directory-walk"
 import { corePlaceRef } from "@/filesystem/resource-file-system"
 import { undoableToast } from "@/lib/undo-toast"
 import { EmptyState } from "@/ui/empty-state"
@@ -55,13 +56,7 @@ function subscriptionFromNode(node: NodeOfKind<"feed">, fileRef: FileRef): FileS
 }
 
 async function readSubscriptions(): Promise<FileSubscription[]> {
-  const entries: DirectoryEntry[] = []
-  let cursor: string | undefined
-  do {
-    const page = await readFileDirectory(SUBSCRIPTIONS_ROOT, DIRECTORY_CONTEXT, { cursor })
-    entries.push(...page.entries)
-    cursor = page.nextCursor
-  } while (cursor)
+  const entries = await readCompleteDirectory(SUBSCRIPTIONS_ROOT, DIRECTORY_CONTEXT)
 
   const subscriptions = await Promise.all(
     entries.map(async (entry): Promise<FileSubscription | null> => {

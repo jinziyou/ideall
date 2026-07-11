@@ -1,3 +1,15 @@
+import type { StoredFile } from "@protocol/files"
+
+export type FileMetaPatch = Partial<Pick<StoredFile, "name" | "tags">>
+export type FileMetaActionInput = { title?: string; tags?: string[] }
+
+export function fileMetaActionInput(patch: FileMetaPatch): FileMetaActionInput {
+  return {
+    ...(patch.name !== undefined ? { title: patch.name } : {}),
+    ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+  }
+}
+
 export function parseFileTags(input: string): string[] {
   const seen = new Set<string>()
   const tags: string[] = []

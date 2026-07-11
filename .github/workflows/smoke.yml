@@ -20,6 +20,7 @@ on:
       - "scripts/verify-full.mjs"
       - "scripts/verify-static-smoke.mjs"
       - "scripts/serve-out.mjs"
+      - ".github/actions/setup-js/**"
       - ".github/workflows/smoke.yml"
   push:
     branches: [main, dev]
@@ -36,6 +37,7 @@ on:
       - "scripts/verify-full.mjs"
       - "scripts/verify-static-smoke.mjs"
       - "scripts/serve-out.mjs"
+      - ".github/actions/setup-js/**"
       - ".github/workflows/smoke.yml"
   schedule:
     - cron: "17 19 * * 0"
@@ -45,34 +47,31 @@ concurrency:
   group: smoke-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build-static:
     name: build static export
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          version: 9.15.9
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js
       - name: Restore Next cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: .next/cache
           key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'next.config.ts', 'tsconfig.json', 'package.json') }}
           restore-keys: |
             ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-next-
-      - name: Install
-        run: pnpm install --frozen-lockfile
       - name: Build static export
         run: pnpm build
       - name: Upload static export
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: static-export
           path: out
@@ -97,27 +96,21 @@ jobs:
           - name: trash
             script: smoke:trash
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          version: 9.15.9
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js
       - name: Restore Playwright cache
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
-      - name: Install
-        run: pnpm install --frozen-lockfile
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium --with-deps
       - name: Download static export
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: static-export
           path: out
@@ -127,7 +120,7 @@ jobs:
           SMOKE_LEVEL: ${{ github.event_name == 'pull_request' && 'core' || 'full' }}
       - name: 上传截图 (失败排查用)
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: smoke-screenshots-${{ matrix.name }}
           path: |

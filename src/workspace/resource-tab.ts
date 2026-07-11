@@ -1,11 +1,8 @@
-import type { NodeResourceRef, ResourceMeta, ResourceRef } from "@protocol/resource"
+import type { NodeResourceRef, ResourceRef } from "@protocol/resource"
 import { parseResourceKey, resourceKey, resourceQueryValue } from "@protocol/resource"
 import { parseFileRefKey } from "@protocol/file-system"
 import { isNodeKind } from "@protocol/node"
-import {
-  connectedResourceTitle,
-  routeForConnectedResource,
-} from "@/vfs/connected-resource-manifest"
+import { connectedResourceTitle, routeForConnectedResource } from "@/lib/connected-resource"
 import type { TabDescriptor } from "./types"
 import { moduleForNodeKind } from "./node-kind-config"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
@@ -44,7 +41,8 @@ export function resourcePath(ref: ResourceRef, route?: string): string {
   return appendResourceParam(route ?? routeForConnectedResource(ref) ?? `/${ref.scheme}`, ref)
 }
 
-export function resourceTab(ref: ResourceRef, title?: string, route?: string): TabDescriptor {
+/** 仅用于读取旧工作区快照；新入口必须使用 resourceFileTab。 */
+export function legacyResourceTab(ref: ResourceRef, title?: string, route?: string): TabDescriptor {
   return {
     kind: RESOURCE_TAB_KIND,
     module: moduleForResource(ref),
@@ -52,10 +50,6 @@ export function resourceTab(ref: ResourceRef, title?: string, route?: string): T
     path: resourcePath(ref, route),
     params: { resource: resourceKey(ref) },
   }
-}
-
-export function resourceTabFromMeta(meta: ResourceMeta): TabDescriptor {
-  return resourceTab(meta.ref, meta.title, meta.route)
 }
 
 export function parseResourceTabParams(params?: Record<string, string>): ResourceRef | null {

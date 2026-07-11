@@ -13,7 +13,11 @@ import { formatTime } from "@/lib/format"
 import type { NoteMeta } from "@protocol/files"
 import { openTarget } from "@/workspace/store"
 import { EmptyState } from "@/ui/empty-state"
-import { corePlaceRef, resourceRefForFile } from "@/filesystem/resource-file-system"
+import {
+  corePlaceRef,
+  resourceFileRef,
+  resourceRefForFile,
+} from "@/filesystem/resource-file-system"
 import { watchFile } from "@/filesystem/registry"
 import { createNoteFile, listNoteFiles } from "./note-file-system"
 
@@ -81,9 +85,10 @@ export default function NotesManager() {
 
   function openNote(n: NoteMeta) {
     openTarget({
-      type: "resource",
-      ref: { scheme: "node", kind: "note", id: n.id },
+      type: "file",
+      ref: resourceFileRef({ scheme: "node", kind: "note", id: n.id }),
       title: n.title || "无标题",
+      rootId: "notes",
     })
   }
 

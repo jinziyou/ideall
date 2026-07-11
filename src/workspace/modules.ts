@@ -17,7 +17,7 @@ import { MODULE_META } from "./module-meta"
 import { PLUGIN_ENTRIES, isPluginModule } from "./plugin-entries"
 import { tabDescriptor } from "./tab-definitions"
 import { descriptorForResourceSearch } from "./open-target"
-import { resourceTab } from "./resource-tab"
+import { resourceFileTab } from "./resource-file-tab"
 
 export type SidebarEntry = {
   label: string
@@ -141,7 +141,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "资讯主页",
         icon: MODULE_META.info.icon,
-        descriptor: resourceTab({ scheme: "info", kind: "home", id: "default" }, "资讯"),
+        descriptor: resourceFileTab({ scheme: "info", kind: "home", id: "default" }, "资讯"),
       },
     ],
   },
@@ -156,7 +156,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "社区主页",
         icon: MODULE_META.community.icon,
-        descriptor: resourceTab({ scheme: "community", kind: "home", id: "default" }, "社区"),
+        descriptor: resourceFileTab({ scheme: "community", kind: "home", id: "default" }, "社区"),
       },
     ],
   },
@@ -188,18 +188,18 @@ export const MODULES: ModuleConfig[] = [
         // 聚合搜索 (选引擎输词跳转外部搜索引擎); 与顶栏搜索框/⌘K 统一面板职责分离: 前者跳外部引擎, 后者搜本机内容。
         label: "搜索",
         icon: Search,
-        descriptor: resourceTab({ scheme: "tool", kind: "search", id: "default" }, "搜索"),
+        descriptor: resourceFileTab({ scheme: "tool", kind: "search", id: "default" }, "搜索"),
       },
       {
         // 「AI 网站」= 外部 AI 站点启动器 (ChatGPT/Claude/…), 与文件工作区的内置 AI 对话区分。
         label: "AI 网站",
         icon: Bot,
-        descriptor: resourceTab({ scheme: "tool", kind: "ai", id: "default" }, "AI 网站"),
+        descriptor: resourceFileTab({ scheme: "tool", kind: "ai", id: "default" }, "AI 网站"),
       },
       {
         label: "导航",
         icon: Compass,
-        descriptor: resourceTab({ scheme: "tool", kind: "navigation", id: "default" }, "导航"),
+        descriptor: resourceFileTab({ scheme: "tool", kind: "navigation", id: "default" }, "导航"),
       },
     ],
   },
@@ -215,7 +215,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "浏览器",
         icon: Globe,
-        descriptor: resourceTab({ scheme: "browser", kind: "page", id: "default" }, "浏览器"),
+        descriptor: resourceFileTab({ scheme: "browser", kind: "page", id: "default" }, "浏览器"),
       },
     ],
   },
@@ -282,7 +282,7 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (pathname.startsWith("/info")) return tabDescriptor("info")
   if (pathname.startsWith("/community")) return tabDescriptor("community")
   if (pathname.startsWith("/browser")) {
-    return resourceTab({ scheme: "browser", kind: "page", id: "default" }, "浏览器")
+    return resourceFileTab({ scheme: "browser", kind: "page", id: "default" }, "浏览器")
   }
   if (pathname.startsWith("/apps")) return tabDescriptor("apps")
   if (pathname.startsWith("/shell")) return tabDescriptor("shell")

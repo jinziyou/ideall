@@ -4,12 +4,12 @@
 use gtk::prelude::*;
 use std::cell::RefCell;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
-use webkit2gtk::{TLSErrorsPolicy, WebContextExt, WebsiteDataManagerExt, WebViewExt};
+use webkit2gtk::{TLSErrorsPolicy, WebContextExt, WebViewExt, WebsiteDataManagerExt};
 use wry::dpi::{LogicalPosition, LogicalSize};
 use wry::{PageLoadEvent, Rect, WebView, WebViewBuilder, WebViewBuilderExtUnix, WebViewExtUnix};
 
-use crate::browser_scripts::CONTENT_JS;
 use crate::browser_cdp::BrowserCdpState;
+use crate::browser_scripts::CONTENT_JS;
 use crate::Bounds;
 
 #[derive(Copy, Clone, Debug, Default)]

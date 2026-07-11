@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    ".next/**",
+    "out/**",
+    "src-tauri/target/**",
+    ".design-sync/**",
+    ".ds-sync/**",
+    "ds-bundle/**"
+  ]
+}

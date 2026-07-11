@@ -86,14 +86,6 @@ export async function listNodeSummaries(kinds: NodeKind[]): Promise<NodeSummary[
 
 // ---- AI fs.* 文件面的底层读 (§6); 隐私净化 stripNode 在 @protocol/node (纯函数, 跨层共用) ----
 
-/** 列出指定 kind 的活跃完整节点 (供 fs.list / fs://nodes; 调用方按需 stripNode 净化)。 */
-export async function listNodesRaw(kinds: NodeKind[]): Promise<Node[]> {
-  if (kinds.length === 0) return []
-  const want = new Set(kinds)
-  const all = await nodesByKinds<Node>(kinds)
-  return all.filter((n) => n.kind != null && want.has(n.kind) && n.deletedAt == null)
-}
-
 /** 取单个活跃完整节点 (供 fs.read; 调用方按 kind 二次 gate / 净化)。 */
 export async function getNodeRaw(id: string): Promise<Node | undefined> {
   const n = await idbGet<Node>(STORE_NODES, id)
@@ -334,7 +326,7 @@ export async function readBlobBase64(
   }
 }
 
-/** UI/Engine 文件面读取原始 Blob；权限与范围限制由上层 FileSystem/VFS 执行。 */
+/** UI/Engine 文件面读取原始 Blob；权限与范围限制由上层 FileSystem 执行。 */
 export async function readBlob(id: string): Promise<Blob | undefined> {
   return (await getFile(id))?.blob
 }

@@ -23,8 +23,12 @@ export interface UiActions {
 let actions: UiActions | null = null
 
 /** app 启动时注册 UI 动作实现 (workspace store)。 */
-export function registerUiActions(a: UiActions): void {
+export function registerUiActions(a: UiActions): () => void {
+  const previous = actions
   actions = a
+  return () => {
+    if (actions === a) actions = previous
+  }
 }
 
 /** 取 UI 动作 (插件用); 未注册 (无 workspace 宿主) 时为 null, 调用方降级为不开标签。 */

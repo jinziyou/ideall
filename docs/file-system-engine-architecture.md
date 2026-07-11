@@ -13,6 +13,7 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 - `FileRef { fileSystemId, fileId }` 是文件身份；名称、路径和父目录不参与身份。`DirectoryEntry` 独立引用 `FileRef`，同一文件可出现在多个目录中；删除 link 或 mount 不等于删除源文件。
 - `ideall.root` 是隐藏的合成根。核心目录与运行期 manifest 挂载共同组成它的直接目录项，这些目录项驱动活动栏和二级侧栏。
 - `mountFileSystem()` 原子注册 provider 并向合成根贡献 mount；失败时回滚，卸载时只注销 provider 和目录项，不删除来源数据。运行时扩展可把多个 mount 与成对的 Engine descriptor/renderer 放在同一批次安装，任一贡献失败都会逆序回滚，观察者只在最终状态确定后刷新。
+- `ideall.core` 的 Resource 兼容投影由 `src/filesystem/resource-file-system.ts` 实现；Node 与连接数据的 `ResourceSourceProvider` 收口在 `src/filesystem/resource-sources/`，只作为该 FileSystem provider 的内部来源接口。现行代码不再有 `src/vfs` 并行挂载层。
 
 ## 文件系统访问契约
 
@@ -34,7 +35,7 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 - 默认 Engine 解析顺序为：当前工作区的单文件偏好、当前工作区的 media type 偏好、工作区默认策略、候选 Engine 的 priority/specificity、通用预览兜底。旧的全局偏好键作为文件工作区偏好继续使用，音频与开发工作区使用独立键。
 - 标签身份是 `FileRef + engineId`。Engine 菜单可将同一文件以其他匹配 Engine 在当前工作区打开，因此音频、开发、数据库或通用预览可以同时存在为不同标签。
 - 文件视图首次通过 `stat` 取元数据，并在 provider 支持时订阅 `watch` 后重新 `stat`。FileSystem registry 拥有底层 watcher 生命周期：同一 provider/目标/上下文的订阅共享一条底层 watch，最后一个观察者离开或 provider 被替换、注销、清空时自动 best-effort 释放；回调绑定 provider generation，旧实例的迟到事件会被丢弃。`FileSystemWatchEventHub` 已用于音频和数据库 provider：它把增量事件路由到目标及 old/new parent，并按批次合并同一目录项的变化；同一 `FileRef` 的多个 link 仍以 parent-scoped `entryId` 区分。目录 Display 对完整加载且身份明确的 `changed` 只重取单项 metadata、对 `deleted` 本地移除；created/move、自身事件、分页、异常信封或竞态失败统一回退全量读取。无 `watch` 的 provider 使用重新进入或显式刷新。
-- 旧静态 tab、Resource tab 与 Node tab 在打开和 workspace hydration 时迁移成 File + Engine；模块切换和模式切换也先规范化 descriptor。`TabContent` 只接受 File + Engine 标签，旧 descriptor 不再有第二套直接渲染分支。
+- 旧静态 tab、Resource tab 与 Node tab 只在深链解析和 workspace hydration 边界迁移成 File + Engine；模块切换和模式切换只处理规范化后的 descriptor。`TabContent` 只接受 File + Engine 标签，旧 descriptor 不再有第二套直接渲染分支。
 - 通用开发 Display 保留脏草稿和外部版本冲突。只有声明 `suspension: "serializable"` 且已成功写入身份绑定休眠快照的 dirty Engine 才可被 LRU 卸载；快照仅存当前窗口 `sessionStorage`，限制单份 1 MiB、合计 4 MiB、最多 24 份，并按 `tabId + engineId + fileKey` 严格恢复。序列化失败、超限或不支持休眠的 dirty Engine 继续保持挂载；关闭标签和离开页面仍使用全局 dirty 告警。`read-only` Engine 会同时禁用正文写入及 Node 工具栏中的重命名、标签和删除操作。
 
 ## 工作区与数据来源模式
@@ -57,7 +58,7 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 ## 当前文件系统
 
 - `ideall.root`：隐藏的 `CompositeRootFileSystem`，合并核心目录与运行期 mount，并发送 mount 变化事件。
-- `ideall.core`：Resource/VFS 存储的 FileSystem 适配层，提供 Node/Blob、仍属于 core 的系统 panel/place 投影和旧 route/resource 兼容。Git、数据库和音频不再创建 core panel 代理文件；旧 `panel:git|database|audio` 深链与持久标签只在打开/水合边界迁移到对应 App FileSystem root。笔记、书签与文件通过对应目录的 `create` action 创建，后续读写、移动、删除与恢复均经 FileSystem；Node 同步、墓碑、Blob 旁存、正文 consent、乐观并发和 `save-to-mine` 语义仍由底层 VFS 权限闸处理。UI 与活动 Engine 可读取完整 Blob，agent 读取仍受 1 MiB 上限约束。
+- `ideall.core`：`resource-file-system` 将 Node/Blob、仍属于 core 的系统 panel/place 和 `resource-sources` 中的连接数据来源投影为 FileSystem，并在深链/水合边界兼容旧 route/resource。Git、数据库和音频不再创建 core panel 代理文件；旧 `panel:git|database|audio` 深链与持久标签只在打开/水合边界迁移到对应 App FileSystem root。笔记、书签与文件通过对应目录的 `create` action 创建，后续读写、移动、删除与恢复均经 FileSystem；Node 同步、墓碑、Blob 旁存、正文 consent、乐观并发和 `save-to-mine` 语义仍由 Resource source 与底层 Node 存储的权限闸处理。UI 与活动 Engine 可读取完整 Blob，agent 读取仍受 1 MiB 上限约束。
 - `ideall.trash`：把底层墓碑投影为回收站目录，通过显式 `restore`、`purge` 和 `empty` action 提供恢复与永久删除，并转发底层更新为 `watch` 事件。
 - `remote.server`：承载 ServerPort 的 info、community、peer 和 publication 文件。常规内容读取与查询保持只读；发布和删除 publication 是经过远端写权限及 token 校验的显式 action，而不是通用 `write`。
 - `third-party.installed-apps`：把本机已安装 App 投影到“本机应用”目录。文件读取返回应用 metadata，`launch` action 通过 Tauri 启动应用；不提供 metadata 写入、`watch` 或独立窗口能力。前端只提交 opaque App id，Rust 每次从平台可信目录重新枚举并解析启动项/图标；id、canonical 路径、图片扩展和内容魔数均在原生侧校验，前端不能提交任意启动路径或图标路径。
@@ -66,7 +67,7 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 - `app.agent-config`：把 Agent 正在使用的设置、工作区、规则、MCP、Skills 和任务 store 投影为可读写 JSON 文件，并复用同一订阅源发送 `watch`。普通 `fs:read` 只能枚举目录和读取不含正文指纹的安全 metadata；正文与带版本的 watch 需要 first-party 专用、默认关闭的 `agent.config:read`，UI 与精确活动 Engine 只对当前文件例外放行。Agent 显式授权后获得严格 section 枚举的 `agent.config.read` MCP tool；该 tool 只在 loopback 宿主注入 adapter 时注册，并仍通过 FileSystem registry 读取。公开正文会 fail-closed 地剥离 API key、token、认证头、URL query、命令参数及 schema 外字段；普通 `fs:write` 不能修改配置，只有 UI、精确活动 Engine 或专用 `agent.config:write` 可写。写入/导入先无副作用地校验全部 runtime schema，端点或命令变化时不会把既有凭据恢复到新目标。
 - `app.git-repositories`：只挂载用户通过原生目录选择器授权的仓库。持久化 mount 为 `{ id, grantId, path }`；其中 path 仅用于展示，随机 mount id 用于 `FileRef`，bearer grantId 只在 provider 内解析原生授权。旧版字符串路径与导入数据会保留为未授权记录，必须重新选择目录，不能隐式恢复访问。provider 暴露仓库目录和真实子文件，提供文本读写、乐观并发、`watch`，以及 fetch、pull、push、branch、commit 和移除挂载等 Git action；仓库级变更会使该 mount 下已订阅的子文件一并刷新。
 
-活动栏、桌面与移动目录树、本地搜索、Home 汇总以及笔记、书签、文件、订阅和回收站管理界面只调用 FileSystem registry。兼容 `FilesPort` 的普通 CRUD 也通过 registry 分派到 `ideall.core`；只有同步所需的 tombstone 全量读取和原子 bulk 写入收口在独立 `StorageSyncPort`。ESLint 对 `app/shell/workspace/modules/shared/ui` 禁止直接导入 store 或旧 VFS registry；`src/vfs` 与 `src/files/stores` 只保留为 provider 的存储实现及同步适配器。
+活动栏、桌面与移动目录树、本地搜索、Home 汇总以及笔记、书签、文件、订阅和回收站管理界面只调用 FileSystem registry。兼容 `FilesPort` 的普通 CRUD 也通过 registry 分派到 `ideall.core`；只有同步所需的 tombstone 全量读取和原子 bulk 写入收口在独立 `StorageSyncPort`。ESLint 对 `app/shell/workspace/modules/shared/ui` 禁止直接导入 store 或 Resource source registry；`src/filesystem/resource-sources` 只保留 FileSystem 内部的来源适配，`src/files/stores` 只保留 provider 存储实现及同步适配器。
 
 ## 运行时扩展边界
 

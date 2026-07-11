@@ -227,8 +227,14 @@ export const BUILTIN_ENGINES = [
 
 export const engineRegistry = new EngineRegistry()
 
-export function registerBuiltInEngines(): void {
+export function registerBuiltInEngines(): () => void {
+  const disposers: Array<() => void> = []
   for (const descriptor of BUILTIN_ENGINES) {
-    if (!engineRegistry.get(descriptor.engineId)) engineRegistry.register(descriptor)
+    if (!engineRegistry.get(descriptor.engineId)) {
+      disposers.push(engineRegistry.register(descriptor))
+    }
+  }
+  return () => {
+    for (const dispose of disposers.reverse()) dispose()
   }
 }

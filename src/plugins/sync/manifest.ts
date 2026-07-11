@@ -2,11 +2,60 @@
 // core 的同步面板经 @protocol/sync 的 getSyncPort() 调用, 不直接依赖本插件。
 // 一次 syncNow 同步两个独立加密块: 关注 + 笔记 (各自 storageId, 互不覆盖); 编排见 sync-orchestrator-machine (XState)。
 import { registerSyncPort } from "@protocol/sync"
+import { SYNC_CODE_SECURE_KEY } from "@/lib/sync-code"
+import { secureFallbackStorageKey } from "@/lib/secure-store"
+import type { PluginDataPort } from "@/plugins/shared/plugin-data"
+import type { LocalDataSchema } from "@/plugins/shared/local-data-schema"
+import {
+  SYNC_DATA_SPEC,
+  exportSyncStatusJson,
+  importSyncStatusJson,
+  inspectSyncStatusData,
+} from "./lib/sync-data-port"
+
+const syncDataPort: PluginDataPort = {
+  ...SYNC_DATA_SPEC,
+  filenamePrefix: "ideall-sync",
+  importMode: "noop",
+  importDescription: "导入只校验同步状态备份, 不写入同步码。",
+  exportJson: exportSyncStatusJson,
+  importJson: importSyncStatusJson,
+  inspect: async () => {
+    const info = await inspectSyncStatusData()
+    return {
+      pluginId: SYNC_DATA_SPEC.pluginId,
+      label: SYNC_DATA_SPEC.pluginLabel,
+      dataKind: SYNC_DATA_SPEC.dataKind,
+      dataVersion: SYNC_DATA_SPEC.dataVersion,
+      status: info.configured ? "ready" : "empty",
+      itemCount: info.configured ? 1 : 0,
+      bytes: info.bytes,
+      updatedAt: null,
+      detail: info.configured ? "已配置同步码（不导出本体）" : "未配置同步码",
+    }
+  },
+}
+
+const syncLocalDataSchemas: readonly LocalDataSchema[] = [
+  {
+    id: "sync.code",
+    label: "同步码",
+    owner: "sync",
+    storage: "localStorage",
+    key: secureFallbackStorageKey(SYNC_CODE_SECURE_KEY),
+    currentVersion: 1,
+    sensitive: true,
+    parseAs: "text",
+    validate: (_value, raw) => (raw.trim() ? ["同步码是本机能力凭证, 不进入插件数据导出"] : []),
+  },
+]
 
 export const syncManifest = {
   id: "sync" as const,
+  dataPorts: [syncDataPort] as const,
+  localDataSchemas: syncLocalDataSchemas,
   register() {
-    registerSyncPort({
+    return registerSyncPort({
       syncNow: async (code) => {
         const { runSyncOrchestrator } = await import("./lib/sync-orchestrator-machine")
         return runSyncOrchestrator(code)

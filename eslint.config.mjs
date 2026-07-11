@@ -25,9 +25,9 @@ const NO_APP = {
 }
 
 const NO_UI_STORAGE_BYPASS = {
-  group: ["@/files/stores", "@/files/stores/**", "@/vfs/registry"],
+  group: ["@/files/stores", "@/files/stores/**", "@/filesystem/resource-sources/registry"],
   message:
-    "活动 UI 不得直接访问 store/VFS registry; 数据与动作必须经 @/filesystem，旧 VFS/store 只作为 provider、同步或 port 的内部实现",
+    "活动 UI 不得直接访问 store/resource-source registry; 数据与动作必须经 FileSystem，底层 store/source 只作为 provider、同步或 port 的内部实现",
 }
 
 const config = [
@@ -42,6 +42,10 @@ const config = [
       "src/lib/api/**",
       "src-tauri/**",
       "out/**",
+      // 设计系统同步工具生成的自包含 bundle/vendor，不是应用手写源码。
+      "ds-bundle/**",
+      ".ds-sync/**",
+      ".design-sync/**",
     ],
   },
 

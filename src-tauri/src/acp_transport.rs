@@ -458,7 +458,10 @@ pub(crate) fn acp_script_path(name: String) -> Option<String> {
     for base in ["scripts", "../scripts"] {
         let p = cwd.join(base).join(&file);
         if p.is_file() {
-            return p.canonicalize().ok().map(|c| c.to_string_lossy().into_owned());
+            return p
+                .canonicalize()
+                .ok()
+                .map(|c| c.to_string_lossy().into_owned());
         }
     }
     None

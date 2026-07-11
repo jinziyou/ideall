@@ -1,72 +1,175 @@
-// 启动 Tauri 桌面开发壳, 并在应用进程「启动前」注入 WebKitGTK 软件渲染开关。
-//
-// 背景: WSL2 / 无独立 GPU 的 Linux 下, WebKitGTK 的 DMABUF / 加速合成渲染会初始化失败
-//   (libEGL / MESA ZINK / dri2 报错), 导致 dev 窗口空白。这两个变量必须在应用进程 *启动前*
-//   就位 —— 进程内 std::env::set_var 传不到 WebKitGTK 的 WebProcess (实测无效), 故在此 wrapper
-//   里注入, 免去每次手敲 `WEBKIT_...=1 pnpm app:dev`。仅 Linux 注入; 已显式设置则尊重原值。
-//
-// 另: Tauri 的 dev-server 探测只认端口可连, 不会等 Next 首屏编译完成; WSL 下 Turbopack 首编译
-//   `/` 可能要数分钟, 窗口会先空白。本脚本先起 (或复用) Next, 预热 `/` 后再 `--no-dev-server-wait`
-//   启动 Tauri, 避免长时间白屏。
-//
-// 用法:
-//   pnpm app:dev                                   # 默认 5020
-//   pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026","beforeDevCommand":"pnpm exec next dev -p 5026"}}'
-//   —— 末尾的参数原样透传给 `tauri dev` (如 5020 被占用时用 --config 换端口, 见 docs/app.md)。
-//
-import { spawn, spawnSync } from "node:child_process"
+// 启动 Tauri 桌面开发壳，并在应用进程启动前注入 Linux/WSL WebKitGTK 软件渲染开关。
+// wrapper 只管理自己启动的 Next/Tauri 进程组；检测到外部 Next 时只复用，退出时绝不终止它。
+import { spawnSync } from "node:child_process"
 import http from "node:http"
 import net from "node:net"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
+import {
+  installShutdownHandlers,
+  spawnDetached,
+  stopChildProcess,
+  waitForChildExit,
+} from "./script-utils.mjs"
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const SCRIPT_PATH = fileURLToPath(import.meta.url)
+const DEFAULT_DEV_URL = "http://localhost:5020"
+const APP_DEV_HELP = `用法:
+  pnpm app:dev
+  pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026"}}'
+  pnpm app:dev -- [runnerArgs] -- [appArgs]
+
+说明:
+  复用或启动 Next 开发服，预热首页后启动 Tauri。末尾参数透传给 tauri dev。
+  wrapper 识别 tauri dev 的标准选项；未知选项会在启动任何子进程前失败。
+
+常用选项:
+  -c, --config <json|path>  覆盖 Tauri 配置；JSON 中的 build.devUrl 同时控制 Next 端口
+  -f, --features <list>     Cargo feature（多项请使用逗号分隔）
+  -t, --target <target>     Rust target triple
+      --release             release 模式运行
+      --no-watch            禁用 Rust 文件监听
+  -h, --help                显示本帮助且不启动服务
+  -V, --version             显示 Tauri CLI 版本且不启动服务
+`
+
+const OPTIONS_WITH_VALUE = new Set([
+  "-r",
+  "--runner",
+  "-t",
+  "--target",
+  "-f",
+  "--features",
+  "-c",
+  "--config",
+  "--additional-watch-folders",
+  "--port",
+])
+const FLAG_OPTIONS = new Set([
+  "-e",
+  "--exit-on-panic",
+  "--release",
+  "--no-dev-server-wait",
+  "--no-watch",
+  "--no-dev-server",
+  "--verbose",
+])
+
+export function parseAppDevArgs(argv) {
+  const result = { help: false, version: false, userArgs: [] }
+  for (let index = 0; index < argv.length; index++) {
+    const argument = argv[index]
+    if (argument === "--help" || argument === "-h") {
+      result.help = true
+      continue
+    }
+    if (argument === "--version" || argument === "-V") {
+      result.version = true
+      continue
+    }
+    if (argument === "--") {
+      result.userArgs.push(...argv.slice(index))
+      break
+    }
+
+    const equalsIndex = argument.startsWith("--") ? argument.indexOf("=") : -1
+    const optionName = equalsIndex > 0 ? argument.slice(0, equalsIndex) : argument
+    if (OPTIONS_WITH_VALUE.has(optionName)) {
+      result.userArgs.push(argument)
+      if (equalsIndex < 0) {
+        const value = argv[++index]
+        if (value === undefined || value === "--") throw new Error(`${optionName} 缺少参数`)
+        result.userArgs.push(value)
+      } else if (equalsIndex === argument.length - 1) {
+        throw new Error(`${optionName} 缺少参数`)
+      }
+      continue
+    }
+    if (FLAG_OPTIONS.has(optionName) || /^-v+$/.test(argument)) {
+      result.userArgs.push(argument)
+      continue
+    }
+    if (argument.startsWith("-")) throw new Error(`未知选项: ${argument}`)
+    result.userArgs.push(argument)
+  }
+  return result
+}
 
 function has(bin) {
   return spawnSync("sh", ["-c", `command -v ${bin}`], { stdio: "ignore" }).status === 0
 }
 
 function parseDevUrl(argv) {
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] !== "--config" || !argv[i + 1]) continue
+  let devUrl = DEFAULT_DEV_URL
+  for (let index = 0; index < argv.length; index++) {
+    const argument = argv[index]
+    let rawConfig = null
+    if ((argument === "--config" || argument === "-c") && argv[index + 1]) rawConfig = argv[++index]
+    else if (argument.startsWith("--config=")) rawConfig = argument.slice("--config=".length)
+    if (!rawConfig) continue
     try {
-      const cfg = JSON.parse(argv[i + 1])
-      if (cfg.build?.devUrl) return cfg.build.devUrl
+      const config = JSON.parse(rawConfig)
+      if (typeof config.build?.devUrl === "string") devUrl = config.build.devUrl
     } catch {
-      // 文件路径形式的 --config 仍走默认 devUrl
+      // 文件路径或 JSON5/TOML 仍交给 Tauri 解析；wrapper 无法静态读取时沿用默认 devUrl。
     }
   }
-  // 必须用 localhost, 勿用 127.0.0.1: Next.js 16 dev (Turbopack) 对后者会拦 dev 资源 / HMR,
-  // React 无法水合 → Tauri 窗口「能看不能点」(Playwright 127.0.0.1 复现, localhost 正常)。
-  return "http://localhost:5020"
+  const parsed = new URL(devUrl)
+  if (parsed.protocol !== "http:" || parsed.hostname !== "localhost") {
+    throw new Error(`build.devUrl 必须使用 http://localhost:<port>: ${devUrl}`)
+  }
+  return parsed.toString().replace(/\/$/, "")
+}
+
+function createAppEnvironment() {
+  const env = { ...process.env }
+  if (process.platform !== "linux") return env
+  env.WEBKIT_DISABLE_DMABUF_RENDERER ??= "1"
+  env.WEBKIT_DISABLE_COMPOSITING_MODE ??= "1"
+  env.NO_AT_BRIDGE ??= "1"
+  env.GTK_A11Y ??= "none"
+  env.GSETTINGS_BACKEND ??= "memory"
+  env.LIBGL_ALWAYS_SOFTWARE ??= "1"
+  if (env.IDEALL_GDK_X11 !== "0") env.GDK_BACKEND ??= "x11"
+  const ime = has("fcitx5") || has("fcitx") ? "fcitx" : has("ibus") ? "ibus" : null
+  if (ime) {
+    env.GTK_IM_MODULE ??= ime
+    env.QT_IM_MODULE ??= ime
+    env.XMODIFIERS ??= `@im=${ime}`
+  }
+  return env
 }
 
 function portTaken(port) {
   return new Promise((resolve) => {
-    const srv = net.createServer()
-    srv.once("error", () => resolve(true))
-    srv.once("listening", () => srv.close(() => resolve(false)))
-    srv.listen(port, "127.0.0.1")
+    const server = net.createServer()
+    server.once("error", () => resolve(true))
+    server.once("listening", () => server.close(() => resolve(false)))
+    server.listen(port, "127.0.0.1")
   })
 }
 
-async function waitForTcp(port, maxMs = 180_000) {
+async function waitForTcp(port, child, maxMs = 180_000) {
   const deadline = Date.now() + maxMs
   while (Date.now() < deadline) {
+    if (child && (child.exitCode != null || child.signalCode != null)) {
+      throw new Error(`Next.js 在端口就绪前退出 (${child.signalCode ?? child.exitCode})`)
+    }
     try {
       await new Promise((resolve, reject) => {
-        const s = net.connect(port, "127.0.0.1", () => {
-          s.destroy()
+        const socket = net.connect(port, "127.0.0.1", () => {
+          socket.destroy()
           resolve()
         })
-        s.on("error", reject)
-        s.setTimeout(2000, () => {
-          s.destroy()
+        socket.on("error", reject)
+        socket.setTimeout(2_000, () => {
+          socket.destroy()
           reject(new Error("timeout"))
         })
       })
       return
     } catch {
-      await sleep(500)
+      await new Promise((resolve) => setTimeout(resolve, 500))
     }
   }
   throw new Error(`Timed out waiting for Next.js on port ${port}`)
@@ -89,105 +192,130 @@ function request(url, { method = "GET", timeoutMs = 900_000 } = {}) {
 
 async function warmupHome(url) {
   const start = Date.now()
-  console.log(`\n[app:dev] Pre-compiling ${url} (WSL 首启可能要数分钟, 请稍候)…\n`)
+  console.log(`\n[app:dev] Pre-compiling ${url} (WSL 首启可能要数分钟，请稍候)…\n`)
   const status = await request(url)
-  if (status < 200 || status >= 500) {
-    throw new Error(`Warmup got HTTP ${status}`)
-  }
-  const sec = ((Date.now() - start) / 1000).toFixed(1)
-  console.log(`\n[app:dev] Frontend ready (${sec}s). Launching Tauri…\n`)
+  if (status < 200 || status >= 500) throw new Error(`Warmup got HTTP ${status}`)
+  console.log(`\n[app:dev] Frontend ready (${((Date.now() - start) / 1_000).toFixed(1)}s).\n`)
 }
 
-const env = { ...process.env }
-if (process.platform === "linux") {
-  env.WEBKIT_DISABLE_DMABUF_RENDERER ??= "1"
-  env.WEBKIT_DISABLE_COMPOSITING_MODE ??= "1"
-  // WSLg: 抑制 AT-SPI / dconf 启动噪音。
-  env.NO_AT_BRIDGE ??= "1"
-  env.GTK_A11Y ??= "none"
-  env.GSETTINGS_BACKEND ??= "memory"
-  // 无 DRI3 的 WSLg X11 下抑制 libEGL/MESA 噪音 (与 WebKit 软件渲染一致)。
-  env.LIBGL_ALWAYS_SOFTWARE ??= "1"
-  // WSLg 多屏窗口定位需 X11; IDEALL_GDK_X11=0 退回 Wayland (坐标不可控)。
-  if (env.IDEALL_GDK_X11 !== "0") {
-    env.GDK_BACKEND ??= "x11"
-  }
-  const ime = has("fcitx5") || has("fcitx") ? "fcitx" : has("ibus") ? "ibus" : null
-  if (ime) {
-    env.GTK_IM_MODULE ??= ime
-    env.QT_IM_MODULE ??= ime
-    env.XMODIFIERS ??= `@im=${ime}`
-  }
+function tauriCliPath(cwd) {
+  return path.join(cwd, "node_modules", "@tauri-apps", "cli", "tauri.js")
 }
 
-const isWin = process.platform === "win32"
-const userArgs = process.argv.slice(2)
-const devUrl = parseDevUrl(userArgs)
-const homeUrl = devUrl.endsWith("/") ? devUrl : `${devUrl}/`
-const port = Number(new URL(devUrl).port || 5020)
-
-let nextChild = null
-function cleanup() {
-  if (nextChild && !nextChild.killed) nextChild.kill("SIGTERM")
+function showTauriVersion(cwd) {
+  const result = spawnSync(process.execPath, [tauriCliPath(cwd), "--version"], { stdio: "inherit" })
+  if (result.error) throw result.error
+  return result.status ?? 1
 }
-process.on("SIGINT", () => {
-  cleanup()
-  process.exit(130)
-})
-process.on("SIGTERM", () => {
-  cleanup()
-  process.exit(143)
-})
 
-async function main() {
-  const alreadyUp = await portTaken(port)
-  if (!alreadyUp) {
-    const nextBin = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next")
-    nextChild = spawn(process.execPath, [nextBin, "dev", "-p", String(port)], {
-      stdio: "inherit",
-      env,
-    })
-    nextChild.on("exit", (code) => {
-      if (code !== 0 && code !== null) {
-        cleanup()
-        process.exit(code)
-      }
-    })
-    await waitForTcp(port)
-  } else {
-    console.log(`[app:dev] Port ${port} already in use — reusing existing dev server.`)
+export async function main(argv = process.argv.slice(2), cwd = process.cwd()) {
+  const parsedArgs = parseAppDevArgs(argv)
+  if (parsedArgs.help) {
+    console.log(APP_DEV_HELP.trimEnd())
+    return 0
   }
+  if (parsedArgs.version) return showTauriVersion(cwd)
 
-  let warm = true
+  // 从这里开始才允许探测环境、占用端口或启动子进程。
+  const devUrl = parseDevUrl(parsedArgs.userArgs)
+  const env = createAppEnvironment()
+  const homeUrl = `${devUrl}/`
+  const port = Number(new URL(devUrl).port || 80)
+  let nextChild = null
+  let tauriChild = null
+  let stopPromise = null
+
+  const stopOwnedChildren = () => {
+    if (stopPromise) return stopPromise
+    stopPromise = (async () => {
+      const tauri = tauriChild
+      const next = nextChild
+      tauriChild = null
+      nextChild = null
+      await Promise.all([
+        stopChildProcess(tauri, { cleanupExitedGroup: true }),
+        stopChildProcess(next, { cleanupExitedGroup: true }),
+      ])
+    })()
+    return stopPromise
+  }
+  const removeShutdownHandlers = installShutdownHandlers(stopOwnedChildren)
+
   try {
-    const status = await request(homeUrl, { method: "HEAD", timeoutMs: 10_000 })
-    warm = status < 200 || status >= 300
-  } catch {
-    warm = true
-  }
-  if (warm) await warmupHome(homeUrl)
-  else console.log("[app:dev] Frontend already warm. Launching Tauri…")
+    if (!(await portTaken(port))) {
+      const nextBin = path.join(cwd, "node_modules", "next", "dist", "bin", "next")
+      nextChild = spawnDetached(process.execPath, [nextBin, "dev", "-p", String(port)], {
+        cwd,
+        env,
+      })
+      await waitForTcp(port, nextChild)
+    } else {
+      console.log(`[app:dev] Port ${port} already in use — reusing existing dev server.`)
+    }
 
-  // Next.js dev (Turbopack) 依赖 eval + dev WebSocket; 生产 CSP 缺 unsafe-eval → SSR 壳能画出来但
-  // React 无法水合, 表现为整窗点击无响应。仅 app:dev 注入放宽 CSP, 打包仍走 tauri.conf.json。
-  const devCsp =
-    "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: ws: wss: http://127.0.0.1:* http://localhost:*; frame-src 'self' tauri: https://www.wonita.link https://wonita.link https://stately.ai; worker-src 'self' blob:"
-  const tauriConfig = JSON.stringify({
-    build: { beforeDevCommand: "", devUrl },
-    app: { security: { csp: devCsp } },
-  })
-  const tauriJs = path.join(process.cwd(), "node_modules", "@tauri-apps", "cli", "tauri.js")
-  const result = spawnSync(
-    process.execPath,
-    [tauriJs, "dev", "--no-dev-server-wait", ...userArgs, "--config", tauriConfig],
-    { stdio: "inherit", env },
-  )
-  cleanup()
-  process.exit(result.status ?? 1)
+    let warm = true
+    try {
+      const status = await request(homeUrl, { method: "HEAD", timeoutMs: 10_000 })
+      warm = status < 200 || status >= 300
+    } catch {
+      warm = true
+    }
+    if (warm) await warmupHome(homeUrl)
+    else console.log("[app:dev] Frontend already warm. Launching Tauri…")
+
+    // Next dev 依赖 eval + HMR WebSocket；仅开发 wrapper 放宽 CSP，生产仍使用 tauri.conf.json。
+    const devCsp =
+      "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: ws: wss: http://127.0.0.1:* http://localhost:*; frame-src 'self' tauri: https://www.wonita.link https://wonita.link https://stately.ai; worker-src 'self' blob:"
+    const wrapperConfig = JSON.stringify({
+      build: { beforeDevCommand: "", devUrl },
+      app: { security: { csp: devCsp } },
+    })
+    const delimiterIndex = parsedArgs.userArgs.indexOf("--")
+    const tauriOptions =
+      delimiterIndex < 0 ? parsedArgs.userArgs : parsedArgs.userArgs.slice(0, delimiterIndex)
+    const runnerArgs = delimiterIndex < 0 ? [] : parsedArgs.userArgs.slice(delimiterIndex)
+    tauriChild = spawnDetached(
+      process.execPath,
+      [
+        tauriCliPath(cwd),
+        "dev",
+        "--no-dev-server-wait",
+        ...tauriOptions,
+        "--config",
+        wrapperConfig,
+        ...runnerArgs,
+      ],
+      { cwd, env },
+    )
+
+    const tauriExit = waitForChildExit(tauriChild).then((outcome) => ({ source: "tauri", outcome }))
+    const firstExit = nextChild
+      ? await Promise.race([
+          tauriExit,
+          waitForChildExit(nextChild).then((outcome) => ({ source: "next", outcome })),
+        ])
+      : await tauriExit
+    if (firstExit.outcome.error) throw firstExit.outcome.error
+    if (firstExit.source === "next") {
+      throw new Error(
+        `Next.js 在 Tauri 运行期间退出 (${firstExit.outcome.signal ?? firstExit.outcome.code})`,
+      )
+    }
+    if (firstExit.outcome.signal) return 1
+    return firstExit.outcome.code ?? 1
+  } finally {
+    await stopOwnedChildren()
+    removeShutdownHandlers()
+  }
 }
 
-main().catch((err) => {
-  console.error("[app:dev]", err.message)
-  cleanup()
-  process.exit(1)
-})
+if (process.argv[1] && path.resolve(process.argv[1]) === SCRIPT_PATH) {
+  main()
+    .then((exitCode) => {
+      process.exitCode = exitCode
+    })
+    .catch((error) => {
+      console.error(`[app:dev] ${error instanceof Error ? error.message : error}`)
+      process.exitCode = 1
+    })
+}

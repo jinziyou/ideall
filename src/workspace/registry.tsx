@@ -208,14 +208,15 @@ function registerRenderer(
   registry: FileEngineRendererRegistry,
   engineId: string,
   renderer: FileEngineRenderer,
-): void {
-  if (!registry.get(engineId)) registry.register(engineId, renderer)
+): () => void {
+  return registry.get(engineId) ? () => {} : registry.register(engineId, renderer)
 }
 
 /** UI composition contribution for the built-in engine descriptors. */
 export function registerBuiltInFileEngineRenderers(
   registry: FileEngineRendererRegistry = fileEngineRendererRegistry,
-): void {
+): () => void {
+  const disposers: Array<() => void> = []
   const nodeRenderer =
     (kind: "note" | "bookmark" | "feed" | "thread"): FileEngineRenderer =>
     ({ file, descriptor }) => {
@@ -225,57 +226,78 @@ export function registerBuiltInFileEngineRenderers(
         : unsupportedEngine(file, descriptor.engineId)
     }
 
-  registerRenderer(registry, "ideall.note", nodeRenderer("note"))
-  registerRenderer(registry, "ideall.bookmark", nodeRenderer("bookmark"))
-  registerRenderer(registry, "ideall.feed", nodeRenderer("feed"))
-  registerRenderer(registry, "ideall.thread", nodeRenderer("thread"))
-  registerRenderer(registry, "ideall.directory", ({ file }) => <FileDirectoryEngine file={file} />)
-  registerRenderer(registry, "ideall.audio", ({ file }) =>
-    sameFileRef(file.ref, AUDIO_LIBRARY_ROOT_REF) ? (
-      audioManifest.renderLibraryRoot()
-    ) : (
-      <AudioFileEngine file={file} />
-    ),
-  )
-  registerRenderer(registry, "ideall.installed-app", ({ file }) => (
-    <InstalledAppEngine file={file} />
-  ))
-  registerRenderer(registry, "ideall.database", databaseManifest.renderEngine)
-  registerRenderer(registry, "ideall.git", gitManifest.renderEngine)
-  registerRenderer(registry, "ideall.shell", () => <ShellPage />)
-  registerRenderer(registry, "ideall.browser", ({ file, descriptor }) => {
-    const resource = resourceRefForFile(file.ref)
-    const propertyUrl = typeof file.properties?.url === "string" ? file.properties.url : undefined
-    const resourceUrl =
-      resource?.scheme === "browser" && resource.id !== "default" ? resource.id : undefined
-    return propertyUrl || resource?.scheme === "browser" ? (
-      <BrowserView initialUrl={propertyUrl ?? resourceUrl} />
-    ) : (
-      unsupportedEngine(file, descriptor.engineId)
-    )
-  })
-  registerRenderer(registry, "ideall.code", ({ file, descriptor }) => (
-    <GenericCodeEngine
-      file={file}
-      engineId={descriptor.engineId}
-      readOnly={descriptor.access === "read-only"}
-    />
-  ))
-  registerRenderer(registry, "ideall.connected", ({ file, descriptor }) => {
-    const resource = resourceRefForFile(file.ref)
-    return resource
-      ? renderConnectedResource(resource)
-      : unsupportedEngine(file, descriptor.engineId)
-  })
-  registerRenderer(registry, "ideall.panel", ({ file }) => renderPanelFile(file))
-  registerRenderer(registry, "ideall.panel-fill", ({ file }) => renderPanelFile(file))
-  registerRenderer(registry, "ideall.preview", ({ file, descriptor }) =>
-    file.kind === "directory" ? (
+  disposers.push(registerRenderer(registry, "ideall.note", nodeRenderer("note")))
+  disposers.push(registerRenderer(registry, "ideall.bookmark", nodeRenderer("bookmark")))
+  disposers.push(registerRenderer(registry, "ideall.feed", nodeRenderer("feed")))
+  disposers.push(registerRenderer(registry, "ideall.thread", nodeRenderer("thread")))
+  disposers.push(
+    registerRenderer(registry, "ideall.directory", ({ file }) => (
       <FileDirectoryEngine file={file} />
-    ) : (
-      renderGenericPreview(file, descriptor.engineId, descriptor.access === "read-only")
+    )),
+  )
+  disposers.push(
+    registerRenderer(registry, "ideall.audio", ({ file }) =>
+      sameFileRef(file.ref, AUDIO_LIBRARY_ROOT_REF) ? (
+        audioManifest.renderLibraryRoot()
+      ) : (
+        <AudioFileEngine file={file} />
+      ),
     ),
   )
+  disposers.push(
+    registerRenderer(registry, "ideall.installed-app", ({ file }) => (
+      <InstalledAppEngine file={file} />
+    )),
+  )
+  disposers.push(registerRenderer(registry, "ideall.database", databaseManifest.renderEngine))
+  disposers.push(registerRenderer(registry, "ideall.git", gitManifest.renderEngine))
+  disposers.push(registerRenderer(registry, "ideall.shell", () => <ShellPage />))
+  disposers.push(
+    registerRenderer(registry, "ideall.browser", ({ file, descriptor }) => {
+      const resource = resourceRefForFile(file.ref)
+      const propertyUrl = typeof file.properties?.url === "string" ? file.properties.url : undefined
+      const resourceUrl =
+        resource?.scheme === "browser" && resource.id !== "default" ? resource.id : undefined
+      return propertyUrl || resource?.scheme === "browser" ? (
+        <BrowserView initialUrl={propertyUrl ?? resourceUrl} />
+      ) : (
+        unsupportedEngine(file, descriptor.engineId)
+      )
+    }),
+  )
+  disposers.push(
+    registerRenderer(registry, "ideall.code", ({ file, descriptor }) => (
+      <GenericCodeEngine
+        file={file}
+        engineId={descriptor.engineId}
+        readOnly={descriptor.access === "read-only"}
+      />
+    )),
+  )
+  disposers.push(
+    registerRenderer(registry, "ideall.connected", ({ file, descriptor }) => {
+      const resource = resourceRefForFile(file.ref)
+      return resource
+        ? renderConnectedResource(resource)
+        : unsupportedEngine(file, descriptor.engineId)
+    }),
+  )
+  disposers.push(registerRenderer(registry, "ideall.panel", ({ file }) => renderPanelFile(file)))
+  disposers.push(
+    registerRenderer(registry, "ideall.panel-fill", ({ file }) => renderPanelFile(file)),
+  )
+  disposers.push(
+    registerRenderer(registry, "ideall.preview", ({ file, descriptor }) =>
+      file.kind === "directory" ? (
+        <FileDirectoryEngine file={file} />
+      ) : (
+        renderGenericPreview(file, descriptor.engineId, descriptor.access === "read-only")
+      ),
+    ),
+  )
+  return () => {
+    for (const dispose of disposers.reverse()) dispose()
+  }
 }
 
 function renderFileEngineBody(

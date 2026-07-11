@@ -1020,8 +1020,10 @@ mod linux_connector_tests {
             desktop.canonicalize().expect("canonical fixture")
         );
         assert_eq!(resolved.1.name, "Example Editor");
-        assert!(resolve_linux_desktop("../org.example.Editor", &[dir.clone()]).is_none());
-        assert!(resolve_linux_desktop("/tmp/evil", &[dir.clone()]).is_none());
+        assert!(
+            resolve_linux_desktop("../org.example.Editor", std::slice::from_ref(&dir)).is_none()
+        );
+        assert!(resolve_linux_desktop("/tmp/evil", std::slice::from_ref(&dir)).is_none());
 
         std::fs::remove_dir_all(dir).expect("remove temp applications dir");
     }

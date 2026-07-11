@@ -8,6 +8,8 @@ export const shellManifest = {
   engines: ["ideall.shell"] as const,
   register() {
     const descriptor = BUILTIN_ENGINES.find((engine) => engine.engineId === "ideall.shell")
-    if (descriptor && !engineRegistry.get(descriptor.engineId)) engineRegistry.register(descriptor)
+    return descriptor && !engineRegistry.get(descriptor.engineId)
+      ? engineRegistry.register(descriptor)
+      : () => {}
   },
 }

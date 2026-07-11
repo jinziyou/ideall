@@ -1,15 +1,12 @@
-import { DIRECTORY_MEDIA_TYPE, type FileRef, type IdeallFile } from "@protocol/file-system"
+import type { FileRef } from "@protocol/file-system"
 import type { ResourceRef } from "@protocol/resource"
 import { getFileSystem } from "@/filesystem/registry"
 import {
   aiTasksPanelFileRef,
   panelFileRef,
   panelForFile,
-  resourceFileRef,
   resourceRefForFile,
 } from "@/filesystem/resource-file-system"
-import { fileTypeInfo } from "@/lib/file-type"
-import type { OpenTarget } from "./open-target"
 import {
   BUILTIN_APP_SURFACES,
   builtinAppSurfaceForLegacyPanel,
@@ -17,6 +14,7 @@ import {
 } from "./file-roots"
 import { FILE_ENGINE_TAB_KIND, fileEngineTab, parseFileEngineTabParams } from "./file-tab"
 import { nodeResourceRefForTab, parseResourceTabParams } from "./resource-tab"
+import { resourceFileTab, rootForResource } from "./resource-file-tab"
 import { isStaticTabKind, type StaticTabKind } from "./tab-definitions"
 import { tabKey } from "./tab-key"
 import type { ModuleId, Tab } from "./types"
@@ -48,35 +46,9 @@ export function validWorkspaceModule(value: unknown): ModuleId | null {
     : null
 }
 
-function legacyResourceEngine(ref: ResourceRef): string {
-  if (ref.scheme === "node") {
-    if (ref.kind === "note") return "ideall.note"
-    if (ref.kind === "bookmark") return "ideall.bookmark"
-    if (ref.kind === "feed") return "ideall.feed"
-    if (ref.kind === "thread") return "ideall.thread"
-    if (ref.kind === "folder") return "ideall.directory"
-    return "ideall.preview"
-  }
-  if (ref.scheme === "browser") return "ideall.browser"
-  return "ideall.connected"
-}
-
-export function legacyResourceRootId(ref: ResourceRef): string {
-  if (ref.scheme === "node") {
-    if (ref.kind === "note") return "notes"
-    if (ref.kind === "bookmark" || ref.kind === "folder") return "bookmarks"
-    if (ref.kind === "file") return "files"
-    if (ref.kind === "feed") return "subscriptions"
-    return "workspace"
-  }
-  if (ref.scheme === "browser") return "browser"
-  if (ref.scheme === "app") return "apps"
-  return ref.scheme
-}
-
 export function inferredRootIdForFile(ref: FileRef): string | undefined {
   const resource = resourceRefForFile(ref)
-  if (resource) return legacyResourceRootId(resource)
+  if (resource) return rootForResource(resource)
 
   const panel = panelForFile(ref)
   if (panel) {
@@ -95,69 +67,8 @@ export function inferredRootIdForFile(ref: FileRef): string | undefined {
   return provider ? mountedFileRootId(provider.descriptor.root) : undefined
 }
 
-function compatibilityFileMediaType(name: string): string {
-  const info = fileTypeInfo(name, "")
-  if (info.preview === "audio") return "audio/*"
-  if (info.preview === "video") return "video/*"
-  if (info.preview === "image" || info.preview === "svg") return `image/${info.ext || "*"}`
-  if (info.preview === "json") return "application/json"
-  if (info.preview === "markdown") return "text/markdown"
-  if (["code", "csv", "text"].includes(info.preview)) return "text/plain"
-  if (info.preview === "pdf") return "application/pdf"
-  return "application/octet-stream"
-}
-
-function compatibilityResourceMediaType(ref: ResourceRef, name: string): string {
-  if (ref.scheme === "node") {
-    if (ref.kind === "folder") return DIRECTORY_MEDIA_TYPE
-    if (ref.kind === "file") return compatibilityFileMediaType(name)
-    return `application/vnd.ideall.${ref.kind}+json`
-  }
-  if (ref.scheme === "browser") return "text/uri-list"
-  if (ref.scheme === "app") return "application/vnd.ideall.app+json"
-  return `application/vnd.ideall.${ref.scheme}.${ref.kind}+json`
-}
-
-/** ResourceRef 兼容入口的同步 metadata 投影；真实 provider metadata 随后异步刷新。 */
-export function compatibilityFileForResource(
-  target: Extract<OpenTarget, { type: "resource" }>,
-): IdeallFile {
-  const { ref, meta } = target
-  const directory = ref.scheme === "node" && (ref.kind === "folder" || ref.kind === "note")
-  const name = meta?.title || target.title || ref.id
-  return {
-    ref: resourceFileRef(ref),
-    kind: directory ? "directory" : "file",
-    name,
-    mediaType: compatibilityResourceMediaType(ref, name),
-    capabilities: [
-      ...(directory ? (["read-directory"] as const) : []),
-      ...(meta?.capabilities.map((capability) => `resource:${capability}`) ?? []),
-    ],
-    source:
-      ref.scheme === "node"
-        ? { kind: "local", id: "ideall.nodes", label: "本机" }
-        : ref.scheme === "info" || ref.scheme === "community"
-          ? { kind: "remote", id: ref.scheme, label: ref.scheme }
-          : ref.scheme === "app" || ref.scheme === "browser"
-            ? { kind: "app", id: ref.scheme, label: ref.scheme }
-            : { kind: "system", id: ref.scheme, label: ref.scheme },
-    updatedAt: meta?.updatedAt,
-    properties: {
-      resourceScheme: ref.scheme,
-      resourceKind: ref.kind,
-      route: meta?.route ?? null,
-      iconHint: meta?.iconHint ?? null,
-    },
-  }
-}
-
 function hydrateResourceFileTab(ref: ResourceRef, tab: Tab): Tab {
-  const descriptor = fileEngineTab(
-    { ref: resourceFileRef(ref), name: tab.title || ref.id },
-    legacyResourceEngine(ref),
-    { module: tab.module, rootId: legacyResourceRootId(ref) },
-  )
+  const descriptor = { ...resourceFileTab(ref, tab.title || ref.id), module: tab.module }
   return { ...descriptor, id: tabKey(descriptor) }
 }
 

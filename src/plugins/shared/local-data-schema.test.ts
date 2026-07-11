@@ -7,7 +7,25 @@ import { AUDIO_DB_NAME, AUDIO_DB_VERSION } from "@/plugins/audio/audio-store"
 import { AGENT_SECRETS_STORAGE_KEY } from "@/plugins/agent/lib/agent-secrets"
 import { AGENT_SETTINGS_STORAGE_KEY } from "@/plugins/agent/lib/agent-settings"
 import { GIT_REPOS_STORAGE_KEY } from "@/plugins/git/git-repos-store"
-import { inspectLocalDataSchemas, repairLocalDataSchema } from "./local-data-schema"
+import { audioManifest } from "@/plugins/audio/manifest"
+import { databaseManifest } from "@/plugins/database/manifest"
+import { gitManifest } from "@/plugins/git/manifest"
+import { agentManifest } from "@/plugins/agent/manifest"
+import { syncManifest } from "@/plugins/sync/manifest"
+import {
+  inspectLocalDataSchemas,
+  registerLocalDataSchemas,
+  repairLocalDataSchema,
+} from "./local-data-schema"
+
+function registerTestSchemas(): () => void {
+  const disposers = [audioManifest, databaseManifest, gitManifest, agentManifest, syncManifest].map(
+    (manifest) => registerLocalDataSchemas(manifest.localDataSchemas),
+  )
+  return () => {
+    for (const dispose of disposers.reverse()) dispose()
+  }
+}
 
 function memoryStorage(data: Record<string, string>): Pick<Storage, "getItem"> {
   return {
@@ -30,6 +48,7 @@ function mutableMemoryStorage(
 }
 
 test("inspectLocalDataSchemas: 识别 JSON 正常、损坏和旧明文敏感值", async () => {
+  const dispose = registerTestSchemas()
   const localStorage = memoryStorage({
     [GIT_REPOS_STORAGE_KEY]: JSON.stringify(["/repo/a"]),
     [AGENT_SETTINGS_STORAGE_KEY]: JSON.stringify({ apiKey: "sk-legacy" }),
@@ -40,26 +59,31 @@ test("inspectLocalDataSchemas: 识别 JSON 正常、损坏和旧明文敏感值"
   const sessionStorage = memoryStorage({
     "ideall:workspace:v1": "{bad",
   })
-  const rows = await inspectLocalDataSchemas({
-    localStorage,
-    sessionStorage,
-    indexedDBDatabases: async () => [{ name: AUDIO_DB_NAME, version: AUDIO_DB_VERSION }],
-  })
-  const byId = new Map(rows.map((row) => [row.id, row]))
+  try {
+    const rows = await inspectLocalDataSchemas({
+      localStorage,
+      sessionStorage,
+      indexedDBDatabases: async () => [{ name: AUDIO_DB_NAME, version: AUDIO_DB_VERSION }],
+    })
+    const byId = new Map(rows.map((row) => [row.id, row]))
 
-  assert.equal(byId.get("git.repos")?.status, "ok")
-  assert.equal(byId.get("workspace.session")?.status, "error")
-  assert.equal(byId.get("agent.settings")?.status, "warning")
-  assert.equal(byId.get("agent.settings")?.repairable, true)
-  assert.match(byId.get("agent.secrets")?.detail ?? "", /明文/)
-  assert.equal(byId.get("sync.code")?.status, "warning")
-  assert.equal(byId.get("sync.code")?.repairable, false)
-  assert.equal(byId.get("auth.token")?.status, "warning")
-  assert.equal(byId.get("audio.db")?.status, "ok")
-  assert.equal(byId.get("database.db")?.status, "missing")
+    assert.equal(byId.get("git.repos")?.status, "ok")
+    assert.equal(byId.get("workspace.session")?.status, "error")
+    assert.equal(byId.get("agent.settings")?.status, "warning")
+    assert.equal(byId.get("agent.settings")?.repairable, true)
+    assert.match(byId.get("agent.secrets")?.detail ?? "", /明文/)
+    assert.equal(byId.get("sync.code")?.status, "warning")
+    assert.equal(byId.get("sync.code")?.repairable, false)
+    assert.equal(byId.get("auth.token")?.status, "warning")
+    assert.equal(byId.get("audio.db")?.status, "ok")
+    assert.equal(byId.get("database.db")?.status, "missing")
+  } finally {
+    dispose()
+  }
 })
 
 test("repairLocalDataSchema: 移除损坏 JSON 并清理旧明文字段", async () => {
+  const dispose = registerTestSchemas()
   const localData = {
     [AGENT_SETTINGS_STORAGE_KEY]: JSON.stringify({ model: "x", apiKey: "sk-legacy" }),
   }
@@ -69,19 +93,23 @@ test("repairLocalDataSchema: 移除损坏 JSON 并清理旧明文字段", async 
   const localStorage = mutableMemoryStorage(localData)
   const sessionStorage = mutableMemoryStorage(sessionData)
 
-  const workspace = await repairLocalDataSchema("workspace.session", {
-    localStorage,
-    sessionStorage,
-  })
-  assert.equal(workspace.ok, true)
-  assert.equal(sessionData["ideall:workspace:v1"], undefined)
+  try {
+    const workspace = await repairLocalDataSchema("workspace.session", {
+      localStorage,
+      sessionStorage,
+    })
+    assert.equal(workspace.ok, true)
+    assert.equal(sessionData["ideall:workspace:v1"], undefined)
 
-  const settings = await repairLocalDataSchema("agent.settings", {
-    localStorage,
-    sessionStorage,
-  })
-  assert.equal(settings.ok, true)
-  const repaired = JSON.parse(localData[AGENT_SETTINGS_STORAGE_KEY]!)
-  assert.equal(repaired.apiKey, undefined)
-  assert.equal(repaired.model, "x")
+    const settings = await repairLocalDataSchema("agent.settings", {
+      localStorage,
+      sessionStorage,
+    })
+    assert.equal(settings.ok, true)
+    const repaired = JSON.parse(localData[AGENT_SETTINGS_STORAGE_KEY]!)
+    assert.equal(repaired.apiKey, undefined)
+    assert.equal(repaired.model, "x")
+  } finally {
+    dispose()
+  }
 })

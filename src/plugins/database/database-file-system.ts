@@ -14,10 +14,10 @@ import type {
   FileSystemProvider,
   FileSystemWatchEvent,
   FileSystemWatchHandle,
-  ReadDirectoryOptions,
 } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
 import { FileSystemWatchEventHub } from "@/filesystem/watch-set"
+import { paginateDirectoryItems } from "@/filesystem/provider-input"
 import {
   DATABASE_FILE_SYSTEM_ID as BUILTIN_DATABASE_FILE_SYSTEM_ID,
   DATABASE_ROOT_REF as BUILTIN_DATABASE_ROOT_REF,
@@ -295,33 +295,6 @@ function rangedJson(
   }
 }
 
-function directoryPage<T>(
-  ref: FileRef,
-  items: readonly T[],
-  options: ReadDirectoryOptions,
-): { items: T[]; offset: number; nextCursor?: string } {
-  const rawCursor = options.cursor
-  if (rawCursor !== undefined && !/^(0|[1-9]\d*)$/.test(rawCursor)) {
-    throw new FileSystemError("invalid-input", `Invalid directory cursor: ${rawCursor}`, ref)
-  }
-  const offset = rawCursor === undefined ? 0 : Number(rawCursor)
-  if (!Number.isSafeInteger(offset)) {
-    throw new FileSystemError("invalid-input", `Invalid directory cursor: ${rawCursor}`, ref)
-  }
-  if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit <= 0)) {
-    throw new FileSystemError("invalid-input", "Directory limit must be a positive integer", ref)
-  }
-
-  const end = options.limit === undefined ? items.length : offset + options.limit
-  const pageItems = items.slice(offset, end)
-  const nextOffset = offset + pageItems.length
-  return {
-    items: pageItems,
-    offset,
-    ...(nextOffset < items.length ? { nextCursor: String(nextOffset) } : {}),
-  }
-}
-
 function objectInput(ref: FileRef, input: unknown): Record<string, unknown> {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new FileSystemError("invalid-input", "Database action input must be an object", ref)
@@ -484,7 +457,7 @@ export function createDatabaseFileSystem(
             },
           ]
         })
-        const result = directoryPage(ref, rootEntries, options)
+        const result = paginateDirectoryItems(ref, rootEntries, options)
         return {
           entries: result.items,
           nextCursor: result.nextCursor,
@@ -492,7 +465,7 @@ export function createDatabaseFileSystem(
       }
       const table = await requireRowsDirectory(ref, deps)
       const rows = await deps.listRows(table.id)
-      const result = directoryPage(ref, rows, options)
+      const result = paginateDirectoryItems(ref, rows, options)
       return {
         entries: result.items.map((row, index) => {
           const snapshot = rowFile(row, table)
@@ -850,10 +823,17 @@ export function createDatabaseFileSystem(
 
 export const databaseFileSystem = createDatabaseFileSystem()
 
-let mounted = false
+let mounted: (() => void) | null = null
 
-export function registerDatabaseFileSystem(mount: (provider: FileSystemProvider) => void): void {
-  if (mounted) return
-  mount(databaseFileSystem)
-  mounted = true
+export function registerDatabaseFileSystem(
+  mount: (provider: FileSystemProvider) => () => void,
+): () => void {
+  if (mounted) return () => {}
+  const dispose = mount(databaseFileSystem)
+  mounted = dispose
+  return () => {
+    if (mounted !== dispose) return
+    mounted = null
+    dispose()
+  }
 }

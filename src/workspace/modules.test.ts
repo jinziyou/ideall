@@ -2,7 +2,8 @@
 // 刷新恢复与路由薄标记 (OpenWorkspaceTab) 的唯一入口, 锁定精确匹配 / 前缀回退 / 非法输入。
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { resourceKey, resourceQueryValue } from "@protocol/resource"
+import { resourceQueryValue } from "@protocol/resource"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { parseFileEngineTabParams } from "./file-tab"
 import { BUILTIN_APP_SURFACES } from "./file-roots"
 import {
@@ -27,15 +28,17 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
   assert.equal(descriptorForPath("/home/bookmarks")?.kind, "home-bookmarks")
   assert.equal(descriptorForPath("/home/publications")?.module, "publications")
   const toolAi = descriptorForPath("/tool/ai")
-  assert.equal(toolAi?.kind, "resource")
-  assert.deepEqual(toolAi?.params, {
-    resource: resourceKey({ scheme: "tool", kind: "ai", id: "default" }),
+  assert.equal(toolAi?.kind, "file-engine")
+  assert.deepEqual(parseFileEngineTabParams(toolAi?.params), {
+    ref: resourceFileRef({ scheme: "tool", kind: "ai", id: "default" }),
+    engineId: "ideall.connected",
   })
   assert.equal(descriptorForPath("/apps")?.kind, "apps")
   const browser = descriptorForPath("/browser")
-  assert.equal(browser?.kind, "resource")
-  assert.deepEqual(browser?.params, {
-    resource: resourceKey({ scheme: "browser", kind: "page", id: "default" }),
+  assert.equal(browser?.kind, "file-engine")
+  assert.deepEqual(parseFileEngineTabParams(browser?.params), {
+    ref: resourceFileRef({ scheme: "browser", kind: "page", id: "default" }),
+    engineId: "ideall.browser",
   })
   for (const id of ["git", "database", "audio"] as const) {
     const descriptor = descriptorForPath(`/${id}`)
@@ -65,8 +68,11 @@ test("descriptorForPath: /home/agent 是虚拟命令路由 → 显式 null; 未�
 test("descriptorForResource: ?resource 优先, 兼容旧 ?node 深链", () => {
   const d = descriptorForResource("?node=note:abc123")
   assert.ok(d)
-  assert.equal(d.kind, "resource")
-  assert.deepEqual(d.params, { resource: "node:note:abc123" })
+  assert.equal(d.kind, "file-engine")
+  assert.deepEqual(parseFileEngineTabParams(d.params), {
+    ref: resourceFileRef({ scheme: "node", kind: "note", id: "abc123" }),
+    engineId: "ideall.note",
+  })
   assert.ok(d.path?.startsWith("/home/notes?resource="))
 
   const fileRef = {
@@ -75,13 +81,16 @@ test("descriptorForResource: ?resource 优先, 兼容旧 ?node 深链", () => {
     id: "a:b/c?d&e=f",
   } as const
   const resource = descriptorForResource(`?node=note:old&resource=${resourceQueryValue(fileRef)}`)
-  assert.deepEqual(resource?.params, { resource: resourceKey(fileRef) })
+  assert.deepEqual(parseFileEngineTabParams(resource?.params), {
+    ref: resourceFileRef(fileRef),
+    engineId: "ideall.preview",
+  })
 
   assert.equal(descriptorForResource("?node=badkind:x"), null, "非法 kind 拒收")
   const info = descriptorForResource(
     `?resource=${resourceQueryValue({ scheme: "info", kind: "entity", id: "ORG:示例" })}`,
   )
-  assert.equal(info?.kind, "resource")
+  assert.equal(info?.kind, "file-engine")
   assert.equal(info?.module, "info")
   assert.ok(info?.path?.startsWith("/info/entity?"))
   assert.ok(info?.path?.includes("resource="))

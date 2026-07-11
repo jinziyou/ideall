@@ -45,13 +45,17 @@ import {
 } from "./store"
 import type { NodeRef } from "./node-ref"
 import { tabDescriptor } from "./tab-definitions"
-import { clearVfsProvidersForTest, registerVfsProvider } from "@/vfs/registry"
-import type { VfsProvider } from "@/vfs/types"
+import {
+  clearResourceSourcesForTest,
+  registerResourceSource,
+} from "@/filesystem/resource-sources/registry"
+import type { ResourceSourceProvider } from "@/filesystem/resource-sources/types"
 import { registerBuiltInEngines } from "@/engines/builtin"
 import { parseFileEngineTabParams } from "./file-tab"
-import { resourceTab } from "./resource-tab"
+import { legacyResourceTab } from "./resource-tab"
+import { resourceFileTab } from "./resource-file-tab"
 import { registerBuiltInFileSystems } from "@/filesystem/builtin"
-import { aiTasksPanelFileRef } from "@/filesystem/resource-file-system"
+import { aiTasksPanelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
 import { registerFileSystem } from "@/filesystem/registry"
 import { FileSystemError, type FileSystemProvider } from "@/filesystem/types"
 import { AUDIO_LIBRARY_ROOT_REF } from "@/filesystem/builtin-app-roots"
@@ -141,33 +145,21 @@ function openNodeResource(
   source: ActiveSource = "user",
   opts?: { transient?: boolean },
 ) {
-  return openTarget(
-    { type: "resource", ref: { scheme: "node", ...ref }, title, transient: opts?.transient },
-    source,
-  )
+  return openTab(resourceFileTab({ scheme: "node", ...ref }, title), source, opts)
 }
 
-test("openTarget node resource 默认来源 user; 传 agent 标记 agent", () => {
+test("resource file tab 默认来源 user; 传 agent 标记 agent", () => {
   openNodeResource({ kind: "note", id: "u1" }, "用户开")
   assert.equal(getActiveSource(), "user")
   openNodeResource({ kind: "note", id: "a1" }, "AI 开", "agent")
   assert.equal(getActiveSource(), "agent", "agent 经 ui.openTab 自激活 → 来源 agent")
 })
 
-test("openTarget(resource): 兼容输入同步打开统一 file + engine 标签", () => {
+test("resourceFileTab: 同步生成统一 file + engine 标签", () => {
   closeAllTabs()
-  assert.equal(
-    openTarget(
-      {
-        type: "resource",
-        ref: { scheme: "node", kind: "file", id: "r1" },
-        title: "readme.md",
-        transient: true,
-      },
-      "agent",
-    ),
-    true,
-  )
+  openTab(resourceFileTab({ scheme: "node", kind: "file", id: "r1" }, "readme.md"), "agent", {
+    transient: true,
+  })
   const tab = getTabs()[0]
   assert.equal(tab.kind, "file-engine")
   assert.deepEqual(parseFileEngineTabParams(tab.params), {
@@ -176,13 +168,10 @@ test("openTarget(resource): 兼容输入同步打开统一 file + engine 标签"
   })
   assert.equal(tab.title, "readme.md")
   assert.equal(tab.rootId, "files")
-  assert.ok(tab.path?.startsWith("/home?file="))
+  assert.ok(tab.path?.startsWith("/home/notes?resource="))
   assert.equal(getTransientId(), tab.id)
   assert.equal(getActiveSource(), "agent")
-  assert.equal(
-    openTarget({ type: "resource", ref: { scheme: "tool", kind: "search", id: "default" } }),
-    true,
-  )
+  openTab(resourceFileTab({ scheme: "tool", kind: "search", id: "default" }))
   const tool = getTabs().at(-1)
   assert.equal(tool?.kind, "file-engine")
   const toolTarget = parseFileEngineTabParams(tool?.params)
@@ -196,17 +185,19 @@ test("openTarget(resource): 兼容输入同步打开统一 file + engine 标签"
 
 test("openTab(resource descriptor): 旧模块入口也折叠为 file + engine 标签", () => {
   closeAllTabs()
-  openTab(resourceTab({ scheme: "browser", kind: "page", id: "https://example.test" }, "例子"))
+  openTab(
+    legacyResourceTab({ scheme: "browser", kind: "page", id: "https://example.test" }, "例子"),
+  )
   const tab = getTabs()[0]
   assert.equal(tab.kind, "file-engine")
   assert.equal(parseFileEngineTabParams(tab.params)?.engineId, "ideall.browser")
   assert.equal(tab.rootId, "browser")
 })
 
-test("openTarget(resource): refreshes descriptor title from VFS metadata", async () => {
+test("openTarget(file): resolves descriptor title from resource source metadata", async () => {
   closeAllTabs()
-  clearVfsProvidersForTest()
-  const provider: VfsProvider = {
+  clearResourceSourcesForTest()
+  const provider: ResourceSourceProvider = {
     scheme: "tool",
     async list() {
       return { items: [] }
@@ -215,7 +206,7 @@ test("openTarget(resource): refreshes descriptor title from VFS metadata", async
       return {
         meta: {
           ref,
-          title: "VFS Search",
+          title: "Resource Search",
           route: "/tool/search",
           capabilities: ["open", "preview", "navigate"],
         },
@@ -229,35 +220,29 @@ test("openTarget(resource): refreshes descriptor title from VFS metadata", async
       return null
     },
   }
-  const unregister = registerVfsProvider(provider)
+  const unregister = registerResourceSource(provider)
 
   try {
     assert.equal(
       openTarget({
-        type: "resource",
-        ref: { scheme: "tool", kind: "search", id: "default" },
-        title: "Fallback Search",
+        type: "file",
+        ref: resourceFileRef({ scheme: "tool", kind: "search", id: "default" }),
+        rootId: "tool",
       }),
       true,
     )
-    assert.equal(getTabs().at(-1)?.title, "Fallback Search")
-
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    assert.equal(getTabs().at(-1)?.title, "VFS Search")
+    assert.equal(getTabs().at(-1)?.title, "Resource Search")
   } finally {
     unregister()
-    clearVfsProvidersForTest()
+    clearResourceSourcesForTest()
   }
 })
 
 test("openTarget(file): canonical marker reuses the opened tab's file-tree root", () => {
   closeAllTabs()
-  openTarget({
-    type: "resource",
-    ref: { scheme: "node", kind: "file", id: "rooted" },
-    title: "rooted.ts",
-  })
+  openTab(resourceFileTab({ scheme: "node", kind: "file", id: "rooted" }, "rooted.ts"))
   const opened = parseFileEngineTabParams(getTabs()[0]?.params)
   assert.ok(opened)
   assert.equal(getActiveRootId(), "files")

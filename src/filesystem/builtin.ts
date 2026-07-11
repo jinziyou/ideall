@@ -38,17 +38,21 @@ export const ideallRootFileSystem = new CompositeRootFileSystem({
   })),
 })
 
-export function registerBuiltInFileSystems(): void {
+export function registerBuiltInFileSystems(): () => void {
+  const disposers: Array<() => void> = []
   if (!getFileSystem(resourceFileSystem.descriptor.fileSystemId)) {
-    registerFileSystem(resourceFileSystem)
+    disposers.push(registerFileSystem(resourceFileSystem))
   }
   if (!getFileSystem(ideallRootFileSystem.descriptor.fileSystemId)) {
-    registerFileSystem(ideallRootFileSystem)
+    disposers.push(registerFileSystem(ideallRootFileSystem))
   }
   if (!getFileSystem(remoteServerFileSystem.descriptor.fileSystemId)) {
-    registerFileSystem(remoteServerFileSystem)
+    disposers.push(registerFileSystem(remoteServerFileSystem))
   }
   if (!getFileSystem(trashFileSystem.descriptor.fileSystemId)) {
-    registerFileSystem(trashFileSystem)
+    disposers.push(registerFileSystem(trashFileSystem))
+  }
+  return () => {
+    for (const dispose of disposers.reverse()) dispose()
   }
 }

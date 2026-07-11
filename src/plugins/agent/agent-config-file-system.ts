@@ -439,10 +439,17 @@ export function createAgentConfigFileSystem(
 
 export const agentConfigFileSystem = createAgentConfigFileSystem()
 
-let mounted = false
+let mounted: (() => void) | null = null
 
-export function registerAgentConfigFileSystem(mount: (provider: FileSystemProvider) => void): void {
-  if (mounted) return
-  mount(agentConfigFileSystem)
-  mounted = true
+export function registerAgentConfigFileSystem(
+  mount: (provider: FileSystemProvider) => () => void,
+): () => void {
+  if (mounted) return () => {}
+  const dispose = mount(agentConfigFileSystem)
+  mounted = dispose
+  return () => {
+    if (mounted !== dispose) return
+    mounted = null
+    dispose()
+  }
 }

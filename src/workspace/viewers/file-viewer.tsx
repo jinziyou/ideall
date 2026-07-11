@@ -10,7 +10,7 @@ import { writeFile } from "@/filesystem/registry"
 import { fileTypeInfo } from "@/lib/format"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { useFilePreview, FilePreviewBox } from "@/modules/home/resources/file-preview"
-import { resourceTab } from "../resource-tab"
+import { resourceFileTab } from "../resource-file-tab"
 import {
   promoteActiveTab,
   renameNodeTab,
@@ -53,7 +53,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
       const resource = target ? resourceRefForFile(target.ref) : null
       return resource?.scheme === "node" && resource.kind === "file" && resource.id === nodeId
     })
-    return engineTab?.id ?? tabKey(resourceTab({ scheme: "node", kind: "file", id: nodeId }))
+    return engineTab?.id ?? tabKey(resourceFileTab({ scheme: "node", kind: "file", id: nodeId }))
   }, [nodeId, tabs])
   const [mode, setMode] = React.useState<FileViewerMode>("preview")
   const [draft, setDraft] = React.useState("")

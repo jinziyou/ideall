@@ -13,6 +13,7 @@ import {
   parseWorkspaceBackupPackage,
   stringifyWorkspaceBackupPackage,
   type PluginDataInspection,
+  type PluginDataPort,
   type PluginImportResult,
   type WorkspaceBackupPackage,
 } from "@/plugins/shared/plugin-data"
@@ -479,6 +480,7 @@ export async function exportWorkspaceArchiveJson(): Promise<string> {
 export async function previewWorkspaceArchiveImport(
   raw: string,
   filename?: string,
+  ports?: readonly PluginDataPort[],
 ): Promise<WorkspaceArchiveImportPreview> {
   let pack: WorkspaceArchivePackage
   try {
@@ -491,7 +493,11 @@ export async function previewWorkspaceArchiveImport(
     }
   }
 
-  const pluginPreview = await previewPluginDataImport(stringifyWorkspaceBackupPackage(pack.plugins))
+  const pluginPreview = await previewPluginDataImport(
+    stringifyWorkspaceBackupPackage(pack.plugins),
+    undefined,
+    ports,
+  )
   if (!pluginPreview.ok) {
     return {
       ok: false,

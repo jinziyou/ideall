@@ -15,6 +15,7 @@ import {
   RuntimeExtensionCatalog,
   RuntimeExtensionRegistry,
 } from "./runtime-extensions"
+import * as runtimeExtensionApi from "./runtime-extensions"
 
 function extension(
   id = "example.connector",
@@ -147,6 +148,12 @@ function noOpRegistry(): RuntimeExtensionRegistry {
     registerEngine: () => () => undefined,
   })
 }
+
+test("runtime extension public barrel does not expose activation authority", () => {
+  assert.equal("issueActivationPermit" in runtimeExtensionApi, false)
+  assert.equal("consumeActivationPermit" in runtimeExtensionApi, false)
+  assert.equal("installCatalogExtension" in runtimeExtensionApi, false)
+})
 
 test("registry: abort/dispose tears down external resources before unregistering contributions", async () => {
   const events: string[] = []

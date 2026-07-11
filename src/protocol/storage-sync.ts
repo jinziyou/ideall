@@ -19,8 +19,12 @@ export interface StorageSyncPort {
 let port: StorageSyncPort | null = null
 
 /** composition root 注册 core 拥有的同步存储实现。 */
-export function registerStorageSyncPort(next: StorageSyncPort): void {
+export function registerStorageSyncPort(next: StorageSyncPort): () => void {
+  const previous = port
   port = next
+  return () => {
+    if (port === next) port = previous
+  }
 }
 
 /** sync 插件取存储级同步能力；普通功能不应依赖此端口。 */

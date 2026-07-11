@@ -2,6 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import type { Node } from "@protocol/node"
 import { createPluginDataPackage, createWorkspaceBackupPackage } from "@/plugins/shared/plugin-data"
+import { gitManifest } from "@/plugins/git/manifest"
 import {
   createWorkspaceArchivePackage,
   isWorkspaceArchiveRaw,
@@ -86,7 +87,7 @@ test("workspace archive: 固定格式并可预检完整工作区归档", async (
   assert.equal(parsedLegacy.core.workspace?.workspaceKind, "files")
   assert.equal(parsedLegacy.core.workspace?.developmentTool, "git")
 
-  const preview = await previewWorkspaceArchiveImport(raw, "workspace.json")
+  const preview = await previewWorkspaceArchiveImport(raw, "workspace.json", gitManifest.dataPorts)
   assert.equal(preview.ok, true)
   assert.equal(preview.target?.pluginLabel, "完整工作区")
   assert.equal(preview.archive?.nodeCount, 1)

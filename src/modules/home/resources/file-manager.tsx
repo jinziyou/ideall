@@ -26,10 +26,9 @@ import {
 } from "@/ui/dropdown-menu"
 import { TextPromptDialog } from "@/shared/prompt-dialog"
 import { cn } from "@/lib/utils"
-import type { FileRef } from "@protocol/file-system"
 import type { FileMeta } from "@protocol/files"
-import { invokeFileAction, readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
-import { corePlaceRef, resourceRefForFile } from "@/filesystem/resource-file-system"
+import { invokeFileAction, watchFile } from "@/filesystem/registry"
+import { corePlaceRef } from "@/filesystem/resource-file-system"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import { fileTypeInfo, formatBytes, formatTime } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
@@ -38,6 +37,7 @@ import { EmptyState } from "@/ui/empty-state"
 import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
 import { downloadStoredFile, readStoredNodeFile } from "./file-preview"
 import { openTarget } from "@/workspace/store"
+import { loadManagedFiles, type ManagedFile } from "./file-manager-data"
 
 // 类型筛选分组: 把细分 FileKind 归并为用户可理解的几类
 type TypeFilter = "all" | "image" | "code" | "doc" | "data" | "media" | "archive" | "other"
@@ -54,37 +54,8 @@ const TYPE_TABS: { value: TypeFilter; label: string }[] = [
 ]
 
 const FILES_ROOT_REF = corePlaceRef("files")
-const UI_DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
-const UI_METADATA_CONTEXT = { actor: "ui", permissions: [], intent: "metadata" } as const
 const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
 const UI_WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
-
-type ManagedFile = FileMeta & { ref: FileRef }
-
-async function listManagedFiles(): Promise<ManagedFile[]> {
-  const page = await readFileDirectory(FILES_ROOT_REF, UI_DIRECTORY_CONTEXT)
-  const files = await Promise.all(
-    page.entries.map(async (entry): Promise<ManagedFile | null> => {
-      const resource = resourceRefForFile(entry.target)
-      if (resource?.scheme !== "node" || resource.kind !== "file") return null
-      const file = await statFile(entry.target, UI_METADATA_CONTEXT)
-      if (!file) return null
-      const tags = file.properties?.tags
-      return {
-        ref: entry.target,
-        id: resource.id,
-        name: file.name,
-        type: file.mediaType,
-        size: file.size ?? 0,
-        createdAt: file.createdAt ?? 0,
-        tags: Array.isArray(tags) && tags.every((tag) => typeof tag === "string") ? [...tags] : [],
-      }
-    }),
-  )
-  return files
-    .filter((file): file is ManagedFile => file !== null)
-    .sort((left, right) => right.createdAt - left.createdAt)
-}
 
 /** FileTypeInfo.group → 筛选分组 */
 function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
@@ -165,7 +136,7 @@ export default function FileManager() {
 
   const refresh = React.useCallback(async () => {
     try {
-      setFiles(await listManagedFiles())
+      setFiles(await loadManagedFiles())
     } catch (e) {
       toast.error("读取文件失败", { description: String(e) })
     } finally {
@@ -178,7 +149,7 @@ export default function FileManager() {
     let active = true
     async function load() {
       try {
-        const list = await listManagedFiles()
+        const list = await loadManagedFiles()
         if (active) setFiles(list)
       } catch (e) {
         toast.error("读取文件失败", { description: String(e) })

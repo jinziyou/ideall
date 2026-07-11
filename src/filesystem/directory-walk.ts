@@ -1,19 +1,13 @@
 import { fileRefKey, type DirectoryEntry, type FileRef } from "@protocol/file-system"
 import { readFileDirectory } from "./registry"
 import type { FileSystemAccessContext } from "./types"
+import { readAllDirectoryEntries } from "./directory-pagination"
 
 export async function readCompleteDirectory(
   ref: FileRef,
   ctx: FileSystemAccessContext,
 ): Promise<DirectoryEntry[]> {
-  const entries: DirectoryEntry[] = []
-  let cursor: string | undefined
-  do {
-    const page = await readFileDirectory(ref, ctx, { cursor })
-    entries.push(...page.entries)
-    cursor = page.nextCursor
-  } while (cursor)
-  return entries
+  return readAllDirectoryEntries((options) => readFileDirectory(ref, ctx, options), { ref })
 }
 
 /** 按目录项投影广度优先遍历；是否下降由调用者依据 kind/capability 决定。 */
