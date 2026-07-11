@@ -30,6 +30,8 @@ export const TOOL = {
   fsWrite: "fs.write",
   fsMove: "fs.move",
   fsDelete: "fs.delete",
+  // Agent 专用的脱敏配置读取；只有 loopback 宿主注入回调且持专用权限时才注册。
+  agentConfigRead: "agent.config.read",
   // ui.* 标签面 (§6.1): 让消费方把节点打开为标签页。
   uiOpenTab: "ui.openTab",
   uiCloseTab: "ui.closeTab",
@@ -49,6 +51,17 @@ export const TOOL = {
   browserWait: "browser.wait",
   browserWaitForSelector: "browser.waitForSelector",
 } as const
+
+export const AGENT_CONFIG_SECTION_IDS = [
+  "settings",
+  "workspaces",
+  "rules",
+  "skills",
+  "mcp",
+  "tasks",
+] as const
+
+export type AgentConfigSection = (typeof AGENT_CONFIG_SECTION_IDS)[number]
 
 export const RESOURCE = {
   identityMe: "identity://me",
@@ -81,6 +94,9 @@ export const PERMISSIONS = [
   // 须二次持 fs.blobs:read, 否则 consent-required。agentGrant 不含此位 —— agent 默认不能无授权把上传文件
   // (PDF/图片等) 读出外发模型端点。
   "fs.blobs:read",
+  // Agent 配置正文（工作区路径、规则、prompt、MCP/技能拓扑）独立于通用 fs:read。
+  // 只允许一方 Agent 经用户工作区显式勾选；普通文件枚举只能看到 metadata。
+  "agent.config:read",
   "ui.tabs",
   // web.* 出站联网 (§egress): 经守卫 (https-only + 私网/元数据 IP 拦截 + 重定向复检 + 体积/超时上限) 取数。
   // 钉死 first-party (见 grant.ts PERMISSION_MIN_TIER): 仅本应用 agent 持有, 不下放给 verified/any-origin 嵌入页。

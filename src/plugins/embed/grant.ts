@@ -87,6 +87,7 @@ export const PERMISSION_MIN_TIER: Partial<Record<Permission, GrantTier>> = {
   "fs.notes:read": "first-party",
   "fs.notes:write": "first-party",
   "fs.blobs:read": "first-party",
+  "agent.config:read": "first-party",
   "identity.publish": "first-party",
   // 出站联网钉死 first-party: 未来 verified/any-origin 嵌入页即便携此位也被 effectivePermissions 剥掉,
   // 不能借宿主拿到任意外网 egress (嵌入页自有同源取数, 不该走宿主出站通道)。
@@ -127,6 +128,15 @@ export const AGENT_PERMISSIONS: Permission[] = [
   "browser:control",
 ]
 
+/** 默认关闭、只能由一方 Agent 工作区显式授权的本机敏感能力。 */
+export const AGENT_OPTIONAL_PERMISSIONS: Permission[] = ["agent.config:read"]
+
+/** 工作区可配置的完整能力集合；默认工作区仍只启用 AGENT_PERMISSIONS。 */
+export const AGENT_CONFIGURABLE_PERMISSIONS: Permission[] = [
+  ...AGENT_PERMISSIONS,
+  ...AGENT_OPTIONAL_PERMISSIONS,
+]
+
 /**
  * 本应用 agent 的 Grant —— 不复用 firstPartyGrant (无 manifest), 经 LoopbackTransport 消费同一能力层。
  * 一方信任、不过期、不可撤 (本应用自带的 AI)。
@@ -134,7 +144,7 @@ export const AGENT_PERMISSIONS: Permission[] = [
  */
 export function agentGrant(now: number, permissions?: Permission[]): Grant {
   const perms = permissions
-    ? AGENT_PERMISSIONS.filter((p) => permissions.includes(p))
+    ? AGENT_CONFIGURABLE_PERMISSIONS.filter((p) => permissions.includes(p))
     : [...AGENT_PERMISSIONS]
   return {
     consumerId: "ideall-agent",

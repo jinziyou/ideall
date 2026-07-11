@@ -113,3 +113,11 @@ export async function deleteTask(id: string): Promise<void> {
     /* 线程已不在 → 忽略 */
   }
 }
+
+/**
+ * 仅替换任务索引；不会创建或删除 core 线程正文。导入/FileSystem 写入因此仍保持
+ * task metadata 与对话内容两层的既有边界。
+ */
+export function replaceTasks(tasks: readonly Partial<AgentTask>[]): void {
+  store.replaceAll(tasks.map(migrate).filter((task) => task.id && task.workspaceId))
+}

@@ -2,7 +2,7 @@
 
 // 上下文组合器: 把一个 AI 工作区的「数据 + 能力 + 规则 + 提示词 + 模型」收敛为可勾选的五组, 每组都有默认。
 // 直接读写当前工作区 (saveWorkspace), 改动即时进入 resolveRun (下次发送生效)。
-// 安全: 能力位只能在 AGENT_PERMISSIONS 内收窄 (agentGrant 取交集); 不暴露 fs.notes:read/fs.blobs:read (隐私三闸)。
+// 安全: 能力位只能在 AGENT_CONFIGURABLE_PERMISSIONS 内选择；敏感配置读取默认关闭。
 
 import * as React from "react"
 import { getFilesPort } from "@protocol/files"
@@ -12,8 +12,8 @@ import { Label } from "@/ui/label"
 import { Panel } from "@/ui/panel"
 import { Textarea } from "@/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
-import type { Permission } from "@/plugins/embed/protocol"
 import { infoEmbedManifest, communityEmbedManifest } from "@/plugins/embed/manifest"
+import { CAPABILITY_OPTIONS } from "../lib/agent-capabilities"
 import { BUILTIN_SKILLS } from "../lib/agent-skills"
 import { getRules, getServerRules, subscribeRules } from "../lib/agent-rules"
 import { PROVIDER_PRESETS } from "../lib/agent-settings"
@@ -23,15 +23,6 @@ import {
   type WorkspaceCapabilities,
   type WorkspaceData,
 } from "../lib/agent-workspace"
-
-const CAPABILITY_OPTIONS: { perm: Permission; label: string; hint: string }[] = [
-  { perm: "fs:read", label: "读取「我的」", hint: "列出关注 / 书签 / 资源 / 笔记标题" },
-  { perm: "fs:write", label: "修改「我的」", hint: "增改书签 / 收藏夹 / 关注" },
-  { perm: "fs.notes:write", label: "写入笔记", hint: "新建 / 编辑笔记" },
-  { perm: "ui.tabs", label: "打开标签", hint: "把节点打开为工作区标签页" },
-  { perm: "web:search", label: "联网搜索", hint: "web.search 搜索引擎" },
-  { perm: "web:fetch", label: "抓取网页", hint: "web.fetch 读取网页正文" },
-]
 
 const APP_OPTIONS = [infoEmbedManifest, communityEmbedManifest]
 const APP_IDS = APP_OPTIONS.map((a) => a.id)

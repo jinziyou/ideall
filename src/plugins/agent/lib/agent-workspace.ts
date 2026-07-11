@@ -4,14 +4,15 @@
 // 纯 store + subscribe/get (不引 React): 组件侧自行 useSyncExternalStore (与 agent-settings.ts 一致)。
 //
 // 安全不变量 (见 agent-context.ts / embed/grant.ts):
-//   - 能力位只能在 AGENT_PERMISSIONS 内**收窄** (agentGrant 取交集, 越权=工具不存在); 工作区无法扩权。
+//   - 默认能力来自 AGENT_PERMISSIONS；一方工作区可显式加入 agent.config:read，所有持久值最终
+//     都按 AGENT_CONFIGURABLE_PERMISSIONS 过滤 (agentGrant 再取交集，越权=工具不存在)。
 //   - 「我的」数据默认只取标题概览; 正文仍须 @ 引用单条 consent (工作区不绕过隐私三闸)。
 
 import { genId } from "@/lib/id"
 import { secureDelete, secureFallbackGet, secureGet, secureSet } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
 import type { Permission } from "@/plugins/embed/protocol"
-import { AGENT_PERMISSIONS } from "@/plugins/embed/grant"
+import { AGENT_CONFIGURABLE_PERMISSIONS, AGENT_PERMISSIONS } from "@/plugins/embed/grant"
 import type { HomeSelection } from "./agent-context"
 import { getAgentSettings } from "./agent-settings"
 import { activeRulesText } from "./agent-rules"
@@ -32,7 +33,7 @@ export interface WorkspaceData {
 
 /** 能力组: MCP / 工具 / 技能 / 应用。 */
 export interface WorkspaceCapabilities {
-  /** 启用的能力位 (默认 = 全部 AGENT_PERMISSIONS; agentGrant 再与默认集取交集)。 */
+  /** 默认启用 AGENT_PERMISSIONS；一方工作区可显式加入 AGENT_CONFIGURABLE_PERMISSIONS 中的可选位。 */
   permissions: Permission[]
   /** 工具名白名单 (null = 全部已授权工具)。 */
   toolAllowlist: string[] | null
@@ -116,6 +117,20 @@ export function defaultWorkspace(name = "默认工作区"): AgentWorkspace {
   }
 }
 
+const CONFIGURABLE_PERMISSIONS = new Set<string>(AGENT_CONFIGURABLE_PERMISSIONS)
+
+function migratePermissions(value: unknown, fallback: readonly Permission[]): Permission[] {
+  if (!Array.isArray(value)) return [...fallback]
+  return [
+    ...new Set(
+      value.filter(
+        (permission): permission is Permission =>
+          typeof permission === "string" && CONFIGURABLE_PERMISSIONS.has(permission),
+      ),
+    ),
+  ]
+}
+
 /** 容旧: 与默认结构深合并, 容忍缺字段 / 旧版本数据。 */
 function migrate(w: Partial<AgentWorkspace>): AgentWorkspace {
   const d = defaultWorkspace(w.name ?? undefined)
@@ -129,7 +144,11 @@ function migrate(w: Partial<AgentWorkspace>): AgentWorkspace {
       ...(w.data ?? {}),
       home: { ...d.data.home, ...(w.data?.home ?? {}) },
     },
-    capabilities: { ...d.capabilities, ...(w.capabilities ?? {}) },
+    capabilities: {
+      ...d.capabilities,
+      ...(w.capabilities ?? {}),
+      permissions: migratePermissions(w.capabilities?.permissions, d.capabilities.permissions),
+    },
     rules: { ruleIds: Array.isArray(w.rules?.ruleIds) ? w.rules!.ruleIds : [] },
     prompt: { ...d.prompt, ...(w.prompt ?? {}) },
     model: { ...d.model, ...(w.model ?? {}) },
@@ -149,6 +168,17 @@ let secureHydrating: Promise<void> | null = null
 
 function workspaceApiKeySecureKey(id: string): string {
   return `ideall:agent:workspace:${id}:apiKey`
+}
+
+function modelEndpoint(value: string): string | null {
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? `${url.origin}${url.pathname}`
+      : null
+  } catch {
+    return null
+  }
 }
 
 function publicWorkspace(ws: AgentWorkspace): AgentWorkspace {
@@ -308,6 +338,53 @@ export function setActiveWorkspace(id: string): void {
   const s = ensure()
   if (s.activeId === id || !s.workspaces.some((w) => w.id === id)) return
   commit({ ...s, activeId: id })
+}
+
+/**
+ * 从不含密钥的公开快照替换工作区配置。secure API Key 只在同 id、同远端 endpoint
+ * 且仍使用工作区覆盖时保留；目标变化、新建或删除都会清理对应凭据。
+ */
+export function replacePublicWorkspacesState(next: Partial<WorkspacesState>): void {
+  const current = ensure()
+  const existingById = new Map(current.workspaces.map((workspace) => [workspace.id, workspace]))
+  const input = Array.isArray(next.workspaces) ? next.workspaces : []
+  const workspaces = input.map((raw) => {
+    const workspace = migrate(raw)
+    const existing = existingById.get(workspace.id)
+    const nextEndpoint = modelEndpoint(workspace.model.baseURL)
+    const preserveApiKey = Boolean(
+      existing &&
+      !existing.model.useGlobal &&
+      !workspace.model.useGlobal &&
+      nextEndpoint !== null &&
+      nextEndpoint === modelEndpoint(existing.model.baseURL),
+    )
+    if (existing && !preserveApiKey) {
+      workspaceApiKeyCache.delete(workspace.id)
+      void secureDelete(workspaceApiKeySecureKey(workspace.id))
+    }
+    return {
+      ...workspace,
+      model: {
+        ...workspace.model,
+        apiKey: preserveApiKey ? (existing?.model.apiKey ?? "") : "",
+      },
+    }
+  })
+  if (!workspaces.length) workspaces.push(defaultWorkspace())
+
+  const retained = new Set(workspaces.map((workspace) => workspace.id))
+  for (const previous of current.workspaces) {
+    if (retained.has(previous.id)) continue
+    workspaceApiKeyCache.delete(previous.id)
+    void secureDelete(workspaceApiKeySecureKey(previous.id))
+  }
+
+  const requestedActiveId = typeof next.activeId === "string" ? next.activeId : ""
+  const activeId = workspaces.some((workspace) => workspace.id === requestedActiveId)
+    ? requestedActiveId
+    : workspaces[0].id
+  commit({ workspaces, activeId })
 }
 
 // —— 派生 (供 panel / composer / precise-mode) ——

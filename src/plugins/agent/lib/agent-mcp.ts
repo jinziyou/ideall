@@ -14,6 +14,11 @@ import { agentGrant } from "@/plugins/embed/grant"
 import type { Permission } from "@/plugins/embed/protocol"
 import { createLoopbackTransports } from "@/plugins/embed/transport"
 import { getUiActions } from "@/lib/ui-actions"
+import { fileSystemRegistry } from "@/filesystem/registry"
+import {
+  AGENT_CONFIG_READ_PERMISSION,
+  agentConfigFileRef,
+} from "@/plugins/agent/agent-config-file-system"
 
 /** OpenAI function-calling 工具定义 (传给模型的 tools 数组)。 */
 export type OpenAiTool = {
@@ -238,6 +243,18 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
       navigate: () => {}, // agent 不做内部路由跳转
       openTab: ui ? (kind, id, title) => ui.openTab(kind, id, title) : undefined,
       closeTab: ui ? (kind, id) => ui.closeTab(kind, id) : undefined,
+      readAgentConfig: async (section) => {
+        const result = await fileSystemRegistry.read(
+          agentConfigFileRef(section),
+          {
+            actor: "agent",
+            permissions: [AGENT_CONFIG_READ_PERMISSION],
+            intent: "content",
+          },
+          { encoding: "json" },
+        )
+        return result.data
+      },
     })
     const { serverTransport, clientTransport } = createLoopbackTransports()
     const client = new Client({ name: "ideall-agent", version: "1.0.0" }, { capabilities: {} })
@@ -429,6 +446,8 @@ export function summarizeTool(name: string, ok: boolean, data: unknown): string 
       return `已移动 ${nodeLabel(d)}`
     case "fs.delete":
       return "已删除"
+    case "agent.config.read":
+      return "已读取 Agent 脱敏配置"
     case "ui.openTab":
       return "已打开标签"
     case "ui.closeTab":

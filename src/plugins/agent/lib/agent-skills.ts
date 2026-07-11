@@ -110,3 +110,15 @@ export function deleteSkill(id: string): void {
   if (s?.builtin) return // 内置技能不可删 (可禁用)
   store.remove(id)
 }
+
+/** 用公开配置快照替换技能注册表，同时保留内置技能的稳定身份。 */
+export function replaceSkills(skills: readonly Partial<AgentSkill>[]): void {
+  const migrated = skills.map(migrate)
+  const builtinIds = new Set(BUILTIN_SKILLS.map((skill) => skill.id))
+  const builtins = BUILTIN_SKILLS.map((fallback) => {
+    const supplied = migrated.find((skill) => skill.id === fallback.id)
+    return supplied ? { ...supplied, id: fallback.id, builtin: true } : migrate(fallback)
+  })
+  const custom = migrated.filter((skill) => !builtinIds.has(skill.id) && !skill.builtin)
+  store.replaceAll([...builtins, ...custom])
+}

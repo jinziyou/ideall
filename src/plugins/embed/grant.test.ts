@@ -94,6 +94,20 @@ test("agentGrant **不含** fs.notes:read (既存笔记正文须 @ 引用 consen
   assert.equal(agentGrant(NOW).permissions.includes("fs.notes:read"), false)
 })
 
+test("agent.config:read 默认关闭，仅显式工作区授权且只对 first-party 生效", () => {
+  assert.equal(agentGrant(NOW).permissions.includes("agent.config:read"), false)
+  assert.equal(
+    agentGrant(NOW, ["fs:read", "agent.config:read"]).permissions.includes("agent.config:read"),
+    true,
+  )
+  const untrusted: Grant = {
+    ...firstPartyGrant(manifest(), NOW),
+    tier: "verified",
+    permissions: ["agent.config:read"],
+  }
+  assert.deepEqual(effectivePermissions(untrusted), [])
+})
+
 test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:write / web:* 出站位", () => {
   for (const m of [infoEmbedManifest, communityEmbedManifest]) {
     assert.equal(m.permissions.includes("fs.notes:read"), false, `${m.id} 不得含 fs.notes:read`)

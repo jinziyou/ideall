@@ -117,6 +117,22 @@ export function deleteMcpServer(id: string): void {
   store.remove(id)
 }
 
+/** 用公开配置快照替换注册表，同时守住内置 loopback 的身份与传输约束。 */
+export function replaceMcpServers(servers: readonly Partial<McpServer>[]): void {
+  const migrated = servers.map(migrate)
+  const suppliedLoopback = migrated.find((server) => server.id === LOOPBACK_ID)
+  const loopback = suppliedLoopback
+    ? {
+        ...suppliedLoopback,
+        id: LOOPBACK_ID,
+        transport: "loopback" as const,
+        builtin: true,
+      }
+    : loopbackRow()
+  const external = migrated.filter((server) => server.id !== LOOPBACK_ID && !server.builtin)
+  store.replaceAll([loopback, ...external])
+}
+
 /** 展示用运行状态: loopback 启用即「已连接」; 外部行传输 (stdio/SSE/streamable-http) 已实现, 但按运行
  *  时连接 (connectAgentMcp 每轮按需连), 无常驻连接可反映 → 静态显示「待接入」; 未启用 → 「已禁用」。 */
 export function runStatusOf(s: McpServer): McpRunStatus {

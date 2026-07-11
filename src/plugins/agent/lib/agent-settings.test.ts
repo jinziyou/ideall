@@ -9,6 +9,7 @@ import {
   hydrateAgentSettingsSecure,
   setAgentSettings,
 } from "./agent-settings"
+import { writeAgentPublicConfigSection } from "./agent-data-port"
 
 const mem = new Map<string, string>()
 const localStorageStub: Storage = {
@@ -121,4 +122,39 @@ test("agentSettingsSecuritySnapshot: 能识别 localStorage 中的旧明文 key"
   mem.clear()
   mem.set(AGENT_SETTINGS_STORAGE_KEY, JSON.stringify({ apiKey: "legacy-key" }))
   assert.equal(agentSettingsSecuritySnapshot().localApiKeyPresent, true)
+})
+
+test("public settings write: baseURL 脱敏且 API Key 只在同 endpoint 保留", () => {
+  mem.clear()
+  setAgentSettings({
+    baseURL: "https://api.example.test/v1",
+    model: "m",
+    apiKey: "same-origin-key",
+    includeHomeContext: true,
+    defaultAgentMode: true,
+    approvalPolicy: "confirm",
+  })
+
+  writeAgentPublicConfigSection("settings", {
+    baseURL: "https://user:pass@api.example.test/v1?key=query-secret#fragment-secret",
+    model: "m2",
+    includeHomeContext: false,
+    defaultAgentMode: false,
+    approvalPolicy: "auto",
+  })
+  assert.equal(getAgentSettings().baseURL, "https://api.example.test/v1")
+  assert.equal(getAgentSettings().apiKey, "same-origin-key")
+
+  writeAgentPublicConfigSection("settings", {
+    baseURL: "https://api.example.test/v2",
+    model: "m2",
+    includeHomeContext: false,
+    defaultAgentMode: false,
+    approvalPolicy: "auto",
+  })
+  assert.equal(getAgentSettings().apiKey, "")
+  assert.equal(
+    mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY)),
+    undefined,
+  )
 })

@@ -2,9 +2,15 @@
 // 锁死 §6 隐私/权限不变量穿过完整链路 —— tools/list 只暴露授权工具; fs.read(note) 无 consent 报错; fs.list 剥正文。
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { registerFilesPort, type FilesPort } from "@protocol/files"
 import type { Node } from "@protocol/node"
 import { registerUiActions } from "@/lib/ui-actions"
+import { registerFileSystem } from "@/filesystem/registry"
+import { createAgentConfigFileSystem } from "@/plugins/agent/agent-config-file-system"
+import { createLocalMcpServer } from "@/plugins/embed/local-mcp-server"
+import { agentGrant } from "@/plugins/embed/grant"
+import { createLoopbackTransports } from "@/plugins/embed/transport"
 import { connectAgentMcp, toApiToolName } from "./agent-mcp"
 
 const noop = () => {
@@ -67,7 +73,84 @@ test("tools/list 只暴露 agentGrant 授权工具 (fs.*/ui.*/web.*; 不含 hub.
   }
   assert.ok(!names.includes("hub.addBookmark"), "无 hub.bookmarks:write → 不暴露 hub.addBookmark")
   assert.ok(!names.includes("identity.me"), "无 identity:read → 不暴露 identity.me")
+  assert.ok(!names.includes(toApiToolName("agent.config.read")), "默认授权不得暴露 Agent 配置正文")
   await mcp.close()
+})
+
+test("agent.config.read: explicit consent reads only the sanitized FileSystem projection", async () => {
+  registerMock({})
+  const unregister = registerFileSystem(
+    createAgentConfigFileSystem({
+      read(section) {
+        if (section === "tasks") throw new Error("store-path-and-secret")
+        if (section === "settings") {
+          return {
+            baseURL: "https://user:password@api.example.test/v1?token=query-secret",
+            model: "safe-model",
+            apiKey: "sk-never-return",
+            includeHomeContext: true,
+            defaultAgentMode: true,
+            approvalPolicy: "confirm",
+          }
+        }
+        return section === "workspaces" ? { workspaces: [], activeId: "" } : []
+      },
+      write: noop,
+      subscribe: () => () => undefined,
+    }),
+  )
+  let mcp: Awaited<ReturnType<typeof connectAgentMcp>> | undefined
+  try {
+    mcp = await connectAgentMcp({ permissions: ["agent.config:read"] })
+    assert.ok(mcp.tools.some((tool) => tool.function.name === toApiToolName("agent.config.read")))
+    const result = await mcp.callTool(toApiToolName("agent.config.read"), {
+      section: "settings",
+    })
+    assert.equal(result.ok, true)
+    assert.deepEqual(result.data, {
+      baseURL: "https://api.example.test/v1",
+      model: "safe-model",
+      includeHomeContext: true,
+      defaultAgentMode: true,
+      approvalPolicy: "confirm",
+    })
+    assert.equal(JSON.stringify(result.data).includes("sk-never-return"), false)
+    assert.equal(JSON.stringify(result.data).includes("password"), false)
+    assert.equal(JSON.stringify(result.data).includes("query-secret"), false)
+
+    const invalid = await mcp.callTool(toApiToolName("agent.config.read"), {
+      section: "../../secrets",
+    })
+    assert.equal(invalid.ok, false)
+    const failed = await mcp.callTool(toApiToolName("agent.config.read"), { section: "tasks" })
+    assert.equal(failed.ok, false)
+    assert.equal((failed.data as { message?: string }).message, "agent-config-read-failed")
+    assert.equal(JSON.stringify(failed.data).includes("store-path-and-secret"), false)
+  } finally {
+    await mcp?.close()
+    unregister()
+  }
+})
+
+test("agent.config.read: a host without the agent-only callback exposes no config tool", async () => {
+  registerMock({})
+  const server = createLocalMcpServer(agentGrant(Date.now(), ["agent.config:read"]), {
+    navigate: () => undefined,
+  })
+  const { serverTransport, clientTransport } = createLoopbackTransports()
+  const client = new Client({ name: "no-agent-config-adapter", version: "1" }, { capabilities: {} })
+  try {
+    await server.connect(serverTransport)
+    await client.connect(clientTransport)
+    const listed = await client.listTools()
+    assert.equal(
+      listed.tools.some((tool) => tool.name === "agent.config.read"),
+      false,
+    )
+  } finally {
+    await client.close().catch(() => undefined)
+    await server.close().catch(() => undefined)
+  }
 })
 
 // web.* 经统一能力层端到端 (resolveFetch 在 node 非 Tauri 回退 globalThis.fetch, 故 stub 之即可驱动)。

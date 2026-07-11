@@ -20,7 +20,13 @@ import {
   isTauri,
 } from "@/lib/tauri"
 import { toast } from "sonner"
-import { TOOL, RESOURCE, type Permission } from "./protocol"
+import {
+  AGENT_CONFIG_SECTION_IDS,
+  TOOL,
+  RESOURCE,
+  type AgentConfigSection,
+  type Permission,
+} from "./protocol"
 import type { ScopedHost } from "./scoped-host"
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
@@ -47,10 +53,13 @@ export interface HostToolsCtx {
   openTab?: (kind: NodeKind, id: string, title: string) => void
   /** 关闭节点标签 (ui.closeTab)。 */
   closeTab?: (kind: NodeKind, id: string) => void
+  /** Agent loopback 专用；普通 embed 宿主不注入，因此即使伪造 permission 也没有配置工具。 */
+  readAgentConfig?: (section: AgentConfigSection) => Promise<unknown>
 }
 
 /** host.navigate 允许的内部路由前缀 (白名单, §5.2)。仅宿主壳路由; 插件 SPA 内页 (/info/* 等) 不经此 API。 */
 const NAV_ALLOW = ["/home", "/auth", "/info", "/community", "/tool"]
+const agentConfigSection = z.enum([...AGENT_CONFIG_SECTION_IDS])
 
 export function registerGrantedTools(
   server: McpServer,
@@ -270,6 +279,19 @@ export function registerGrantedTools(
         return ok({ ok: true })
       } catch (e) {
         return fsWriteErr(e)
+      }
+    })
+  }
+
+  // Agent 配置不是通用 fs.read 的旁路：只在一方 loopback 显式注入 registry adapter，且
+  // Grant 持专用 consent 位时出现。section 使用固定枚举，不接受任意 FileRef/路径。
+  if (has("agent.config:read") && ctx.readAgentConfig) {
+    server.tool(TOOL.agentConfigRead, { section: agentConfigSection }, async ({ section }) => {
+      try {
+        return ok(await ctx.readAgentConfig!(section))
+      } catch {
+        // provider/store 的原始错误可能含路径或配置片段，不回显给模型。
+        return fail(-32000, "agent-config-read-failed")
       }
     })
   }
