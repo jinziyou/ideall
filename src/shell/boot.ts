@@ -4,6 +4,7 @@
 // 使终端外壳 (core) 永不直接依赖具体 app/plugin。
 import { registerContentResolver } from "@protocol/content"
 import { registerFilesPort } from "@protocol/files"
+import { registerStorageSyncPort } from "@protocol/storage-sync"
 import { registerUiActions } from "@/lib/ui-actions"
 import { registerActiveNode } from "@/lib/active-node"
 import { registerBuiltInVfsProviders } from "@/vfs/builtin"
@@ -12,6 +13,7 @@ import { registerBuiltInEngines } from "@/engines/builtin"
 import { registerBuiltInFileEngineRenderers } from "@/workspace/registry"
 import { isTauri } from "@/lib/tauri"
 import { filesPort } from "@/files/files-port"
+import { storageSyncPort } from "@/files/storage-sync-port"
 import {
   openTarget,
   closeFileTabs,
@@ -40,6 +42,8 @@ import { gitManifest } from "@/plugins/git/manifest"
 import { databaseManifest } from "@/plugins/database/manifest"
 import { audioManifest } from "@/plugins/audio/manifest"
 import { codeManifest } from "@/plugins/code/manifest"
+import { agentManifest } from "@/plugins/agent/manifest"
+import { runtimeExtensionCatalog } from "./runtime-extensions"
 
 let booted = false
 
@@ -49,12 +53,16 @@ export function registerAll(): void {
   booted = true
   // 「我的」数据端口 (core 实现, 供 agent 等插件经 protocol 读写「我的」本机数据)。
   registerFilesPort(filesPort)
+  // 同步专用原始存储面只暴露 tombstone/原子批处理；普通插件 CRUD 统一经 FilesPort→FileSystem。
+  registerStorageSyncPort(storageSyncPort)
   // Resource/VFS 挂载点: 本地 node + 连接模式路由型资源。provider 自身保持 UI 无关。
   registerBuiltInVfsProviders()
   // 五层模型的统一文件系统。旧 Resource/VFS 作为首个存储适配器接入，迁移期并行存在。
   registerBuiltInFileSystems()
   registerBuiltInEngines()
   registerBuiltInFileEngineRenderers()
+  // 内置第三方 App connector 也走生产 runtime factory 路径，避免动态目录只停留在测试 API。
+  runtimeExtensionCatalog.discoverBuiltin(appsManifest.runtimeExtensionFactory)
   // UI 动作端口 (ui.*): 让 agent 经 MCP 把节点打开为工作区标签 (守 components↛app 边界, 由 app 注入)。
   registerUiActions({
     // agent 经 ui.openTab 打开 → source "agent": 该节点不计入「打开即隐式同意」(见下 active-node 守卫), 不改打开行为。
@@ -93,16 +101,20 @@ export function registerAll(): void {
   }
   // 插件能力注册 (如 sync 的 SyncPort; shell/git/database/audio/code 视图由 workspace/registry 挂载)。
   for (const p of [
-    appsManifest,
     syncManifest,
     shellManifest,
     gitManifest,
     databaseManifest,
     audioManifest,
     codeManifest,
+    agentManifest,
   ]) {
     p.register?.()
   }
+  // 只重放已经由可信 factory 注册的扩展 id；持久化快照本身永远不承载可执行代码。
+  runtimeExtensionCatalog.hydrate()
+  // 随包连接器默认启用；单个可选扩展失败只记录在 catalog，不中断整个 shell 启动。
+  void runtimeExtensionCatalog.tryActivate(appsManifest.runtimeExtensionFactory.id)
 }
 
 /**
