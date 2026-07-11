@@ -5,10 +5,12 @@ import { Settings } from "lucide-react"
 import ThemeToggle from "@/shell/theme-toggle"
 import { LocalDeviceStatus } from "@/shell/local-device-chip"
 import { ConnectedApps } from "@/plugins/embed/connected-apps"
+import { Panel, SettingRow } from "@/ui/panel"
+import { RuntimeExtensionsPanel } from "./runtime-extensions-panel"
 
 export default function SettingsPage() {
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-6">
       <div className="space-y-1">
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <Settings className="h-6 w-6 text-muted-foreground" />
@@ -16,20 +18,21 @@ export default function SettingsPage() {
         </h1>
       </div>
 
-      <section className="rounded-lg border bg-card p-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium">外观</span>
+      <Panel>
+        <SettingRow label="外观">
           <ThemeToggle />
-        </div>
-      </section>
+        </SettingRow>
+      </Panel>
 
-      <section className="rounded-lg border bg-card p-4">
+      <Panel>
         <LocalDeviceStatus />
-      </section>
+      </Panel>
 
-      <section className="rounded-lg border bg-card p-4">
+      <Panel>
         <ConnectedApps />
-      </section>
+      </Panel>
+
+      <RuntimeExtensionsPanel />
     </div>
   )
 }

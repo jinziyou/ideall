@@ -80,39 +80,182 @@ export class EngineRegistryError extends Error {
   }
 }
 
+const MAX_ENGINE_ID_LENGTH = 160
+const MAX_ENGINE_LABEL_LENGTH = 256
+const MAX_ICON_HINT_LENGTH = 160
+const MAX_MATCHER_ITEMS = 128
+const MAX_MATCHER_TEXT_LENGTH = 512
+const MAX_MATCHER_PROPERTIES = 128
+const ENGINE_DESCRIPTOR_KEYS = new Set([
+  "engineId",
+  "label",
+  "match",
+  "priority",
+  "layout",
+  "access",
+  "suspension",
+  "supportsStandaloneWindow",
+  "iconHint",
+])
+const ENGINE_MATCHER_KEYS = new Set(["kinds", "mediaTypes", "requiredCapabilities", "properties"])
+
+function invalidDescriptor(field: string, message: string): never {
+  throw new EngineRegistryError("invalid-descriptor", `Engine descriptor ${field} ${message}`)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+function boundedText(value: unknown, maxLength: number): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    value === value.trim() &&
+    !/[\u0000-\u001f\u007f]/.test(value)
+  )
+}
+
+function snapshotStringArray(
+  value: unknown,
+  field: string,
+  accepts: (item: string) => boolean = () => true,
+): readonly string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length > MAX_MATCHER_ITEMS) {
+    invalidDescriptor(field, `must be an array of at most ${MAX_MATCHER_ITEMS} strings`)
+  }
+  const snapshot = value.map((item, index) => {
+    if (!boundedText(item, MAX_MATCHER_TEXT_LENGTH) || !accepts(item)) {
+      invalidDescriptor(`${field}[${index}]`, "contains an invalid value")
+    }
+    return item
+  })
+  return Object.freeze(snapshot)
+}
+
+function snapshotProperties(value: unknown): EngineMatcher["properties"] {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) invalidDescriptor("match.properties", "must be a plain object")
+  const entries = Object.entries(value)
+  if (entries.length > MAX_MATCHER_PROPERTIES) {
+    invalidDescriptor("match.properties", `must contain at most ${MAX_MATCHER_PROPERTIES} entries`)
+  }
+  const snapshot: Record<string, string | number | boolean | null> = Object.create(null)
+  for (const [key, property] of entries) {
+    if (!boundedText(key, MAX_MATCHER_TEXT_LENGTH)) {
+      invalidDescriptor("match.properties", "contains an invalid key")
+    }
+    if (
+      property !== null &&
+      typeof property !== "string" &&
+      typeof property !== "boolean" &&
+      !(typeof property === "number" && Number.isFinite(property))
+    ) {
+      invalidDescriptor(`match.properties.${key}`, "must be a scalar value")
+    }
+    if (typeof property === "string" && property.length > MAX_MATCHER_TEXT_LENGTH) {
+      invalidDescriptor(`match.properties.${key}`, "string value is too long")
+    }
+    snapshot[key] = property
+  }
+  return Object.freeze(snapshot)
+}
+
 function snapshotMatcher(matcher: EngineMatcher | undefined): EngineMatcher | undefined {
-  if (!matcher) return undefined
+  if (matcher === undefined) return undefined
+  if (!isRecord(matcher)) invalidDescriptor("match", "must be a plain object")
+  for (const key of Reflect.ownKeys(matcher)) {
+    if (typeof key !== "string" || !ENGINE_MATCHER_KEYS.has(key)) {
+      invalidDescriptor("match", `contains unsupported field ${String(key)}`)
+    }
+  }
+  const kinds = snapshotStringArray(
+    matcher.kinds,
+    "match.kinds",
+    (kind) => kind === "file" || kind === "directory",
+  ) as EngineMatcher["kinds"]
+  const mediaTypes = snapshotStringArray(matcher.mediaTypes, "match.mediaTypes")
+  const requiredCapabilities = snapshotStringArray(
+    matcher.requiredCapabilities,
+    "match.requiredCapabilities",
+  )
+  const properties = snapshotProperties(matcher.properties)
   return Object.freeze({
-    ...matcher,
-    kinds: matcher.kinds ? Object.freeze([...matcher.kinds]) : undefined,
-    mediaTypes: matcher.mediaTypes ? Object.freeze([...matcher.mediaTypes]) : undefined,
-    requiredCapabilities: matcher.requiredCapabilities
-      ? Object.freeze([...matcher.requiredCapabilities])
-      : undefined,
-    properties: matcher.properties ? Object.freeze({ ...matcher.properties }) : undefined,
+    ...(kinds === undefined ? {} : { kinds }),
+    ...(mediaTypes === undefined ? {} : { mediaTypes }),
+    ...(requiredCapabilities === undefined ? {} : { requiredCapabilities }),
+    ...(properties === undefined ? {} : { properties }),
   })
 }
 
 function snapshotDescriptor(descriptor: EngineDescriptor): EngineDescriptor {
-  if (!descriptor.engineId.trim() || descriptor.engineId !== descriptor.engineId.trim()) {
-    throw new EngineRegistryError(
-      "invalid-descriptor",
-      "Engine descriptor engineId must be non-empty and have no surrounding whitespace",
-    )
+  if (!isRecord(descriptor)) invalidDescriptor("value", "must be a plain object")
+  for (const key of Reflect.ownKeys(descriptor)) {
+    if (typeof key !== "string" || !ENGINE_DESCRIPTOR_KEYS.has(key)) {
+      invalidDescriptor("value", `contains unsupported field ${String(key)}`)
+    }
   }
-  if (!descriptor.label.trim()) {
-    throw new EngineRegistryError("invalid-descriptor", "Engine descriptor label must not be empty")
+  if (!boundedText(descriptor.engineId, MAX_ENGINE_ID_LENGTH)) {
+    invalidDescriptor("engineId", "must be non-empty, bounded and have no surrounding whitespace")
+  }
+  if (!boundedText(descriptor.label, MAX_ENGINE_LABEL_LENGTH)) {
+    invalidDescriptor("label", "must be non-empty, bounded and have no surrounding whitespace")
   }
   if (descriptor.priority !== undefined && !Number.isFinite(descriptor.priority)) {
-    throw new EngineRegistryError("invalid-descriptor", "Engine descriptor priority must be finite")
+    invalidDescriptor("priority", "must be finite")
   }
-  return Object.freeze({ ...descriptor, match: snapshotMatcher(descriptor.match) })
+  if (descriptor.layout !== "padded" && descriptor.layout !== "fill") {
+    invalidDescriptor("layout", "must be padded or fill")
+  }
+  if (descriptor.access !== "read-only" && descriptor.access !== "read-write") {
+    invalidDescriptor("access", "must be read-only or read-write")
+  }
+  if (descriptor.suspension !== undefined && descriptor.suspension !== "serializable") {
+    invalidDescriptor("suspension", "must be serializable when provided")
+  }
+  if (
+    descriptor.supportsStandaloneWindow !== undefined &&
+    typeof descriptor.supportsStandaloneWindow !== "boolean"
+  ) {
+    invalidDescriptor("supportsStandaloneWindow", "must be boolean when provided")
+  }
+  if (
+    descriptor.iconHint !== undefined &&
+    !boundedText(descriptor.iconHint, MAX_ICON_HINT_LENGTH)
+  ) {
+    invalidDescriptor("iconHint", "must be a bounded string when provided")
+  }
+  const match = snapshotMatcher(descriptor.match)
+  return Object.freeze({
+    engineId: descriptor.engineId,
+    label: descriptor.label,
+    ...(match === undefined ? {} : { match }),
+    ...(descriptor.priority === undefined ? {} : { priority: descriptor.priority }),
+    layout: descriptor.layout,
+    access: descriptor.access,
+    ...(descriptor.suspension === undefined ? {} : { suspension: descriptor.suspension }),
+    ...(descriptor.supportsStandaloneWindow === undefined
+      ? {}
+      : { supportsStandaloneWindow: descriptor.supportsStandaloneWindow }),
+    ...(descriptor.iconHint === undefined ? {} : { iconHint: descriptor.iconHint }),
+  })
+}
+
+/** Runtime preflight entry point; performs the same fail-closed checks used by register(). */
+export function validateEngineDescriptor(descriptor: EngineDescriptor): void {
+  snapshotDescriptor(descriptor)
 }
 
 export class EngineRegistry {
   readonly #descriptors = new Map<string, EngineDescriptor>()
   readonly #listeners = new Set<() => void>()
   #revision = 0
+  #batchDepth = 0
+  #notificationPending = false
 
   register(descriptor: EngineDescriptor): () => void {
     const stored = snapshotDescriptor(descriptor)
@@ -162,8 +305,39 @@ export class EngineRegistry {
     return this.#revision
   }
 
+  /**
+   * Defers registry notifications until a synchronous multi-registry mutation is complete.
+   * State is still mutated synchronously, so callers must not await inside the operation.
+   */
+  batch<T>(operation: () => T): T {
+    this.#batchDepth += 1
+    try {
+      return operation()
+    } finally {
+      this.#batchDepth -= 1
+      if (this.#batchDepth === 0 && this.#notificationPending) {
+        this.#notificationPending = false
+        this.#emit()
+      }
+    }
+  }
+
   #notify(): void {
+    if (this.#batchDepth > 0) {
+      this.#notificationPending = true
+      return
+    }
+    this.#emit()
+  }
+
+  #emit(): void {
     this.#revision += 1
-    for (const listener of this.#listeners) listener()
+    for (const listener of this.#listeners) {
+      try {
+        listener()
+      } catch {
+        // 观察者不是事务参与者，不能把已提交的 descriptor 变更变成半失败。
+      }
+    }
   }
 }

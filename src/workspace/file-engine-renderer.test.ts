@@ -83,6 +83,23 @@ test("file engine renderer registry: duplicate and malformed ids are rejected", 
   )
 })
 
+test("file engine renderer registry: throwing observer cannot interrupt registration", () => {
+  const registry = new FileEngineRendererRegistry()
+  let healthyCalls = 0
+  registry.subscribe(() => {
+    throw new Error("observer boom")
+  })
+  registry.subscribe(() => {
+    healthyCalls += 1
+  })
+
+  const dispose = registry.register("demo.safe", () => null)
+  assert.ok(registry.get("demo.safe"))
+  assert.equal(healthyCalls, 1)
+  assert.doesNotThrow(dispose)
+  assert.equal(healthyCalls, 2)
+})
+
 test("built-in Displays are idempotent and code rendering honors descriptor access", () => {
   const registry = new FileEngineRendererRegistry()
   registerBuiltInFileEngineRenderers(registry)
@@ -132,4 +149,30 @@ test("ideall.preview renders SVG as an image preview instead of a code editor", 
   assert.notEqual(svgElement.type, textElement.type)
   assert.equal((svgElement.props as { readOnly?: boolean }).readOnly, undefined)
   assert.equal((textElement.props as { readOnly?: boolean }).readOnly, true)
+})
+
+test("installed app files use the dedicated metadata and launch Display", () => {
+  const registry = new FileEngineRendererRegistry()
+  registerBuiltInFileEngineRenderers(registry)
+  const appDescriptor = BUILTIN_ENGINES.find(({ engineId }) => engineId === "ideall.installed-app")!
+  const appFile: IdeallFile = {
+    ...file,
+    ref: { fileSystemId: "third-party.installed-apps", fileId: "app:org.example.Editor" },
+    name: "Editor",
+    mediaType: "application/vnd.ideall.installed-app+json",
+    capabilities: ["read", "actions", "apps:launch"],
+    properties: {
+      appId: "org.example.Editor",
+      comment: "Example editor",
+      categories: ["Development"],
+      iconPath: null,
+    },
+  }
+  const element = registry.get(appDescriptor.engineId)?.({
+    file: appFile,
+    descriptor: appDescriptor,
+  })
+
+  assert.ok(React.isValidElement(element))
+  assert.equal((element.props as { file?: IdeallFile }).file, appFile)
 })

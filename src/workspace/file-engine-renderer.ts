@@ -28,6 +28,8 @@ export class FileEngineRendererRegistry {
   readonly #renderers = new Map<string, FileEngineRenderer>()
   readonly #listeners = new Set<() => void>()
   #revision = 0
+  #batchDepth = 0
+  #notificationPending = false
 
   register(engineId: string, renderer: FileEngineRenderer): () => void {
     if (!engineId.trim() || engineId !== engineId.trim() || typeof renderer !== "function") {
@@ -70,6 +72,20 @@ export class FileEngineRendererRegistry {
     return () => this.#listeners.delete(listener)
   }
 
+  /** See EngineRegistry.batch; paired engine contributions use both boundaries together. */
+  batch<T>(operation: () => T): T {
+    this.#batchDepth += 1
+    try {
+      return operation()
+    } finally {
+      this.#batchDepth -= 1
+      if (this.#batchDepth === 0 && this.#notificationPending) {
+        this.#notificationPending = false
+        this.#emit()
+      }
+    }
+  }
+
   clear(): void {
     if (this.#renderers.size === 0) return
     this.#renderers.clear()
@@ -77,8 +93,22 @@ export class FileEngineRendererRegistry {
   }
 
   #notify(): void {
+    if (this.#batchDepth > 0) {
+      this.#notificationPending = true
+      return
+    }
+    this.#emit()
+  }
+
+  #emit(): void {
     this.#revision += 1
-    for (const listener of this.#listeners) listener()
+    for (const listener of this.#listeners) {
+      try {
+        listener()
+      } catch {
+        // 观察者故障不能破坏 renderer registry 的原子状态。
+      }
+    }
   }
 }
 

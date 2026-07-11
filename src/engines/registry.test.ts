@@ -123,3 +123,49 @@ test("engine registry: 拒绝重复 id 与非有限 priority", () => {
     (error) => error instanceof EngineRegistryError && error.code === "invalid-descriptor",
   )
 })
+
+test("engine registry: runtime descriptor fields and matcher values fail closed", () => {
+  const invalidDescriptors: Array<[string, unknown]> = [
+    ["layout", { ...engine("bad-layout", 1), layout: "overlay" }],
+    ["access", { ...engine("bad-access", 1), access: "execute" }],
+    ["suspension", { ...engine("bad-suspension", 1), suspension: "memory" }],
+    ["supportsStandaloneWindow", { ...engine("bad-window", 1), supportsStandaloneWindow: "yes" }],
+    ["match", { ...engine("bad-match", 1), match: "text/*" }],
+    ["kinds", { ...engine("bad-kind", 1), match: { kinds: ["symlink"] } }],
+    ["mediaTypes", { ...engine("bad-media", 1), match: { mediaTypes: [42] } }],
+    [
+      "requiredCapabilities",
+      { ...engine("bad-capability", 1), match: { requiredCapabilities: [null] } },
+    ],
+    ["properties", { ...engine("bad-property", 1), match: { properties: { mode: {} } } }],
+  ]
+
+  for (const [field, descriptor] of invalidDescriptors) {
+    const registry = new EngineRegistry()
+    assert.throws(
+      () => registry.register(descriptor as EngineDescriptor),
+      (error) =>
+        error instanceof EngineRegistryError &&
+        error.code === "invalid-descriptor" &&
+        error.message.includes(field),
+    )
+    assert.deepEqual(registry.list(), [])
+  }
+})
+
+test("engine registry: throwing observer is isolated from committed mutations", () => {
+  const registry = new EngineRegistry()
+  let healthyCalls = 0
+  registry.subscribe(() => {
+    throw new Error("observer boom")
+  })
+  registry.subscribe(() => {
+    healthyCalls += 1
+  })
+
+  const dispose = registry.register(engine("safe", 1))
+  assert.equal(registry.get("safe")?.engineId, "safe")
+  assert.equal(healthyCalls, 1)
+  assert.doesNotThrow(dispose)
+  assert.equal(healthyCalls, 2)
+})
