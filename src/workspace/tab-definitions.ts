@@ -78,6 +78,8 @@ export const TAB_DEFINITIONS = {
   },
   apps: { module: "apps", title: "应用", path: "/apps", layout: "padded" },
   shell: { module: "shell", title: "终端", path: "/shell", layout: "fill" },
+  // 以下三项仅用于识别并迁移旧 static tab 快照；新导航直接创建真实 App root 的
+  // file-engine descriptor，不再把它们作为可渲染的静态 surface。
   git: { module: "git", title: "Git", path: "/git", layout: "padded" },
   database: { module: "database", title: "数据库", path: "/database", layout: "padded" },
   audio: { module: "audio", title: "音频播放器", path: "/audio", layout: "padded" },

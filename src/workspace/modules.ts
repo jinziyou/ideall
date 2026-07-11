@@ -286,9 +286,11 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   }
   if (pathname.startsWith("/apps")) return tabDescriptor("apps")
   if (pathname.startsWith("/shell")) return tabDescriptor("shell")
-  if (pathname.startsWith("/git")) return tabDescriptor("git")
-  if (pathname.startsWith("/database")) return tabDescriptor("database")
-  if (pathname.startsWith("/audio")) return tabDescriptor("audio")
+  for (const id of ["git", "database", "audio"] as const) {
+    if (pathname.startsWith(`/${id}`)) {
+      return PLUGIN_ENTRIES.find((entry) => entry.id === id)?.descriptor ?? null
+    }
+  }
   if (pathname.startsWith("/code")) return tabDescriptor("code")
   if (pathname.startsWith("/trash")) return tabDescriptor("trash")
   if (pathname.startsWith("/tool")) return tabDescriptor("tool-search")

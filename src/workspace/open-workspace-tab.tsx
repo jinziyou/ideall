@@ -48,11 +48,14 @@ function OpenWorkspaceTabInner() {
       }
       if (p === "/audio") {
         setWorkspaceKind("audio")
-        return
       }
-      if (p === "/git" || p === "/shell") {
+      if (p === "/git") {
         setWorkspaceKind("development")
-        setDevelopmentTool(p === "/git" ? "git" : "shell")
+        setDevelopmentTool("git")
+      }
+      if (p === "/shell") {
+        setWorkspaceKind("development")
+        setDevelopmentTool("shell")
         return
       }
       // 路由驱动的打开 (移动底栏 / ⌘K / 深链 / 桌面 UrlSync 回写) 一律走「预览」(transient):

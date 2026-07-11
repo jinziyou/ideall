@@ -1,7 +1,13 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import type { DirectoryEntry } from "@protocol/file-system"
-import { CORE_FILE_ROOTS, rootEntriesForMode } from "./file-roots"
+import {
+  BUILTIN_APP_SURFACES,
+  CORE_FILE_ROOTS,
+  defaultFileForPath,
+  mountedFileRootId,
+  rootEntriesForMode,
+} from "./file-roots"
 
 const parent = { fileSystemId: "ideall.root", fileId: "root" }
 
@@ -44,4 +50,14 @@ test("root entries: 合成根保持完整，Display 按本地/连接镜头过滤
     ["info", "community", "tool", "browser", "mount.connected", "mount.shared"],
   )
   assert.equal(entries.length, CORE_FILE_ROOTS.length + 3, "过滤不能修改合成根目录")
+})
+
+test("file roots: database/git/audio routes target their mounted FileSystem roots", () => {
+  for (const id of ["database", "git", "audio"] as const) {
+    const surface = BUILTIN_APP_SURFACES[id]
+    assert.deepEqual(defaultFileForPath(`/${id}`), {
+      ref: surface.ref,
+      rootId: mountedFileRootId(surface.ref),
+    })
+  }
 })

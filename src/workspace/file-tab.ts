@@ -8,6 +8,7 @@ import {
 import { panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
 import type { ModuleId, Tab, TabDescriptor } from "./types"
 import { moduleForResource } from "./resource-tab"
+import { builtinAppSurfaceForRoot } from "./file-roots"
 
 export const FILE_ENGINE_TAB_KIND = "file-engine"
 
@@ -21,6 +22,8 @@ function moduleForFile(ref: FileRef): ModuleId {
   if (resource) return moduleForResource(resource)
   const panel = panelForFile(ref)
   if (panel) return panel.module as ModuleId
+  const appSurface = builtinAppSurfaceForRoot(ref)
+  if (appSurface) return appSurface.module
   return "home"
 }
 

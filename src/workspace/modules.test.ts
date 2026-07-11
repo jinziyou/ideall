@@ -3,6 +3,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { resourceKey, resourceQueryValue } from "@protocol/resource"
+import { parseFileEngineTabParams } from "./file-tab"
+import { BUILTIN_APP_SURFACES } from "./file-roots"
 import {
   descriptorForPath,
   descriptorForResource,
@@ -35,9 +37,14 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
   assert.deepEqual(browser?.params, {
     resource: resourceKey({ scheme: "browser", kind: "page", id: "default" }),
   })
-  assert.equal(descriptorForPath("/git")?.kind, "git")
-  assert.equal(descriptorForPath("/database")?.kind, "database")
-  assert.equal(descriptorForPath("/audio")?.kind, "audio")
+  for (const id of ["git", "database", "audio"] as const) {
+    const descriptor = descriptorForPath(`/${id}`)
+    assert.equal(descriptor?.kind, "file-engine")
+    assert.deepEqual(parseFileEngineTabParams(descriptor?.params), {
+      ref: BUILTIN_APP_SURFACES[id].ref,
+      engineId: BUILTIN_APP_SURFACES[id].engineId,
+    })
+  }
   assert.equal(descriptorForPath("/code")?.kind, "code")
   assert.equal(descriptorForPath("/trash")?.kind, "trash")
 })

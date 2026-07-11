@@ -1,3 +1,5 @@
+import { MAX_ENGINE_SUSPEND_SNAPSHOT_BYTES } from "../engine-suspension"
+
 export type FileDraftSnapshot = {
   base: string
   draft: string
@@ -25,12 +27,22 @@ export function readFileDraft(fileId: string): FileDraftSnapshot | null {
   }
 }
 
-export function writeFileDraft(fileId: string, draft: FileDraftSnapshot): void {
-  if (typeof sessionStorage === "undefined") return
+export function writeFileDraft(fileId: string, draft: FileDraftSnapshot): boolean {
+  if (typeof sessionStorage === "undefined") return false
   try {
-    sessionStorage.setItem(draftKey(fileId), JSON.stringify(draft))
+    const serialized = JSON.stringify(draft)
+    if (serialized.length > MAX_ENGINE_SUSPEND_SNAPSHOT_BYTES) {
+      sessionStorage.removeItem(draftKey(fileId))
+      return false
+    }
+    sessionStorage.setItem(draftKey(fileId), serialized)
+    return true
   } catch {
     // 配额满或隐私模式下放弃草稿持久化, 编辑器内存草稿仍在。
+    try {
+      sessionStorage.removeItem(draftKey(fileId))
+    } catch {}
+    return false
   }
 }
 

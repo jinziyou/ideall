@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { MODULES } from "./modules"
+import { parseFileEngineTabParams } from "./file-tab"
 import {
   isStaticTabKind,
   tabDefinitionLayout,
@@ -43,10 +44,16 @@ test("tab definitions: layout 与视图分类由 kind 单源推导", () => {
   assert.equal(tabDefinitionViewType("tool-search"), "panel")
 })
 
-test("workspace modules: 所有入口都是 Resource 文件或已注册静态 Tab", () => {
+test("workspace modules: 所有入口都是文件视图、Resource 兼容文件或已注册静态 Tab", () => {
   const missing = MODULES.flatMap((module) =>
     module.entries.filter(
-      (entry) => entry.descriptor.kind !== "resource" && !isStaticTabKind(entry.descriptor.kind),
+      (entry) =>
+        entry.descriptor.kind !== "resource" &&
+        !isStaticTabKind(entry.descriptor.kind) &&
+        !(
+          entry.descriptor.kind === "file-engine" &&
+          parseFileEngineTabParams(entry.descriptor.params) !== null
+        ),
     ),
   )
   assert.deepEqual(missing, [])

@@ -329,13 +329,3 @@ export function createInstalledAppsFileSystem(
 }
 
 export const installedAppsFileSystem = createInstalledAppsFileSystem()
-
-let mounted = false
-
-export function registerInstalledAppsFileSystem(
-  mount: (provider: FileSystemProvider) => void,
-): void {
-  if (mounted) return
-  mount(installedAppsFileSystem)
-  mounted = true
-}

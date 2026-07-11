@@ -20,8 +20,9 @@ import {
 import { resolveNodeResourceViewer, resourceLayout } from "./resource-engines"
 import { RESOURCE_TAB_KIND, nodeResourceRefForTab, parseResourceTabParams } from "./resource-tab"
 import type { ResourceRef } from "@protocol/resource"
-import type { FileRef, IdeallFile } from "@protocol/file-system"
-import { statFile, watchFile } from "@/filesystem/registry"
+import { sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
+import { getFileSystem, statFile, subscribeFileSystems, watchFile } from "@/filesystem/registry"
+import { AUDIO_LIBRARY_ROOT_REF } from "@/filesystem/builtin-app-roots"
 import { panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { engineRegistry } from "@/engines/builtin"
 import {
@@ -52,7 +53,11 @@ import { openTarget } from "./store"
 import { useActiveRootId, useWorkspaceKind } from "./store"
 import { writeStartupTarget } from "./startup-target"
 import NodeFileEngineToolbar from "./viewers/node-file-engine-toolbar"
+import GenericFileActionMenu from "./viewers/generic-file-action-menu"
 import { canOpenStandaloneWindow } from "./standalone-window-policy"
+import { audioManifest } from "@/plugins/audio/manifest"
+import { databaseManifest } from "@/plugins/database/manifest"
+import { gitManifest } from "@/plugins/git/manifest"
 
 // 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
 const FOLLOW_TYPES: SubscriptionType[] = ["publisher", "entity", "search", "peer"]
@@ -73,9 +78,6 @@ const ToolAi = React.lazy(() => import("@/modules/tool/ai-page"))
 const ToolNavigation = React.lazy(() => import("@/modules/tool/navigation-page"))
 const AppsPage = React.lazy(() => import("@/modules/apps/apps-page"))
 const ShellPage = React.lazy(() => import("@/plugins/shell/shell-page"))
-const GitPage = React.lazy(() => import("@/plugins/git/git-page"))
-const DatabasePage = React.lazy(() => import("@/plugins/database/database-page"))
-const AudioPage = React.lazy(() => import("@/plugins/audio/audio-page"))
 const CodePage = React.lazy(() => import("@/plugins/code/code-page"))
 const TrashPage = React.lazy(() => import("@/modules/home/trash/trash-page"))
 const BrowserView = React.lazy(() => import("./browser-view"))
@@ -89,10 +91,11 @@ const AudioFileEngine = React.lazy(() => import("./viewers/audio-file-engine"))
 const FileDirectoryEngine = React.lazy(() => import("./viewers/file-directory-engine"))
 const GenericCodeEngine = React.lazy(() => import("./viewers/generic-code-engine"))
 const GenericPreviewEngine = React.lazy(() => import("./viewers/generic-preview-engine"))
+const InstalledAppEngine = React.lazy(() => import("./viewers/installed-app-engine"))
 
 type Entry = { render: (tab: Tab) => React.ReactNode }
 
-const REGISTRY: Record<StaticTabKind, Entry> = {
+const REGISTRY: Partial<Record<StaticTabKind, Entry>> = {
   "home-overview": { render: () => <Overview /> },
   "home-notes": { render: () => <NotesManager /> },
   subscriptions: {
@@ -114,9 +117,8 @@ const REGISTRY: Record<StaticTabKind, Entry> = {
   "tool-navigation": { render: () => <ToolNavigation /> },
   apps: { render: () => <AppsPage /> },
   shell: { render: () => <ShellPage /> },
-  git: { render: () => <GitPage /> },
-  database: { render: () => <DatabasePage /> },
-  audio: { render: () => <AudioPage /> },
+  // git/database/audio 仅保留在 TAB_DEFINITIONS 识别旧快照；运行态入口已经迁移到
+  // 各自 App FileSystem 的真实 root，由对应 File Engine renderer 处理。
   code: { render: () => <CodePage /> },
   trash: { render: () => <TrashPage /> },
   "browser-view": { render: () => <BrowserView /> },
@@ -159,6 +161,9 @@ function renderPanelFile(file: IdeallFile): React.ReactNode {
     return <div className="p-6 text-sm text-muted-foreground">无法打开此系统文件</div>
   }
   const entry = REGISTRY[panel.tabKind]
+  if (!entry) {
+    return <div className="p-6 text-sm text-muted-foreground">无法打开此系统文件</div>
+  }
   const tab: Tab = {
     id: `panel:${panel.id}`,
     kind: panel.tabKind,
@@ -226,17 +231,17 @@ export function registerBuiltInFileEngineRenderers(
   registerRenderer(registry, "ideall.thread", nodeRenderer("thread"))
   registerRenderer(registry, "ideall.directory", ({ file }) => <FileDirectoryEngine file={file} />)
   registerRenderer(registry, "ideall.audio", ({ file }) =>
-    file.properties?.tabKind === "audio" ? <AudioPage /> : <AudioFileEngine file={file} />,
+    sameFileRef(file.ref, AUDIO_LIBRARY_ROOT_REF) ? (
+      audioManifest.renderLibraryRoot()
+    ) : (
+      <AudioFileEngine file={file} />
+    ),
   )
-  registerRenderer(registry, "ideall.database", ({ file }) => {
-    const tableId =
-      typeof file.properties?.tableId === "string" ? file.properties.tableId : undefined
-    return <DatabasePage initialTableId={tableId} />
-  })
-  registerRenderer(registry, "ideall.git", ({ file }) => {
-    const path = typeof file.properties?.path === "string" ? file.properties.path : undefined
-    return <GitPage initialRepoPath={path} />
-  })
+  registerRenderer(registry, "ideall.installed-app", ({ file }) => (
+    <InstalledAppEngine file={file} />
+  ))
+  registerRenderer(registry, "ideall.database", databaseManifest.renderEngine)
+  registerRenderer(registry, "ideall.git", gitManifest.renderEngine)
   registerRenderer(registry, "ideall.shell", () => <ShellPage />)
   registerRenderer(registry, "ideall.browser", ({ file, descriptor }) => {
     const resource = resourceRefForFile(file.ref)
@@ -431,6 +436,13 @@ export function FileEngineContent({
   const [file, setFile] = React.useState<IdeallFile | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const { fileSystemId, fileId } = refValue
+  // registry 用全局通知即可，但 snapshot 取当前 provider 对象：无关挂载变化时 Object.is
+  // 保持相同，不会清空所有 Engine 子树；同 id 卸载/重装时对象变化才重新 stat/watch。
+  const providerSnapshot = React.useSyncExternalStore(
+    subscribeFileSystems,
+    () => getFileSystem(fileSystemId),
+    () => getFileSystem(fileSystemId),
+  )
   const legacyResource = resourceRefForFile(refValue)
   const missingMessage =
     legacyResource?.scheme === "node" && legacyResource.kind === "file"
@@ -479,7 +491,7 @@ export function FileEngineContent({
       alive = false
       watchHandle?.dispose()
     }
-  }, [fileId, fileSystemId, missingMessage])
+  }, [fileId, fileSystemId, missingMessage, providerSnapshot])
 
   if (error) {
     return <div className="p-6 text-sm text-destructive">{error}</div>
@@ -509,7 +521,10 @@ export function FileEngineContent({
           <h1 className="min-w-0 truncate text-xs font-normal text-muted-foreground">
             {file.name}
           </h1>
-          <EnginePicker file={file} engineId={engineId} />
+          <div className="flex shrink-0 items-center gap-1">
+            <GenericFileActionMenu file={file} />
+            <EnginePicker file={file} engineId={engineId} />
+          </div>
         </div>
       )}
       <div className="min-h-0 flex-1">
@@ -564,33 +579,11 @@ function renderConnectedResource(ref: ResourceRef): React.ReactNode {
   return <div className="p-6 text-sm text-muted-foreground">无法打开此资源</div>
 }
 
-function renderResourceTab(tab: Tab): React.ReactNode {
-  const ref = parseResourceTabParams(tab.params)
-  if (!ref) {
-    return <div className="p-6 text-sm text-muted-foreground">无法打开此资源（{tab.id}）</div>
-  }
-  if (ref.scheme === "node") return renderNodeResource(ref)
-  return <React.Suspense fallback={Spinner}>{renderConnectedResource(ref)}</React.Suspense>
-}
-
 function renderTabBody(tab: Tab): React.ReactNode {
   if (tab.kind === FILE_ENGINE_TAB_KIND) return renderFileEngineTab(tab)
-  if (tab.kind === RESOURCE_TAB_KIND) return renderResourceTab(tab)
-
-  // 节点级标签 (一切皆标签): params={kind,id} → 解析 NodeRef → 查节点查看器 → <Comp nodeId/>。
-  if (tab.kind === "node") {
-    const resourceRef = nodeResourceRefForTab(tab)
-    if (!resourceRef) {
-      return <div className="p-6 text-sm text-muted-foreground">无法打开此内容（{tab.id}）</div>
-    }
-    return renderNodeResource(resourceRef)
-  }
-
-  const entry = isStaticTabKind(tab.kind) ? REGISTRY[tab.kind] : undefined
-  if (!entry) {
-    return <div className="p-6 text-sm text-muted-foreground">未知的标签类型：{tab.kind}</div>
-  }
-  return <React.Suspense fallback={Spinner}>{entry.render(tab)}</React.Suspense>
+  // 旧 static/resource/node descriptor 只允许在 store 水合/打开边界迁移；Display 不再保留
+  // 第二套直接渲染路径。命中这里表示调用方绕过了 openTarget/migrateWorkspaceTab。
+  return <div className="p-6 text-sm text-muted-foreground">标签尚未规范为文件视图：{tab.kind}</div>
 }
 
 export function TabContent({ tab }: { tab: Tab }) {

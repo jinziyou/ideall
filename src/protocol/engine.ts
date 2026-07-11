@@ -5,6 +5,12 @@ export type EngineLayout = "padded" | "fill"
 
 export type EngineAccess = "read-only" | "read-write"
 
+/**
+ * serializable 表示 renderer 能把完整未保存状态写入有界会话快照、恢复后继续编辑，并且只有
+ * 快照成功后才把标签标为 suspend-ready。缺省表示不能安全休眠，dirty 标签必须继续保持挂载。
+ */
+export type EngineSuspension = "serializable"
+
 export type EngineMatchPropertyValue = string | number | boolean | null
 
 export type EngineMatcher = Readonly<{
@@ -26,6 +32,7 @@ export type EngineDescriptor = Readonly<{
   priority?: number
   layout: EngineLayout
   access: EngineAccess
+  suspension?: EngineSuspension
   supportsStandaloneWindow?: boolean
   iconHint?: string
 }>

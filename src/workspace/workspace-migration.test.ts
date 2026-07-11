@@ -1,9 +1,11 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { resourceKey } from "@protocol/resource"
+import { fileRefKey } from "@protocol/file-system"
 import { parseFileEngineTabParams } from "./file-tab"
 import { migrateWorkspaceTab, migrateWorkspaceTabs } from "./store"
 import type { Tab } from "./types"
+import { BUILTIN_APP_SURFACES, mountedFileRootId } from "./file-roots"
 
 test("workspace migration: legacy node and resource tabs become file + engine tabs", () => {
   const legacyNode: Tab = {
@@ -118,4 +120,38 @@ test("workspace migration: legacy static panels and AI tasks become file-engine 
     engineId: "ideall.panel-fill",
   })
   assert.equal(tasks?.rootId, "workspace")
+})
+
+test("workspace migration: legacy app panels become their real FileSystem roots", () => {
+  for (const id of ["database", "git", "audio"] as const) {
+    const surface = BUILTIN_APP_SURFACES[id]
+    const legacyStatic = migrateWorkspaceTab({
+      id,
+      kind: id,
+      module: surface.module,
+      title: id,
+    })
+    assert.deepEqual(parseFileEngineTabParams(legacyStatic?.params), {
+      ref: surface.ref,
+      engineId: surface.engineId,
+    })
+    assert.equal(legacyStatic?.rootId, mountedFileRootId(surface.ref))
+
+    const legacyFileEngine = migrateWorkspaceTab({
+      id: `file-engine:${id}`,
+      kind: "file-engine",
+      module: surface.module,
+      title: id,
+      params: {
+        file: fileRefKey({ fileSystemId: "ideall.core", fileId: `panel:${id}` }),
+        engine: surface.engineId,
+      },
+      rootId: "system",
+    })
+    assert.deepEqual(parseFileEngineTabParams(legacyFileEngine?.params), {
+      ref: surface.ref,
+      engineId: surface.engineId,
+    })
+    assert.equal(legacyFileEngine?.rootId, mountedFileRootId(surface.ref))
+  }
 })

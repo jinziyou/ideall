@@ -12,6 +12,7 @@ import {
   promoteActiveTab,
   toggleModule,
   toggleFileRoot,
+  toggleMountedFileRoot,
   setMode,
   setWorkspaceKind,
   setDevelopmentTool,
@@ -51,6 +52,10 @@ import { parseFileEngineTabParams } from "./file-tab"
 import { resourceTab } from "./resource-tab"
 import { registerBuiltInFileSystems } from "@/filesystem/builtin"
 import { aiTasksPanelFileRef } from "@/filesystem/resource-file-system"
+import { registerFileSystem } from "@/filesystem/registry"
+import { FileSystemError, type FileSystemProvider } from "@/filesystem/types"
+import { AUDIO_LIBRARY_ROOT_REF } from "@/filesystem/builtin-app-roots"
+import { mountedFileRootId } from "./file-roots"
 
 registerBuiltInEngines()
 registerBuiltInFileSystems()
@@ -483,6 +488,182 @@ test("工作区种类正交切换，不改变标签、数据镜头或文件根",
   setWorkspaceKind("files")
 })
 
+test("切换工作区为当前 FileRef 激活场景 Engine，并保留原 Engine 标签", async () => {
+  closeAllTabs()
+  setWorkspaceKind("files")
+  const ref = { fileSystemId: "test.workspace-scenario", fileId: "readme" }
+  const file = {
+    ref,
+    kind: "file" as const,
+    name: "readme.txt",
+    mediaType: "text/plain",
+    capabilities: ["read" as const],
+    source: { kind: "local" as const, id: "test" },
+  }
+  const provider: FileSystemProvider = {
+    descriptor: {
+      fileSystemId: ref.fileSystemId,
+      name: "Workspace scenario fixture",
+      root: { fileSystemId: ref.fileSystemId, fileId: "root" },
+      source: file.source,
+    },
+    async stat(target) {
+      return target.fileId === ref.fileId ? file : null
+    },
+    async readDirectory() {
+      return { entries: [] }
+    },
+    async read(target) {
+      throw new FileSystemError("unsupported", "fixture has no content", target)
+    },
+    async write(target) {
+      throw new FileSystemError("unsupported", "fixture is read-only", target)
+    },
+    async actions() {
+      return []
+    },
+    async invoke(target) {
+      throw new FileSystemError("unsupported", "fixture has no actions", target)
+    },
+  }
+  const unregister = registerFileSystem(provider)
+  try {
+    openTarget({ type: "file", ref, file, transient: true })
+    assert.equal(parseFileEngineTabParams(getTabs().at(-1)?.params)?.engineId, "ideall.preview")
+    const previewId = getActiveId()
+    assert.equal(getTransientId(), previewId)
+
+    setWorkspaceKind("development")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    assert.equal(parseFileEngineTabParams(getTabs().at(-1)?.params)?.engineId, "ideall.code")
+    assert.ok(
+      getTabs().some((tab) => tab.id === previewId),
+      "场景切换不能替换活动预览标签",
+    )
+    assert.equal(getTransientId(), previewId, "原预览槽保留，新场景标签按显式导航打开")
+    assert.deepEqual(
+      getTabs()
+        .map((tab) => parseFileEngineTabParams(tab.params))
+        .filter((target) => target?.ref.fileSystemId === ref.fileSystemId)
+        .map((target) => target?.engineId)
+        .sort(),
+      ["ideall.code", "ideall.preview"],
+    )
+  } finally {
+    setWorkspaceKind("files")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    closeAllTabs()
+    unregister()
+  }
+})
+
+test("同步导航或后发文件打开都会取消旧的慢 stat，避免抢回焦点", async () => {
+  closeAllTabs()
+  setWorkspaceKind("files")
+  let releaseSlow: (() => void) | undefined
+  const slowGate = new Promise<void>((resolve) => {
+    releaseSlow = resolve
+  })
+  const fileFor = (fileId: string) => ({
+    ref: { fileSystemId: "test.workspace-race", fileId },
+    kind: "file" as const,
+    name: `${fileId}.txt`,
+    mediaType: "text/plain",
+    capabilities: ["read" as const],
+    source: { kind: "local" as const, id: "test" },
+  })
+  const provider: FileSystemProvider = {
+    descriptor: {
+      fileSystemId: "test.workspace-race",
+      name: "Workspace race fixture",
+      root: { fileSystemId: "test.workspace-race", fileId: "root" },
+      source: { kind: "local", id: "test" },
+    },
+    async stat(ref) {
+      if (ref.fileId === "slow") await slowGate
+      return ref.fileId === "slow" || ref.fileId === "fast" ? fileFor(ref.fileId) : null
+    },
+    async readDirectory() {
+      return { entries: [] }
+    },
+    async read(ref) {
+      throw new FileSystemError("unsupported", "fixture has no content", ref)
+    },
+    async write(ref) {
+      throw new FileSystemError("unsupported", "fixture is read-only", ref)
+    },
+    async actions() {
+      return []
+    },
+    async invoke(ref) {
+      throw new FileSystemError("unsupported", "fixture has no actions", ref)
+    },
+  }
+  const baseStat = provider.stat.bind(provider)
+  const unregister = registerFileSystem(provider)
+  try {
+    openTarget({ type: "file", ref: fileFor("slow").ref })
+    setWorkspaceKind("development")
+    releaseSlow?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(
+      getTabs().some((tab) => parseFileEngineTabParams(tab.params)?.ref.fileId === "slow"),
+      false,
+      "工作区切换取消此前的慢文件请求",
+    )
+
+    closeAllTabs()
+    setWorkspaceKind("files")
+    openTarget({ type: "file", ref: fileFor("fast").ref })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const fastId = getActiveId()!
+    let releaseActivation: (() => void) | undefined
+    const activationGate = new Promise<void>((resolve) => {
+      releaseActivation = resolve
+    })
+    provider.stat = async (ref, ctx) => {
+      if (ref.fileId === "slow") await activationGate
+      return baseStat(ref, ctx)
+    }
+    openTarget({ type: "file", ref: fileFor("slow").ref })
+    setActiveTab(fastId)
+    releaseActivation?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(getActiveId(), fastId)
+    assert.equal(
+      getTabs().some((tab) => parseFileEngineTabParams(tab.params)?.ref.fileId === "slow"),
+      false,
+      "显式激活已有标签取消慢文件请求",
+    )
+
+    let releaseOlder: (() => void) | undefined
+    const olderGate = new Promise<void>((resolve) => {
+      releaseOlder = resolve
+    })
+    provider.stat = async (ref, ctx) => {
+      if (ref.fileId === "slow") await olderGate
+      return baseStat(ref, ctx)
+    }
+    openTarget({ type: "file", ref: fileFor("slow").ref })
+    openTarget({ type: "file", ref: fileFor("fast").ref })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    releaseOlder?.()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(parseFileEngineTabParams(getTabs().at(-1)?.params)?.ref.fileId, "fast")
+    assert.equal(
+      getTabs().some((tab) => parseFileEngineTabParams(tab.params)?.ref.fileId === "slow"),
+      false,
+    )
+  } finally {
+    releaseSlow?.()
+    setWorkspaceKind("files")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    closeAllTabs()
+    unregister()
+  }
+})
+
 test("openTab / setActiveTab 不翻镜头, 也不污染当前镜头侧栏模块", () => {
   closeAllTabs()
   setMode("local")
@@ -547,6 +728,60 @@ test("toggleFileRoot 显式选择另一镜头的根时同步 mode，跨模式根
   assert.equal(getMode(), "local")
   assert.equal(getActiveRootId(), "home")
   await new Promise((resolve) => setTimeout(resolve, 0))
+})
+
+test("toggleMountedFileRoot opens a mounted app's real root through its semantic engine", async () => {
+  closeAllTabs()
+  toggleFileRoot("home")
+  const provider: FileSystemProvider = {
+    descriptor: {
+      fileSystemId: AUDIO_LIBRARY_ROOT_REF.fileSystemId,
+      name: "Audio root fixture",
+      root: AUDIO_LIBRARY_ROOT_REF,
+      source: { kind: "app", id: "audio" },
+    },
+    async stat(ref) {
+      return ref.fileId === AUDIO_LIBRARY_ROOT_REF.fileId
+        ? {
+            ref,
+            kind: "directory",
+            name: "音频库",
+            mediaType: "application/vnd.ideall.audio.library+json",
+            capabilities: ["read-directory", "read"],
+            source: { kind: "app", id: "audio" },
+          }
+        : null
+    },
+    async readDirectory() {
+      return { entries: [] }
+    },
+    async read(ref) {
+      throw new FileSystemError("unsupported", "fixture has no content", ref)
+    },
+    async write(ref) {
+      throw new FileSystemError("unsupported", "fixture is read-only", ref)
+    },
+    async actions() {
+      return []
+    },
+    async invoke(ref) {
+      throw new FileSystemError("unsupported", "fixture has no actions", ref)
+    },
+  }
+  const unregister = registerFileSystem(provider)
+  try {
+    toggleMountedFileRoot(AUDIO_LIBRARY_ROOT_REF)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
+      ref: AUDIO_LIBRARY_ROOT_REF,
+      engineId: "ideall.audio",
+    })
+    assert.equal(getActiveRootId(), mountedFileRootId(AUDIO_LIBRARY_ROOT_REF))
+    assert.equal(getActiveModule(), "audio")
+  } finally {
+    closeAllTabs()
+    unregister()
+  }
 })
 
 test("closeTab: 焦点转移不翻镜头, activeModule 收束到当前镜头", () => {

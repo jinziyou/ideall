@@ -12,12 +12,18 @@ import {
   acceptExternalTextDraft,
   createTextDraftDocument,
   editTextDraft,
+  isTextDraftDocument,
   markTextDraftSaved,
   reconcileTextDraft,
 } from "../file-engine-data"
 import { fileEngineTab } from "../file-tab"
-import { promoteTab, setTabDirty, tabKey } from "../store"
+import { promoteTab, setTabDirty, setTabSuspendReady, tabKey } from "../store"
 import { useTabActive } from "../tab-active-context"
+import {
+  clearEngineSuspendSnapshot,
+  readEngineSuspendSnapshot,
+  writeEngineSuspendSnapshot,
+} from "../engine-suspension"
 
 const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
   ssr: false,
@@ -52,12 +58,19 @@ export default function GenericCodeEngine({
   const tabId = tabKey(fileEngineTab(file, engineId))
   const { fileSystemId, fileId } = file.ref
   const ref = React.useMemo(() => ({ fileSystemId, fileId }), [fileId, fileSystemId])
-  const [document, setDocument] = React.useState(() =>
-    createTextDraftDocument({ fileKey, text: "", version: file.version }),
+  const [document, setDocument] = React.useState(
+    () =>
+      readEngineSuspendSnapshot({
+        tabId,
+        engineId,
+        fileKey,
+        validate: isTextDraftDocument,
+      }) ?? createTextDraftDocument({ fileKey, text: "", version: file.version }),
   )
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [suspendReady, setSuspendReady] = React.useState(false)
   const loadedFileKey = React.useRef<string | null>(null)
   const writable = !readOnly && file.capabilities.includes("write")
   const dirty = document.fileKey === fileKey && document.draft !== document.base
@@ -110,6 +123,29 @@ export default function GenericCodeEngine({
     setTabDirty(tabId, dirty)
   }, [dirty, tabId])
 
+  React.useEffect(() => {
+    if (!dirty) {
+      clearEngineSuspendSnapshot(tabId)
+      setTabSuspendReady(tabId, false)
+      setSuspendReady(false)
+      return
+    }
+    // 输入期间先撤销 ready，避免 TabHost 在快照落后于编辑器时卸载；短暂空闲后再同步序列化。
+    setTabSuspendReady(tabId, false)
+    setSuspendReady(false)
+    const timer = window.setTimeout(() => {
+      const ready = writeEngineSuspendSnapshot({
+        tabId,
+        engineId,
+        fileKey,
+        payload: document,
+      })
+      setTabSuspendReady(tabId, ready)
+      setSuspendReady(ready)
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [dirty, document, engineId, fileKey, tabId])
+
   const save = React.useCallback(async () => {
     if (!writable || !dirty || saving) return
     const savedDraft = document.draft
@@ -135,16 +171,6 @@ export default function GenericCodeEngine({
       setSaving(false)
     }
   }, [dirty, document.draft, document.version, file.mediaType, fileKey, ref, saving, writable])
-
-  React.useEffect(() => {
-    if (!dirty) return
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ""
-    }
-    window.addEventListener("beforeunload", onBeforeUnload)
-    return () => window.removeEventListener("beforeunload", onBeforeUnload)
-  }, [dirty])
 
   React.useEffect(() => {
     if (!active || !writable) return
@@ -184,7 +210,9 @@ export default function GenericCodeEngine({
             ? "外部版本已更新，草稿已保留"
             : writable
               ? dirty
-                ? "未保存"
+                ? suspendReady
+                  ? "未保存 · 可安全休眠"
+                  : "未保存 · 草稿过大或暂存不可用，将保持运行"
                 : "已保存"
               : "只读"}
         </span>

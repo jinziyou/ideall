@@ -30,6 +30,21 @@ test("builtin engines: audio and source files resolve to scenario engines", () =
   )
 })
 
+test("builtin engines: app FileSystem roots resolve to their semantic engines", () => {
+  registerBuiltInEngines()
+  for (const [mediaType, engineId] of [
+    ["application/vnd.ideall.audio.library+json", "ideall.audio"],
+    ["application/vnd.ideall.database.workspace+json", "ideall.database"],
+    ["application/vnd.ideall.git.repositories+json", "ideall.git"],
+  ] as const) {
+    const properties = engineId === "ideall.git" ? { git: true } : {}
+    assert.equal(
+      engineRegistry.resolve(file(mediaType, "directory", properties))?.descriptor.engineId,
+      engineId,
+    )
+  }
+})
+
 test("builtin engines: user media-type preference overrides scenario priority", () => {
   registerBuiltInEngines()
   const preferences = withMediaTypeEnginePreference(
@@ -71,6 +86,16 @@ test("builtin engines: semantic panel JSON is not captured by the code engine", 
     engineRegistry.resolve(file("application/vnd.ideall.audio+json"))?.descriptor.engineId,
     "ideall.audio",
   )
+  assert.equal(
+    engineRegistry.resolve(file("application/vnd.ideall.installed-app+json"))?.descriptor.engineId,
+    "ideall.installed-app",
+  )
+  assert.deepEqual(
+    engineRegistry
+      .matching(file("application/vnd.ideall.installed-app+json"))
+      .map(({ descriptor }) => descriptor.engineId),
+    ["ideall.installed-app", "ideall.preview"],
+  )
   assert.deepEqual(
     engineRegistry
       .matching(file("application/vnd.ideall.database+json"))
@@ -91,6 +116,7 @@ test("builtin engines: privileged main-window viewers cannot be opened standalon
     "ideall.git",
     "ideall.shell",
     "ideall.connected",
+    "ideall.installed-app",
     "ideall.panel",
     "ideall.panel-fill",
   ]) {
@@ -98,4 +124,11 @@ test("builtin engines: privileged main-window viewers cannot be opened standalon
   }
   assert.equal(engineRegistry.get("ideall.code")?.supportsStandaloneWindow, true)
   assert.equal(engineRegistry.get("ideall.preview")?.supportsStandaloneWindow, true)
+})
+
+test("builtin engines: editable text renderers declare serializable suspension", () => {
+  registerBuiltInEngines()
+  assert.equal(engineRegistry.get("ideall.code")?.suspension, "serializable")
+  assert.equal(engineRegistry.get("ideall.preview")?.suspension, "serializable")
+  assert.equal(engineRegistry.get("ideall.shell")?.suspension, undefined)
 })

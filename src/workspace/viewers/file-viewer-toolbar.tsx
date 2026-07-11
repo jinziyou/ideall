@@ -101,7 +101,13 @@ export default function FileViewerToolbar<TFile extends FileToolbarFile>({
             <span>{file.type || type.label}</span>
             {capability && <span>{capability}</span>}
             {dirty && <span className="text-amber-600">未保存</span>}
-            {dirty && <span>草稿已暂存{draftSavedAt ? ` · ${formatTime(draftSavedAt)}` : ""}</span>}
+            {dirty && (
+              <span>
+                {draftSavedAt
+                  ? `草稿已暂存 · ${formatTime(draftSavedAt)}`
+                  : "草稿暂存不可用，标签将保持运行"}
+              </span>
+            )}
             {displayTags.map((tag) => (
               <span key={tag} className="rounded bg-muted px-1.5 py-0.5">
                 #{tag}

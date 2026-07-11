@@ -21,6 +21,11 @@ import {
 import type { ResourceRef } from "@protocol/resource"
 import type { ModuleId, WsMode } from "./types"
 import { corePlaceRef, panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
+import {
+  AUDIO_LIBRARY_ROOT_REF,
+  DATABASE_ROOT_REF,
+  GIT_ROOT_REF,
+} from "@/filesystem/builtin-app-roots"
 
 /**
  * 合成文件系统根目录的直接子树。根本身不进入活动栏；这些目录就是桌面端的
@@ -57,6 +62,36 @@ const CONNECTED_MODE: readonly WsMode[] = ["connected"]
 const ALL_MODES: readonly WsMode[] = ["local", "connected"]
 
 const resource = (ref: ResourceRef) => resourceFileRef(ref)
+
+export type BuiltinAppSurfaceId = "audio" | "database" | "git"
+
+export const BUILTIN_APP_SURFACES: Readonly<
+  Record<BuiltinAppSurfaceId, Readonly<{ ref: FileRef; engineId: string; module: ModuleId }>>
+> = {
+  audio: { ref: AUDIO_LIBRARY_ROOT_REF, engineId: "ideall.audio", module: "audio" },
+  database: { ref: DATABASE_ROOT_REF, engineId: "ideall.database", module: "database" },
+  git: { ref: GIT_ROOT_REF, engineId: "ideall.git", module: "git" },
+}
+
+export function builtinAppSurfaceForRoot(
+  ref: FileRef,
+): (typeof BUILTIN_APP_SURFACES)[BuiltinAppSurfaceId] | null {
+  return (
+    Object.values(BUILTIN_APP_SURFACES).find(
+      (surface) =>
+        surface.ref.fileSystemId === ref.fileSystemId && surface.ref.fileId === ref.fileId,
+    ) ?? null
+  )
+}
+
+/** 旧 ideall.core/panel:* 仅作为入口别名；新标签身份永远使用 App FileSystem root。 */
+export function builtinAppSurfaceForLegacyPanel(
+  ref: FileRef,
+): (typeof BUILTIN_APP_SURFACES)[BuiltinAppSurfaceId] | null {
+  if (ref.fileSystemId !== "ideall.core" || !ref.fileId.startsWith("panel:")) return null
+  const id = ref.fileId.slice("panel:".length)
+  return id === "audio" || id === "database" || id === "git" ? BUILTIN_APP_SURFACES[id] : null
+}
 
 export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
   {
@@ -236,9 +271,7 @@ export function fileRootRef(rootId: string): FileRef | null {
     : null
 }
 
-export function defaultFileForPath(
-  pathname: string,
-): { ref: FileRef; rootId: CoreFileRootId } | null {
+export function defaultFileForPath(pathname: string): { ref: FileRef; rootId: string } | null {
   if (pathname.startsWith("/home/settings")) {
     return { ref: panelFileRef("settings"), rootId: "system" }
   }
@@ -285,7 +318,13 @@ export function defaultFileForPath(
   if (pathname.startsWith("/tool")) {
     return { ref: resource({ scheme: "tool", kind: "search", id: "default" }), rootId: "tool" }
   }
-  const systemPanel = (["shell", "git", "database", "audio", "code", "trash"] as const).find((id) =>
+  for (const id of ["audio", "database", "git"] as const) {
+    if (pathname.startsWith(`/${id}`)) {
+      const surface = BUILTIN_APP_SURFACES[id]
+      return { ref: surface.ref, rootId: mountedFileRootId(surface.ref) }
+    }
+  }
+  const systemPanel = (["shell", "code", "trash"] as const).find((id) =>
     pathname.startsWith(`/${id}`),
   )
   return systemPanel ? { ref: panelFileRef(systemPanel), rootId: "system" } : null

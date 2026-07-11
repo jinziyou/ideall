@@ -3,12 +3,22 @@ import type { ComponentType } from "react"
 import { MODULE_META } from "./module-meta"
 import { tabDescriptor } from "./tab-definitions"
 import type { TabDescriptor } from "./types"
+import { fileEngineTab } from "./file-tab"
+import { BUILTIN_APP_SURFACES, mountedFileRootId } from "./file-roots"
 
 export type PluginEntry = {
   id: string
   label: string
   icon: ComponentType<{ className?: string }>
   descriptor: TabDescriptor
+}
+
+function appSurfaceDescriptor(id: keyof typeof BUILTIN_APP_SURFACES, name: string): TabDescriptor {
+  const surface = BUILTIN_APP_SURFACES[id]
+  return fileEngineTab({ ref: surface.ref, name }, surface.engineId, {
+    module: surface.module,
+    rootId: mountedFileRootId(surface.ref),
+  })
 }
 
 export const PLUGIN_ENTRIES: PluginEntry[] = [
@@ -22,19 +32,19 @@ export const PLUGIN_ENTRIES: PluginEntry[] = [
     id: "git",
     label: MODULE_META.git.label,
     icon: MODULE_META.git.icon,
-    descriptor: tabDescriptor("git"),
+    descriptor: appSurfaceDescriptor("git", MODULE_META.git.label),
   },
   {
     id: "database",
     label: MODULE_META.database.label,
     icon: MODULE_META.database.icon,
-    descriptor: tabDescriptor("database"),
+    descriptor: appSurfaceDescriptor("database", MODULE_META.database.label),
   },
   {
     id: "audio",
     label: MODULE_META.audio.label,
     icon: MODULE_META.audio.icon,
-    descriptor: tabDescriptor("audio"),
+    descriptor: appSurfaceDescriptor("audio", MODULE_META.audio.label),
   },
   {
     id: "code",

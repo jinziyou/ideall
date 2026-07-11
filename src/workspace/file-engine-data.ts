@@ -21,6 +21,27 @@ export type TextDraftDocument = {
   pendingExternal?: Omit<TextDraftSnapshot, "fileKey">
 }
 
+export function isTextDraftDocument(value: unknown): value is TextDraftDocument {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false
+  const document = value as Partial<TextDraftDocument>
+  if (
+    typeof document.fileKey !== "string" ||
+    typeof document.base !== "string" ||
+    typeof document.draft !== "string" ||
+    (document.version !== undefined && typeof document.version !== "string")
+  ) {
+    return false
+  }
+  const pending = document.pendingExternal
+  return (
+    pending === undefined ||
+    (pending !== null &&
+      typeof pending === "object" &&
+      typeof pending.text === "string" &&
+      (pending.version === undefined || typeof pending.version === "string"))
+  )
+}
+
 export function createTextDraftDocument(snapshot: TextDraftSnapshot): TextDraftDocument {
   return {
     fileKey: snapshot.fileKey,

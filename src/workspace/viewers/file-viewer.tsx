@@ -11,7 +11,14 @@ import { fileTypeInfo } from "@/lib/format"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { useFilePreview, FilePreviewBox } from "@/modules/home/resources/file-preview"
 import { resourceTab } from "../resource-tab"
-import { promoteActiveTab, renameNodeTab, setTabDirty, tabKey, useTabs } from "../store"
+import {
+  promoteActiveTab,
+  renameNodeTab,
+  setTabDirty,
+  setTabSuspendReady,
+  tabKey,
+  useTabs,
+} from "../store"
 import { useTabActive } from "../tab-active-context"
 import { useFileActions } from "../use-file-actions"
 import { clearFileDraft, readFileDraft, writeFileDraft } from "./file-draft"
@@ -142,28 +149,20 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     if (!file || !editable || preview.text === null) return
     if (dirty) {
       const now = Date.now()
-      writeFileDraft(file.id, {
+      const ready = writeFileDraft(file.id, {
         base: preview.text,
         draft,
         fileName: displayName,
         updatedAt: now,
       })
-      setDraftSavedAt(now)
+      setTabSuspendReady(tabId, ready)
+      setDraftSavedAt(ready ? now : null)
     } else {
       clearFileDraft(file.id)
+      setTabSuspendReady(tabId, false)
       setDraftSavedAt(null)
     }
-  }, [dirty, displayName, draft, editable, file, preview.text])
-
-  React.useEffect(() => {
-    if (!dirty) return
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      e.preventDefault()
-      e.returnValue = ""
-    }
-    window.addEventListener("beforeunload", onBeforeUnload)
-    return () => window.removeEventListener("beforeunload", onBeforeUnload)
-  }, [dirty])
+  }, [dirty, displayName, draft, editable, file, preview.text, tabId])
 
   const handleModeChange = React.useCallback((next: FileViewerMode) => {
     if (next === "edit") promoteActiveTab()

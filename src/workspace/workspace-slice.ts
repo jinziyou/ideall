@@ -19,6 +19,8 @@ export type WorkspaceState = {
   rightPanelOpen: boolean
   lru: string[]
   dirtyTabs: string[]
+  /** dirty Engine 已成功写入可恢复快照，可安全按 LRU 卸载。 */
+  suspendReadyTabs: string[]
   hydrated: boolean
   /** 显式路由正在解析 FileRef；URL 镜像在完成前不得回写旧活动标签。 */
   routeOpenPending: boolean
@@ -38,6 +40,7 @@ export const workspaceInitialState: WorkspaceState = {
   rightPanelOpen: false,
   lru: [],
   dirtyTabs: [],
+  suspendReadyTabs: [],
   hydrated: false,
   routeOpenPending: false,
 }
@@ -54,6 +57,7 @@ function applyDerivedAfterPatch(
     const ids = new Set(state.tabs.map((t) => t.id))
     state.lru = state.lru.filter((id) => ids.has(id))
     state.dirtyTabs = state.dirtyTabs.filter((id) => ids.has(id))
+    state.suspendReadyTabs = state.suspendReadyTabs.filter((id) => ids.has(id))
   }
 }
 
