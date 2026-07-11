@@ -129,20 +129,17 @@ export type NewNote = {
 }
 
 /**
- * 「我的」本地数据端口 —— core 实现 (包装 IndexedDB stores), 经 protocol 暴露给 plugin。
- * agent 插件经此读写用户的关注 / 书签 / 收藏夹 / 资源, 而非直接依赖 core 存储 (依赖反转)。
+ * 「我的」兼容领域端口 —— core 实现经 FileSystem registry 访问稳定 FileRef，再由 provider
+ * 分派到实际存储。agent/embed 可暂时沿用领域 DTO，而不绕过统一文件访问通路。
+ * tombstone 全量读与原子 bulk 写不属于本端口，独立收口在 StorageSyncPort。
  */
 export interface FilesPort {
   // 关注
   /** 列出活跃关注 (过滤软删除标记)。UI / 插件读路径。 */
   listSubscriptions(): Promise<Subscription[]>
-  /** 列出全部关注含删除标记 —— 跨端同步合并用 (删除标记须进合并/上传才能传播删除)。 */
-  listAllSubscriptions(): Promise<Subscription[]>
   addSubscription(input: NewSubscription): Promise<Subscription>
   removeSubscription(type: SubscriptionType, key: string): Promise<void>
   isSubscribed(type: SubscriptionType, key: string): Promise<boolean>
-  /** 跨端同步落地: 写入合并 + GC 后的完整数据, 并物理清除集合外的过期删除标记 (一次事务批处理)。 */
-  bulkPutSubscriptions(subs: Subscription[]): Promise<void>
   // 书签 / 收藏夹
   listBookmarks(): Promise<Bookmark[]>
   addBookmark(input: NewBookmark): Promise<Bookmark>
@@ -159,10 +156,6 @@ export interface FilesPort {
   getNote(id: string): Promise<Note | undefined>
   /** 列出某父页下的活跃直接子页面 (元数据, 按同级序), 供树感知插件导航。 */
   listNoteChildren(parentId: string | null): Promise<NoteMeta[]>
-  /** 列出全部笔记含删除标记 + 完整正文 —— 跨端同步合并/上传用 (读路径另有 listNotes 过滤删除标记)。 */
-  listAllNotes(): Promise<Note[]>
-  /** 跨端同步落地: 写入合并 + GC 后的完整数据 (一次事务批处理)。 */
-  bulkPutNotes(notes: Note[]): Promise<void>
   // 对话线程 (agent 插件经此读写, 不直接依赖 core 存储; 本地独占, 默认不同步, 软删进回收站)
   /** 线程列表, 按最近更新倒序。 */
   listThreads(): Promise<Thread[]>

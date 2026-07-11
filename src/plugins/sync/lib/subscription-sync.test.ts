@@ -1,11 +1,11 @@
 // syncNow 编排集成测试 (node:test + tsx)。
 // syncNow 是跨端同步真实落地编排 (跨重试累积合并 / 解密 / unionMerge / GC / 脏数据过滤 / 409 冲突),
-// 此前仅其纯函数零件被隔离单测、编排本身无覆盖 (M-15)。本测以内存 FilesPort + stub 的
+// 此前仅其纯函数零件被隔离单测、编排本身无覆盖 (M-15)。本测以内存 StorageSyncPort + stub 的
 // /v1/sync/{id} 服务端 (乐观并发, {data} 包络) + 真实 sync-crypto 加解密, 端到端驱动编排各分支。
 import { test, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import { syncNow } from "./subscription-sync"
-import { registerFilesPort, type FilesPort } from "@protocol/files"
+import { registerStorageSyncPort, type StorageSyncPort } from "@protocol/storage-sync"
 import type { Subscription } from "@protocol/subscription"
 import type { SyncBlob } from "@protocol/sync"
 import { deriveKeys, encryptJson, decryptJson } from "@/lib/sync-crypto"
@@ -61,7 +61,7 @@ function makeServer(initial: SyncBlob | null = null) {
   return state
 }
 
-/** 注册一个内存 FilesPort, 返回其 store (syncNow 仅用 listAllSubscriptions / bulkPutSubscriptions)。 */
+/** 注册一个内存 StorageSyncPort, 返回其 store。 */
 function makeHub(initial: Subscription[]) {
   const store: Subscription[] = initial.map((s) => ({ ...s }))
   const port = {
@@ -73,7 +73,7 @@ function makeHub(initial: Subscription[]) {
       store.push(...subs.map((s) => ({ ...s })))
     },
   }
-  registerFilesPort(port as unknown as FilesPort)
+  registerStorageSyncPort(port as unknown as StorageSyncPort)
   return { store }
 }
 

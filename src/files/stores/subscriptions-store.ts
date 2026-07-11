@@ -1,6 +1,6 @@
 // 「发现」关注本地存储仓库 —— 折叠步 C 后物理统一到 nodes 仓库 (kind:"feed", 确定性 id feed:type:key)。
 // 对外仍以 Subscription 域类型呈现 (节点↔Subscription 映射在本仓库边界), 消费方零改;
-// **同步零改**: subscription-sync 仍走 "subs" scope, 经 listAllSubscriptions/bulkPutSubscriptions 读写,
+// 同步仍走 "subs" scope, 但原始全量/bulk 能力已独立收口到 StorageSyncPort,
 // 本仓库把 feed 节点映射回旧 Subscription wire (id 由 content.type:key 重建 = 旧确定性 id, 跨端 LWW 一致)。
 // 删除走软删标记 (deletedAt), 含删除标记全量参与同步合并 (漏带 = 已删关注被对端恢复)。
 import type { Subscription, SubscriptionType, NewSubscription } from "@protocol/subscription"
@@ -149,7 +149,7 @@ export async function removeSubscription(type: SubscriptionType, key: string): P
 }
 
 /**
- * 跨端同步落地 (sync 插件经 FilesPort 调用): subs 是合并 + GC 后的完整数据 (含未过期删除标记, wire id=type:key)。
+ * 跨端同步落地 (sync 插件经 StorageSyncPort 调用): subs 是合并 + GC 后的完整数据 (含未过期删除标记, wire id=type:key)。
  * 映射回 feed 节点整批 put; 并物理删除「落地时刻 nodes 库中仍残留的过期 feed 删除标记」(据当前真实库, 仅限 feed kind)。
  */
 export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> {

@@ -1,7 +1,7 @@
 // 笔记跨端同步编排 (sync 插件) —— 本地优先 + 端到端加密, 与关注同构但走独立加密块 (notes scope)。
 // 合并 (§7): 整篇删除 node 级 LWW; 正文块级 mergeNoteContent。编排由 sync-domain-machine (XState) 驱动。
 import type { Note } from "@protocol/files"
-import { getFilesPort } from "@protocol/files"
+import { getStorageSyncPort } from "@protocol/storage-sync"
 import { isSaneSyncTimestamp, pruneExpiredTombstones, type SyncResult } from "@protocol/sync"
 import { mergeNoteContent, pruneBlockTombstones, type Block } from "@protocol/note-merge"
 import type { DomainSyncConfig } from "./sync-domain-runner"
@@ -83,10 +83,10 @@ export function isValidRemoteNote(s: unknown, now: number = Date.now()): s is No
 /** 笔记域同步配置 (供 XState domain machine / orchestrator 复用)。 */
 export const notesSyncConfig: DomainSyncConfig<Note> = {
   keyScope: "notes",
-  listLocal: () => getFilesPort().listAllNotes(),
+  listLocal: () => getStorageSyncPort().listAllNotes(),
   merge: mergeNotes,
   gc: gcNotes,
-  bulkPut: (items) => getFilesPort().bulkPutNotes(items),
+  bulkPut: (items) => getStorageSyncPort().bulkPutNotes(items),
   isValidRemote: isValidRemoteNote,
 }
 

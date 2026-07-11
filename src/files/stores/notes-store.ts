@@ -396,7 +396,7 @@ export async function restoreSubtree(notes: Note[]): Promise<void> {
   notifyFilesUpdated({ kind: "note", id: notes[0]?.id })
 }
 
-// ---- 跨端同步钩子 (供 sync 插件经 FilesPort 调用) ----
+// ---- 跨端同步钩子 (仅由 core StorageSyncPort adapter 暴露给 sync 插件) ----
 
 /** 列出全部笔记含删除标记 + 完整正文 —— 同步合并/上传用。 */
 export async function listAllNotes(): Promise<Note[]> {

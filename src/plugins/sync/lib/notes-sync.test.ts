@@ -4,7 +4,7 @@
 import { test, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import type { Note } from "@protocol/files"
-import { registerFilesPort, type FilesPort } from "@protocol/files"
+import { registerStorageSyncPort, type StorageSyncPort } from "@protocol/storage-sync"
 import type { SyncBlob } from "@protocol/sync"
 import { deriveKeys, encryptJson } from "@/lib/sync-crypto"
 import { mergeTwoNotes, mergeNotes, isValidRemoteNote, syncNotes } from "./notes-sync"
@@ -191,7 +191,7 @@ function makeServer(initial: SyncBlob | null = null) {
   return state
 }
 
-/** 内存 FilesPort (syncNotes 仅用 listAllNotes / bulkPutNotes)。 */
+/** 内存 StorageSyncPort (syncNotes 仅用笔记同步原始面)。 */
 function makeNotesHub(initial: Note[]) {
   const store: Note[] = initial.map((n) => ({ ...n }))
   const port = {
@@ -203,7 +203,7 @@ function makeNotesHub(initial: Note[]) {
       store.push(...ns.map((n) => ({ ...n })))
     },
   }
-  registerFilesPort(port as unknown as FilesPort)
+  registerStorageSyncPort(port as unknown as StorageSyncPort)
   return { store }
 }
 

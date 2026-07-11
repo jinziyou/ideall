@@ -8,7 +8,7 @@ import {
   pruneExpiredTombstones,
   type SyncResult,
 } from "@protocol/sync"
-import { getFilesPort } from "@protocol/files"
+import { getStorageSyncPort } from "@protocol/storage-sync"
 import type { DomainSyncConfig } from "./sync-domain-runner"
 import { runDomainSync } from "./sync-domain-machine"
 
@@ -32,10 +32,10 @@ function isValidRemoteSub(s: unknown, now: number): s is Subscription {
 
 /** 关注域同步配置 (供 XState domain machine / orchestrator 复用)。 */
 export const subscriptionsSyncConfig: DomainSyncConfig<Subscription> = {
-  listLocal: () => getFilesPort().listAllSubscriptions(),
+  listLocal: () => getStorageSyncPort().listAllSubscriptions(),
   merge: unionMerge,
   gc: pruneExpiredTombstones,
-  bulkPut: (items) => getFilesPort().bulkPutSubscriptions(items),
+  bulkPut: (items) => getStorageSyncPort().bulkPutSubscriptions(items),
   isValidRemote: isValidRemoteSub,
 }
 
