@@ -322,7 +322,6 @@ try {
         activeId: tabId,
         transientId: tabId,
         activeModule: "home",
-        mode: "local",
         sidebarCollapsed: false,
         rightPanelOpen: false,
       }

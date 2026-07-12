@@ -16,7 +16,7 @@ import {
   Map,
   Megaphone,
   Newspaper,
-  NotebookPen,
+  FileText,
   Rss,
   Shell,
   Trash2,
@@ -38,7 +38,8 @@ export type ModuleMeta = {
 /** 在「外壳导航」与「工作区模块」两处都出现、需保持一致的模块身份原子。 */
 export const MODULE_META = {
   overview: { label: "我的", icon: LayoutDashboard },
-  notes: { label: "笔记", icon: NotebookPen },
+  // 产品区段名是「文件」; 底层 place/kind 仍为 notes/note。
+  notes: { label: "文件", icon: FileText },
   subscriptions: { label: "关注", icon: Rss, tintClass: "text-spoke-info" },
   publications: {
     label: "发布",

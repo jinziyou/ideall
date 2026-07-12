@@ -4,7 +4,7 @@ import { EngineRegistry } from "./registry"
 export const BUILTIN_ENGINES = [
   {
     engineId: "ideall.note",
-    label: "笔记",
+    label: "页面",
     match: { mediaTypes: ["application/vnd.ideall.note+json"] },
     priority: 1000,
     layout: "fill",

@@ -1,19 +1,16 @@
 "use client"
 
-// 二级侧栏: 标题栏 + 统一文件树 (所有模式共用 sidebar-tree)。
-// 点击树节点 → 开/激活标签; 概览由活动栏「我的」直达。
+// 二级侧栏：显示当前五分区的固定叶项。
 
 import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/lib/utils"
-import FileSystemSidebarTree from "./tree/file-system-sidebar-tree"
-import { coreFileRoot, isCoreFileRootId } from "./file-roots"
+import NavigationSidebarList from "./navigation-sidebar-list"
+import { navigationSection } from "./navigation-sections"
 import { useActiveRootId, setSidebarCollapsed } from "./store"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
   const activeRootId = useActiveRootId()
-  const title = isCoreFileRootId(activeRootId)
-    ? coreFileRoot(activeRootId).sidebarTitle
-    : "已挂载文件"
+  const title = navigationSection(activeRootId).label
 
   return (
     <aside
@@ -40,7 +37,7 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
             <PanelLeftClose className="h-4 w-4" />
           </button>
         </div>
-        <FileSystemSidebarTree />
+        <NavigationSidebarList />
       </div>
     </aside>
   )

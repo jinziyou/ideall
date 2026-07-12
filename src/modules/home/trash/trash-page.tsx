@@ -57,10 +57,10 @@ function parseTrashItem(value: Readonly<Record<string, unknown>> | undefined): T
 }
 
 const KIND_LABEL: Record<TrashFileItem["kind"], string> = {
-  note: "笔记",
+  note: "页面",
   bookmark: "书签",
   folder: "收藏夹",
-  file: "文件",
+  file: "资源",
   feed: "关注",
   thread: "对话",
 }
@@ -186,7 +186,7 @@ export default function TrashPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">回收站</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            管理本机已删除的文件、笔记、书签与关注。
+            管理本机已删除的页面、资源、书签与关注。
           </p>
         </div>
         <div className="flex items-center gap-2">

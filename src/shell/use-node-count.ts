@@ -34,7 +34,7 @@ async function countPlaceKind(
 }
 
 /**
- * 「我的」内容计数 (关注 + 书签 + 资源 + 笔记)。订阅对应 FileSystem 目录实时刷新,
+ * 「我的」内容计数 (关注 + 书签 + 资源 + 文件)。订阅对应 FileSystem 目录实时刷新,
  * 数值增加时 flash 一下 (供「我的」导航项挂数量 badge)。原 nav-link 内联逻辑抽出, 供 rail / 底栏共用。
  */
 export function useNodeCount(): { count: number | null; flash: boolean } {

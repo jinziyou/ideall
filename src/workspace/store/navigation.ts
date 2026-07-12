@@ -1,17 +1,16 @@
 "use client"
 
-import type { DevelopmentTool, ModuleId, WorkspaceKind, WsMode } from "../types"
+import type { DevelopmentTool, ModuleId, WorkspaceKind } from "../types"
 import type { OpenTarget } from "../open-target"
 import type { ActiveSource } from "../workspace-slice"
 import { tabKey } from "../tab-key"
-import { coerceActiveModuleForMode, isModeNeutralModule, moduleById } from "../modules"
+import { moduleById } from "../modules"
 import {
+  builtinAppSurfaceForRoot,
   builtinAppSurfaceForLegacyPanel,
-  coerceCoreFileRootIdForMode,
   coreFileRoot,
   coreFileRootForModule,
-  coreFileRootMode,
-  mountedFileRootId,
+  normalizeNavigationRootId,
 } from "../file-roots"
 import { FILE_ENGINE_TAB_KIND, fileEngineTab, fileEngineTargetForTab } from "../file-tab"
 import { DEFAULT_STARTUP_TARGET, readStartupTarget } from "../startup-target"
@@ -37,30 +36,8 @@ import {
   workspaceState,
 } from "./runtime"
 
-/**
- * 模块到数据来源模式的映射。只有显式模块导航会同步模式；标签激活不会改变模式。
- */
-const MODE_OF: Record<ModuleId, WsMode> = {
-  home: "local",
-  subscriptions: "local",
-  apps: "local",
-  plugins: "local",
-  shell: "local",
-  git: "local",
-  database: "local",
-  audio: "local",
-  code: "local",
-  trash: "local",
-  tool: "connected",
-  info: "connected",
-  community: "connected",
-  publications: "connected",
-  browser: "connected",
-  agent: "connected",
-}
-
 export function openSettings(): void {
-  openTarget({ type: "file", ref: panelFileRef("settings"), rootId: "system" })
+  openTarget({ type: "file", ref: panelFileRef("settings"), rootId: "settings" })
 }
 
 export function openAiSettings(options?: OpenTabOptions): void {
@@ -68,7 +45,7 @@ export function openAiSettings(options?: OpenTabOptions): void {
   openTarget({
     type: "file",
     ref: panelFileRef("ai-settings"),
-    rootId: "workspace",
+    rootId: "settings",
     transient: options?.transient,
   })
 }
@@ -81,7 +58,7 @@ export function openAiSection(
   openTarget({
     type: "file",
     ref: panelFileRef(kind),
-    rootId: "workspace",
+    rootId: "settings",
     transient: options?.transient,
   })
 }
@@ -93,7 +70,7 @@ export function openAiTasks(workspaceId: string, title: string, options?: OpenTa
     type: "file",
     ref: aiTasksPanelFileRef(workspaceId),
     title,
-    rootId: "workspace",
+    rootId: "activity",
     transient: options?.transient,
   })
 }
@@ -110,16 +87,13 @@ async function openFileTarget(
       ref: legacySurface.ref,
       file: undefined,
       engineId: legacySurface.engineId,
-      rootId: mountedFileRootId(legacySurface.ref),
+      rootId: "apps",
     }
   }
 
   const request = fileOpenRequests.begin()
   const canCommit = () => request.isCurrent() && (shouldCommit?.() ?? true)
-  const current = workspaceState()
-  const navigationRootId = target.rootId
-    ? coerceCoreFileRootIdForMode(target.rootId, current.mode, current.activeRootId)
-    : undefined
+  const navigationRootId = target.rootId ? normalizeNavigationRootId(target.rootId) : undefined
   if (navigationRootId) patchWorkspace({ activeRootId: navigationRootId })
 
   try {
@@ -162,7 +136,8 @@ async function openFileTarget(
     const existingRootId = workspaceState().tabs.find(
       (tab) => tab.id === tabKey(provisional),
     )?.rootId
-    const rootId = target.rootId ?? existingRootId ?? inferredRootIdForFile(file.ref)
+    const requestedRootId = target.rootId ?? existingRootId ?? inferredRootIdForFile(file.ref)
+    const rootId = requestedRootId ? normalizeNavigationRootId(requestedRootId) : undefined
     openTab(
       fileEngineTab(
         { ref: file.ref, name: target.title || file.name },
@@ -173,10 +148,7 @@ async function openFileTarget(
       { transient: target.transient },
     )
     if (rootId) {
-      const state = workspaceState()
-      patchWorkspace({
-        activeRootId: coerceCoreFileRootIdForMode(rootId, state.mode, state.activeRootId),
-      })
+      patchWorkspace({ activeRootId: rootId })
     }
     return true
   } catch {
@@ -209,10 +181,7 @@ export async function openStartupTarget(transient = false): Promise<boolean> {
     typeof window === "undefined" ? undefined : window.localStorage,
   )
   if (configured.rootId) {
-    const state = workspaceState()
-    patchWorkspace({
-      activeRootId: coerceCoreFileRootIdForMode(configured.rootId, state.mode, state.activeRootId),
-    })
+    patchWorkspace({ activeRootId: normalizeNavigationRootId(configured.rootId) })
   }
   if (await openFileTarget({ type: "file", ...configured, transient }, "user")) return true
   if (
@@ -250,15 +219,13 @@ export function toggleFileRoot(rootId: string): void {
   invalidatePendingFileOpen()
   const state = workspaceState()
   const root = coreFileRoot(rootId)
-  const mode = coreFileRootMode(root, state.mode)
-  if (state.activeRootId === root.id && state.mode === mode && !state.sidebarCollapsed) {
+  if (state.activeRootId === root.id && !state.sidebarCollapsed) {
     patchWorkspace({ sidebarCollapsed: true })
     return
   }
   patchWorkspace({
     activeRootId: root.id,
     activeModule: root.module,
-    mode,
     sidebarCollapsed: false,
     activeSource: "user",
   })
@@ -272,15 +239,10 @@ export function toggleFileRoot(rootId: string): void {
 
 export function toggleMountedFileRoot(ref: FileRef): void {
   invalidatePendingFileOpen()
-  const state = workspaceState()
-  const rootId = mountedFileRootId(ref)
-  if (state.activeRootId === rootId && !state.sidebarCollapsed) {
-    patchWorkspace({ sidebarCollapsed: true })
-    return
-  }
+  const rootId = "apps"
   patchWorkspace({
     activeRootId: rootId,
-    activeModule: "home",
+    activeModule: builtinAppSurfaceForRoot(ref)?.module ?? "apps",
     sidebarCollapsed: false,
     activeSource: "user",
   })
@@ -296,25 +258,30 @@ export function toggleModule(moduleId: ModuleId): void {
   }
   const workspaceModule = moduleById(moduleId)
   const first = workspaceModule.entries[0]
-  const mode = isModeNeutralModule(moduleId) ? state.mode : MODE_OF[moduleId]
   if (!first || moduleId === "plugins") {
-    patchWorkspace({ activeModule: moduleId, mode, sidebarCollapsed: false })
+    patchWorkspace({
+      activeModule: moduleId,
+      activeRootId: coreFileRootForModule(moduleId).id,
+      sidebarCollapsed: false,
+    })
     return
   }
   const descriptor = migrateWorkspaceTab({ ...first.descriptor, id: tabKey(first.descriptor) })
   if (!descriptor) {
-    patchWorkspace({ activeModule: moduleId, mode, sidebarCollapsed: false })
+    patchWorkspace({
+      activeModule: moduleId,
+      activeRootId: coreFileRootForModule(moduleId).id,
+      sidebarCollapsed: false,
+    })
     return
   }
   hideBrowserWebviewUnlessBrowserTab(descriptor)
   patchWorkspace({
     ...planTransientTabOpen(state.tabs, state.transientId, descriptor),
     activeModule: moduleId,
-    activeRootId: coerceCoreFileRootIdForMode(
+    activeRootId: normalizeNavigationRootId(
       descriptor.rootId ?? coreFileRootForModule(moduleId).id,
-      mode,
     ),
-    mode,
     sidebarCollapsed: false,
     activeSource: "user",
   })
@@ -351,54 +318,6 @@ export function setDevelopmentTool(developmentTool: DevelopmentTool): void {
   if (developmentTool !== workspaceState().developmentTool) patchWorkspace({ developmentTool })
 }
 
-export function setMode(mode: WsMode): void {
-  invalidatePendingFileOpen()
-  const state = workspaceState()
-  if (mode === state.mode) {
-    const activeModule = coerceActiveModuleForMode(state.activeModule, mode)
-    const activeRootId = coerceCoreFileRootIdForMode(state.activeRootId, mode)
-    if (activeModule !== state.activeModule || activeRootId !== state.activeRootId) {
-      patchWorkspace({ activeModule, activeRootId })
-    }
-    return
-  }
-
-  cancelRouteFileOpen()
-  const firstModule: ModuleId = mode === "local" ? "home" : "info"
-  const first = moduleById(firstModule).entries[0]
-  if (!first) {
-    patchWorkspace({
-      mode,
-      activeModule: firstModule,
-      sidebarCollapsed: false,
-      activeSource: "user",
-    })
-    return
-  }
-  const descriptor = migrateWorkspaceTab({ ...first.descriptor, id: tabKey(first.descriptor) })
-  if (!descriptor) {
-    patchWorkspace({
-      mode,
-      activeModule: firstModule,
-      sidebarCollapsed: false,
-      activeSource: "user",
-    })
-    return
-  }
-  hideBrowserWebviewUnlessBrowserTab(descriptor)
-  patchWorkspace({
-    ...planTransientTabOpen(state.tabs, state.transientId, descriptor),
-    mode,
-    activeModule: firstModule,
-    activeRootId: coerceCoreFileRootIdForMode(
-      descriptor.rootId ?? coreFileRootForModule(firstModule).id,
-      mode,
-    ),
-    sidebarCollapsed: false,
-    activeSource: "user",
-  })
-}
-
 export function setSidebarCollapsed(value: boolean): void {
   patchWorkspace({ sidebarCollapsed: value })
 }
@@ -409,11 +328,16 @@ export function toggleSidebar(): void {
 
 export function toggleWorkspace(): void {
   const state = workspaceState()
-  if (state.activeModule === "agent" && !state.sidebarCollapsed) {
+  if (state.activeRootId === "activity" && !state.sidebarCollapsed) {
     patchWorkspace({ sidebarCollapsed: true })
     return
   }
-  patchWorkspace({ activeModule: "agent", sidebarCollapsed: false, activeSource: "user" })
+  patchWorkspace({
+    activeModule: "agent",
+    activeRootId: "activity",
+    sidebarCollapsed: false,
+    activeSource: "user",
+  })
 }
 
 export function toggleRightPanel(): void {

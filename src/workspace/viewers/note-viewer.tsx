@@ -82,7 +82,7 @@ export default function NoteViewer({ nodeId }: NodeViewerProps) {
                     type: "file",
                     ref: resourceFileRef({ scheme: "node", kind: "note", id: a.id }),
                     title: a.title || "无标题",
-                    rootId: "notes",
+                    rootId: "home",
                   })
                 }
                 className="max-w-[10rem] shrink-0 truncate rounded px-1 py-0.5 hover:bg-accent"

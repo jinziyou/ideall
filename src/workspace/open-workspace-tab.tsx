@@ -37,7 +37,7 @@ function OpenWorkspaceTabInner() {
         void openRouteFileTarget({
           type: "file",
           ref: panelFileRef("ai-settings"),
-          rootId: "workspace",
+          rootId: "settings",
         })
         return
       }

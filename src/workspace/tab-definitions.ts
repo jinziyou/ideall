@@ -21,7 +21,7 @@ export const TAB_DEFINITIONS = {
   },
   "home-notes": {
     module: "home",
-    title: "笔记",
+    title: "文件",
     path: "/home/notes",
     layout: "padded",
   },
@@ -103,6 +103,18 @@ export const TAB_DEFINITIONS = {
   "ai-skills": { module: "agent", title: "Skills", layout: "fill", viewType: "config" },
   "ai-rules": { module: "agent", title: "规则", layout: "fill", viewType: "config" },
   "ai-tasks": { module: "agent", title: "任务", layout: "fill", viewType: "config" },
+  "agent-spaces": {
+    module: "agent",
+    title: "空间",
+    layout: "padded",
+    viewType: "config",
+  },
+  "agent-task-list": {
+    module: "agent",
+    title: "任务",
+    layout: "padded",
+    viewType: "config",
+  },
 } as const satisfies Record<string, TabDefinition>
 
 export type StaticTabKind = keyof typeof TAB_DEFINITIONS

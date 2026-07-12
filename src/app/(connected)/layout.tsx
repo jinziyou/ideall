@@ -1,4 +1,4 @@
-// 连接模式专属分区 (资讯 / 社区 / 浏览器); 跨模式的 tool 在 app/tool 平铺。
+// 浏览分区路由组（新闻 / 社区 / 浏览器）；括号目录只组织源码，不改变 URL。
 export default function ConnectedLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }

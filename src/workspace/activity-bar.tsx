@@ -1,43 +1,30 @@
 "use client"
 
-// 合成文件系统根目录不显示；活动栏展示根的直接子树。每个按钮只负责选择
-// 一个空间锚点，二级侧栏再展示该目录的完整文件树。
+// 五分区活动栏。一级入口固定同时可见。
 
-import { Folder } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { coreFileRoot, isCoreFileRootId, mountedFileRootId } from "./file-roots"
-import {
-  toggleFileRoot,
-  toggleMountedFileRoot,
-  useActiveRootId,
-  useSidebarCollapsed,
-} from "./store"
-import { useRootDirectoryEntries } from "./use-root-directory-entries"
+import { NAVIGATION_SECTIONS } from "./navigation-sections"
+import { toggleFileRoot, useActiveRootId, useSidebarCollapsed } from "./store"
 
 export default function ActivityBar() {
   const activeRootId = useActiveRootId()
   const sidebarCollapsed = useSidebarCollapsed()
-  const rootEntries = useRootDirectoryEntries()
 
   return (
     <aside className="hidden h-full w-14 shrink-0 flex-col items-center overflow-y-auto border-r bg-card px-2 py-2.5 md:flex">
       <div className="flex w-full flex-col gap-1">
-        {rootEntries.map((entry) => {
-          const core = isCoreFileRootId(entry.entryId) ? coreFileRoot(entry.entryId) : null
-          const rootId = core?.id ?? mountedFileRootId(entry.target)
-          const Icon = core?.icon ?? Folder
-          const active = activeRootId === rootId
+        {NAVIGATION_SECTIONS.map((section) => {
+          const Icon = section.icon
+          const active = activeRootId === section.id
           return (
             <button
-              key={entry.entryId}
+              key={section.id}
               type="button"
               onMouseDown={(event) => event.stopPropagation()}
-              onClick={() =>
-                core ? toggleFileRoot(core.id) : toggleMountedFileRoot(entry.target)
-              }
+              onClick={() => toggleFileRoot(section.id)}
               aria-current={active ? "true" : undefined}
               aria-expanded={active && !sidebarCollapsed}
-              title={entry.name}
+              title={section.label}
               className={cn(
                 "relative flex w-full shrink-0 flex-col items-center justify-center gap-0.5 rounded-shell py-1.5 text-[11px] font-medium transition-colors",
                 active
@@ -51,10 +38,10 @@ export default function ActivityBar() {
               <Icon
                 className={cn(
                   "h-[1.2rem] w-[1.2rem]",
-                  active ? "text-primary" : core?.colorClass,
+                  active ? "text-primary" : section.colorClass,
                 )}
               />
-              <span className="max-w-12 truncate leading-none">{entry.name}</span>
+              <span className="max-w-12 truncate leading-none">{section.label}</span>
             </button>
           )
         })}

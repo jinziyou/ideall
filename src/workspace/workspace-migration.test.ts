@@ -5,7 +5,7 @@ import { fileRefKey } from "@protocol/file-system"
 import { parseFileEngineTabParams } from "./file-tab"
 import { migrateWorkspaceTab, migrateWorkspaceTabs } from "./store"
 import type { Tab } from "./types"
-import { BUILTIN_APP_SURFACES, mountedFileRootId } from "./file-roots"
+import { BUILTIN_APP_SURFACES } from "./file-roots"
 
 test("workspace migration: legacy node and resource tabs become file + engine tabs", () => {
   const legacyNode: Tab = {
@@ -32,17 +32,17 @@ test("workspace migration: legacy node and resource tabs become file + engine ta
   }
   const browser = migrateWorkspaceTab(legacyResource)
   assert.equal(parseFileEngineTabParams(browser?.params)?.engineId, "ideall.browser")
-  assert.equal(browser?.rootId, "browser")
+  assert.equal(browser?.rootId, "browse")
 })
 
-test("workspace migration: legacy node kinds restore their file-tree roots", () => {
+test("workspace migration: legacy node kinds restore their navigation sections", () => {
   const roots = {
-    note: "notes",
-    bookmark: "bookmarks",
-    folder: "bookmarks",
-    file: "files",
-    feed: "subscriptions",
-    thread: "workspace",
+    note: "home",
+    bookmark: "home",
+    folder: "home",
+    file: "home",
+    feed: "home",
+    thread: "activity",
   } as const
 
   for (const [kind, rootId] of Object.entries(roots)) {
@@ -77,7 +77,7 @@ test("workspace migration: tabs are deduplicated after their ids are canonicaliz
   const migrated = migrateWorkspaceTabs([legacyNode, legacyResource])
   assert.equal(migrated.tabs.length, 1)
   assert.equal(migrated.tabs[0]?.kind, "file-engine")
-  assert.equal(migrated.tabs[0]?.rootId, "notes")
+  assert.equal(migrated.tabs[0]?.rootId, "home")
   assert.equal(migrated.idMap.get(legacyNode.id), migrated.tabs[0]?.id)
   assert.equal(migrated.idMap.get(legacyResource.id), migrated.tabs[0]?.id)
 })
@@ -106,7 +106,7 @@ test("workspace migration: legacy static panels and AI tasks become file-engine 
     ref: { fileSystemId: "ideall.core", fileId: "panel:settings" },
     engineId: "ideall.panel",
   })
-  assert.equal(settings?.rootId, "system")
+  assert.equal(settings?.rootId, "settings")
 
   const tasks = migrateWorkspaceTab({
     id: "ai-tasks:old",
@@ -119,7 +119,7 @@ test("workspace migration: legacy static panels and AI tasks become file-engine 
     ref: { fileSystemId: "ideall.core", fileId: "panel:ai-tasks:project%2Fa" },
     engineId: "ideall.panel-fill",
   })
-  assert.equal(tasks?.rootId, "workspace")
+  assert.equal(tasks?.rootId, "activity")
 })
 
 test("workspace migration: legacy app panels become their real FileSystem roots", () => {
@@ -135,7 +135,7 @@ test("workspace migration: legacy app panels become their real FileSystem roots"
       ref: surface.ref,
       engineId: surface.engineId,
     })
-    assert.equal(legacyStatic?.rootId, mountedFileRootId(surface.ref))
+    assert.equal(legacyStatic?.rootId, "apps")
 
     const legacyFileEngine = migrateWorkspaceTab({
       id: `file-engine:${id}`,
@@ -152,6 +152,29 @@ test("workspace migration: legacy app panels become their real FileSystem roots"
       ref: surface.ref,
       engineId: surface.engineId,
     })
-    assert.equal(legacyFileEngine?.rootId, mountedFileRootId(surface.ref))
+    assert.equal(legacyFileEngine?.rootId, "apps")
+  }
+})
+
+test("workspace migration: canonical tabs use their file to disambiguate the old system root", () => {
+  const fixtures = [
+    { panel: "settings", module: "home", expected: "settings" },
+    { panel: "trash", module: "trash", expected: "activity" },
+    { panel: "code", module: "code", expected: "apps" },
+  ] as const
+
+  for (const fixture of fixtures) {
+    const migrated = migrateWorkspaceTab({
+      id: `legacy-system:${fixture.panel}`,
+      kind: "file-engine",
+      module: fixture.module,
+      title: fixture.panel,
+      params: {
+        file: fileRefKey({ fileSystemId: "ideall.core", fileId: `panel:${fixture.panel}` }),
+        engine: "ideall.panel",
+      },
+      rootId: "system",
+    })
+    assert.equal(migrated?.rootId, fixture.expected, fixture.panel)
   }
 })

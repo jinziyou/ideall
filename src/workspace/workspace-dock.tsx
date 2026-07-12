@@ -1,14 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  AudioLines,
-  Database,
-  GitBranch,
-  Loader2,
-  PanelBottomClose,
-  Terminal,
-} from "lucide-react"
+import { AudioLines, Database, GitBranch, Loader2, PanelBottomClose, Terminal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { IconButton } from "@/ui/icon-button"
 import { setDevelopmentTool, setWorkspaceKind, useDevelopmentTool, useWorkspaceKind } from "./store"

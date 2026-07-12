@@ -54,7 +54,6 @@ test("workspace archive: 固定格式并可预检完整工作区归档", async (
           activeId: "code",
           transientId: null,
           activeModule: "code",
-          mode: "local",
           workspaceKind: "development",
           developmentTool: "shell",
           sidebarCollapsed: false,
@@ -76,16 +75,20 @@ test("workspace archive: 固定格式并可预检完整工作区归档", async (
   assert.equal(parsed.core.workspace?.tabs.length, 1)
   assert.equal(parsed.core.workspace?.workspaceKind, "development")
   assert.equal(parsed.core.workspace?.developmentTool, "shell")
+  assert.equal("mode" in (parsed.core.workspace ?? {}), false)
   assert.equal(parsed.plugins.plugins[0].plugin.id, "git")
 
   const legacy = JSON.parse(raw) as {
     core: { workspace: Record<string, unknown> }
   }
+  assert.equal("mode" in legacy.core.workspace, false)
   delete legacy.core.workspace.workspaceKind
   delete legacy.core.workspace.developmentTool
+  legacy.core.workspace.mode = "connected"
   const parsedLegacy = parseWorkspaceArchivePackage(JSON.stringify(legacy))
   assert.equal(parsedLegacy.core.workspace?.workspaceKind, "files")
   assert.equal(parsedLegacy.core.workspace?.developmentTool, "git")
+  assert.equal("mode" in (parsedLegacy.core.workspace ?? {}), false)
 
   const preview = await previewWorkspaceArchiveImport(raw, "workspace.json", gitManifest.dataPorts)
   assert.equal(preview.ok, true)

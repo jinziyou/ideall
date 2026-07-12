@@ -33,7 +33,7 @@ const GLOBAL_MODEL = "__global__"
 const CUSTOM_PRESET = "__custom__"
 
 const DATA_KINDS: { key: keyof WorkspaceData["home"]; label: string }[] = [
-  { key: "notes", label: "笔记" },
+  { key: "notes", label: "文件" },
   { key: "subscriptions", label: "关注" },
   { key: "bookmarks", label: "书签" },
   { key: "folders", label: "收藏夹" },

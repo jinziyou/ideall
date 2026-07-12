@@ -11,7 +11,7 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 - Storage 是物理来源和 provenance，包括本地 Node/Blob、插件 IndexedDB、ServerPort、本机 App 与第三方数据。来源保留自己的事务、同步和权限语义，不强行实现一套通用 CRUD。
 - 一个 `FileSystemProvider` 对应一个可独立挂载的文件系统实例。registry 按 `fileSystemId` 分派，允许注册多个同类来源。
 - `FileRef { fileSystemId, fileId }` 是文件身份；名称、路径和父目录不参与身份。`DirectoryEntry` 独立引用 `FileRef`，同一文件可出现在多个目录中；删除 link 或 mount 不等于删除源文件。
-- `ideall.root` 是隐藏的合成根。核心目录与运行期 manifest 挂载共同组成它的直接目录项，这些目录项驱动活动栏和二级侧栏。
+- `ideall.root` 是隐藏的合成根。它以“我的 / 活动 / 浏览 / 应用 / 设置”五个核心目录作为固定导航根，并接纳运行期 manifest 挂载；动态来源不会改变一级分区集合。
 - `mountFileSystem()` 原子注册 provider 并向合成根贡献 mount；失败时回滚，卸载时只注销 provider 和目录项，不删除来源数据。运行时扩展可把多个 mount 与成对的 Engine descriptor/renderer 放在同一批次安装，任一贡献失败都会逆序回滚，观察者只在最终状态确定后刷新。
 - `ideall.core` 的 Resource 兼容投影由 `src/filesystem/resource-file-system.ts` 实现；Node 与连接数据的 `ResourceSourceProvider` 收口在 `src/filesystem/resource-sources/`，只作为该 FileSystem provider 的内部来源接口。现行代码不再有 `src/vfs` 并行挂载层。
 
@@ -35,23 +35,23 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 - 默认 Engine 解析顺序为：当前工作区的单文件偏好、当前工作区的 media type 偏好、工作区默认策略、候选 Engine 的 priority/specificity、通用预览兜底。旧的全局偏好键作为文件工作区偏好继续使用，音频与开发工作区使用独立键。
 - 标签身份是 `FileRef + engineId`。Engine 菜单可将同一文件以其他匹配 Engine 在当前工作区打开，因此音频、开发、数据库或通用预览可以同时存在为不同标签。
 - 文件视图首次通过 `stat` 取元数据，并在 provider 支持时订阅 `watch` 后重新 `stat`。FileSystem registry 拥有底层 watcher 生命周期：同一 provider/目标/上下文的订阅共享一条底层 watch，最后一个观察者离开或 provider 被替换、注销、清空时自动 best-effort 释放；回调绑定 provider generation，旧实例的迟到事件会被丢弃。`FileSystemWatchEventHub` 已用于音频和数据库 provider：它把增量事件路由到目标及 old/new parent，并按批次合并同一目录项的变化；同一 `FileRef` 的多个 link 仍以 parent-scoped `entryId` 区分。目录 Display 对完整加载且身份明确的 `changed` 只重取单项 metadata、对 `deleted` 本地移除；created/move、自身事件、分页、异常信封或竞态失败统一回退全量读取。无 `watch` 的 provider 使用重新进入或显式刷新。
-- 旧静态 tab、Resource tab 与 Node tab 只在深链解析和 workspace hydration 边界迁移成 File + Engine；模块切换和模式切换只处理规范化后的 descriptor。`TabContent` 只接受 File + Engine 标签，旧 descriptor 不再有第二套直接渲染分支。
+- 旧静态 tab、Resource tab 与 Node tab 只在深链解析和 workspace hydration 边界迁移成 File + Engine；导航分区与工作区切换只处理规范化后的 descriptor。`TabContent` 只接受 File + Engine 标签，旧 descriptor 不再有第二套直接渲染分支。
 - 通用开发 Display 保留脏草稿和外部版本冲突。只有声明 `suspension: "serializable"` 且已成功写入身份绑定休眠快照的 dirty Engine 才可被 LRU 卸载；快照仅存当前窗口 `sessionStorage`，限制单份 1 MiB、合计 4 MiB、最多 24 份，并按 `tabId + engineId + fileKey` 严格恢复。序列化失败、超限或不支持休眠的 dirty Engine 继续保持挂载；关闭标签和离开页面仍使用全局 dirty 告警。`read-only` Engine 会同时禁用正文写入及 Node 工具栏中的重命名、标签和删除操作。
 
-## 工作区与数据来源模式
+## 工作区与固定导航分区
 
 - 工作区与视图是同一个 Display 概念，由 `WorkspaceKind = files | audio | development` 表达。工作区切换位于顶栏，不生成活动栏、目录树或移动导航项。
 - 文件工作区是默认基础视图，包含文件树、标签页、文件渲染和 AI Agent。音频工作区在其上增加保持挂载的音频播放区；开发工作区在其上增加保持挂载的 Git / Shell 工具区。音频播放区与音频 File Engine 共用 shell 级播放控制器和唯一媒体元素，切换文件或工作区不会产生并行播放器。
-- 工作区切换只改变 Display 组合和无显式偏好时的 Engine 选择，不改变 `WsMode`、当前 `FileRef`、既有标签、脏草稿、根目录或文件系统挂载。若活动标签是文件，Display 会为同一 `FileRef` 激活新场景的默认 Engine 标签；旧 Engine 标签继续保留。隐藏工具区保持挂载，避免切换后中断播放或 Shell 会话。
+- 工作区切换只改变 Display 组合和无显式偏好时的 Engine 选择，不改变当前 `FileRef`、既有标签、脏草稿、根目录或文件系统挂载。若活动标签是文件，Display 会为同一 `FileRef` 激活新场景的默认 Engine 标签；旧 Engine 标签继续保留。隐藏工具区保持挂载，避免切换后中断播放或 Shell 会话。
 - 音频工作区对 `audio/*` 文件默认使用音频 Engine；开发工作区对通用文本文件默认使用 Code Engine；文件工作区使用通用预览。用户设置的单文件或 media type 偏好优先于这些默认策略。
-- `WsMode = local | connected` 是与工作区正交的数据来源镜头。它只过滤同一个合成根的可见直接子树，不拆分 FileSystem、文件身份或 Engine 偏好。
-- `ideall.core` 内部的 AI `workspace` 目录继续承载兼容 FileRef 和旧快照，但设置 `navigationHidden`，不出现在左侧导航。AI 对话从所有工作区共享的右侧 Agent 面板到达；MCP、Skills 和规则从 AI 设置页内打开。
+- 活动栏一级分区固定为：**我的**、**活动**、**浏览**、**应用**、**设置**。对应的二级侧栏分别为：“关注 / 书签 / 资源 / 文件”、“空间 / 任务 / 删除”、“新闻 / 社区 / 浏览器”、“搜索 / 本地应用”、“基本 / AI”。五个一级入口始终同时可见；本地与联网资源共享同一合成根、FileSystem 身份和 Engine 偏好。
+- `ideall.core` 内部的 AI `workspace` 目录继续承载兼容 FileRef 和旧快照，但设置 `navigationHidden`，不出现在左侧导航。AI 对话从所有工作区共享的右侧 Agent 面板到达；MCP、Skills 和规则从“设置 > AI”内打开。
 
 ## 启动与独立窗口
 
-- 根目录本身不作为内容页显示；桌面活动栏和移动文件位置选择器订阅同一个完整合成根，再由 Display 按本地/连接模式过滤。模式切换不卸载 provider、不改变 FileRef 或已打开标签；二级侧栏通过 `readDirectory/stat/watch` 渲染当前子树。
+- 根目录本身不作为内容页显示；桌面活动栏和移动导航订阅同一个完整合成根，并呈现相同的五个固定分区。二级侧栏使用稳定 `FileRef` 打开对应目标；provider 挂载变化不改变已打开标签的文件身份。
 - 文件深链使用 `?file=<FileRefKey>&engine=<engineId>`；旧 `?resource=`、`?node=` 和静态路由保留为兼容入口。
-- 主窗口优先恢复 workspace 快照，包括数据来源模式、工作区、开发工具选择和标签。旧快照缺少工作区字段时回退文件工作区。没有可恢复标签时读取 `ideall:startup-target:v1`，无效时回退 Home。
+- 主窗口优先恢复 workspace 快照，包括当前导航分区、工作区、开发工具选择和标签。旧快照缺少工作区字段时回退文件工作区。没有可恢复标签时读取 `ideall:startup-target:v1`，无效时回退“我的”。
 - 独立窗口入口要求文件显式声明 `standalone-window` capability，同时 Engine descriptor 声明 `supportsStandaloneWindow`。程序化打开会重新 `stat`，独立窗口渲染入口也重复执行同一策略，不能用伪造 metadata 或 `display=window` 深链绕过。当前 `ideall.core` 的 Node 文件、音轨和数据库表可选择支持；远端文件、本机 App 和 Git 文件不会因此自动获得独立窗口权限。
 - 独立窗口使用 `file/engine/display=window` 内部深链，不恢复主 workspace。原生窗口创建命令仅授权 `main` 调用，URL 与 label 在 TypeScript 和 Rust 两侧校验；生成的 `engine-*` 窗口不继承主窗口的 secure-store、HTTP、Shell 或 guarded FS IPC capability。
 
@@ -61,7 +61,7 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 - `ideall.core`：`resource-file-system` 将 Node/Blob、仍属于 core 的系统 panel/place 和 `resource-sources` 中的连接数据来源投影为 FileSystem，并在深链/水合边界兼容旧 route/resource。Git、数据库和音频不再创建 core panel 代理文件；旧 `panel:git|database|audio` 深链与持久标签只在打开/水合边界迁移到对应 App FileSystem root。笔记、书签与文件通过对应目录的 `create` action 创建，后续读写、移动、删除与恢复均经 FileSystem；Node 同步、墓碑、Blob 旁存、正文 consent、乐观并发和 `save-to-mine` 语义仍由 Resource source 与底层 Node 存储的权限闸处理。UI 与活动 Engine 可读取完整 Blob，agent 读取仍受 1 MiB 上限约束。
 - `ideall.trash`：把底层墓碑投影为回收站目录，通过显式 `restore`、`purge` 和 `empty` action 提供恢复与永久删除，并转发底层更新为 `watch` 事件。
 - `remote.server`：承载 ServerPort 的 info、community、peer 和 publication 文件。常规内容读取与查询保持只读；发布和删除 publication 是经过远端写权限及 token 校验的显式 action，而不是通用 `write`。
-- `third-party.installed-apps`：把本机已安装 App 投影到“本机应用”目录。文件读取返回应用 metadata，`launch` action 通过 Tauri 启动应用；不提供 metadata 写入、`watch` 或独立窗口能力。前端只提交 opaque App id，Rust 每次从平台可信目录重新枚举并解析启动项/图标；id、canonical 路径、图片扩展和内容魔数均在原生侧校验，前端不能提交任意启动路径或图标路径。
+- `third-party.installed-apps`：把本机已安装 App 投影到“本地应用”目录。文件读取返回应用 metadata，`launch` action 通过 Tauri 启动应用；不提供 metadata 写入、`watch` 或独立窗口能力。前端只提交 opaque App id，Rust 每次从平台可信目录重新枚举并解析启动项/图标；id、canonical 路径、图片扩展和内容魔数均在原生侧校验，前端不能提交任意启动路径或图标路径。
 - `app.audio-library`：继续使用音频插件原 IndexedDB Blob，不复制媒体数据；提供播放状态、导入、导出、删除和 metadata 更新，并发送 `watch` 事件。音轨以 `audio/*` 文件供音频或预览 Engine 使用。
 - `app.database`：每张表保留一个稳定 table JSON 文件，并挂出 rows 目录；每行都有不受排序影响的稳定 `FileRef`，可独立 `stat/read/watch/update/delete`。行 metadata 只含稳定身份/表引用，单元格正文只由 `read(rowRef)` 返回；删表会向已打开的行发送 `deleted`。表/行主键读取不扫描全库，rows 目录执行严格 cursor/limit 分页并在目录项携带安全 metadata snapshot，Display 可避免逐项 `stat`。建表、导入、导出、删表和行 CRUD 仍通过显式 action 提供；同一个 table 文件可由数据库、Code 或 Preview Engine 渲染。
 - `app.agent-config`：把 Agent 正在使用的设置、工作区、规则、MCP、Skills 和任务 store 投影为可读写 JSON 文件，并复用同一订阅源发送 `watch`。普通 `fs:read` 只能枚举目录和读取不含正文指纹的安全 metadata；正文与带版本的 watch 需要 first-party 专用、默认关闭的 `agent.config:read`，UI 与精确活动 Engine 只对当前文件例外放行。Agent 显式授权后获得严格 section 枚举的 `agent.config.read` MCP tool；该 tool 只在 loopback 宿主注入 adapter 时注册，并仍通过 FileSystem registry 读取。公开正文会 fail-closed 地剥离 API key、token、认证头、URL query、命令参数及 schema 外字段；普通 `fs:write` 不能修改配置，只有 UI、精确活动 Engine 或专用 `agent.config:write` 可写。写入/导入先无副作用地校验全部 runtime schema，端点或命令变化时不会把既有凭据恢复到新目标。

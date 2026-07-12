@@ -1,44 +1,45 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import type { DirectoryEntry } from "@protocol/file-system"
 import {
   BUILTIN_APP_SURFACES,
   CORE_FILE_ROOTS,
   defaultFileForPath,
-  mountedFileRootId,
-  rootEntriesForMode,
+  normalizeNavigationRootId,
 } from "./file-roots"
 
-const parent = { fileSystemId: "ideall.root", fileId: "root" }
+test("file roots: 一级导航固定为五个分区", () => {
+  assert.deepEqual(
+    CORE_FILE_ROOTS.map((root) => [root.id, root.label]),
+    [
+      ["home", "我的"],
+      ["activity", "活动"],
+      ["browse", "浏览"],
+      ["apps", "应用"],
+      ["settings", "设置"],
+    ],
+  )
+})
 
-function entry(entryId: string, properties?: Readonly<Record<string, unknown>>): DirectoryEntry {
-  return {
-    entryId,
-    parent,
-    target: { fileSystemId: `test.${entryId}`, fileId: "root" },
-    name: entryId,
-    kind: entryId.startsWith("mount.") ? "mount" : "link",
-    properties,
+test("file roots: 旧细粒度 roots 归一到五分区", () => {
+  const expected = {
+    home: "home",
+    subscriptions: "home",
+    bookmarks: "home",
+    files: "home",
+    notes: "home",
+    workspace: "activity",
+    apps: "apps",
+    info: "browse",
+    community: "browse",
+    browser: "browse",
+    tool: "apps",
+    system: "settings",
+    "mount:third-party.demo:root": "apps",
+  } as const
+
+  for (const [rootId, sectionId] of Object.entries(expected)) {
+    assert.equal(normalizeNavigationRootId(rootId), sectionId, rootId)
   }
-}
-
-test("root entries: 合成根保持完整，Display 按本地/连接镜头过滤", () => {
-  const entries = [
-    ...CORE_FILE_ROOTS.map((root) => entry(root.id)),
-    entry("mount.local"),
-    entry("mount.connected", { workspaceModes: ["connected"] }),
-    entry("mount.shared", { workspaceModes: ["local", "connected"] }),
-  ]
-
-  assert.deepEqual(
-    rootEntriesForMode(entries, "local").map((item) => item.entryId),
-    ["home", "subscriptions", "apps", "tool", "mount.local", "mount.shared"],
-  )
-  assert.deepEqual(
-    rootEntriesForMode(entries, "connected").map((item) => item.entryId),
-    ["info", "community", "browser", "tool", "mount.connected", "mount.shared"],
-  )
-  assert.equal(entries.length, CORE_FILE_ROOTS.length + 3, "过滤不能修改合成根目录")
 })
 
 test("file roots: database/git/audio routes target their mounted FileSystem roots", () => {
@@ -46,7 +47,7 @@ test("file roots: database/git/audio routes target their mounted FileSystem root
     const surface = BUILTIN_APP_SURFACES[id]
     assert.deepEqual(defaultFileForPath(`/${id}`), {
       ref: surface.ref,
-      rootId: mountedFileRootId(surface.ref),
+      rootId: "apps",
     })
   }
 })

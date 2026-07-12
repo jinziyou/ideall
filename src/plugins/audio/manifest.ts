@@ -72,7 +72,7 @@ export const audioManifest = {
         mountFileSystem(fileSystemRegistry, ideallRootFileSystem, provider, {
           entryId: "app.audio-library",
           name: "音频库",
-          properties: { workspaceModes: ["local"], navigationHidden: true },
+          properties: { navigationHidden: true },
         }),
       ),
     )

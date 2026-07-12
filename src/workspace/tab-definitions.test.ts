@@ -41,6 +41,10 @@ test("tab definitions: layout 与视图分类由 kind 单源推导", () => {
   assert.equal(tabDefinitionLayout("home-bookmarks"), "padded")
   assert.equal(tabDefinitionViewType("home-overview"), "overview")
   assert.equal(tabDefinitionViewType("ai-settings"), "config")
+  assert.equal(tabDefinitionLayout("agent-spaces"), "padded")
+  assert.equal(tabDefinitionLayout("agent-task-list"), "padded")
+  assert.equal(tabDefinitionViewType("agent-spaces"), "config")
+  assert.equal(tabDefinitionViewType("agent-task-list"), "config")
   assert.equal(tabDefinitionViewType("tool-search"), "panel")
 })
 

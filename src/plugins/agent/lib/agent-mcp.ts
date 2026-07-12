@@ -407,7 +407,7 @@ export async function connectAgentMcp(opts?: ConnectAgentOpts): Promise<AgentMcp
 }
 
 const KIND_LABEL: Record<string, string> = {
-  note: "笔记",
+  note: "页面",
   bookmark: "书签",
   folder: "收藏夹",
   file: "文件",

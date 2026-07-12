@@ -1,8 +1,4 @@
-// 工作区模块配置 (桌面工作区壳的唯一数据来源): 驱动活动栏 + 二级侧栏 + 路由→标签解析。
-// 活动栏按当前「本地/连接」数据来源模式过滤展示 (顶栏 ModeSwitch 切换; 见 modulesForMode):
-//   本机/我的(local): 我的(home) · 关注(subscriptions) · [轨底] 插件 · 应用 · 回收站
-//   连接/发现(connected): 资讯(info) · 社区(community) · 发布(publications) · 工具(tool) · 浏览器(browser)
-//   工具(tool): crossMode → 两模式活动栏均展示, 打开不翻 mode (见 store isModeNeutralModule)。
+// 旧模块配置保留路由→标签解析与插件兼容；桌面/移动导航由 navigation-sections 单源驱动。
 // 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏搜索框/⌘K 统一面板搜本机内容, 两者职责分离。
 //
 // 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
@@ -12,9 +8,9 @@
 
 import type { ComponentType } from "react"
 import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"
-import type { ModuleId, TabDescriptor, WsMode } from "./types"
+import type { ModuleId, TabDescriptor } from "./types"
 import { MODULE_META } from "./module-meta"
-import { PLUGIN_ENTRIES, isPluginModule } from "./plugin-entries"
+import { PLUGIN_ENTRIES } from "./plugin-entries"
 import { tabDescriptor } from "./tab-definitions"
 import { descriptorForResourceSearch } from "./open-target"
 import { resourceFileTab } from "./resource-file-tab"
@@ -27,10 +23,6 @@ export type SidebarEntry = {
 
 export type ModuleConfig = {
   id: ModuleId
-  /** 所属数据来源模式 (本地 vs 连接); 活动栏按当前 mode 过滤展示。 */
-  mode: WsMode
-  /** 跨模式常驻: 本地/连接活动栏均展示, 打开时不翻 mode (见 store isModeNeutralModule)。 */
-  crossMode?: boolean
   label: string
   icon: ComponentType<{ className?: string }>
   /** 分区色 (text-*), 仅用于图标着色, 不大面积 fill。 */
@@ -64,10 +56,8 @@ const homeEntries: SidebarEntry[] = [
 ]
 
 export const MODULES: ModuleConfig[] = [
-  // —— 本地 ——
   {
     id: "home",
-    mode: "local",
     label: "我的",
     icon: Hexagon,
     sidebarTitle: "我的",
@@ -77,7 +67,6 @@ export const MODULES: ModuleConfig[] = [
     // 关注 = 全部动态来源 (发布者 / 实体 / 搜索 / 社区发布者 peer) 的统一入口; 内容汇入「我的」。
     // 旧的「关注」(资讯源) 与「关注」(社区 peer) 两个入口已合并到这里。
     id: "subscriptions",
-    mode: "local",
     label: MODULE_META.subscriptions.label,
     icon: MODULE_META.subscriptions.icon,
     colorClass: MODULE_META.subscriptions.tintClass,
@@ -92,7 +81,6 @@ export const MODULES: ModuleConfig[] = [
   },
   {
     id: "apps",
-    mode: "local",
     label: MODULE_META.apps.label,
     icon: MODULE_META.apps.icon,
     colorClass: MODULE_META.apps.tintClass,
@@ -107,7 +95,6 @@ export const MODULES: ModuleConfig[] = [
   },
   {
     id: "plugins",
-    mode: "local",
     label: MODULE_META.plugins.label,
     icon: MODULE_META.plugins.icon,
     colorClass: MODULE_META.plugins.tintClass,
@@ -116,7 +103,6 @@ export const MODULES: ModuleConfig[] = [
   },
   {
     id: "trash",
-    mode: "local",
     label: MODULE_META.trash.label,
     icon: MODULE_META.trash.icon,
     colorClass: MODULE_META.trash.tintClass,
@@ -129,10 +115,8 @@ export const MODULES: ModuleConfig[] = [
       },
     ],
   },
-  // —— 连接 ——
   {
     id: "info",
-    mode: "connected",
     label: MODULE_META.info.label,
     icon: MODULE_META.info.icon,
     colorClass: MODULE_META.info.tintClass,
@@ -147,7 +131,6 @@ export const MODULES: ModuleConfig[] = [
   },
   {
     id: "community",
-    mode: "connected",
     label: MODULE_META.community.label,
     icon: MODULE_META.community.icon,
     colorClass: MODULE_META.community.tintClass,
@@ -162,7 +145,6 @@ export const MODULES: ModuleConfig[] = [
   },
   {
     id: "publications",
-    mode: "connected",
     label: MODULE_META.publications.label,
     icon: MODULE_META.publications.icon,
     colorClass: MODULE_META.publications.tintClass,
@@ -177,8 +159,6 @@ export const MODULES: ModuleConfig[] = [
   },
   {
     id: "tool",
-    mode: "connected",
-    crossMode: true,
     label: MODULE_META.tool.label,
     icon: MODULE_META.tool.icon,
     colorClass: MODULE_META.tool.tintClass,
@@ -206,7 +186,6 @@ export const MODULES: ModuleConfig[] = [
   {
     // 浏览器 = 外部资源模块 (内嵌 webview); 插件/宿主 UI 的外链均经此打开 (见 browser-open.ts)。
     id: "browser",
-    mode: "connected",
     label: "浏览器",
     icon: Globe,
     colorClass: "text-spoke-community",
@@ -225,44 +204,6 @@ export const MODULES: ModuleConfig[] = [
 
 export function moduleById(id: ModuleId): ModuleConfig {
   return MODULES.find((m) => m.id === id) ?? MODULES[0]
-}
-
-/** 某模式下的模块列表 (活动栏按当前视图渲染; crossMode 模块两种模式均展示)。 */
-export function modulesForMode(mode: WsMode): ModuleConfig[] {
-  return MODULES.filter((m) => m.mode === mode || m.crossMode)
-}
-
-/** 模式镜头默认落点: local → 我的, connected → 资讯。 */
-export function primaryModuleForMode(mode: WsMode): ModuleId {
-  return mode === "local" ? "home" : "info"
-}
-
-/** 模块是否应在当前 mode 的左侧导航/侧栏语境中可见。 */
-export function isModuleVisibleInMode(id: ModuleId, mode: WsMode): boolean {
-  if (id === "agent") return true
-  if (mode === "local" && isPluginModule(id)) return true
-  return modulesForMode(mode).some((m) => m.id === id)
-}
-
-/**
- * 将 activeModule 收束到当前 mode 可见的左侧导航模块。
- * preferred 来自“想激活的标签模块”; current 是当前侧栏锚点。
- * 标签跨 mode 激活时优先保留 current, 避免左侧栏被另一模式污染。
- */
-export function coerceActiveModuleForMode(
-  preferred: ModuleId,
-  mode: WsMode,
-  current?: ModuleId,
-): ModuleId {
-  if (isModuleVisibleInMode(preferred, mode)) return preferred
-  if (current && isModuleVisibleInMode(current, mode)) return current
-  return primaryModuleForMode(mode)
-}
-
-/** 打开/激活时不翻 mode 的模块 (AI 区段 + 跨模式工具): 保留当前视图, 不由 module 反推。 */
-export function isModeNeutralModule(id: ModuleId): boolean {
-  if (id === "agent") return true
-  return MODULES.find((m) => m.id === id)?.crossMode === true
 }
 
 const ALL_ENTRIES = MODULES.flatMap((m) => m.entries)

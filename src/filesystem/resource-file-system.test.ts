@@ -291,6 +291,35 @@ test("resource filesystem: AI threads are linked from Home while the legacy work
   assert.equal((await fs.stat(corePlaceRef("workspace"), ctx))?.kind, "directory")
 })
 
+test("resource filesystem: workspace exposes aggregate spaces and tasks panels", async () => {
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [] }
+    },
+    async get() {
+      throw new Error("not found")
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      throw new Error("unsupported")
+    },
+  })
+  const fs = createResourceFileSystem()
+  const page = await fs.readDirectory(corePlaceRef("workspace"), ctx)
+
+  assert.deepEqual(
+    page.entries.slice(0, 2).map((entry) => entry.target),
+    [panelFileRef("spaces"), panelFileRef("tasks")],
+  )
+  assert.equal((await fs.stat(panelFileRef("spaces"), ctx))?.properties?.tabKind, "agent-spaces")
+  assert.equal((await fs.stat(panelFileRef("tasks"), ctx))?.properties?.tabKind, "agent-task-list")
+  assert.equal((await fs.stat(panelFileRef("spaces"), ctx))?.properties?.panelLayout, "padded")
+  assert.equal((await fs.stat(panelFileRef("tasks"), ctx))?.properties?.panelLayout, "padded")
+})
+
 test("resource filesystem: dynamic AI task panels use canonical workspace FileRefs", async () => {
   const fs = createResourceFileSystem()
   const ref = aiTasksPanelFileRef("ws /100%")
@@ -378,6 +407,19 @@ test("resource filesystem: legacy resource identity and root hierarchy are prese
   registerResourceSource(provider)
   const fs = createResourceFileSystem()
   const roots = await fs.readDirectory(corePlaceRef("notes"), ctx)
+  assert.deepEqual(
+    roots.entries.slice(0, 2).map((entry) => [entry.name, entry.file?.kind, entry.target.fileId]),
+    [
+      ["文件", "file", "panel:notes"],
+      ["Root", "directory", resourceFileRef(rootMeta.ref).fileId],
+    ],
+  )
+  assert.equal(roots.entries[0]?.properties?.navigationHidden, true)
+  assert.equal(
+    roots.entries.find((entry) => entry.target.fileId.startsWith("resource:"))?.properties
+      ?.preferredEngine,
+    "ideall.note",
+  )
   const noteEntries = roots.entries.filter((entry) => entry.target.fileId.startsWith("resource:"))
   assert.equal(noteEntries.length, 1, "place root only lists top-level notes")
   assert.deepEqual(resourceRefForFile(noteEntries[0].target), rootMeta.ref)
@@ -387,6 +429,7 @@ test("resource filesystem: legacy resource identity and root hierarchy are prese
   const children = await fs.readDirectory(resourceFileRef(rootMeta.ref), ctx)
   assert.equal(children.entries.length, 1)
   assert.deepEqual(resourceRefForFile(children.entries[0].target), childMeta.ref)
+  assert.deepEqual(children.entries[0].parent, resourceFileRef(rootMeta.ref))
 })
 
 test("resource filesystem: stat normalizes legacy not-found errors to null", async () => {

@@ -18,7 +18,7 @@ function memoryStorage() {
   }
 }
 
-test("startup target: persists arbitrary file + engine + root", () => {
+test("startup target: persists arbitrary file + engine and normalizes legacy roots", () => {
   const storage = memoryStorage()
   const target = {
     ref: { fileSystemId: "third-party.demo", fileId: "42" },
@@ -26,7 +26,7 @@ test("startup target: persists arbitrary file + engine + root", () => {
     rootId: "mount:demo",
   }
   assert.equal(writeStartupTarget(storage, target), true)
-  assert.deepEqual(readStartupTarget(storage), target)
+  assert.deepEqual(readStartupTarget(storage), { ...target, rootId: "apps" })
   assert.equal(resetStartupTarget(storage), true)
   assert.deepEqual(readStartupTarget(storage), DEFAULT_STARTUP_TARGET)
 })
@@ -37,4 +37,17 @@ test("startup target: corrupted data falls back to Home", () => {
     parseStartupTarget(JSON.stringify({ file: fileRefKey(DEFAULT_STARTUP_TARGET.ref) })),
     null,
   )
+})
+
+test("startup target: legacy system root is inferred from its file", () => {
+  const legacy = (panel: string) =>
+    JSON.stringify({
+      file: fileRefKey({ fileSystemId: "ideall.core", fileId: `panel:${panel}` }),
+      engineId: "ideall.panel",
+      rootId: "system",
+    })
+
+  assert.equal(parseStartupTarget(legacy("settings"))?.rootId, "settings")
+  assert.equal(parseStartupTarget(legacy("trash"))?.rootId, "activity")
+  assert.equal(parseStartupTarget(legacy("code"))?.rootId, "apps")
 })

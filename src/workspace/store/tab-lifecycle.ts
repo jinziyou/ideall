@@ -4,9 +4,8 @@ import type { Tab, TabDescriptor } from "../types"
 import type { NodeRef } from "../node-ref"
 import { tabKey } from "../tab-key"
 import { isBrowserResourceTab, nodeResourceRefForTab } from "../resource-tab"
-import { coerceActiveModuleForMode } from "../modules"
 import { isStaticTabKind } from "../tab-definitions"
-import { coerceCoreFileRootIdForMode, coreFileRootForModule } from "../file-roots"
+import { coreFileRootForModule, normalizeNavigationRootId } from "../file-roots"
 import { FILE_ENGINE_TAB_KIND, fileEngineTargetForTab } from "../file-tab"
 import { migrateWorkspaceTab } from "../workspace-compat"
 import {
@@ -29,7 +28,7 @@ import {
 export type OpenTabOptions = { transient?: boolean }
 
 /**
- * 打开或激活标签。标签导航不会隐式切换本地/连接模式；瞬态标签复用唯一预览槽。
+ * 打开或激活标签；瞬态标签复用唯一预览槽。
  */
 export function openTab(
   descriptor: TabDescriptor,
@@ -56,15 +55,18 @@ export function openTab(
   hideBrowserWebviewUnlessBrowserTab(descriptor)
   const id = tabKey(descriptor)
   const state = workspaceState()
-  const activeRootId = coerceCoreFileRootIdForMode(
+  const activeRootId = normalizeNavigationRootId(
     descriptor.rootId ?? coreFileRootForModule(descriptor.module).id,
-    state.mode,
-    state.activeRootId,
   )
+  const canonicalDescriptor = { ...descriptor, rootId: activeRootId }
   if (options?.transient) {
+    const plan = planTransientTabOpen(state.tabs, state.transientId, canonicalDescriptor)
     patchWorkspace({
-      ...planTransientTabOpen(state.tabs, state.transientId, descriptor),
-      activeModule: coerceActiveModuleForMode(descriptor.module, state.mode, state.activeModule),
+      ...plan,
+      tabs: plan.tabs.map((tab) =>
+        tab.id === plan.activeId ? { ...tab, rootId: activeRootId } : tab,
+      ),
+      activeModule: descriptor.module,
       activeRootId,
       activeSource: source,
     })
@@ -73,9 +75,9 @@ export function openTab(
 
   const exists = state.tabs.some((tab) => tab.id === id)
   const tabs = exists
-    ? state.tabs
+    ? state.tabs.map((tab) => (tab.id === id ? { ...tab, rootId: activeRootId } : tab))
     : evictColdTabs({
-        tabs: [...state.tabs, { ...descriptor, id }],
+        tabs: [...state.tabs, { ...canonicalDescriptor, id }],
         transientId: state.transientId,
         lru: state.lru,
         dirtyIds: dirtyTabSet(),
@@ -85,7 +87,7 @@ export function openTab(
     tabs,
     transientId: state.transientId === id ? null : state.transientId,
     activeId: id,
-    activeModule: coerceActiveModuleForMode(descriptor.module, state.mode, state.activeModule),
+    activeModule: descriptor.module,
     activeRootId,
     activeSource: source,
   })
@@ -215,12 +217,8 @@ export function closeTab(id: string): void {
   if (plan.activeChanged && plan.nextActiveTab) {
     const next = plan.nextActiveTab
     hideBrowserWebviewUnlessBrowserTab(next)
-    activeModule = coerceActiveModuleForMode(next.module, state.mode, activeModule)
-    activeRootId = coerceCoreFileRootIdForMode(
-      next.rootId ?? coreFileRootForModule(next.module).id,
-      state.mode,
-      activeRootId,
-    )
+    activeModule = next.module
+    activeRootId = normalizeNavigationRootId(next.rootId ?? coreFileRootForModule(next.module).id)
   }
   patchWorkspace({
     tabs: plan.tabs,
@@ -266,12 +264,8 @@ export function closeOtherTabs(keepId: string): void {
   patchWorkspace({
     tabs: [keep],
     activeId: keepId,
-    activeModule: coerceActiveModuleForMode(keep.module, state.mode, state.activeModule),
-    activeRootId: coerceCoreFileRootIdForMode(
-      keep.rootId ?? coreFileRootForModule(keep.module).id,
-      state.mode,
-      state.activeRootId,
-    ),
+    activeModule: keep.module,
+    activeRootId: normalizeNavigationRootId(keep.rootId ?? coreFileRootForModule(keep.module).id),
     transientId: state.transientId === keepId ? keepId : null,
     activeSource: "user",
   })
@@ -294,12 +288,8 @@ export function setActiveTab(id: string): void {
   hideBrowserWebviewUnlessBrowserTab(tab)
   patchWorkspace({
     activeId: id,
-    activeModule: coerceActiveModuleForMode(tab.module, state.mode, state.activeModule),
-    activeRootId: coerceCoreFileRootIdForMode(
-      tab.rootId ?? coreFileRootForModule(tab.module).id,
-      state.mode,
-      state.activeRootId,
-    ),
+    activeModule: tab.module,
+    activeRootId: normalizeNavigationRootId(tab.rootId ?? coreFileRootForModule(tab.module).id),
     activeSource: "user",
   })
 }

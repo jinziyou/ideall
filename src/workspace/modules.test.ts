@@ -6,16 +6,8 @@ import { resourceQueryValue } from "@protocol/resource"
 import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { parseFileEngineTabParams } from "./file-tab"
 import { BUILTIN_APP_SURFACES } from "./file-roots"
-import {
-  descriptorForPath,
-  descriptorForResource,
-  moduleById,
-  modulesForMode,
-  isModeNeutralModule,
-  isModuleVisibleInMode,
-  primaryModuleForMode,
-  coerceActiveModuleForMode,
-} from "./modules"
+import { NAVIGATION_SECTIONS } from "./navigation-sections"
+import { descriptorForPath, descriptorForResource, moduleById } from "./modules"
 
 test("descriptorForPath: 根路径与 /home 落到「我的」概览", () => {
   assert.equal(descriptorForPath("/")?.kind, "home-overview")
@@ -98,47 +90,24 @@ test("descriptorForResource: ?resource 优先, 兼容旧 ?node 深链", () => {
   assert.equal(descriptorForResource(""), null)
 })
 
-test("modulesForMode: 本地/连接各自簇 + crossMode 工具两侧都在", () => {
-  const local = modulesForMode("local").map((m) => m.id)
-  const connected = modulesForMode("connected").map((m) => m.id)
-  assert.deepEqual(local, ["home", "subscriptions", "apps", "plugins", "trash", "tool"])
-  assert.deepEqual(connected, ["info", "community", "publications", "tool", "browser"])
-})
-
-test("isModeNeutralModule: agent 与 crossMode 工具中性, 其余不翻", () => {
-  assert.equal(isModeNeutralModule("agent"), true)
-  assert.equal(isModeNeutralModule("tool"), true)
-  assert.equal(isModeNeutralModule("home"), false)
-  assert.equal(isModeNeutralModule("info"), false)
+test("navigation sections: 五个分区及活动栏项目固定且同时可见", () => {
+  assert.deepEqual(
+    NAVIGATION_SECTIONS.map((section) => ({
+      id: section.id,
+      label: section.label,
+      items: section.items.map((item) => item.label),
+    })),
+    [
+      { id: "home", label: "我的", items: ["关注", "书签", "资源", "文件"] },
+      { id: "activity", label: "活动", items: ["空间", "任务", "删除"] },
+      { id: "browse", label: "浏览", items: ["新闻", "社区", "浏览器"] },
+      { id: "apps", label: "应用", items: ["搜索", "本地应用"] },
+      { id: "settings", label: "设置", items: ["基本", "AI"] },
+    ],
+  )
 })
 
 test("moduleById: 未知 id 回退首个模块 (不抛错)", () => {
   assert.equal(moduleById("home").id, "home")
   assert.equal(moduleById("不存在" as never).id, "home")
-})
-
-test("module visibility: 当前镜头只暴露本模式模块与允许的特殊模块", () => {
-  assert.equal(primaryModuleForMode("local"), "home")
-  assert.equal(primaryModuleForMode("connected"), "info")
-  assert.equal(isModuleVisibleInMode("home", "local"), true)
-  assert.equal(isModuleVisibleInMode("plugins", "local"), true)
-  assert.equal(isModuleVisibleInMode("shell", "local"), true, "插件子模块通过插件组在本地可见")
-  assert.equal(isModuleVisibleInMode("community", "local"), false)
-  assert.equal(isModuleVisibleInMode("info", "connected"), true)
-  assert.equal(isModuleVisibleInMode("publications", "connected"), true)
-  assert.equal(isModuleVisibleInMode("publications", "local"), false)
-  assert.equal(isModuleVisibleInMode("browser", "connected"), true)
-  assert.equal(isModuleVisibleInMode("home", "connected"), false)
-  assert.equal(isModuleVisibleInMode("shell", "connected"), false)
-  assert.equal(isModuleVisibleInMode("agent", "local"), true)
-  assert.equal(isModuleVisibleInMode("agent", "connected"), true)
-})
-
-test("coerceActiveModuleForMode: 跨模式标签不污染当前镜头侧栏", () => {
-  assert.equal(coerceActiveModuleForMode("community", "local", "home"), "home")
-  assert.equal(coerceActiveModuleForMode("community", "local", "plugins"), "plugins")
-  assert.equal(coerceActiveModuleForMode("community", "local"), "home")
-  assert.equal(coerceActiveModuleForMode("home", "connected", "info"), "info")
-  assert.equal(coerceActiveModuleForMode("home", "connected"), "info")
-  assert.equal(coerceActiveModuleForMode("tool", "local", "home"), "tool", "crossMode 工具两侧可见")
 })

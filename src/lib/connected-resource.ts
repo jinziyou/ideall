@@ -1,6 +1,6 @@
 import type { ResourceCapability, ResourceRef, ResourceScheme } from "@protocol/resource"
 
-/** 旧 ResourceRef 到连接模式路由/能力的纯映射；不依赖 FileSystem 或 UI。 */
+/** 旧 ResourceRef 到远端资源路由/能力的纯映射；不依赖 FileSystem 或 UI。 */
 export type ConnectedResourceScheme = Exclude<ResourceScheme, "node">
 export type ConnectedResourceRef = Exclude<ResourceRef, { scheme: "node" }>
 

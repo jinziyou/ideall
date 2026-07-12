@@ -41,7 +41,6 @@ type PersistedWorkspaceSnapshot = {
   activeId: string | null
   transientId: string | null
   activeModule: string
-  mode: "local" | "connected"
   workspaceKind: "files" | "audio" | "development"
   developmentTool: "git" | "shell"
   sidebarCollapsed: boolean
@@ -300,7 +299,6 @@ function normalizeWorkspaceSnapshot(value: unknown): PersistedWorkspaceSnapshot 
     activeId: nullableWorkspaceString(value.activeId),
     transientId: nullableWorkspaceString(value.transientId),
     activeModule: typeof value.activeModule === "string" ? value.activeModule : "home",
-    mode: value.mode === "connected" ? "connected" : "local",
     workspaceKind,
     developmentTool: value.developmentTool === "shell" ? "shell" : "git",
     sidebarCollapsed: value.sidebarCollapsed === true,

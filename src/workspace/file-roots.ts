@@ -1,49 +1,23 @@
 import type { ComponentType } from "react"
-import {
-  AppWindow,
-  Bookmark,
-  Boxes,
-  Compass,
-  FileText,
-  FolderOpen,
-  Globe,
-  Home,
-  Rss,
-  Settings,
-  Users,
-} from "lucide-react"
-import {
-  fileRefKey,
-  parseFileRefKey,
-  type DirectoryEntry,
-  type FileRef,
-} from "@protocol/file-system"
+import { fileRefKey, parseFileRefKey, type FileRef } from "@protocol/file-system"
 import type { ResourceRef } from "@protocol/resource"
-import type { ModuleId, WsMode } from "./types"
+import type { ModuleId } from "./types"
 import { corePlaceRef, panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
 import {
   AUDIO_LIBRARY_ROOT_REF,
   DATABASE_ROOT_REF,
   GIT_ROOT_REF,
 } from "@/filesystem/builtin-app-roots"
+import {
+  NAVIGATION_SECTIONS,
+  navigationSectionIdForRoot,
+  type NavigationSectionId,
+} from "./navigation-sections"
 
 /**
- * 合成文件系统根目录的直接子树。根本身不进入活动栏；这些目录就是桌面端的
- * 一级空间锚点。合成根始终包含全部来源，Display 再按 modes 提供本地/连接镜头。
+ * 五个固定导航分区。旧的细粒度文件根仍保留稳定 FileRef，但不再作为一级入口。
  */
-export type CoreFileRootId =
-  | "home"
-  | "subscriptions"
-  | "bookmarks"
-  | "files"
-  | "notes"
-  | "workspace"
-  | "apps"
-  | "info"
-  | "community"
-  | "tool"
-  | "browser"
-  | "system"
+export type CoreFileRootId = NavigationSectionId
 
 export type CoreFileRoot = {
   id: CoreFileRootId
@@ -51,15 +25,9 @@ export type CoreFileRoot = {
   sidebarTitle: string
   icon: ComponentType<{ className?: string }>
   module: ModuleId
-  modes: readonly WsMode[]
-  navigationHidden?: boolean
   colorClass?: string
   defaultFile?: FileRef
 }
-
-const LOCAL_MODE: readonly WsMode[] = ["local"]
-const CONNECTED_MODE: readonly WsMode[] = ["connected"]
-const ALL_MODES: readonly WsMode[] = ["local", "connected"]
 
 const resource = (ref: ResourceRef) => resourceFileRef(ref)
 
@@ -93,126 +61,23 @@ export function builtinAppSurfaceForLegacyPanel(
   return id === "audio" || id === "database" || id === "git" ? BUILTIN_APP_SURFACES[id] : null
 }
 
-export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = [
-  {
-    id: "home",
-    label: "我的",
-    sidebarTitle: "我的",
-    icon: Home,
-    module: "home",
-    modes: LOCAL_MODE,
-    defaultFile: panelFileRef("home"),
-  },
-  {
-    id: "subscriptions",
-    label: "关注",
-    sidebarTitle: "关注",
-    icon: Rss,
-    module: "subscriptions",
-    modes: LOCAL_MODE,
-    colorClass: "text-spoke-info",
-    defaultFile: panelFileRef("subscriptions"),
-  },
-  {
-    id: "bookmarks",
-    label: "书签",
-    sidebarTitle: "书签",
-    icon: Bookmark,
-    module: "home",
-    modes: LOCAL_MODE,
-    navigationHidden: true,
-    defaultFile: panelFileRef("bookmarks"),
-  },
-  {
-    id: "files",
-    label: "文件",
-    sidebarTitle: "文件",
-    icon: FolderOpen,
-    module: "home",
-    modes: LOCAL_MODE,
-    navigationHidden: true,
-    defaultFile: panelFileRef("files"),
-  },
-  {
-    id: "notes",
-    label: "笔记",
-    sidebarTitle: "笔记",
-    icon: FileText,
-    module: "home",
-    modes: LOCAL_MODE,
-    navigationHidden: true,
-    defaultFile: panelFileRef("notes"),
-  },
-  {
-    id: "workspace",
-    label: "工作区",
-    sidebarTitle: "工作区",
-    icon: Boxes,
-    module: "agent",
-    modes: ALL_MODES,
-    navigationHidden: true,
-  },
-  {
-    id: "apps",
-    label: "应用",
-    sidebarTitle: "应用",
-    icon: AppWindow,
-    module: "apps",
-    modes: LOCAL_MODE,
-    colorClass: "text-spoke-tool",
-    defaultFile: panelFileRef("apps"),
-  },
-  {
-    id: "info",
-    label: "资讯",
-    sidebarTitle: "资讯",
-    icon: Globe,
-    module: "info",
-    modes: CONNECTED_MODE,
-    colorClass: "text-spoke-info",
-    defaultFile: resource({ scheme: "info", kind: "home", id: "default" }),
-  },
-  {
-    id: "community",
-    label: "社区",
-    sidebarTitle: "社区",
-    icon: Users,
-    module: "community",
-    modes: CONNECTED_MODE,
-    colorClass: "text-spoke-community",
-    defaultFile: resource({ scheme: "community", kind: "home", id: "default" }),
-  },
-  {
-    id: "browser",
-    label: "浏览器",
-    sidebarTitle: "浏览器",
-    icon: Globe,
-    module: "browser",
-    modes: CONNECTED_MODE,
-    colorClass: "text-spoke-community",
-    defaultFile: resource({ scheme: "browser", kind: "page", id: "default" }),
-  },
-  {
-    id: "tool",
-    label: "工具",
-    sidebarTitle: "工具",
-    icon: Compass,
-    module: "tool",
-    modes: ALL_MODES,
-    colorClass: "text-spoke-tool",
-    defaultFile: resource({ scheme: "tool", kind: "search", id: "default" }),
-  },
-  {
-    id: "system",
-    label: "系统",
-    sidebarTitle: "系统",
-    icon: Settings,
-    module: "home",
-    modes: LOCAL_MODE,
-    navigationHidden: true,
-    defaultFile: panelFileRef("settings"),
-  },
-] as const
+const SECTION_MODULE: Readonly<Record<CoreFileRootId, ModuleId>> = {
+  home: "home",
+  activity: "agent",
+  browse: "info",
+  apps: "apps",
+  settings: "home",
+}
+
+export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = NAVIGATION_SECTIONS.map((section) => ({
+  id: section.id,
+  label: section.label,
+  sidebarTitle: section.label,
+  icon: section.icon,
+  module: SECTION_MODULE[section.id],
+  colorClass: section.colorClass,
+  defaultFile: section.items[0]?.target.ref,
+}))
 
 export const MOUNTED_FILE_ROOT_PREFIX = "mount:"
 
@@ -220,48 +85,8 @@ export function isCoreFileRootId(value: string): value is CoreFileRootId {
   return CORE_FILE_ROOTS.some((root) => root.id === value)
 }
 
-function configuredEntryModes(entry: DirectoryEntry): readonly WsMode[] | null {
-  const value = entry.properties?.workspaceModes
-  if (!Array.isArray(value)) return null
-  const modes = value.filter(
-    (candidate): candidate is WsMode => candidate === "local" || candidate === "connected",
-  )
-  return modes.length > 0 ? modes : null
-}
-
-/** Display 镜头过滤；文件系统合成根本身始终保留完整目录。动态挂载默认属于本地模式。 */
-export function rootEntryVisibleInMode(entry: DirectoryEntry, mode: WsMode): boolean {
-  if (entry.properties?.navigationHidden === true) return false
-  if (isCoreFileRootId(entry.entryId)) {
-    const root = coreFileRoot(entry.entryId)
-    return !root.navigationHidden && root.modes.includes(mode)
-  }
-  return (configuredEntryModes(entry) ?? LOCAL_MODE).includes(mode)
-}
-
-export function rootEntriesForMode(
-  entries: readonly DirectoryEntry[],
-  mode: WsMode,
-): DirectoryEntry[] {
-  return entries.filter((entry) => rootEntryVisibleInMode(entry, mode))
-}
-
-export function coreFileRootMode(root: CoreFileRoot, current: WsMode): WsMode {
-  return root.modes.includes(current) ? current : root.modes[0]
-}
-
-export function coerceCoreFileRootIdForMode(
-  rootId: string,
-  mode: WsMode,
-  fallback?: string,
-): string {
-  if (!isCoreFileRootId(rootId)) return rootId
-  const root = coreFileRoot(rootId)
-  if (!root.navigationHidden && root.modes.includes(mode)) return rootId
-  if (fallback && (!isCoreFileRootId(fallback) || coreFileRoot(fallback).modes.includes(mode))) {
-    if (!isCoreFileRootId(fallback) || !coreFileRoot(fallback).navigationHidden) return fallback
-  }
-  return mode === "local" ? "home" : "info"
+export function normalizeNavigationRootId(rootId: string | null | undefined): CoreFileRootId {
+  return navigationSectionIdForRoot(rootId)
 }
 
 export function mountedFileRootId(ref: FileRef): string {
@@ -269,7 +94,16 @@ export function mountedFileRootId(ref: FileRef): string {
 }
 
 export function fileRootRef(rootId: string): FileRef | null {
-  if (isCoreFileRootId(rootId)) return corePlaceRef(rootId)
+  if (isCoreFileRootId(rootId)) {
+    const representative = {
+      home: "home",
+      activity: "workspace",
+      browse: "info",
+      apps: "apps",
+      settings: "system",
+    } as const
+    return corePlaceRef(representative[rootId])
+  }
   return rootId.startsWith(MOUNTED_FILE_ROOT_PREFIX)
     ? parseFileRefKey(rootId.slice(MOUNTED_FILE_ROOT_PREFIX.length))
     : null
@@ -277,13 +111,13 @@ export function fileRootRef(rootId: string): FileRef | null {
 
 export function defaultFileForPath(pathname: string): { ref: FileRef; rootId: string } | null {
   if (pathname.startsWith("/home/settings")) {
-    return { ref: panelFileRef("settings"), rootId: "home" }
+    return { ref: panelFileRef("settings"), rootId: "settings" }
   }
   if (pathname.startsWith("/home/subscriptions")) {
-    return { ref: panelFileRef("subscriptions"), rootId: "subscriptions" }
+    return { ref: panelFileRef("subscriptions"), rootId: "home" }
   }
   if (pathname.startsWith("/home/publications")) {
-    return { ref: panelFileRef("publications"), rootId: "community" }
+    return { ref: panelFileRef("publications"), rootId: "browse" }
   }
   if (pathname.startsWith("/home/bookmarks")) {
     return { ref: panelFileRef("bookmarks"), rootId: "home" }
@@ -296,58 +130,61 @@ export function defaultFileForPath(pathname: string): { ref: FileRef; rootId: st
   }
   if (pathname.startsWith("/apps")) return { ref: panelFileRef("apps"), rootId: "apps" }
   if (pathname.startsWith("/info")) {
-    return { ref: resource({ scheme: "info", kind: "home", id: "default" }), rootId: "info" }
+    return { ref: resource({ scheme: "info", kind: "home", id: "default" }), rootId: "browse" }
   }
   if (pathname.startsWith("/community")) {
     return {
       ref: resource({ scheme: "community", kind: "home", id: "default" }),
-      rootId: "community",
+      rootId: "browse",
     }
   }
   if (pathname.startsWith("/browser")) {
     return {
       ref: resource({ scheme: "browser", kind: "page", id: "default" }),
-      rootId: "browser",
+      rootId: "browse",
     }
   }
   if (pathname.startsWith("/tool/ai")) {
-    return { ref: resource({ scheme: "tool", kind: "ai", id: "default" }), rootId: "tool" }
+    return { ref: resource({ scheme: "tool", kind: "ai", id: "default" }), rootId: "apps" }
   }
   if (pathname.startsWith("/tool/navigation")) {
     return {
       ref: resource({ scheme: "tool", kind: "navigation", id: "default" }),
-      rootId: "tool",
+      rootId: "apps",
     }
   }
   if (pathname.startsWith("/tool")) {
-    return { ref: resource({ scheme: "tool", kind: "search", id: "default" }), rootId: "tool" }
+    return { ref: resource({ scheme: "tool", kind: "search", id: "default" }), rootId: "apps" }
   }
   for (const id of ["audio", "database", "git"] as const) {
     if (pathname.startsWith(`/${id}`)) {
       const surface = BUILTIN_APP_SURFACES[id]
-      return { ref: surface.ref, rootId: mountedFileRootId(surface.ref) }
+      return { ref: surface.ref, rootId: "apps" }
     }
   }
   const systemPanel = (["shell", "code", "trash"] as const).find((id) =>
     pathname.startsWith(`/${id}`),
   )
-  return systemPanel ? { ref: panelFileRef(systemPanel), rootId: "system" } : null
+  return systemPanel
+    ? { ref: panelFileRef(systemPanel), rootId: systemPanel === "trash" ? "activity" : "apps" }
+    : null
 }
 
 export function coreFileRoot(id: string | null | undefined): CoreFileRoot {
-  return CORE_FILE_ROOTS.find((root) => root.id === id) ?? CORE_FILE_ROOTS[0]
+  const normalized = normalizeNavigationRootId(id)
+  return CORE_FILE_ROOTS.find((root) => root.id === normalized) ?? CORE_FILE_ROOTS[0]
 }
 
 export function coreFileRootForModule(module: ModuleId): CoreFileRoot {
-  if (module === "subscriptions") return coreFileRoot("subscriptions")
+  if (module === "subscriptions") return coreFileRoot("home")
   if (module === "apps") return coreFileRoot("apps")
-  if (module === "info") return coreFileRoot("info")
-  if (module === "community" || module === "publications") return coreFileRoot("community")
-  if (module === "tool") return coreFileRoot("tool")
-  if (module === "browser") return coreFileRoot("browser")
-  if (module === "agent") return coreFileRoot("workspace")
+  if (["info", "community", "publications", "browser"].includes(module)) {
+    return coreFileRoot("browse")
+  }
+  if (module === "tool") return coreFileRoot("apps")
+  if (module === "agent" || module === "trash") return coreFileRoot("activity")
   if (["shell", "git", "database", "audio", "code", "trash", "plugins"].includes(module)) {
-    return coreFileRoot("system")
+    return coreFileRoot("apps")
   }
   return coreFileRoot("home")
 }

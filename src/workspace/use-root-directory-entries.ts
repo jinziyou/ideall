@@ -4,15 +4,13 @@ import * as React from "react"
 import type { DirectoryEntry } from "@protocol/file-system"
 import { ideallRootFileSystem } from "@/filesystem/builtin"
 import { readFileDirectory, watchFile } from "@/filesystem/registry"
-import { rootEntriesForMode } from "./file-roots"
-import { useMode } from "./store"
+import { isCoreFileRootId } from "./file-roots"
 
 const ROOT_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
 const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 
 export function useRootDirectoryEntries(): DirectoryEntry[] {
   const [entries, setEntries] = React.useState<DirectoryEntry[]>([])
-  const mode = useMode()
 
   React.useEffect(() => {
     let alive = true
@@ -37,5 +35,5 @@ export function useRootDirectoryEntries(): DirectoryEntry[] {
     }
   }, [])
 
-  return React.useMemo(() => rootEntriesForMode(entries, mode), [entries, mode])
+  return React.useMemo(() => entries.filter((entry) => isCoreFileRootId(entry.entryId)), [entries])
 }

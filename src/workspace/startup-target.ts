@@ -1,6 +1,8 @@
 import { fileRefKey, parseFileRefKey, type FileRef } from "@protocol/file-system"
 import { panelFileRef } from "@/filesystem/resource-file-system"
 import { STARTUP_TARGET_STORAGE_KEY } from "@/lib/workspace-storage"
+import { isCoreFileRootId, normalizeNavigationRootId } from "./file-roots"
+import { inferredRootIdForFile } from "./workspace-compat"
 
 export { STARTUP_TARGET_STORAGE_KEY }
 
@@ -18,14 +20,23 @@ export const DEFAULT_STARTUP_TARGET: StartupTarget = {
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">
 
+function canonicalRootId(ref: FileRef, rootId: string | undefined): string | undefined {
+  if (!rootId || isCoreFileRootId(rootId)) return rootId
+  return normalizeNavigationRootId(inferredRootIdForFile(ref) ?? rootId)
+}
+
 export function parseStartupTarget(raw: string | null | undefined): StartupTarget | null {
   if (!raw) return null
   try {
     const value = JSON.parse(raw) as { file?: unknown; engineId?: unknown; rootId?: unknown }
     const ref = typeof value.file === "string" ? parseFileRefKey(value.file) : null
     const engineId = typeof value.engineId === "string" ? value.engineId.trim() : ""
-    const rootId = typeof value.rootId === "string" && value.rootId ? value.rootId : undefined
-    return ref && engineId ? { ref, engineId, rootId } : null
+    if (!ref || !engineId) return null
+    const rootId = canonicalRootId(
+      ref,
+      typeof value.rootId === "string" && value.rootId ? value.rootId : undefined,
+    )
+    return { ref, engineId, rootId }
   } catch {
     return null
   }
@@ -48,7 +59,7 @@ export function writeStartupTarget(storage: StorageLike | null | undefined, targ
       JSON.stringify({
         file: fileRefKey(target.ref),
         engineId: target.engineId,
-        rootId: target.rootId,
+        rootId: canonicalRootId(target.ref, target.rootId),
       }),
     )
     return true

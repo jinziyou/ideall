@@ -20,13 +20,13 @@ import {
   type IdeallFile,
 } from "@protocol/file-system"
 import { readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
+import { resourceRefForFile } from "@/filesystem/resource-file-system"
 import { getTabs, openTarget, useActiveId, useActiveRootId } from "../store"
 import { coreFileRoot, fileRootRef, isCoreFileRootId } from "../file-roots"
 import { fileEngineTargetForTab } from "../file-tab"
 import { onTreeArrowNav, focusTreeSibling, forwardTreeFocus } from "./tree-keynav"
 import { readAllDirectoryEntries } from "./directory-pagination"
-
-const EXPANDED_KEY = "ideall:file-system-tree:expanded"
+import { fileCanExpand, useFileTreeExpansion } from "./file-tree-expansion"
 
 type LoadedEntry = { entry: DirectoryEntry; file: IdeallFile | null }
 
@@ -55,33 +55,7 @@ export default function FileSystemSidebarTree() {
   const rootId = useActiveRootId()
   const directory = fileRootRef(rootId)
   const activeId = useActiveId()
-  const [expanded, setExpanded] = React.useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set()
-    try {
-      const raw = window.localStorage.getItem(EXPANDED_KEY)
-      return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
-    } catch {
-      return new Set()
-    }
-  })
-
-  React.useEffect(() => {
-    try {
-      window.localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded]))
-    } catch {
-      /* storage unavailable */
-    }
-  }, [expanded])
-
-  const toggle = React.useCallback((ref: FileRef) => {
-    const key = fileRefKey(ref)
-    setExpanded((current) => {
-      const next = new Set(current)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }, [])
+  const { expanded, setExpanded } = useFileTreeExpansion()
 
   return (
     <nav
@@ -92,13 +66,13 @@ export default function FileSystemSidebarTree() {
       className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2 outline-none"
     >
       {directory ? (
-        <DirectoryChildren
+        <FileSystemTreeChildren
           directory={directory}
           depth={0}
           activeRef={activeFileRef(activeId)}
           rootId={rootId}
           expanded={expanded}
-          onToggle={toggle}
+          onSetExpanded={setExpanded}
           refreshKey="root"
         />
       ) : (
@@ -108,22 +82,24 @@ export default function FileSystemSidebarTree() {
   )
 }
 
-function DirectoryChildren({
+export function FileSystemTreeChildren({
   directory,
   depth,
   activeRef,
   rootId,
   expanded,
-  onToggle,
+  onSetExpanded,
   refreshKey,
+  onOpen,
 }: {
   directory: FileRef
   depth: number
   activeRef: FileRef | null
   rootId: string
   expanded: Set<string>
-  onToggle: (ref: FileRef) => void
+  onSetExpanded: (ref: FileRef, expanded: boolean) => void
   refreshKey: string
+  onOpen?: (file: IdeallFile, expandable: boolean) => void
 }) {
   const [items, setItems] = React.useState<LoadedEntry[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -198,8 +174,9 @@ function DirectoryChildren({
       activeRef={activeRef}
       rootId={rootId}
       expanded={expanded}
-      onToggle={onToggle}
+      onSetExpanded={onSetExpanded}
       refreshKey={`${refreshKey}:${revision}`}
+      onOpen={onOpen}
     />
   ))
 }
@@ -211,8 +188,9 @@ function FileTreeRow({
   activeRef,
   rootId,
   expanded,
-  onToggle,
+  onSetExpanded,
   refreshKey,
+  onOpen,
 }: {
   entry: DirectoryEntry
   file: IdeallFile | null
@@ -220,32 +198,39 @@ function FileTreeRow({
   activeRef: FileRef | null
   rootId: string
   expanded: Set<string>
-  onToggle: (ref: FileRef) => void
+  onSetExpanded: (ref: FileRef, expanded: boolean) => void
   refreshKey: string
+  onOpen?: (file: IdeallFile, expandable: boolean) => void
 }) {
   const Icon = fileIcon(file)
-  const expandable = file?.kind === "directory"
+  const expandable = fileCanExpand(file)
   const open = expandable ? expanded.has(fileRefKey(file.ref)) : false
   const active = Boolean(file && activeRef && sameFileRef(file.ref, activeRef))
   const badge = file?.properties?.badge
 
   const openFile = (transient: boolean) => {
     if (!file) return
+    if (expandable) onSetExpanded(file.ref, true)
+    const resource = resourceRefForFile(file.ref)
     const preferredEngine =
       typeof entry.properties?.preferredEngine === "string"
         ? entry.properties.preferredEngine
-        : undefined
+        : resource?.scheme === "node" && resource.kind === "note"
+          ? "ideall.note"
+          : undefined
     openTarget(
       {
         type: "file",
         ref: file.ref,
         file,
         engineId: preferredEngine,
+        title: entry.name,
         transient,
         rootId,
       },
       "user",
     )
+    onOpen?.(file, expandable)
   }
 
   return (
@@ -266,12 +251,12 @@ function FileTreeRow({
           } else if (event.key === "ArrowRight") {
             if (file && expandable && !open) {
               event.preventDefault()
-              onToggle(file.ref)
+              onSetExpanded(file.ref, true)
             } else if (focusTreeSibling(event.currentTarget, 1)) event.preventDefault()
           } else if (event.key === "ArrowLeft") {
             if (file && expandable && open) {
               event.preventDefault()
-              onToggle(file.ref)
+              onSetExpanded(file.ref, false)
             } else if (focusTreeSibling(event.currentTarget, -1)) event.preventDefault()
           }
         }}
@@ -288,7 +273,7 @@ function FileTreeRow({
           aria-hidden
           onClick={(event) => {
             event.stopPropagation()
-            if (file && expandable) onToggle(file.ref)
+            if (file && expandable) onSetExpanded(file.ref, !open)
           }}
           className={cn(
             "grid h-5 w-5 shrink-0 place-items-center rounded transition-transform hover:bg-accent",
@@ -307,14 +292,15 @@ function FileTreeRow({
         )}
       </div>
       {file && expandable && open && (
-        <DirectoryChildren
+        <FileSystemTreeChildren
           directory={file.ref}
           depth={depth + 1}
           activeRef={activeRef}
           rootId={rootId}
           expanded={expanded}
-          onToggle={onToggle}
+          onSetExpanded={onSetExpanded}
           refreshKey={refreshKey}
+          onOpen={onOpen}
         />
       )}
     </div>

@@ -82,7 +82,7 @@ export const gitManifest = {
         mountFileSystem(fileSystemRegistry, ideallRootFileSystem, provider, {
           entryId: "app.git-repositories",
           name: "Git 仓库",
-          properties: { workspaceModes: ["local"], navigationHidden: true },
+          properties: { navigationHidden: true },
         }),
       ),
     )

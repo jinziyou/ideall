@@ -23,7 +23,7 @@ test("home places: 锁定「我的」区段顺序与默认 FileRef", () => {
   })
   assert.deepEqual(homePlaceById("notes")?.defaultFile, {
     fileSystemId: "ideall.core",
-    fileId: "panel:notes",
+    fileId: "place:notes",
   })
 
   assert.equal(homePlaceById("workspace")?.defaultFile, undefined)

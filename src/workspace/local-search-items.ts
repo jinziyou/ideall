@@ -1,4 +1,4 @@
-// 本机内容 (笔记 / 关注 / 书签 / 资源 / 对话) 的可搜索条目: 唯一数据来源, 供 ⌘K 统一面板消费
+// 本机内容 (文件 / 关注 / 书签 / 资源 / 对话) 的可搜索条目: 唯一数据来源, 供 ⌘K 统一面板消费
 // (顶栏搜索框唤起同一面板; 旧的独立本地搜索对话框已并入)。每项含 run() 执行:
 // 所有本机内容先作为 FileSystem 目录项加载, 再打开对应文件标签。
 
@@ -15,7 +15,7 @@ import { MODULE_META } from "./module-meta"
 import { openTarget } from "./store"
 import type { OpenTarget } from "./open-target"
 
-export type LocalSearchGroup = "笔记" | "关注" | "书签" | "资源" | "对话"
+export type LocalSearchGroup = "文件" | "关注" | "书签" | "资源" | "对话"
 export type LocalSearchItem = {
   id: string
   label: string
@@ -25,11 +25,11 @@ export type LocalSearchItem = {
   run: () => void
 }
 
-export const LOCAL_SEARCH_ORDER: LocalSearchGroup[] = ["笔记", "关注", "书签", "资源", "对话"]
+export const LOCAL_SEARCH_ORDER: LocalSearchGroup[] = ["文件", "关注", "书签", "资源", "对话"]
 
 // 图标从 MODULE_META 派生 (分组名是本文件的展示口径, 与模块 label 恰好一致但语义独立)。
 export const LOCAL_SEARCH_ICON: Record<LocalSearchGroup, ComponentType<{ className?: string }>> = {
-  笔记: MODULE_META.notes.icon,
+  文件: MODULE_META.notes.icon,
   关注: MODULE_META.subscriptions.icon,
   书签: MODULE_META.bookmarks.icon,
   资源: MODULE_META.resources.icon,
@@ -44,7 +44,7 @@ export type LocalSearchSource = {
 }
 
 const LOCAL_SEARCH_SOURCES: LocalSearchSource[] = [
-  { group: "笔记", place: "notes", kind: "note", descendKind: "note" },
+  { group: "文件", place: "notes", kind: "note", descendKind: "note" },
   { group: "关注", place: "subscriptions", kind: "feed" },
   { group: "书签", place: "bookmarks", kind: "bookmark", descendKind: "folder" },
   { group: "资源", place: "files", kind: "file" },
@@ -125,7 +125,7 @@ async function loadFileGroup(
   }
 }
 
-/** 并行加载本机内容并构建可搜索/可执行条目 (按 笔记→关注→书签→资源→对话 顺序)。 */
+/** 并行加载本机内容并构建可搜索/可执行条目 (按 文件→关注→书签→资源→对话 顺序)。 */
 export async function loadLocalSearchItems(
   options: LoadLocalSearchItemsOptions = {},
   loader: LocalSearchEntryLoader = loadFileEntries,

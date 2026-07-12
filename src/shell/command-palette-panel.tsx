@@ -15,7 +15,6 @@ import {
   Hexagon,
   Layers,
   LayoutGrid,
-  NotebookPen,
   RefreshCw,
   SunMoon,
   Terminal,
@@ -72,7 +71,7 @@ export { openCommandPalette }
 
 /**
  * ⌘K 统一面板 —— 全局唯一实例 (挂根布局), 本地搜索与命令的单一入口 (顶栏搜索框同样唤起它)。
- * 直接输入 = 搜本机内容 (笔记/关注/书签/资源) + 匹配命令; 输入 `>` 前缀 = 只看命令 (VS Code 惯例)。
+ * 直接输入 = 搜本机内容 (文件/关注/书签/资源) + 匹配命令; 输入 `>` 前缀 = 只看命令 (VS Code 惯例)。
  * 实现: 全部命令项的 value 以 "> " 开头 —— cmdk 模糊匹配天然让 ">xxx" 只命中命令 (内容项 value 无 ">"),
  * 内容分组在命令模式下额外整组不渲染。命令: 跳发现模块 / 我的各子区 / 系统服务 (主题/同步/更新)。
  * 由 ⌘K / Ctrl+K 或任意 openCommandPalette() 触发器 (顶栏搜索框 / 移动顶栏 / 各页页头) 唤起。
@@ -80,7 +79,7 @@ export { openCommandPalette }
 export default function CommandPalettePanel({ initialOpen = false }: { initialOpen?: boolean }) {
   const router = useRouter()
   const [open, setOpen] = React.useState(initialOpen)
-  // 受控输入: 内容项 (笔记/书签/资源/关注) 仅在用户输入时才展示, 避免一打开就糊一屏本机内容
+  // 受控输入: 内容项 (文件/书签/资源/关注) 仅在用户输入时才展示, 避免一打开就糊一屏本机内容
   // (⌘K 主要是命令/跳转入口; 内容搜索是兑现占位文案「跳到书签」的补充)。
   const [query, setQuery] = React.useState("")
   // `>` 前缀 = 命令模式 (只看命令): 内容分组整组不渲染; 匹配面靠命令 value 的 "> " 前缀天然收窄。
@@ -204,7 +203,7 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
           title: note.name || "无标题",
         })
       } catch (e) {
-        toast.error("新建笔记失败", { description: String(e) })
+        toast.error("新建页面失败", { description: String(e) })
       }
     })()
   }
@@ -325,10 +324,10 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="我的">
-          {/* 最高频捕获动作 (记一条笔记) 的 1 步入口, 置组首。 */}
-          <CommandItem value="> 新建笔记 new note 记录 写作" onSelect={newNote}>
-            <NotebookPen className="h-4 w-4" />
-            新建笔记
+          {/* 最高频捕获动作 (在「文件」下新建页面) 的 1 步入口, 置组首。 */}
+          <CommandItem value="> 新建页面 new page 文件 写作" onSelect={newNote}>
+            <Files className="h-4 w-4" />
+            新建页面
           </CommandItem>
           {HOME_SUBPAGES.map((p) => (
             <CommandItem key={p.href} value={`> 我的 ${p.label}`} onSelect={() => go(p.href)}>
@@ -406,7 +405,7 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
             </CommandItem>
           )}
         </CommandGroup>
-        {/* 本机内容 (笔记/关注/书签/资源): 仅在输入且非命令模式时展示, 按标题模糊匹配 (cmdk 据 keywords 过滤)。 */}
+        {/* 本机内容 (文件/关注/书签/资源): 仅在输入且非命令模式时展示, 按标题模糊匹配 (cmdk 据 keywords 过滤)。 */}
         {!commandMode && query.trim() && contentQuery === query.trim() && content.length > 0
           ? LOCAL_SEARCH_ORDER.map((g) => {
               const gi = content.filter((i) => i.group === g)

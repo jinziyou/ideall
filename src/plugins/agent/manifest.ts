@@ -47,7 +47,7 @@ export const agentManifest = {
       mountFileSystem(fileSystemRegistry, ideallRootFileSystem, provider, {
         entryId: "app.agent-config",
         name: "AI 智能体配置",
-        properties: { workspaceModes: ["local"], navigationHidden: true },
+        properties: { navigationHidden: true },
       }),
     )
   },

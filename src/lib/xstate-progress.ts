@@ -38,7 +38,7 @@ export function syncProgressFromSnapshot(
   if (typeof v === "object" && v !== null && "syncing" in v) {
     const par = (v as { syncing: Record<string, string> }).syncing
     if (par.subscriptions === "run") parts.push("关注")
-    if (par.notes === "run") parts.push("笔记")
+    if (par.notes === "run") parts.push("文件")
   }
   return {
     kind: "sync",

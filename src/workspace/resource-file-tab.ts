@@ -19,15 +19,14 @@ export function engineForResource(ref: ResourceRef): string {
 
 export function rootForResource(ref: ResourceRef): string {
   if (ref.scheme === "node") {
-    if (ref.kind === "note") return "notes"
-    if (ref.kind === "bookmark" || ref.kind === "folder") return "bookmarks"
-    if (ref.kind === "file") return "files"
-    if (ref.kind === "feed") return "subscriptions"
-    return "workspace"
+    return ref.kind === "thread" ? "activity" : "home"
   }
-  if (ref.scheme === "browser") return "browser"
+  if (ref.scheme === "browser" || ref.scheme === "info" || ref.scheme === "community") {
+    return "browse"
+  }
   if (ref.scheme === "app") return "apps"
-  return ref.scheme
+  if (ref.scheme === "tool") return "apps"
+  return "home"
 }
 
 /** 当前运行时入口：ResourceRef 先映射为 FileRef，再生成唯一的 File + Engine 标签身份。 */

@@ -26,11 +26,10 @@ import {
 } from "@/plugins/agent/lib/agent-settings"
 import { SurfacePanel } from "@/ui/panel"
 import { IconButton } from "@/ui/icon-button"
-import { useMode, useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings } from "./store"
+import { useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings } from "./store"
 
 export default function RightAiPanel() {
   const open = useRightPanelOpen()
-  const mode = useMode()
   const isMdUp = useMediaQuery("(min-width: 768px)")
   const isLg = useMediaQuery("(min-width: 1024px)")
   const panelRef = React.useRef<AgentPanelHandle>(null)
@@ -47,9 +46,9 @@ export default function RightAiPanel() {
   )
   const configured = isConfigured(settings)
   const panelWorkspace =
-    mode === "local"
-      ? (wsState.workspaces.find((w) => w.id === wsState.activeId) ?? wsState.workspaces[0] ?? null)
-      : null
+    wsState.workspaces.find((workspace) => workspace.id === wsState.activeId) ??
+    wsState.workspaces[0] ??
+    null
   const activeModel = panelWorkspace ? resolveModel(panelWorkspace) : null
   const panelConfigured = panelWorkspace ? isWorkspaceConfigured(panelWorkspace) : configured
   const panelModelLabel = panelWorkspace

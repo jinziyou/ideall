@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
-import type { DevelopmentTool, ModuleId, Tab, WorkspaceKind, WsMode } from "./types"
+import type { DevelopmentTool, ModuleId, Tab, WorkspaceKind } from "./types"
 
 /** 激活来源: user=用户 · agent=AI 经 ui.openTab。 */
 export type ActiveSource = "user" | "agent"
@@ -12,7 +12,6 @@ export type WorkspaceState = {
   activeModule: ModuleId
   /** 合成文件系统根目录下当前选中的直接子树。 */
   activeRootId: string
-  mode: WsMode
   workspaceKind: WorkspaceKind
   developmentTool: DevelopmentTool
   sidebarCollapsed: boolean
@@ -33,7 +32,6 @@ export const workspaceInitialState: WorkspaceState = {
   activeSource: "user",
   activeModule: "home",
   activeRootId: "home",
-  mode: "local",
   workspaceKind: "files",
   developmentTool: "git",
   sidebarCollapsed: false,

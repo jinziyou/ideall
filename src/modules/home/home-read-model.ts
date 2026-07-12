@@ -49,7 +49,7 @@ export function buildHomeActivity({
       id: `note:${n.id}`,
       ts: n.createdAt,
       dotClass: "bg-pop",
-      label: "写笔记",
+      label: "文件",
       title: n.title || "无标题",
       href: "/home/notes",
     })

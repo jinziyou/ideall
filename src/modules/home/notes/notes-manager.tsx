@@ -1,7 +1,7 @@
 "use client"
 
-// 笔记面板 (home-notes 标签): 搜索 + 最近笔记列表 + 新建。
-// 完整页树与编辑在二级侧栏文件树 + 内容标签 (note-viewer), 此处不再重复页树。
+// 文件面板 (home-notes 标签): 搜索 + 最近页面列表 + 新建。
+// 完整页树与编辑在二级侧栏「文件」树 + 内容标签 (note-viewer), 此处不再重复页树。
 import * as React from "react"
 import { toast } from "sonner"
 import { FilePlus2, FileText, Loader2, Plus, Search } from "lucide-react"
@@ -33,7 +33,7 @@ export default function NotesManager() {
     try {
       setNotes(await listNoteFiles(true))
     } catch (e) {
-      toast.error("读取笔记失败", { description: String(e) })
+      toast.error("读取文件失败", { description: String(e) })
     } finally {
       setLoading(false)
     }
@@ -69,7 +69,7 @@ export default function NotesManager() {
       const note = await createNoteFile(null)
       const resource = resourceRefForFile(note.ref)
       if (!resource || resource.scheme !== "node" || resource.kind !== "note") {
-        throw new Error("文件系统返回了无效笔记引用")
+        throw new Error("文件系统返回了无效文件引用")
       }
       await reload()
       openTarget({
@@ -88,7 +88,7 @@ export default function NotesManager() {
       type: "file",
       ref: resourceFileRef({ scheme: "node", kind: "note", id: n.id }),
       title: n.title || "无标题",
-      rootId: "notes",
+      rootId: "home",
     })
   }
 
@@ -96,7 +96,7 @@ export default function NotesManager() {
     return (
       <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        加载笔记…
+        加载文件…
       </div>
     )
   }
@@ -104,9 +104,9 @@ export default function NotesManager() {
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold">笔记</h1>
+        <h1 className="text-xl font-semibold">文件</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          在左侧文件树浏览全部笔记；此处可搜索或查看最近编辑。
+          在左侧文件树浏览全部页面；此处可搜索或查看最近编辑。
         </p>
       </div>
 
@@ -129,7 +129,7 @@ export default function NotesManager() {
       {notes.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title="还没有笔记"
+          title="还没有文件"
           action={
             <Button variant="outline" onClick={handleNewRoot}>
               <FilePlus2 className="mr-2 h-4 w-4" />
@@ -138,7 +138,7 @@ export default function NotesManager() {
           }
         />
       ) : filtered.length === 0 ? (
-        <EmptyState title="没有匹配的笔记。" />
+        <EmptyState title="没有匹配的文件。" />
       ) : (
         <div className="flex flex-col gap-1">
           {!searching && <p className="px-1 text-xs font-medium text-muted-foreground">最近编辑</p>}

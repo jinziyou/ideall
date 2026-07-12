@@ -1,9 +1,8 @@
 "use client"
 
-import type { DevelopmentTool, ModuleId, Tab, WorkspaceKind, WsMode } from "../types"
+import type { DevelopmentTool, ModuleId, Tab, WorkspaceKind } from "../types"
 import { isBrowserResourceTab } from "../resource-tab"
-import { coerceActiveModuleForMode } from "../modules"
-import { coerceCoreFileRootIdForMode, coreFileRootForModule } from "../file-roots"
+import { coreFileRootForModule, normalizeNavigationRootId } from "../file-roots"
 import { WORKSPACE_STORAGE_KEY } from "../workspace-persist"
 import { migrateWorkspaceTabs, validWorkspaceModule } from "../workspace-compat"
 import { browserRelease, isTauri } from "@/lib/tauri"
@@ -15,15 +14,10 @@ type PersistedWorkspace = {
   transientId: string | null
   activeModule: ModuleId
   activeRootId: string | null
-  mode: WsMode
   workspaceKind: WorkspaceKind
   developmentTool: DevelopmentTool
   sidebarCollapsed: boolean
   rightPanelOpen: boolean
-}
-
-function validMode(value: unknown): WsMode {
-  return value === "connected" || value === "local" ? value : "local"
 }
 
 function validWorkspaceKind(value: unknown): WorkspaceKind {
@@ -45,7 +39,6 @@ function readPersistedWorkspace(): PersistedWorkspace | null {
       transientId?: string | null
       activeModule?: ModuleId
       activeRootId?: string
-      mode?: WsMode
       workspaceKind?: WorkspaceKind
       developmentTool?: DevelopmentTool
       sidebarCollapsed?: boolean
@@ -59,7 +52,6 @@ function readPersistedWorkspace(): PersistedWorkspace | null {
       activeModule: validWorkspaceModule(value.activeModule) ?? "home",
       activeRootId:
         typeof value.activeRootId === "string" && value.activeRootId ? value.activeRootId : null,
-      mode: validMode(value.mode),
       workspaceKind: validWorkspaceKind(value.workspaceKind),
       developmentTool: validDevelopmentTool(value.developmentTool),
       sidebarCollapsed: value.sidebarCollapsed ?? false,
@@ -92,11 +84,10 @@ export function hydrateWorkspace(): void {
     const savedTransientId = saved.transientId
       ? (idMap.get(saved.transientId) ?? saved.transientId)
       : null
-    const aiActive = activeTab?.module === "agent"
     const requestedRootId =
       current.activeId && activeTab
-        ? current.activeRootId
-        : (saved.activeRootId ?? activeTab?.rootId ?? coreFileRootForModule(saved.activeModule).id)
+        ? (activeTab.rootId ?? current.activeRootId)
+        : (activeTab?.rootId ?? saved.activeRootId ?? coreFileRootForModule(saved.activeModule).id)
 
     hydrateWorkspaceState({
       tabs,
@@ -107,15 +98,9 @@ export function hydrateWorkspace(): void {
           : null,
       lru: activeTab ? [activeTab.id] : [],
       activeSource: "user",
-      activeModule: aiActive
-        ? saved.activeModule
-        : activeTab
-          ? coerceActiveModuleForMode(activeTab.module, saved.mode, saved.activeModule)
-          : current.activeId
-            ? coerceActiveModuleForMode(current.activeModule, saved.mode, saved.activeModule)
-            : coerceActiveModuleForMode(saved.activeModule, saved.mode),
-      activeRootId: coerceCoreFileRootIdForMode(requestedRootId, saved.mode),
-      mode: saved.mode,
+      activeModule:
+        activeTab?.module ?? (current.activeId ? current.activeModule : saved.activeModule),
+      activeRootId: normalizeNavigationRootId(requestedRootId),
       workspaceKind: saved.workspaceKind,
       developmentTool: saved.developmentTool,
       sidebarCollapsed: saved.sidebarCollapsed,

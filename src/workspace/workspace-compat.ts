@@ -10,7 +10,9 @@ import {
 import {
   BUILTIN_APP_SURFACES,
   builtinAppSurfaceForLegacyPanel,
-  mountedFileRootId,
+  builtinAppSurfaceForRoot,
+  isCoreFileRootId,
+  normalizeNavigationRootId,
 } from "./file-roots"
 import { FILE_ENGINE_TAB_KIND, fileEngineTab, parseFileEngineTabParams } from "./file-tab"
 import { nodeResourceRefForTab, parseResourceTabParams } from "./resource-tab"
@@ -47,24 +49,28 @@ export function validWorkspaceModule(value: unknown): ModuleId | null {
 }
 
 export function inferredRootIdForFile(ref: FileRef): string | undefined {
+  if (builtinAppSurfaceForRoot(ref)) return "apps"
   const resource = resourceRefForFile(ref)
   if (resource) return rootForResource(resource)
 
   const panel = panelForFile(ref)
   if (panel) {
-    if (panel.id === "home") return "home"
-    if (panel.id === "subscriptions") return "subscriptions"
-    if (panel.id === "bookmarks") return "bookmarks"
-    if (panel.id === "files") return "files"
-    if (panel.id === "notes") return "notes"
-    if (panel.module === "agent") return "workspace"
+    if (["home", "subscriptions", "bookmarks", "files", "notes"].includes(panel.id)) {
+      return "home"
+    }
+    if (panel.id === "spaces" || panel.id === "tasks" || panel.id === "trash") {
+      return "activity"
+    }
+    if (panel.id === "ai-tasks" || panel.id.startsWith("ai-tasks:")) return "activity"
+    if (panel.module === "agent") return "settings"
     if (panel.id === "apps") return "apps"
-    if (panel.id === "publications") return "community"
-    return "system"
+    if (panel.id === "publications") return "browse"
+    if (panel.id === "settings") return "settings"
+    return "apps"
   }
 
   const provider = getFileSystem(ref.fileSystemId)
-  return provider ? mountedFileRootId(provider.descriptor.root) : undefined
+  return provider ? "apps" : undefined
 }
 
 function hydrateResourceFileTab(ref: ResourceRef, tab: Tab): Tab {
@@ -87,17 +93,17 @@ function migrateStaticWorkspaceTab(tab: Tab & { kind: StaticTabKind }): Tab | nu
     case "home-overview":
       return hydratePanelFileTab(panelFileRef("home"), tab, "home")
     case "home-notes":
-      return hydratePanelFileTab(panelFileRef("notes"), tab, "notes")
+      return hydratePanelFileTab(panelFileRef("notes"), tab, "home")
     case "subscriptions":
-      return hydratePanelFileTab(panelFileRef("subscriptions"), tab, "subscriptions")
+      return hydratePanelFileTab(panelFileRef("subscriptions"), tab, "home")
     case "home-publications":
-      return hydratePanelFileTab(panelFileRef("publications"), tab, "community")
+      return hydratePanelFileTab(panelFileRef("publications"), tab, "browse")
     case "home-resources":
-      return hydratePanelFileTab(panelFileRef("files"), tab, "files")
+      return hydratePanelFileTab(panelFileRef("files"), tab, "home")
     case "home-bookmarks":
-      return hydratePanelFileTab(panelFileRef("bookmarks"), tab, "bookmarks")
+      return hydratePanelFileTab(panelFileRef("bookmarks"), tab, "home")
     case "home-settings":
-      return hydratePanelFileTab(panelFileRef("settings"), tab, "system")
+      return hydratePanelFileTab(panelFileRef("settings"), tab, "settings")
     case "info":
       return hydrateResourceFileTab({ scheme: "info", kind: "home", id: "default" }, tab)
     case "community":
@@ -111,31 +117,35 @@ function migrateStaticWorkspaceTab(tab: Tab & { kind: StaticTabKind }): Tab | nu
     case "apps":
       return hydratePanelFileTab(panelFileRef("apps"), tab, "apps")
     case "shell":
-      return hydratePanelFileTab(panelFileRef("shell"), tab, "system", "ideall.shell")
+      return hydratePanelFileTab(panelFileRef("shell"), tab, "apps", "ideall.shell")
     case "git":
     case "database":
     case "audio": {
       const surface = BUILTIN_APP_SURFACES[tab.kind]
-      return hydratePanelFileTab(surface.ref, tab, mountedFileRootId(surface.ref), surface.engineId)
+      return hydratePanelFileTab(surface.ref, tab, "apps", surface.engineId)
     }
     case "code":
-      return hydratePanelFileTab(panelFileRef("code"), tab, "system")
+      return hydratePanelFileTab(panelFileRef("code"), tab, "apps")
     case "trash":
-      return hydratePanelFileTab(panelFileRef("trash"), tab, "system")
+      return hydratePanelFileTab(panelFileRef("trash"), tab, "activity")
     case "browser-view":
       return hydrateResourceFileTab({ scheme: "browser", kind: "page", id: "default" }, tab)
     case "ai-settings":
     case "ai-mcp":
     case "ai-skills":
     case "ai-rules":
-      return hydratePanelFileTab(panelFileRef(tab.kind), tab, "workspace", "ideall.panel-fill")
+      return hydratePanelFileTab(panelFileRef(tab.kind), tab, "settings", "ideall.panel-fill")
+    case "agent-spaces":
+      return hydratePanelFileTab(panelFileRef("spaces"), tab, "activity")
+    case "agent-task-list":
+      return hydratePanelFileTab(panelFileRef("tasks"), tab, "activity")
     case "ai-tasks": {
       const workspaceId = tab.params?.workspaceId
       return workspaceId
         ? hydratePanelFileTab(
             aiTasksPanelFileRef(workspaceId),
             tab,
-            "workspace",
+            "activity",
             "ideall.panel-fill",
           )
         : null
@@ -164,9 +174,18 @@ export function migrateWorkspaceTab(tab: Tab): Tab | null {
       return hydratePanelFileTab(
         surface.ref,
         { ...tab, module: surface.module },
-        mountedFileRootId(surface.ref),
+        "apps",
         surface.engineId,
       )
+    }
+    const inferredRootId = inferredRootIdForFile(target.ref)
+    return {
+      ...tab,
+      id: tabKey(tab),
+      rootId:
+        tab.rootId && isCoreFileRootId(tab.rootId)
+          ? tab.rootId
+          : normalizeNavigationRootId(inferredRootId ?? tab.rootId),
     }
   }
   if (isStaticTabKind(tab.kind)) {

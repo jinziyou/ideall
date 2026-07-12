@@ -1,8 +1,8 @@
 "use client"
 
-// 「我的 · 概览」仪表盘: 区段入口 (关注/书签/资源/笔记/工作区) + 最近动态。
+// 「我的 · 概览」仪表盘: 区段入口 (关注/书签/资源/文件/工作区) + 最近动态。
 // 入口点击经 openTarget 打开区段文件，由默认引擎生成对应 Display。
-// 全部本地优先: 计数与动态只读本机数据; 发布是连接模式下的远端身份动作。
+// 全部本地优先: 计数与动态只读本机数据; 发布是远端身份动作。
 
 import * as React from "react"
 import { ArrowRight, Bot, Database, Inbox, ShieldCheck } from "lucide-react"
@@ -46,7 +46,7 @@ const NEXT_ACTIONS = [
   {
     id: "workspace",
     title: "询问本地资料",
-    description: "打开 AI 侧栏，用自己的笔记、书签、资源和对话做问答。",
+    description: "打开 AI 侧栏，用自己的文件、书签、资源和对话做问答。",
   },
 ] as const
 
@@ -111,7 +111,7 @@ export default function Overview() {
                 今天从这里继续：读、整理、再交给 AI
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                概览不只展示计数：它把本机关注、书签、资源、笔记和工作区对话压到同一屏，
+                概览不只展示计数：它把本机关注、书签、资源、文件和工作区对话压到同一屏，
                 让空库也有明确的下一步，数据仍只落在本机。
               </p>
             </div>
@@ -156,7 +156,7 @@ export default function Overview() {
           </div>
         </Panel>
 
-        {/* 区段入口: 关注 / 书签 / 资源 / 笔记 / 工作区 */}
+        {/* 区段入口: 关注 / 书签 / 资源 / 文件 / 工作区 */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-3">
           {HOME_PLACES.map((s) => {
             const Icon = s.icon
@@ -205,7 +205,7 @@ export default function Overview() {
             <EmptyState
               icon={Inbox}
               title="本机还没有最近动态"
-              description="添加关注、书签、资源或笔记后，新的本地动作会按时间出现在这里。"
+              description="添加关注、书签、资源或文件后，新的本地动作会按时间出现在这里。"
               bordered={false}
               className="py-8"
               action={
@@ -251,7 +251,7 @@ export default function Overview() {
               <div className="grid gap-2 text-[13px] leading-relaxed text-muted-foreground">
                 <div className="flex items-start gap-2">
                   <StatusDot tone="ok" className="mt-1.5" />
-                  <span>关注、书签、资源、笔记和对话从本地 stores 读取。</span>
+                  <span>关注、书签、资源、文件和对话从本地 stores 读取。</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <Database className="mt-0.5 h-3.5 w-3.5 shrink-0" />

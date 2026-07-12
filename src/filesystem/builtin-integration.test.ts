@@ -5,7 +5,7 @@ import { ideallRootFileSystem, registerBuiltInFileSystems } from "./builtin"
 
 afterEach(() => clearFileSystemsForTest())
 
-test("builtin filesystem: hidden root exposes core second-level subtrees", async () => {
+test("builtin filesystem: root exposes the five navigation sections", async () => {
   registerBuiltInFileSystems()
   registerBuiltInFileSystems()
   const root = getFileSystem("ideall.root")
@@ -16,19 +16,14 @@ test("builtin filesystem: hidden root exposes core second-level subtrees", async
     intent: "directory",
   })
   assert.deepEqual(
-    page.entries.slice(0, 5).map((entry) => entry.entryId),
-    ["home", "subscriptions", "bookmarks", "files", "notes"],
+    page.entries.map((entry) => [entry.entryId, entry.name, entry.properties?.navigationSection]),
+    [
+      ["home", "我的", "home"],
+      ["activity", "活动", "activity"],
+      ["browse", "浏览", "browse"],
+      ["apps", "应用", "apps"],
+      ["settings", "设置", "settings"],
+    ],
   )
   assert.ok(page.entries.every((entry) => entry.parent.fileSystemId === "ideall.root"))
-  assert.equal(
-    page.entries.find((entry) => entry.entryId === "workspace")?.properties?.navigationHidden,
-    true,
-  )
-  for (const id of ["bookmarks", "files", "notes", "system"] as const) {
-    assert.equal(
-      page.entries.find((entry) => entry.entryId === id)?.properties?.navigationHidden,
-      true,
-      `${id} should stay off the activity bar`,
-    )
-  }
 })

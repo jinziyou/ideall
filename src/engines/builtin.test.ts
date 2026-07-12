@@ -45,6 +45,16 @@ test("builtin engines: app FileSystem roots resolve to their semantic engines", 
   }
 })
 
+test("builtin engines: note pages keep their editor while also acting as directories", () => {
+  registerBuiltInEngines()
+  const note = file("application/vnd.ideall.note+json", "directory")
+  assert.equal(engineRegistry.resolve(note)?.descriptor.engineId, "ideall.note")
+  assert.deepEqual(
+    engineRegistry.matching(note).map(({ descriptor }) => descriptor.engineId),
+    ["ideall.note", "ideall.directory", "ideall.preview"],
+  )
+})
+
 test("builtin engines: user media-type preference overrides scenario priority", () => {
   registerBuiltInEngines()
   const preferences = withMediaTypeEnginePreference(

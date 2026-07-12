@@ -1,6 +1,6 @@
 "use client"
 
-import type { DevelopmentTool, ModuleId, Tab, WorkspaceKind, WsMode } from "../types"
+import type { DevelopmentTool, ModuleId, Tab, WorkspaceKind } from "../types"
 import type { ActiveSource } from "../workspace-slice"
 import { fileEngineTargetForTab } from "../file-tab"
 import { panelForFile } from "@/filesystem/resource-file-system"
@@ -53,10 +53,6 @@ export function useActiveRootId() {
   return useAppSelector((state) => state.workspace.activeRootId)
 }
 
-export function useMode() {
-  return useAppSelector((state) => state.workspace.mode)
-}
-
 export function useWorkspaceKind() {
   return useAppSelector((state) => state.workspace.workspaceKind)
 }
@@ -92,10 +88,6 @@ export function getActiveId(): string | null {
 
 export function getTransientId(): string | null {
   return workspaceState().transientId
-}
-
-export function getMode(): WsMode {
-  return workspaceState().mode
 }
 
 export function getWorkspaceKind(): WorkspaceKind {

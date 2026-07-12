@@ -63,7 +63,7 @@ export async function listNoteFiles(includeText = false): Promise<NoteMeta[]> {
 
 function createdFile(value: unknown): IdeallFile {
   if (!value || typeof value !== "object" || !("file" in value)) {
-    throw new Error("文件系统未返回新建笔记")
+    throw new Error("文件系统未返回新建页面")
   }
   const file = value.file as Partial<IdeallFile> | null
   if (!file || !isFileRef(file.ref) || typeof file.name !== "string") {

@@ -87,6 +87,8 @@ const AiMcp = React.lazy(() => import("@/plugins/agent/views/ai-mcp"))
 const AiSkills = React.lazy(() => import("@/plugins/agent/views/ai-skills"))
 const AiRules = React.lazy(() => import("@/plugins/agent/views/ai-rules"))
 const AiTasks = React.lazy(() => import("@/plugins/agent/views/ai-tasks"))
+const AgentSpaces = React.lazy(() => import("@/plugins/agent/views/agent-spaces"))
+const AgentTaskList = React.lazy(() => import("@/plugins/agent/views/agent-task-list"))
 const AudioFileEngine = React.lazy(() => import("./viewers/audio-file-engine"))
 const FileDirectoryEngine = React.lazy(() => import("./viewers/file-directory-engine"))
 const GenericCodeEngine = React.lazy(() => import("./viewers/generic-code-engine"))
@@ -130,6 +132,8 @@ const REGISTRY: Partial<Record<StaticTabKind, Entry>> = {
   "ai-tasks": {
     render: (tab) => <AiTasks workspaceId={tab.params?.workspaceId ?? ""} />,
   },
+  "agent-spaces": { render: () => <AgentSpaces /> },
+  "agent-task-list": { render: () => <AgentTaskList /> },
 }
 
 const Spinner = (
@@ -519,12 +523,15 @@ export function FileEngineContent({
     return <div className="p-6 text-sm text-destructive">{error}</div>
   }
   if (!file) return Spinner
-  const candidate = engineRegistry
-    .matching(file)
-    .find((item) => item.descriptor.engineId === engineId)
+  const matches = engineRegistry.matching(file)
+  // 陈旧标签 / 深链可能带着已不再匹配的 engineId；就地回退到当前候选中优先级最高的引擎渲染,
+  // 不改写标签本身 (避免在渲染路径里触发 store 更新)。
+  const candidate =
+    matches.find((item) => item.descriptor.engineId === engineId) ?? matches[0] ?? null
   if (!candidate) {
-    return <div className="p-6 text-sm text-muted-foreground">该引擎不能处理此文件。</div>
+    return <div className="p-6 text-sm text-muted-foreground">没有可处理此文件的引擎。</div>
   }
+  const activeEngineId = candidate.descriptor.engineId
   if (display === "window" && !canOpenStandaloneWindow(file, candidate.descriptor)) {
     return <div className="p-6 text-sm text-destructive">此文件或引擎不允许在独立窗口中打开。</div>
   }
@@ -534,7 +541,7 @@ export function FileEngineContent({
       {isNodeFile ? (
         <NodeFileEngineToolbar
           file={file}
-          enginePicker={<EnginePicker file={file} engineId={engineId} />}
+          enginePicker={<EnginePicker file={file} engineId={activeEngineId} />}
           onFileChanged={setFile}
           readOnly={candidate.descriptor.access === "read-only"}
         />
@@ -545,7 +552,7 @@ export function FileEngineContent({
           </h1>
           <div className="flex shrink-0 items-center gap-1">
             <GenericFileActionMenu file={file} />
-            <EnginePicker file={file} engineId={engineId} />
+            <EnginePicker file={file} engineId={activeEngineId} />
           </div>
         </div>
       )}

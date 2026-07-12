@@ -43,7 +43,7 @@ test("local search: builds content items from FileSystem directory entries", asy
 
   assert.deepEqual(
     items.map((item) => item.group),
-    ["笔记", "关注", "书签", "资源", "对话"],
+    ["文件", "关注", "书签", "资源", "对话"],
   )
   assert.deepEqual(
     items.map((item) => item.target?.type),
@@ -73,7 +73,7 @@ test("local search: passes normalized source groups and options to the FileSyste
   assert.deepEqual(
     calls.map(({ source }) => ({ group: source.group, place: source.place, kind: source.kind })),
     [
-      { group: "笔记", place: "notes", kind: "note" },
+      { group: "文件", place: "notes", kind: "note" },
       { group: "关注", place: "subscriptions", kind: "feed" },
       { group: "书签", place: "bookmarks", kind: "bookmark" },
       { group: "资源", place: "files", kind: "file" },

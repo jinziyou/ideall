@@ -1,6 +1,6 @@
 "use client"
 
-// 本地模式「应用」视图: 列举本机已安装应用, 支持搜索/分类筛选与一键启动。
+// 「本地应用」视图: 列举本机已安装应用, 支持搜索/分类筛选与一键启动。
 
 import * as React from "react"
 import { AppWindow, ChevronDown, RefreshCw, Search } from "lucide-react"

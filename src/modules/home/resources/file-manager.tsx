@@ -227,7 +227,7 @@ export default function FileManager() {
   }
 
   function handlePreview(file: ManagedFile) {
-    openTarget({ type: "file", ref: file.ref, transient: true, rootId: "files" })
+    openTarget({ type: "file", ref: file.ref, transient: true, rootId: "home" })
   }
 
   // 统计: 总占用 + 各分组数量

@@ -1,13 +1,12 @@
 "use client"
 
-// 桌面顶边栏 (现代面板式标签工作区, Tauri 下兼作标题栏): 左 = logo + 数据来源 + 工作区切换;
+// 桌面顶边栏 (现代面板式标签工作区, Tauri 下兼作标题栏): 左 = logo + 工作区切换;
 // 中 = 统一搜索框; 右 = 拖拽区 + 布局开关 (侧栏 / AI 侧栏) + 设置 + 账户 + (Tauri) 窗控。
 // Tauri: 仅空白区标记 data-tauri-drag-region —— 勿挂在 header 上, 否则 Linux/WSL 下子按钮可能收不到点击。
 import Link from "next/link"
 import { WonitaMark } from "@/shared/wonita-mark"
 import AccountMenu from "@/shell/account-menu"
 import WindowControls from "@/shell/window-controls"
-import ModeSwitch from "./mode-switch"
 import WorkspaceSwitch from "./workspace-switch"
 import SettingsMenu from "./settings-menu"
 import TopSearch from "./top-search"
@@ -32,8 +31,6 @@ export default function TopBar() {
         >
           <WonitaMark className="h-6 w-auto text-foreground" />
         </Link>
-        <div className="mx-1 h-5 w-px shrink-0 bg-border" />
-        <ModeSwitch />
         <div className="mx-1 h-5 w-px shrink-0 bg-border" />
         <WorkspaceSwitch />
       </div>

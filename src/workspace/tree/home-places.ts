@@ -2,7 +2,7 @@ import type { ComponentType } from "react"
 import { MessagesSquare } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
 import type { FileRef } from "@protocol/file-system"
-import { panelFileRef } from "@/filesystem/resource-file-system"
+import { corePlaceRef, panelFileRef } from "@/filesystem/resource-file-system"
 import { MODULE_META } from "../module-meta"
 
 export type HomePlaceId = "subscriptions" | "bookmarks" | "resources" | "notes" | "workspace"
@@ -53,7 +53,8 @@ export const HOME_PLACES: HomePlace[] = [
     id: "notes",
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
-    defaultFile: panelFileRef("notes"),
+    // 与侧栏「文件」一致: 打开 notes place 目录 (页树), 而非独立笔记面板。
+    defaultFile: corePlaceRef("notes"),
     childKinds: ["note"],
   },
   {

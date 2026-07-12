@@ -21,7 +21,7 @@ export const appsManifest = {
             mount: {
               entryId: "third-party.installed-apps",
               name: "本机应用",
-              properties: { workspaceModes: ["local"], navigationHidden: true },
+              properties: { navigationHidden: true },
             },
           },
         ],

@@ -64,8 +64,31 @@ export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
   ],
   bookmarks: [{ id: "bookmarks", name: "书签管理", tabKind: "home-bookmarks", module: "home" }],
   files: [{ id: "files", name: "文件管理", tabKind: "home-resources", module: "home" }],
-  notes: [{ id: "notes", name: "笔记", tabKind: "home-notes", module: "home" }],
+  notes: [
+    {
+      id: "notes",
+      name: "文件",
+      tabKind: "home-notes",
+      module: "home",
+      // 页树在「文件」目录下直接展示；管理面板仅保留路由/兼容身份，不进侧栏。
+      properties: { navigationHidden: true },
+    },
+  ],
   workspace: [
+    {
+      id: "spaces",
+      name: "空间",
+      tabKind: "agent-spaces",
+      module: "agent",
+      layout: "padded",
+    },
+    {
+      id: "tasks",
+      name: "任务",
+      tabKind: "agent-task-list",
+      module: "agent",
+      layout: "padded",
+    },
     {
       id: "ai-settings",
       name: "AI 设置",
@@ -116,8 +139,8 @@ const PLACE_NAMES: Record<CorePlaceId, string> = {
   home: "我的",
   subscriptions: "关注",
   bookmarks: "书签",
-  files: "文件",
-  notes: "笔记",
+  files: "资源",
+  notes: "文件",
   workspace: "工作区",
   apps: "应用",
   info: "资讯",
@@ -342,6 +365,10 @@ export function fileFromResource(meta: ResourceMeta, record?: ResourceRecord | n
       hasChildren: meta.hasChildren ?? false,
       subscriptionType: node?.kind === "feed" ? node.content.type : null,
       subscriptionKey: node?.kind === "feed" ? node.content.key : null,
+      // 「文件」树里的页面默认用笔记引擎打开 (目录引擎仍可选手动切换)。
+      ...(meta.ref.scheme === "node" && meta.ref.kind === "note"
+        ? { preferredEngine: "ideall.note" }
+        : {}),
     },
   }
 }

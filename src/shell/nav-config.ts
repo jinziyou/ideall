@@ -60,7 +60,7 @@ export const HOME_SUBPAGES: NavLink[] = [
     href: "/home/notes",
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
-    hint: "创建与编写笔记",
+    hint: "浏览与编写本机文件页",
   },
   {
     href: "/home/subscriptions",

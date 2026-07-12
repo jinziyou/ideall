@@ -44,7 +44,7 @@ export async function navigateExternal(
       type: "file",
       ref: resourceFileRef({ scheme: "browser", kind: "page", id: href }),
       title: href,
-      rootId: "browser",
+      rootId: "browse",
     })
   }
 

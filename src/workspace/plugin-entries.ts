@@ -1,4 +1,4 @@
-// 本地模式插件入口 (终端 / Git / 数据库 / 音频 / Code 等) —— 活动栏「插件」模块与侧栏树共用。
+// 旧插件入口 (终端 / Git / 数据库 / 音频 / Code 等)，保留路由与快照兼容。
 import type { ComponentType } from "react"
 import { MODULE_META } from "./module-meta"
 import { tabDescriptor } from "./tab-definitions"
