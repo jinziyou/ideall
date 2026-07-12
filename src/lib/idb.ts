@@ -15,8 +15,8 @@ export const STORE_BLOBS = "blobs"
 export const STORE_TRASH_SNAPSHOTS = "trash_snapshots"
 export const INDEX_NODES_DELETED_AT = "deletedAt"
 export const INDEX_NODES_KIND = "kind"
-export const INDEX_NODES_PARENT_ID = "parentId"
-export const INDEX_NODES_UPDATED_AT = "updatedAt"
+const INDEX_NODES_PARENT_ID = "parentId"
+const INDEX_NODES_UPDATED_AT = "updatedAt"
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -107,17 +107,6 @@ export async function idbGetAllFromIndex<T>(
   return withStore<T[]>(storeName, "readonly", (store) => {
     const index = store.index(indexName)
     return query === undefined ? index.getAll() : index.getAll(query)
-  })
-}
-
-export async function idbCountFromIndex(
-  storeName: string,
-  indexName: string,
-  query?: IDBValidKey | IDBKeyRange,
-): Promise<number> {
-  return withStore<number>(storeName, "readonly", (store) => {
-    const index = store.index(indexName)
-    return query === undefined ? index.count() : index.count(query)
   })
 }
 

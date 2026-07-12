@@ -1,5 +1,12 @@
 import { BASE, createSilentWavBuffer } from "../lib.mjs"
-import { AUDIO_TITLE, SHOT_DIR, deleteDb, openPluginPage, resetWorkspace } from "./shared.mjs"
+import {
+  AUDIO_TITLE,
+  SHOT_DIR,
+  deleteDb,
+  openPluginPage,
+  openPluginSurface,
+  resetWorkspace,
+} from "./shared.mjs"
 
 export async function runAudioPluginSmoke({ page, record, markStage }) {
   markStage("audio")
@@ -7,6 +14,15 @@ export async function runAudioPluginSmoke({ page, record, markStage }) {
   await resetWorkspace(page)
   await deleteDb(page, "ideall:audio")
   await openPluginPage(page, "/audio")
+  const audioDock = page.getByRole("region", { name: "音频工作区工具" })
+  await audioDock.waitFor({
+    state: "visible",
+    timeout: 30000,
+  })
+  const dockAudioInput = audioDock.locator('input[type="file"][accept="audio/*"]')
+  await dockAudioInput.waitFor({ state: "attached", timeout: 30000 })
+  record("旧音频路由切换到单一 Workspace Dock", (await dockAudioInput.count()) === 1)
+  await openPluginSurface(page, "audio")
   await page.getByRole("heading", { name: "音频播放器", exact: true }).waitFor({
     state: "visible",
     timeout: 30000,
@@ -26,7 +42,7 @@ export async function runAudioPluginSmoke({ page, record, markStage }) {
   record("音频插件可导出 JSON 备份", true)
   await openPluginPage(page, "/home")
   await deleteDb(page, "ideall:audio")
-  await openPluginPage(page, "/audio")
+  await openPluginSurface(page, "audio")
   await page
     .locator('input[type="file"][accept="application/json,.json"]')
     .setInputFiles(audioExportPath)

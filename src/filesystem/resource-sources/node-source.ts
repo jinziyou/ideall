@@ -26,13 +26,13 @@ import { addFile, updateFileContent } from "@/files/stores/files-store"
 import type {
   ResourceAction,
   ResourceActionId,
-  ResourcePage,
   ResourceQuery,
   ResourceRecord,
   ResourceSourceAccessContext,
   ResourceSourceProvider,
 } from "./types"
 import { ResourceSourceError } from "./types"
+import { matchesResourceText, paginateResourceMeta } from "./query-utils"
 
 export type NodeResourceSourceDeps = {
   listNodeSummaries: (kinds: NodeKind[]) => Promise<NodeSummary[]>
@@ -180,31 +180,10 @@ function nodeMeta(node: Node): ResourceMeta {
   }
 }
 
-function matchesText(meta: ResourceMeta, text: string | undefined): boolean {
-  if (!text) return true
-  return meta.title.toLocaleLowerCase().includes(text.trim().toLocaleLowerCase())
-}
-
 function matchesSummaryParent(summary: NodeSummary, parent: ResourceQuery["parent"]): boolean {
   if (!parent) return true
   if (parent.scheme !== "node") return false
   return summary.parentId === parent.id
-}
-
-function paginate(
-  items: ResourceMeta[],
-  limit: number | undefined,
-  cursor: string | undefined,
-): ResourcePage {
-  const parsedOffset = cursor == null ? 0 : Number.parseInt(cursor, 10)
-  const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0
-  const pageLimit = limit != null && limit > 0 ? Math.floor(limit) : items.length
-  const pageItems = items.slice(offset, offset + pageLimit)
-  const nextOffset = offset + pageLimit
-  return {
-    items: pageItems,
-    nextCursor: nextOffset < items.length ? String(nextOffset) : undefined,
-  }
 }
 
 function objectInput(input: unknown): Record<string, unknown> {
@@ -335,12 +314,12 @@ export function createNodeResourceSource(
       const metas = summaries
         .filter((summary) => matchesSummaryParent(summary, query.parent))
         .map((summary) => summaryMeta(summary, byId))
-        .filter((meta) => matchesText(meta, query.text))
+        .filter((meta) => matchesResourceText(meta, query.text))
         .sort((a, b) => {
           const bySortKey = (a.sortKey ?? "").localeCompare(b.sortKey ?? "")
           return bySortKey !== 0 ? bySortKey : a.title.localeCompare(b.title)
         })
-      return paginate(metas, query.limit, query.cursor)
+      return paginateResourceMeta(metas, query.limit, query.cursor)
     },
     async create(input, ctx) {
       const raw = objectInput(input)

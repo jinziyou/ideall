@@ -6,7 +6,7 @@
  */
 
 /** 命名实体 label → 中文。覆盖后端 (wonita 服务) 返回的全部实体类别。 */
-export const NER_LABEL_TEXT: Record<string, string> = {
+const NER_LABEL_TEXT: Record<string, string> = {
   PER: "人物",
   LOC: "地区",
   ORG: "组织",

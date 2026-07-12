@@ -4,6 +4,7 @@ import { readAllDirectoryEntries } from "@/filesystem/directory-pagination"
 import { fileSystemRegistry, type FileSystemRegistry } from "@/filesystem/registry"
 import { corePlaceRef, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { FileSystemError } from "@/filesystem/types"
+import { mapConcurrentOrdered } from "@/lib/map-concurrent-ordered"
 
 export type ManagedFile = FileMeta & { ref: FileRef }
 
@@ -33,35 +34,6 @@ function statConcurrency(value: number | undefined): number {
     )
   }
   return concurrency
-}
-
-async function mapConcurrentOrdered<T, R>(
-  values: readonly T[],
-  concurrency: number,
-  task: (value: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(values.length)
-  const failures: Array<{ index: number; error: unknown }> = []
-  let nextIndex = 0
-  let stopped = false
-  const worker = async () => {
-    while (!stopped && nextIndex < values.length) {
-      const index = nextIndex
-      nextIndex += 1
-      try {
-        results[index] = await task(values[index] as T, index)
-      } catch (error) {
-        failures.push({ index, error })
-        stopped = true
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => worker()))
-  if (failures.length > 0) {
-    failures.sort((left, right) => left.index - right.index)
-    throw failures[0]?.error
-  }
-  return results
 }
 
 function managedFile(ref: FileRef, file: IdeallFile): ManagedFile | null {

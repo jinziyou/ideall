@@ -2,6 +2,7 @@
 // 跨端合并/GC 等纯接口约定在 @protocol/note-merge (与 unionMerge 同层, sync 插件共用); 此处 re-export 以便就近引用。
 import { sortKeyBetween } from "@/files/sort-key"
 import {
+  blockMapById,
   rebuildContent,
   type Block,
   type BlockId,
@@ -11,6 +12,7 @@ import {
 
 export type { Block, BlockId, BlockMeta, BlockMetaMap }
 export {
+  blockMapById,
   mergeNoteContent,
   pruneBlockTombstones,
   BLOCK_TOMBSTONE_TTL_MS,
@@ -22,14 +24,6 @@ export {
 export interface BlockPatch {
   upsert: { id: BlockId; block: Block; v: number; by: string; sk: string }[]
   delete: BlockId[]
-}
-
-/** content (块数组) → id→块 映射 (只取有 id 的顶层块; 跳过 null/非对象防崩)。 */
-export function blockMapById(blocks: Block[]): Map<BlockId, Block> {
-  const m = new Map<BlockId, Block>()
-  for (const b of blocks)
-    if (b && typeof b === "object" && typeof b.id === "string" && b.id) m.set(b.id, b)
-  return m
 }
 
 /** 顶层块 id 列表 (按当前顺序; 仅有 id 者)。 */

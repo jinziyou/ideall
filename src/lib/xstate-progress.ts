@@ -4,7 +4,7 @@ import { flowProgressActions, type FlowProgress } from "@/lib/flow-progress-slic
 import type { AuthFlowInput } from "@/lib/auth/auth-flow-runner"
 import { actorInspectOptions, ensureXStateInspector } from "@/lib/xstate-inspector"
 
-export function setFlowProgress(progress: FlowProgress | null) {
+function setFlowProgress(progress: FlowProgress | null) {
   store.dispatch(flowProgressActions.set(progress))
 }
 

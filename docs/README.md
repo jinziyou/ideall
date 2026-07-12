@@ -29,7 +29,7 @@
 | --- | --- |
 | [sync-lww-tradeoff.md](sync-lww-tradeoff.md) | 已落地：关注同步的 LWW、墓碑传播与 GC 取舍 |
 | [extension-registry-design.md](extension-registry-design.md) | 历史红队设计基线；运行时 FileSystem + Engine 注册已落地，部分能力/端口扩展仍是方向 |
-| [local-data-provider.md](local-data-provider.md) | P1 已落地，浏览器扩展/native messaging/loopback 方案停放 |
+| [local-data-provider.md](local-data-provider.md) | P1 已落地；运行期连接查看/断开已实现，持久 consent 与外部 transport 停放 |
 
 ## 历史归档
 

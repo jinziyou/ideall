@@ -1,4 +1,5 @@
 import type { ResourceRef, ResourceScheme } from "@protocol/resource"
+import { mapConcurrentOrdered } from "@/lib/map-concurrent-ordered"
 import type {
   ResourceAction,
   ResourceActionId,
@@ -24,38 +25,6 @@ function getConcurrency(value: number | undefined): number {
     )
   }
   return concurrency
-}
-
-async function mapConcurrentOrdered<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  task: (item: T) => Promise<R>,
-): Promise<R[]> {
-  if (items.length === 0) return []
-  const results = new Array<R>(items.length)
-  const failures: Array<{ index: number; error: unknown }> = []
-  let nextIndex = 0
-  let stopped = false
-  const worker = async () => {
-    while (!stopped) {
-      const index = nextIndex
-      nextIndex += 1
-      if (index >= items.length) return
-      try {
-        results[index] = await task(items[index] as T)
-      } catch (error) {
-        failures.push({ index, error })
-        stopped = true
-      }
-    }
-  }
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
-  await Promise.all(workers)
-  if (failures.length > 0) {
-    failures.sort((left, right) => left.index - right.index)
-    throw failures[0]?.error
-  }
-  return results
 }
 
 export function registerResourceSource(provider: ResourceSourceProvider): () => void {

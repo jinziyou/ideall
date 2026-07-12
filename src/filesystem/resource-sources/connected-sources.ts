@@ -19,10 +19,10 @@ import {
   type ConnectedResourceScheme,
 } from "@/lib/connected-resource"
 import { saveResourceToMine, type SaveToMineResult } from "./save-to-mine"
+import { matchesResourceText, paginateResourceMeta } from "./query-utils"
 import type {
   ResourceAction,
   ResourceActionId,
-  ResourcePage,
   ResourceQuery,
   ResourceSourceAccessContext,
   ResourceSourceProvider,
@@ -180,26 +180,6 @@ function queryKinds(query: ResourceQuery, scheme: RouteScheme): string[] | null 
   return [...new Set(rawKinds)]
 }
 
-function matchesText(meta: ResourceMeta, text: string | undefined): boolean {
-  if (!text?.trim()) return true
-  return meta.title.toLocaleLowerCase().includes(text.trim().toLocaleLowerCase())
-}
-
-function paginate(
-  items: ResourceMeta[],
-  limit: number | undefined,
-  cursor: string | undefined,
-): ResourcePage {
-  const parsedOffset = cursor == null ? 0 : Number.parseInt(cursor, 10)
-  const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0
-  const pageLimit = limit != null && limit > 0 ? Math.floor(limit) : items.length
-  const nextOffset = offset + pageLimit
-  return {
-    items: items.slice(offset, nextOffset),
-    nextCursor: nextOffset < items.length ? String(nextOffset) : undefined,
-  }
-}
-
 type DynamicRecordLoader = (query: ResourceQuery) => Promise<ConnectedRecord[]>
 
 function uniqueRecords(records: ConnectedRecord[]): ConnectedRecord[] {
@@ -241,8 +221,8 @@ function createRouteProvider(
       const items = records
         .map((record) => record.meta)
         .filter((meta) => !kinds || kinds.includes(meta.ref.kind))
-        .filter((meta) => matchesText(meta, query.text))
-      return paginate(items, query.limit, query.cursor)
+        .filter((meta) => matchesResourceText(meta, query.text))
+      return paginateResourceMeta(items, query.limit, query.cursor)
     },
     async get(ref) {
       return recordForRef(ref)

@@ -4,8 +4,6 @@ import { STARTUP_TARGET_STORAGE_KEY } from "@/lib/workspace-storage"
 import { isCoreFileRootId, normalizeNavigationRootId } from "./file-roots"
 import { inferredRootIdForFile } from "./workspace-compat"
 
-export { STARTUP_TARGET_STORAGE_KEY }
-
 export type StartupTarget = {
   ref: FileRef
   engineId: string

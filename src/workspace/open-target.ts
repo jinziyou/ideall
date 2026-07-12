@@ -19,7 +19,7 @@ export type OpenTarget =
   | { type: "tab"; descriptor: TabDescriptor; transient?: boolean }
   | { type: "command"; command: "open-ai-panel" | "toggle-right-panel" }
 
-export function descriptorForResource(ref: ResourceRef, title?: string): TabDescriptor | null {
+function descriptorForResource(ref: ResourceRef, title?: string): TabDescriptor | null {
   return resourceFileTab(ref, title)
 }
 

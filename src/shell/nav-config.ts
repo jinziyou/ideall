@@ -2,10 +2,8 @@ import { Bot } from "lucide-react"
 import type { ComponentType } from "react"
 import { MODULE_META } from "@/workspace/module-meta"
 
-// 移动端 Sheet/底栏 + ⌘K 命令面板的导航唯一数据来源 (扁平 href 链接范式)。
-// 与桌面工作区的 workspace/modules.ts 是「有意分工的两源」而非重复: 二者经 MODULE_META 共享身份 (label/icon/色),
-// 各自只描述自己界面的导航形态。详见 modules.ts 顶部说明。勿合并。
-/** 导航唯一数据来源 (移动 + ⌘K) —— 身份取自 MODULE_META, 杜绝手抄漂移。 */
+// 底栏与 ⌘K 命令面板仍采用扁平 href；移动抽屉已与桌面共用 navigation-sections。
+/** href 导航项的共享数据，身份取自 MODULE_META。 */
 export type NavLink = {
   href: string
   label: string

@@ -5,7 +5,6 @@ import {
   acceptExternalTextDraft,
   createTextDraftDocument,
   editTextDraft,
-  fileReadResultToBlob,
   fileTags,
   markTextDraftSaved,
   reconcileTextDraft,
@@ -26,25 +25,6 @@ test("file engine data: tags are copied from validated file metadata", () => {
   tags.push("local")
   assert.deepEqual(fileTags(file), ["one", "two"])
   assert.deepEqual(fileTags({ ...file, properties: { tags: ["ok", 1] } }), [])
-})
-
-test("file engine data: FileSystem base64 and binary reads become downloadable blobs", async () => {
-  const fromBase64 = fileReadResultToBlob({
-    data: { base64: "aGVsbG8=" },
-    mediaType: "text/plain",
-  })
-  const fromBytes = fileReadResultToBlob({
-    data: new Uint8Array([119, 111, 114, 108, 100]),
-    mediaType: "text/plain",
-  })
-
-  assert.equal(fromBase64.type, "text/plain")
-  assert.equal(await fromBase64.text(), "hello")
-  assert.equal(await fromBytes.text(), "world")
-  assert.throws(
-    () => fileReadResultToBlob({ data: { nested: true }, mediaType: "application/json" }),
-    TypeError,
-  )
 })
 
 test("file engine data: clean drafts reload when an external version arrives", () => {
@@ -102,6 +82,7 @@ test("file engine data: metadata-only bumps and successful saves preserve draft 
   assert.equal(saved.base, "local draft")
   assert.equal(saved.draft, "local draft")
   assert.equal(saved.version, "3")
+  assert.equal(editTextDraft(saved, saved.draft), saved, "相同编辑值应保持引用稳定")
 
   const caughtUp = editTextDraft(
     { ...dirty, pendingExternal: { text: "external edit", version: "4" } },

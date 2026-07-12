@@ -6,7 +6,7 @@
 > 决策已锁定：**发布身份/token 由 ideall 持有**（微信式 SSO，token 永不进 iframe）。
 > 关联文档：[`docs/app.md`](app.md)（Tauri / 静态导出）、[`docs/architecture.md`](architecture.md)（终端架构）。
 > **定位**：轻量级**嵌入式 Web 应用**（webview + 桥，Telegram Mini App / 飞书 H5 一档）——provider 的网页经 iframe 集成并通信，**非**微信式（打包 / 自有 DSL / 双线程深沙箱）。
-> 最后更新：2026-06 · 决策人：lyping
+> 最后核对：2026-07 · 决策人：lyping
 >
 > **本仓内说明**：本文是嵌入桥的设计规格，已随仓落地（实现见 `src/plugins/embed/*`）。规格成文于 `src/` 终端化重组前，文中个别概念名已演进——宿主本地数据端口 `HubData` → 现 `FilesPort`（`@protocol/files` / `getFilesPort()`）；面向用户的「订阅」措辞现统一为「关注」（端口/工具的英文标识如 `hub.subscriptions` 不变）。下文涉及本仓的路径已对齐当前结构。
 
@@ -14,9 +14,9 @@
 
 ## 0. TL;DR
 
-- ideall = Web 容器（浏览器能力 + 数据桥），`(discover)` 下的 info/community 变成**远程嵌入应用**；wonita 是默认实现、可换。
+- ideall = Web 容器（浏览器能力 + 数据桥），工作区“浏览”分区中的 info/community 是**远程嵌入应用**；wonita 是默认实现、可换。
 - **两个面分开**：嵌入/呈现面 = iframe+postMessage；能力/数据面 = MCP。MCP 不渲染页面，只做能力调用。
-- **数据按类型分流**（关键）：公共语料**页面直连 wonita**；主权数据/身份/agent/导航**经 ideall（MCP）**；带鉴权的写（发布）经 ideall，用宿主持有的 token。
+- **数据按类型分流**（关键）：公共语料**页面直连 wonita**；主权数据、身份与导航**经 iframe 桥的 MCP**；带鉴权的写（发布）经 ideall，用宿主持有的 token。内置 Agent 不向 iframe 暴露，另经进程内 loopback 复用同一能力层。
 - **隔膜**（membrane）= 宿主壳。它是唯一留在开源客户端、可审计的部分；私有 E2E 同步身份/密钥永不进契约。
 - 本地优先 = **用户数据主权在用户**，不是"全部离线/本地渲染"。info/community 是"链接外部世界"层，无离线要求。
 
@@ -51,7 +51,7 @@
 ```
             ┌───────────────────────── ideall (Tauri webview) ─────────────────────────┐
             │  宿主壳 (Next 静态导出, 持 Tauri 能力, withGlobalTauri=false)              │
-            │   ├─ (discover) 布局 / nav  ← 应用外壳                                     │
+            │   ├─ 工作区五分区导航 / 标签壳                                              │
             │   └─ EmbedHost: <iframe src="https://www.wonita.link/..."> ───────┐     │
             │         │  mcpPort  ── MCP (JSON-RPC) ──┐                            │     │
             │         │  uiPort   ── UI 事件 (裸 JSON)┘                            │     │
@@ -59,7 +59,7 @@
                       │ (宿主壳 = MCP server; 隔膜在 handler 内)                    │
         ┌─────────────▼──────────────┐                              ┌─────────────▼─────────────┐
         │ 主权/身份/agent 经 MCP:      │                              │ 被嵌入页 (wonita web)       │
-        │  getHubData() / auth-store  │                              │  MCP client + UI 事件       │
+        │  ScopedHost / auth-store    │                              │  MCP client + UI 事件       │
         │  ServerPort.publish(token)  │                              │  公共语料: 直连 ↓           │
         └────────────┬───────────────┘                              └─────────────┬─────────────┘
                      │ 带 token 的写                                                │ 公共读 (读开放)
@@ -82,11 +82,11 @@
 | --- | --- | --- | --- |
 | 公共语料：info 文章 / 实体图 / peer 列表 / peer 发布 | **页面 ↔ wonita** | 页面自身 fetch | 非主权、读开放；wonita 的页连 wonita 的语料天然；大列表/分页直连更快，不被 MCP 契约卡形状 |
 | 发布 / 删除 / 改 profile（需 JWT） | **页面 ↔ ideall(MCP) → ideall 持 token → wonita** | `community.publish` 等 | token 归宿主，永不进 iframe；仅此类写发生 ideall↔wonita |
-| 本地主权数据：订阅 / 书签 / 收藏夹 | **页面 ↔ ideall** | `hub.*` | 只有宿主有（IndexedDB / HubDataPort） |
+| 本地主权数据：关注 / 书签 | **页面 ↔ ideall** | `hub.*` | 只有宿主有（IndexedDB，经收窄的 `ScopedHost.files` 访问） |
 | 当前发布身份（CurrentUser） | **页面 ↔ ideall** | `identity.me` | 来自宿主 auth-store |
-| agent（摘要/问答） | **页面 ↔ ideall** | `agent.run` | BYO-key，宿主能力 |
+| agent（摘要/问答） | **不经 iframe 桥开放** | — | 内置 Agent 经进程内 loopback 消费同一 MCP 能力层 |
 | 导航 / 外链 / 主题 | **页面 ↔ ideall** | `host.*` / uiPort | 应用外壳能力 |
-| 可选：后端可换读（第三方嵌入应用想跟随用户配置的 ServerPort） | **页面 ↔ ideall → ServerPort** | `data.*` | wonita 一方页不用（走直连）；留给可换后端/第三方场景 |
+| 可选：后端可换读（保留设计） | **尚未实现** | `data.*` | wonita 一方页直接取数；当前 `PERMISSIONS` 与工具注册面均没有 `data.*` |
 
 > 可换分两层、两套机制：**核心层可换 = ServerPort**（原生 home/agent 可换后端）；**嵌入应用层可换 = 可换整个嵌入应用**（info 是协议，wonita 是默认实现）。所以"wonita 页直连 wonita 语料"不破可换性——可换单位是嵌入应用，不是语料读路径。
 
@@ -99,22 +99,21 @@
 ```
 宿主壳                                              被嵌入页 (wonita web)
   │ 1. 渲染 <iframe src=entry sandbox=...>
-  │ 2. iframe 'load' → new MessageChannel() ×2 (mcp, ui)
-  │ 3. iframe.contentWindow.postMessage(
+  │ 2. ◄── ideall:embed-hello ──────────────────────────────────────────  页面就绪后约每 200ms 重发，直至收到 init
+  │ 3. 校验 event.source === iframe.contentWindow 且 event.origin === manifest origin
+  │ 4. new MessageChannel() ×2 (mcp, ui)
+  │ 5. iframe.contentWindow.postMessage(
   │      {type:"ideall:init", protocol, appId, permissions, theme},
-  │      MINIAPP_ORIGIN, [mcpPort2, uiPort2])  ───────────────────────►  4. 'message': 校验 event.origin === HOST_ORIGIN
-  │ 5. McpServer.connect(MessagePortTransport(mcpPort1))                     取 event.ports[0]=mcp, [1]=ui
-  │                                                                       6. McpClient.connect(MessagePortTransport(mcpPort2))
-  │ 7. ◄── initialize ──────────────────────────────────────────────────   client 发起 MCP initialize (协商 protocolVersion/capabilities)
-  │ 8. ── result(serverInfo, capabilities) ──►
-  │                                                                       9. notifications/initialized
-  │                                                                      10. listTools / callTool / 读公共语料(直连)
+  │      MANIFEST_ORIGIN, [mcpPort2, uiPort2])  ─────────────────────────►  6. 校验宿主 origin，接收两个 port
+  │ 7. McpServer.connect(MessagePortTransport(mcpPort1))                  8. McpClient.connect(MessagePortTransport(mcpPort2))
+  │ 9. ◄── initialize ──────────────────────────────────────────────────  client 发起 MCP initialize
+  │10. ── result(serverInfo, capabilities) ─────────────────────────────►
+  │                                                                      11. notifications/initialized
+  │                                                                      12. listTools / callTool / 公共语料直连
 ```
 
-- **端口移交握手**（被嵌入页 hello 触发）：宿主**只在收到被嵌入页 hello 后**才建桥发 `ideall:init`——不在 iframe `load` 时主动发（`load` 常早于被嵌入页 JS 就绪，提前发 init 会丢包且 `started` 守卫阻止重试）；被嵌入页就绪后每 ~200ms 重发 hello 直到收到 init。把两条 `MessageChannel` 的 port2 经 `postMessage` 转移给 iframe；此后只走专用 port，不再用 `window.postMessage` 广播（点对点、更安全）。
+- **端口移交握手**（被嵌入页 hello 触发）：宿主**只在收到被嵌入页 hello 后**才建桥发 `ideall:init`——不在 iframe `load` 时主动发（`load` 常早于被嵌入页 JS 就绪，提前发 init 会丢包且 `started` 守卫阻止重试）；被嵌入页就绪后每约 200ms 重发 hello 直到收到 init。把两条 `MessageChannel` 的 port2 经 `postMessage` 转移给 iframe；此后只走专用 port，不再用 `window.postMessage` 广播（点对点、更安全）。
 - **MCP 握手**（client 发起）：标准 `initialize` 协商，跑在 mcpPort 之上。
->
-> 注：上方时序图沿用早期“load→init”画法示意；实现已改为“hello→init”（见 `src/plugins/embed/host.tsx`），其余步骤不变。
 
 ### 4.2 MCP-over-postMessage 传输（两侧共用）
 
@@ -166,16 +165,16 @@ export class MessagePortTransport implements Transport {
 
 ## 5. MCP 能力契约
 
-宿主壳 = 一个 MCP server（**每个 iframe 一个独立实例**，只注册该嵌入应用授权的工具 → `tools/list` 天然只暴露可用项）。下面 backed-by 列出对应的 ideall 现有端口/方法。类型见 `src/protocol/{server-port,files,subscription}.ts`（`HubData` 即现 `FilesPort`）。
+宿主壳 = 一个 MCP server（**每个 iframe 一个独立实例**，只注册该嵌入应用有效授权范围内的工具 → `tools/list` 天然只暴露可用项）。下面 backed-by 列出对应的 ideall 现有端口/方法。类型见 `src/protocol/{server-port,files,subscription}.ts`；handler 通过按权限收窄的 `ScopedHost` 访问这些端口。
 
 ### 5.1 Resources（只读、可枚举的宿主自有数据）
 
 | URI | 返回 | 权限 | backed-by |
 | --- | --- | --- | --- |
 | `identity://me` | `CurrentUser \| null` | `identity:read` | `auth-store.getSession().user` |
-| `hub://subscriptions` | `Subscription[]` | `hub.subscriptions:read` | `getHubData().listSubscriptions()` |
-| `hub://bookmarks` | `Bookmark[]` | `hub.bookmarks:read` | `getHubData().listBookmarks()` |
-| `hub://folders` | `BookmarkFolder[]` | `hub.bookmarks:read` | `getHubData().listFolders()` |
+| `hub://subscriptions` | `Subscription[]` | `hub.subscriptions:read` | `ScopedHost.files.listSubscriptions()` |
+| `hub://bookmarks` | `Bookmark[]` | `hub.bookmarks:read` | `ScopedHost.files.listBookmarks()` |
+| `fs://nodes` | 脱敏后的 `Node[]` | `fs:read` | `ScopedHost.files.listStripped()` |
 
 ### 5.2 Tools
 
@@ -183,7 +182,7 @@ export class MessagePortTransport implements Transport {
 
 | tool | 入参 | 出参 | 权限 | backed-by |
 | --- | --- | --- | --- | --- |
-| `identity.me` | — | `CurrentUser \| null` | `identity:read` | `getSession()` / `ServerPort.getMe(token)` |
+| `identity.me` | — | `CurrentUser \| null` | `identity:read` | `ScopedHost.getSession()` |
 | `community.publish` | `{title:string, url?:string, body?:string}` | `Publication` | `identity.publish` | `ServerPort.publish(hostToken, draft)` |
 | `community.deletePublication` | `{id:number}` | `{ok:true}` | `identity.publish` | `ServerPort.deletePublication(hostToken, id)` |
 | `me.updateProfile` | `{name?:string, avatar?:string}` | `{ok:true}` | `identity.publish` | ✅ 已由 `ServerPort.updateProfile(token, patch)` 提供（封装 `PUT /v1/me/profile`，204 无响应体） |
@@ -199,20 +198,18 @@ export class MessagePortTransport implements Transport {
 | `hub.removeSubscription` | `{type:SubscriptionType, key:string}` | `{ok:true}` | `hub.subscriptions:write` | `removeSubscription(type,key)` |
 | `hub.isSubscribed` | `{type, key}` | `boolean` | `hub.subscriptions:read` | `isSubscribed(type,key)` |
 | `hub.addBookmark` | `NewBookmark` | `Bookmark` | `hub.bookmarks:write` | `addBookmark(input)` |
-| `hub.listFolders` | — | `BookmarkFolder[]` | `hub.bookmarks:read` | `listFolders()` |
 
 > 用户在 info 里"订阅发布者"、community 里"收藏 peer"等动作经此**写回本地 home**——主权动作落在主权层，不留扩展侧。
 
-**agent / 导航（宿主能力）**
+**宿主导航（当前能力）**
 
 | tool | 入参 | 出参 | 权限 | 说明 |
 | --- | --- | --- | --- | --- |
-| `agent.run` | `{task:string, context?:{title?,url?,text?}[]}` | `{text:string}` | `agent.invoke` | 调 BYO-key agent；每次调用宿主可弹确认 |
 | `host.navigate` | `{route:string}` | `{ok:true}` | `host.nav` | 打开 ideall 内部路由（白名单前缀） |
-| `host.openExternal` | `{url:string}` | `{ok:true}` | `host.external` | 经 opener 插件用系统浏览器打开；URL 安全校验 |
+| `host.openExternal` | `{url:string}` | `{ok:true}` | `host.external` | 经宿主 UI action 打开“浏览器”模块；URL 协议校验 |
 | `host.toast` | `{message:string, kind?:"info"\|"error"}` | `{ok:true}` | （随容器默认） | 用 ideall toast |
 
-**data / 后端可换读（可选，wonita 一方页不用）**
+**data / 后端可换读（历史保留设计，未实现）**
 
 | tool | 入参 | 出参 | 权限 | backed-by |
 | --- | --- | --- | --- | --- |
@@ -221,7 +218,7 @@ export class MessagePortTransport implements Transport {
 | `data.listPeers` | — | `PeerPublisher[]` | `data.peers:read` | `ServerPort.listPeers` |
 | `data.getPeerPublications` | `{id:string}` | `Publication[]` | `data.peers:read` | `ServerPort.getPeerPublications` |
 
-### 5.3 Prompts（可选）
+### 5.3 Agent / Prompts（历史保留设计，未实现）
 
 预置 agent 工作流，供嵌入应用一键调用：`summarize-selection`、`compare-entities`、`digest-peer`。映射到 `agent.run` 的固定模板。
 
@@ -243,25 +240,24 @@ export class MessagePortTransport implements Transport {
   "minHostProtocol": "1.0",                        // 要求的最低宿主协议
   "permissions": [
     "identity:read", "identity.publish",
-    "hub.subscriptions:write",
-    "host.external"
+    "hub.subscriptions:read", "hub.subscriptions:write",
+    "host.external", "host.nav"
   ]
 }
 ```
 
-info 的 manifest 类似，典型 `permissions`: `["data.info:read"?, "hub.subscriptions:write", "host.external"]`（公共语料直连，故 `data.info:read` 通常不需要；`agent.invoke` 已从示例移除——manifest 不携带它，agent 走宿主侧回环，见 §5.3 注）。
+info 的现行 manifest 授予 `hub.subscriptions:read|write`、`hub.bookmarks:write`、`host.external` 与 `host.nav`；公共语料由页面直连，不存在 `data.info:read`。community 另有 `identity:read` / `identity.publish`。完整清单以 `src/plugins/embed/manifest.ts` 为准。
 
 ### 6.2 权限位清单
 
-`identity:read`、`identity.publish`、`hub.subscriptions:read|write`、`hub.bookmarks:read|write`、`agent.invoke`、`host.nav`、`host.external`、`data.info:read`、`data.peers:read`。
-
-> 其中 `agent.invoke` 与 `data.*:read` 为**保留位、当前未实现**（agent 走宿主侧回环、公共语料页面直连，见 §5.3 注）；实际生效的授权位以 `src/plugins/embed/protocol.ts` 的 `PERMISSIONS` 为准。
+现行 `PERMISSIONS` 包含 identity、hub、host、`fs.*`、`agent.config:read`、`ui.tabs`、`web.*` 与 `browser.*` 分组。`agent.invoke` 和 `data.*:read` 不在联合中，只是 §5.2–5.3 的历史保留设计；实际生效清单以 `src/plugins/embed/protocol.ts` 为准。
 
 ### 6.3 授权流程
 
-- 一方（first-party，如 wonita）嵌入应用：随包预置授权（签名 manifest），免逐次弹窗。
-- 三方嵌入应用：首次加载按 `permissions` 弹一次性同意；敏感位（`identity.publish`、`agent.invoke`）每次调用可二次确认。
-- 宿主按授权**只注册允许的 tool/resource**；越权调用返回 `-32001 permission-denied`。
+- 一方（first-party，如 wonita）嵌入应用：随包预置 manifest，当前自动建立 Grant，不弹连接前 consent。
+- 已建立连接会登记到设置页“已连接的应用”，展示 origin 与权限；用户可立即断开对应 MCP server。该撤销只作用于当前运行期连接，刷新后仍会按一方 manifest 重连。
+- 三方 manifest、持久 Grant、连接前 consent 与逐次敏感操作确认尚未实现；未进入 manifest/CSP 白名单的任意来源不能建立桥。
+- 宿主只注册 `effectivePermissions(grant)` 允许的 tool/resource；未授权能力不会出现在 `tools/list`，直接调用未注册工具由 MCP 层返回未知工具错误。
 
 ---
 
@@ -283,19 +279,18 @@ info 的 manifest 类似，典型 `permissions`: `["data.info:read"?, "hub.subsc
 | type | payload | 用途 |
 | --- | --- | --- |
 | `theme` | `{mode:"dark"\|"light", tokens:{...}}` | 初始 + 变更，套 ideall 色板 |
-| `resize` | `{width, height, safeArea:{top,bottom,...}}` | 视口/安全区 |
 | `visibility` | `{visible:boolean}` | 标签切换/挂起 |
-| `back` | `{}` | 移动端返回键（页面应 pop 内部路由或回 `handled:false`） |
 | `navigated` | `{route}` | 宿主路由变化通知 |
+
+`resize` 与移动端 `back` 仍是保留设计，当前宿主未发送。
 
 **页面 → 宿主**
 
 | type | payload | 用途 |
 | --- | --- | --- |
 | `ready` | `{}` | 内容挂载完成（宿主可撤 loading） |
-| `set-title` | `{title}` | 同步标题到外壳 |
-| `request-resize` | `{height}` | 按内容高度请求容器调整 |
-| `loading` | `{busy:boolean}` | 顶部进度条 |
+
+`set-title`、`request-resize` 与 `loading` 已保留消息名，但当前宿主忽略这些事件。
 
 ---
 
@@ -312,7 +307,7 @@ info 的 manifest 类似，典型 `permissions`: `["data.info:read"?, "hub.subsc
 - `ideall:init` 必须校验 `event.origin === HOST_ORIGIN`（按平台，§4.3）。
 - 宿主侧校验 iframe `entry` 源在 manifest `origins` 白名单内；CSP `frame-src` 同步收紧到该源。
 - 握手后只用移交的 `MessagePort`，不监听/不广播 `window.postMessage`。
-- `host.openExternal` / 页面内外链：先解析真实 URL，未知/可疑域名二次确认（参考链接安全策略），永不在 webview 内直接跳转外链。
+- `host.openExternal` / 页面内外链：宿主只接受 `http:` / `https:`，再经 UI action 打开隔离的“浏览器”表面；页面不能借此提交其它协议。
 
 ### 9.3 被嵌入页的 header（wonita 侧）
 
@@ -329,40 +324,36 @@ Content-Security-Policy: frame-ancestors tauri://localhost https://tauri.localho
 
 - `src/plugins/embed/host.tsx`：`EmbedHost`——建 `MessageChannel`、握手、按 manifest 起 `McpServer`、注册授权工具、生命周期清理。
 - `src/plugins/embed/transport.ts`：`MessagePortTransport`（§4.2）。
-- `src/plugins/embed/tools.ts` / `grant.ts` / `local-mcp-server.ts`：按授权把权限位映射到 `getServerPort()` / `getFilesPort()` / `auth-store` 调用并起本地 MCP server。
-- info / community 的发现界面：由 `src/workspace/registry.tsx` 按标签 kind 直接挂 `EmbedHost`（`info`/`community` 两个 registry 项，`<EmbedHost manifest={…EmbedManifest} />`）——不再走独立的模块 `page.tsx`。
+- `src/plugins/embed/tools.ts` / `grant.ts` / `scoped-host.ts` / `local-mcp-server.ts`：先按 Grant 得出有效权限并构造收窄的宿主句柄，再注册 tool/resource、启动本地 MCP server。
+- info / community 的现行入口通过 `ideall.connected` File Engine 渲染 `EmbedHost`；`src/workspace/registry.tsx` 中同名静态标签项仅保留旧快照兼容。
+- `src/plugins/embed/connections.ts` / `connected-apps.tsx`：登记活动连接，并在设置页提供运行期查看与一键断开。
 - `src-tauri/tauri.conf.json`：设 CSP（§4.2）。capabilities 已够用（`http:*`、`opener`）。
 
 ### 10.2 server 接线（要点）
 
 ```ts
-function startEmbed(manifest: Manifest, iframe: HTMLIFrameElement) {
-  const mcp = new MessageChannel(), ui = new MessageChannel()
+// 仅在来源与 iframe 窗口均校验通过的 ideall:embed-hello 后调用。
+function startBridge(manifest: Manifest, iframe: HTMLIFrameElement) {
+  const mcp = new MessageChannel()
+  const ui = new MessageChannel()
   iframe.contentWindow!.postMessage(
     { type: "ideall:init", protocol: "1.0", appId: manifest.id,
       permissions: manifest.permissions, theme: currentTheme() },
     new URL(manifest.entry).origin, [mcp.port2, ui.port2])
 
-  const server = new McpServer({ name: "ideall-host", version: "1.0.0" })
-  registerGrantedTools(server, manifest.permissions)   // 只注册授权项
-  server.connect(new MessagePortTransport(mcp.port1))
-  wireUiEvents(ui.port1)                                 // 主题/resize/back...
-  return () => { mcp.port1.close(); ui.port1.close() }   // 卸载清理
+  const grant = firstPartyGrant(manifest, Date.now())
+  const server = createLocalMcpServer(grant, { navigate: (route) => router.push(route) })
+  void server.connect(new MessagePortTransport(mcp.port1))
+  wireUiEvents(ui.port1)
+  return () => {
+    void server.close()
+    mcp.port1.close()
+    ui.port1.close()
+  }
 }
 ```
 
-```ts
-// tools.ts 片段
-if (perms.includes("identity.publish"))
-  server.tool("community.publish", PublishSchema, async (a) => {
-    const s = getSession()
-    if (!s) return mcpError(-32002, "not-authenticated")
-    return toMcp(await getServerPort().publish(s.token, a))   // token 来自宿主, 不经 iframe
-  })
-if (perms.includes("hub.subscriptions:write"))
-  server.tool("hub.addSubscription", NewSubscriptionSchema, async (a) =>
-    toMcp(await getHubData().addSubscription(a)))
-```
+具体 handler 不直接取模块单例，而是使用 `makeScopedHost(effectivePermissions(grant))` 生成的收窄句柄；现行接线见 `local-mcp-server.ts`、`scoped-host.ts` 与 `tools.ts`。
 
 ---
 
@@ -372,7 +363,7 @@ if (perms.includes("hub.subscriptions:write"))
 
 **必须（否则跑不起来）**
 1. **放行被嵌入**：服务端去 `X-Frame-Options`、设 `frame-ancestors`（§9.3）。
-2. **接握手 + transport**：监听 `ideall:init`、校验 origin、取 ports、起 MCP client、`initialize`。封进 `@ideall/embed-sdk` 后一行 `await IdeallEmbed.connect()`。
+2. **接握手 + transport**：页面就绪后循环发送 `ideall:embed-hello`，收到 `ideall:init` 时校验 origin、取 ports、启动 MCP client 并执行 `initialize`。封进 `@ideall/embed-sdk` 后由 `IdeallEmbed.connect()` 处理。
 3. **取数分流**：公共语料**仍页面直连** wonita；发布/删除/profile、订阅/收藏、当前身份**改走 MCP**；页面不再自存 token、嵌入态不做登录。
 4. **双模式检测（两个嵌入态信号）**：① **主判据 = 同步 URL 标记**——ideall 给 iframe `src` 注入 `?embed=ideall&embedApp=<id>`（宿主 `src/plugins/embed/host.tsx`，query 不改 origin），被嵌入页**首帧**即可据此判嵌入态、立刻去 chrome，**无闪烁**；② **`ideall:init` 握手**——收到即确认嵌入态并接 transport（§4）。两信号皆缺、超时无 init=独立站点态；此超时非 ~800ms 而是 **8s 水合容差下限**（`Math.max(timeoutMs, 8000)`，见 `wonita/portal/src/embed/client.ts`），吸收宿主慢水合 / dev 冷编译。
 
@@ -393,11 +384,11 @@ export const canPublish = ideall ? ideall.permissions.includes("identity.publish
 ```
 
 **强烈建议（像原生 + 安全）**
-5. **去掉自己的导航/头尾**，只渲染内容区（外壳由 ideall `(discover)` 提供）。**首帧**就读 §11.4 的 `?embed=ideall` URL 标记来隐藏 chrome——别等异步 `ideall:init`，否则导航会闪一下。注意：ideall 作宿主**无法**跨域删你的导航（同源策略），故此条必须被嵌入页自己做。
+5. **去掉自己的导航/头尾**，只渲染内容区（外壳由 ideall 工作区提供）。**首帧**就读 §11.4 的 `?embed=ideall` URL 标记来隐藏 chrome——别等异步 `ideall:init`，否则导航会闪一下。注意：ideall 作宿主**无法**跨域删你的导航（同源策略），故此条必须被嵌入页自己做。
 6. 主题：吃 init 的 `theme` + 听 uiPort `theme`，套 ideall token。
 7. 导航：外链/跳 ideall 路由改调 `host.openExternal`/`host.navigate`，不用 `window.open`/`target=_blank`。
 8. 能力门控：按 init 的 `permissions` 显隐 UI（没授 publish 就别显示发布按钮）。
-9. UI 事件：挂载发 `ready`；按需 `request-resize`；移动端处理 `back` 和 safe-area。
+9. UI 事件：挂载后发送当前已处理的 `ready`；`request-resize`、移动端 `back` 与 safe-area 仍需宿主实现后再接入。
 10. 安全：每条入站消息校验 origin；只用移交 port；收紧页面自身 CSP。
 11. 版本：`initialize` 协商 `protocolVersion`，过旧提示升级。
 
@@ -441,7 +432,7 @@ class IdeallEmbed {
 | 情况 | 行为 |
 | --- | --- |
 | 无 `ideall:init`（超时，实际 **8s 水合容差下限**） | 页面进独立站点态；主判据为同步 `?embed=ideall` URL 标记（§11.4），超时仅兜底 |
-| `-32001 permission-denied` | 页面隐藏对应入口（理论上授权位已过滤，属兜底） |
+| 工具未出现在 `tools/list` / 调用未知工具 | 页面隐藏对应入口；授权位或信任档不允许时宿主不会注册该工具 |
 | `-32002 not-authenticated` | 提示在 ideall 登录，可附 `host.navigate("/auth")` |
 | 宿主协议过旧 | 提示升级 ideall；非关键功能降级 |
 | iframe 加载失败 / 离线 | 宿主显示重试；公共语料离线即不可用（设计如此，非主权数据） |
@@ -450,16 +441,16 @@ class IdeallEmbed {
 
 ## 15. 分期路线图
 
-- **A 期（验证链路）**：协议最小集（握手 + `MessagePortTransport` + `identity.*` + `community.publish` + `host.*`）+ `EmbedHost`；**community 作第一个嵌入应用**（P2、风险低，又正好验证 token 不出 iframe 的链路）。
-- **B 期**：info 作嵌入应用（公共语料直连 + `hub.addSubscription` 写回订阅 + `agent.run`）；保留原生 info 作非 wonita ServerPort 的 fallback。
-- **C 期**：开放协议 + `@ideall/embed-sdk` + 文档 → 第三方嵌入应用 = "后端/嵌入可换兑现 + 生态"里程碑落到 UI 层。
+- **A 期（已落地）**：协议最小集（hello/init 握手 + `MessagePortTransport` + `identity.*` + `community.publish` + `host.*`）+ `EmbedHost`，community 验证 token 不出 iframe 的链路。
+- **B 期（主链路已落地，方案有调整）**：info 作为嵌入应用，公共语料直连，关注/书签写回宿主；`agent.run` 未向 iframe 开放，内置 Agent 改走宿主侧 loopback。
+- **C 期（未落地）**：任意第三方嵌入应用、持久 Grant、连接前 consent 与公开 SDK/发现流程。
 
 ---
 
 ## 16. 验收 / 测试
 
 - 握手：iframe 收到 init、origin 校验通过、双 port 建立、MCP `initialize` 成功。
-- 隔膜：iframe 内 `window.__TAURI__` 为 undefined；任何路径拿不到 `ideall:auth:token` 或 secure-store fallback；越权 tool 返回 `-32001`。
+- 隔膜：iframe 内 `window.__TAURI__` 为 undefined；任何路径拿不到 `ideall:auth:token` 或 secure-store fallback；未授权 tool 不出现在 `tools/list`，直接调用按未知工具处理。
 - 发布闭环：community 嵌入应用经 `community.publish` 成功发布，网络层确认 token 由宿主注入、未经 iframe。
 - 写回主权：在嵌入应用内"订阅发布者"→ `hub://subscriptions` 出现该项 → home 中枢可见。
 - 双模式：同一 wonita 页独立打开（直连+自登录）与嵌入打开（分流+SSO）均工作。

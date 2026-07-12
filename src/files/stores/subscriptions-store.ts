@@ -8,7 +8,7 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive, expiredTombstoneIdsToDelete } from "@protocol/sync"
 import { faviconForDomain, faviconForUrl } from "@/lib/favicon"
 import { safeHref } from "@/lib/safe-url"
-import { sortKeyBetween } from "@/files/sort-key"
+import { appendSortKey, maxSortKey } from "@/files/sort-key"
 import { feedNodeId, subToFeedNode, feedNodeToSub } from "@/files/feed-node"
 import {
   idbBulkPutDelete,
@@ -33,24 +33,6 @@ async function allFeedNodes(): Promise<FeedNode[]> {
     "feed",
   )
   return all.filter((n): n is FeedNode => n.kind === "feed")
-}
-
-/** 同级最大 sortKey (含删除标记)。 */
-function maxKey(nodes: { sortKey: string }[]): string | null {
-  const keys = nodes
-    .map((n) => n.sortKey)
-    .filter((k) => typeof k === "string" && k.length > 0)
-    .sort()
-  return keys.length ? keys[keys.length - 1] : null
-}
-
-/** 自 after 起一个严格递增追加键 (关注列表按 createdAt 展示, sortKey 仅供就绪)。 */
-function nextKey(after: string | null): string {
-  try {
-    return sortKeyBetween(after, null)
-  } catch {
-    return sortKeyBetween(null, null)
-  }
 }
 
 // ---- 读 (映射 feed 节点 → Subscription) ----
@@ -124,7 +106,10 @@ export async function addSubscription(input: NewSubscription): Promise<Subscript
     updatedAt: existing ? nextUpdatedAt(existing.updatedAt, now) : now,
   }
   // sub 无 deletedAt → subToFeedNode 不写删除标记位 = 恢复; 复用删除标记 sortKey, 全新则追加。
-  const node = subToFeedNode(sub, existing?.sortKey || nextKey(maxKey(await allFeedNodes())))
+  const node = subToFeedNode(
+    sub,
+    existing?.sortKey || appendSortKey(maxSortKey(await allFeedNodes())),
+  )
   await idbPut(STORE_NODES, node)
   notifyFilesUpdated({ kind: "feed", id, subType: input.type })
   return sub
@@ -155,12 +140,12 @@ export async function removeSubscription(type: SubscriptionType, key: string): P
 export async function bulkPutSubscriptions(subs: Subscription[]): Promise<void> {
   const existing = await allFeedNodes() // feed 作用域: 过期删除标记 GC 绝不波及其它 kind 节点
   const keyById = new Map(existing.map((n) => [n.id, n.sortKey]))
-  let lastKey = maxKey(existing)
+  let lastKey = maxSortKey(existing)
   const nodes = subs.map((sub) => {
     const nid = feedNodeId(sub.type, sub.key)
     let sk = keyById.get(nid)
     if (!sk) {
-      sk = nextKey(lastKey) // 新关注 → 追加键; 已存在 → 复用其 sortKey (不重排)
+      sk = appendSortKey(lastKey) // 新关注 → 追加键; 已存在 → 复用其 sortKey (不重排)
       lastKey = sk
     }
     return subToFeedNode(sub, sk)

@@ -4,7 +4,7 @@
 export const FILES_UPDATED = "ideall:files-updated"
 /** 跨端同步完成事件 (sync 插件在合并写本地后广播); 同时监听旧 wonita 事件名以兼容已加载旧窗口。 */
 export const SUBSCRIPTIONS_SYNCED = "ideall:subscriptions-synced"
-export const LEGACY_SUBSCRIPTIONS_SYNCED = "wonita:subscriptions-synced"
+const LEGACY_SUBSCRIPTIONS_SYNCED = "wonita:subscriptions-synced"
 
 /** 写入 payload (§7/§9): 哪个 kind 的哪个 id 变了 —— live-merge 据此只重读该条, 不被任何「我的」写惊动。缺省=未知。 */
 export type FilesUpdate = { kind?: string; id?: string; subType?: string }

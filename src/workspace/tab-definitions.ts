@@ -11,7 +11,7 @@ type TabDefinition = {
   viewType?: TabViewType
 }
 
-export const TAB_DEFINITIONS = {
+const TAB_DEFINITIONS = {
   "home-overview": {
     module: "home",
     title: "我的",

@@ -103,6 +103,15 @@ if (fixtureMode) {
     assert.throws(() => parseRunnerArgs(["--unknown"], {}), /未知选项/)
   })
 
+  test("runner help remains available when test environment overrides are invalid", () => {
+    const parsed = parseRunnerArgs(["--help"], {
+      IDEALL_TEST_TIMEOUT_MS: "not-a-number",
+      IDEALL_TEST_LOG_LIMIT_KB: "also-invalid",
+    })
+    assert.equal(parsed.help, true)
+    assert.deepEqual(parsed.filters, [])
+  })
+
   test("runTestFile times out and escalates TERM to KILL", async () => {
     const result = await runTestFile(SELF, {
       ...fixtureOptions("hang"),

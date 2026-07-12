@@ -28,7 +28,7 @@ const TITLES = {
 
 async function openTrash(page) {
   await page.goto(TRASH_URL, { waitUntil: "domcontentloaded", timeout: 30000 })
-  await page.locator("h1", { hasText: "回收站" }).waitFor({
+  await page.locator("h1:visible", { hasText: "回收站" }).waitFor({
     state: "visible",
     timeout: 30000,
   })
@@ -281,18 +281,12 @@ try {
   }
   record("回收站展示文件、笔记与对话删除项", true)
 
-  const trashEntry = page
-    .locator("aside")
-    .getByRole("treeitem", { name: /回收站/ })
-    .last()
-  await trashEntry.waitFor({ state: "visible", timeout: 15000 })
-  await page.waitForFunction(() => {
-    const entries = [...document.querySelectorAll('aside [role="treeitem"]')]
-    return entries.some(
-      (entry) => entry.textContent?.includes("回收站") && entry.textContent.includes("4"),
-    )
+  const trashEntry = page.locator("aside").getByRole("treeitem", {
+    name: "删除",
+    exact: true,
   })
-  record("左侧回收站文件条目显示数量徽标", true)
+  await trashEntry.waitFor({ state: "visible", timeout: 15000 })
+  record("左侧活动分区高亮删除入口", (await trashEntry.getAttribute("aria-selected")) === "true")
   await page.screenshot({ path: `${SHOT_DIR}/1-seeded.png` })
 
   markStage("restore note")

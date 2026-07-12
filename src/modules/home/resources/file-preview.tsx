@@ -7,15 +7,14 @@ import { AlertTriangle, Loader2, RotateCcw } from "lucide-react"
 import type { FileRef } from "@protocol/file-system"
 import type { StoredFile } from "@protocol/files"
 import { readFile, statFile, watchFile } from "@/filesystem/registry"
+import { fileReadResultToBlob } from "@/filesystem/read-result"
 import { resourceFileRef } from "@/filesystem/resource-file-system"
-import type { FileReadResult } from "@/filesystem/types"
-import { base64ToBytes } from "@/lib/base64"
 import { cn } from "@/lib/utils"
+import { TEXT_PREVIEW_LIMIT } from "@/lib/file-preview"
 import { formatBytes, fileTypeInfo } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import { Button } from "@/ui/button"
 
-export const TEXT_PREVIEW_LIMIT = 512 * 1024
 const JSON_FORMAT_LIMIT = 128 * 1024
 const CSV_ROW_LIMIT = 200
 const CSV_COLUMN_LIMIT = 64
@@ -48,21 +47,6 @@ const UI_WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as co
 
 export function storedNodeFileRef(fileId: string): FileRef {
   return resourceFileRef({ scheme: "node", kind: "file", id: fileId })
-}
-
-export function fileReadResultToBlob(result: FileReadResult): Blob {
-  const { data } = result
-  if (data instanceof Blob) return data
-  if (typeof data === "string") return new Blob([data], { type: result.mediaType })
-  if (data instanceof ArrayBuffer) return new Blob([data], { type: result.mediaType })
-  if (ArrayBuffer.isView(data)) {
-    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice()
-    return new Blob([bytes], { type: result.mediaType })
-  }
-  if (data && typeof data === "object" && "base64" in data && typeof data.base64 === "string") {
-    return new Blob([base64ToBytes(data.base64)], { type: result.mediaType })
-  }
-  throw new TypeError("FileSystem read result is not byte-addressable")
 }
 
 export async function readStoredNodeFile(fileId: string): Promise<{

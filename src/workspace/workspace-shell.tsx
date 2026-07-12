@@ -3,7 +3,7 @@
 // 工作区壳 (挂在根布局, 跨路由持久存在 → TabHost keep-alive)。
 // 桌面 (md+): 活动栏 + 二级侧栏 + 标签条 + 主区 + 状态栏。
 // 移动 (<md): 沿用现有顶栏(Header) + 底部标签栏(BottomTabBar), 主区显示当前激活标签。
-// children = 各路由页的 OpenWorkspaceTab 标记 (无 UI), 隐藏渲染仅触发开标签副作用。
+// children = 各路由页的 OpenWorkspaceTab 标记 (无 UI), 隐藏渲染仅分发目标或工作区命令。
 // /auth 跳出工作区, 纯页面渲染。
 
 import * as React from "react"
@@ -44,11 +44,13 @@ import { descriptorForFileEngineSearch, parseFileEngineSearch } from "./file-tab
 import { FileEngineContent } from "./registry"
 import { defaultFileForPath } from "./file-roots"
 import WorkspaceDock from "./workspace-dock"
+import { workspaceCommandForPath } from "./workspace-route"
 
 function routeProvidesInitialView(pathname: string | null, search: string): boolean {
   if (parseFileEngineSearch(search) || descriptorForResource(search)) return true
   const path = pathname || "/"
   if (path.startsWith("/ai")) return true
+  if (workspaceCommandForPath(path)) return false
   if (path === "/" || path === "/home" || path.startsWith("/home/agent")) return false
   return Boolean(defaultFileForPath(path) || descriptorForPath(path))
 }

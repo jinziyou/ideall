@@ -1,8 +1,8 @@
-import { SHOT_DIR, openPluginPage } from "./shared.mjs"
+import { SHOT_DIR, openPluginSurface } from "./shared.mjs"
 
 export async function runGitPluginSmoke({ page, record, markStage }) {
   markStage("git")
-  await openPluginPage(page, "/git")
+  await openPluginSurface(page, "git")
   await page.getByText("Git 工作台仅在桌面 App 中可用", { exact: true }).waitFor({
     state: "visible",
     timeout: 30000,

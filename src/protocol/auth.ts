@@ -1,10 +1,2 @@
-// 鉴权接口约定 —— 账号会话 + X25519 登录方案。
-// 数据访问 (同构) / store / crypto 实现物理留在 lib/auth/*; 经此暴露。
-export { getServerPublicKey, login, register, fetchMe } from "@/lib/auth/auth-api"
-export type { AuthBody, AuthPayload, CurrentUser } from "@/lib/auth/auth-api"
-export { getSession, subscribeSession, setSession, clearSession } from "@/lib/auth/auth-store"
-export type { Session } from "@/lib/auth/auth-store"
-export { newClientId, newKeypair, encryptPassword } from "@/lib/auth/crypto"
-export type { ClientKeypair } from "@/lib/auth/crypto"
-export { runAuthFlow } from "@/lib/auth/auth-flow-machine"
-export type { AuthFlowInput, AuthFlowResult } from "@/lib/auth/auth-flow-runner"
+// UI 读取账号会话的薄协议入口；鉴权流程与写操作由 lib/auth 内部编排。
+export { getSession, subscribeSession } from "@/lib/auth/auth-store"

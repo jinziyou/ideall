@@ -1,5 +1,5 @@
 // 统一节点模型 (一切皆文件) —— 所有本地优先内容收敛为单一命名空间里的可寻址节点。
-// 见 docs/design/ai-native-redesign.md §2。纯类型 + 零依赖运行期守卫 (不引 platejs/编辑器):
+// 见 docs/design/archive/ai-native-redesign.md §2。纯类型 + 零依赖运行期守卫 (不引 platejs/编辑器):
 //   - kind 为主辨识 (不设顶层 mime; file 用 blobRef.mime);
 //   - 可辨识联合杀掉 content:unknown 的类型逃逸; note 的 unknown[] 是协议纯度被迫且合理的妥协;
 //   - 折叠分步进行 (§3): 步 A 仅 note 物理入库, 其余 kind 类型先就位、随后续折叠落库。

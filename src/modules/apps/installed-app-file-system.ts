@@ -12,6 +12,7 @@ import type {
   FileSystemAccessContext,
   FileSystemProvider,
 } from "@/filesystem/types"
+import { paginateDirectoryItems } from "@/filesystem/provider-input"
 import { FileSystemError } from "@/filesystem/types"
 import { launchInstalledApp, listInstalledApps, type InstalledApp } from "@/lib/installed-apps"
 
@@ -151,22 +152,6 @@ function assertLaunchAccess(ref: FileRef, ctx: FileSystemAccessContext): void {
   throw new FileSystemError("permission-denied", "Missing apps:launch permission", ref)
 }
 
-function parseOffset(ref: FileRef, cursor: string | undefined): number {
-  if (cursor === undefined) return 0
-  if (!/^(0|[1-9]\d*)$/.test(cursor)) {
-    throw new FileSystemError("invalid-input", `Invalid app directory cursor: ${cursor}`, ref)
-  }
-  return Number(cursor)
-}
-
-function pageLimit(ref: FileRef, limit: number | undefined, total: number): number {
-  if (limit === undefined) return total
-  if (!Number.isInteger(limit) || limit <= 0) {
-    throw new FileSystemError("invalid-input", "App directory limit must be positive", ref)
-  }
-  return limit
-}
-
 function readMetadata(
   ref: FileRef,
   app: InstalledApp,
@@ -269,20 +254,17 @@ export function createInstalledAppsFileSystem(
         throw new FileSystemError("unsupported", "Installed app is not a directory", ref)
       }
       const apps = await loadApps(options.cursor === undefined)
-      const offset = parseOffset(ref, options.cursor)
-      const limit = pageLimit(ref, options.limit, apps.length)
-      const page = apps.slice(offset, offset + limit)
-      const nextOffset = offset + page.length
+      const page = paginateDirectoryItems(ref, apps, options)
       return {
-        entries: page.map((app, index) => ({
+        entries: page.items.map((app, index) => ({
           entryId: installedAppFileRef(app.id).fileId,
           parent: installedAppsRootRef,
           target: installedAppFileRef(app.id),
           name: app.name,
           kind: "child",
-          sortKey: String(offset + index).padStart(6, "0"),
+          sortKey: String(page.offset + index).padStart(6, "0"),
         })),
-        nextCursor: nextOffset < apps.length ? String(nextOffset) : undefined,
+        nextCursor: page.nextCursor,
       }
     },
     async read(ref, ctx, options): Promise<FileReadResult> {

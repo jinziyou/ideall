@@ -142,7 +142,8 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
   }, GIT_REPOS_KEY)
   record(
     "Code 插件可预检并导入插件数据",
-    Array.isArray(importedRepos) && importedRepos.includes(CODE_IMPORT_REPO),
+    Array.isArray(importedRepos) &&
+      importedRepos.some((repo) => repo === CODE_IMPORT_REPO || repo?.path === CODE_IMPORT_REPO),
   )
   await openPluginPage(page, "/code")
   await page.getByRole("button", { name: "导出全部", exact: true }).waitFor({
@@ -174,7 +175,10 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
   await page.waitForFunction(
     ({ key, repo }) => {
       try {
-        return JSON.parse(localStorage.getItem(key) || "[]").includes(repo)
+        const values = JSON.parse(localStorage.getItem(key) || "[]")
+        return (
+          Array.isArray(values) && values.some((value) => value === repo || value?.path === repo)
+        )
       } catch {
         return false
       }
@@ -218,7 +222,10 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
   await page.waitForFunction(
     ({ key, repo }) => {
       try {
-        return JSON.parse(localStorage.getItem(key) || "[]").includes(repo)
+        const values = JSON.parse(localStorage.getItem(key) || "[]")
+        return (
+          Array.isArray(values) && values.some((value) => value === repo || value?.path === repo)
+        )
       } catch {
         return false
       }

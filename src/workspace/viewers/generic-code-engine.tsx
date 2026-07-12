@@ -7,6 +7,8 @@ import { toast } from "sonner"
 import { fileRefKey, type IdeallFile } from "@protocol/file-system"
 import { readFile, writeFile } from "@/filesystem/registry"
 import { base64ToBytes } from "@/lib/base64"
+import { TEXT_PREVIEW_LIMIT, textPreviewRange } from "@/lib/file-preview"
+import { formatBytes } from "@/lib/format"
 import { Button } from "@/ui/button"
 import {
   acceptExternalTextDraft,
@@ -73,6 +75,11 @@ export default function GenericCodeEngine({
   const [suspendReady, setSuspendReady] = React.useState(false)
   const loadedFileKey = React.useRef<string | null>(null)
   const writable = !readOnly && file.capabilities.includes("write")
+  const previewRange = React.useMemo(
+    () => textPreviewRange(readOnly, file.size),
+    [file.size, readOnly],
+  )
+  const previewTruncated = previewRange !== undefined
   const dirty = document.fileKey === fileKey && document.draft !== document.base
   const conflicted = document.fileKey === fileKey && document.pendingExternal != null
 
@@ -91,7 +98,10 @@ export default function GenericCodeEngine({
     readFile(
       ref,
       { actor: "engine", permissions: [], activeFile: ref, intent: "content" },
-      { encoding: "text" },
+      {
+        encoding: "text",
+        ...(previewRange ? { range: previewRange } : {}),
+      },
     )
       .then(async (result) => {
         const text = await textFromData(result.data)
@@ -117,10 +127,11 @@ export default function GenericCodeEngine({
     return () => {
       alive = false
     }
-  }, [file.version, fileKey, ref])
+  }, [file.version, fileKey, previewRange, ref])
 
   React.useEffect(() => {
     setTabDirty(tabId, dirty)
+    if (dirty) promoteTab(tabId)
   }, [dirty, tabId])
 
   React.useEffect(() => {
@@ -248,12 +259,14 @@ export default function GenericCodeEngine({
         filename={file.name}
         language={file.mediaType}
         readOnly={!writable}
-        onChange={(draft) => {
-          if (draft !== document.draft) promoteTab(tabId)
-          setDocument((current) => editTextDraft(current, draft))
-        }}
+        onChange={(draft) => setDocument((current) => editTextDraft(current, draft))}
         className="min-h-0 flex-1"
       />
+      {previewTruncated && (
+        <div className="shrink-0 border-t bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          仅预览前 {formatBytes(TEXT_PREVIEW_LIMIT)}
+        </div>
+      )}
     </div>
   )
 }

@@ -47,7 +47,7 @@
     "gen:api:check": "openapi-typescript openapi/server.json -o node_modules/.cache/ideall/server.gen.d.ts && node scripts/gen-api-check.mjs",
     "test": "node --import tsx scripts/run-tests.mjs",
     "test:coverage": "c8 node --import tsx scripts/run-tests.mjs",
-    "test:scripts": "node --test scripts/project-version.test.mjs scripts/process-management.test.mjs scripts/app-dev.test.mjs scripts/release-artifacts.test.mjs scripts/check-bundle-budget.test.mjs",
+    "test:scripts": "node --test scripts/project-version.test.mjs scripts/process-management.test.mjs scripts/app-dev.test.mjs scripts/release-artifacts.test.mjs scripts/check-bundle-budget.test.mjs scripts/check-static-export.test.mjs scripts/serve-out.test.mjs",
     "smoke:notes": "node scripts/smoke/notes.mjs",
     "smoke:files": "node scripts/smoke/files.mjs",
     "smoke:files:preview": "node scripts/smoke/files-preview.mjs",

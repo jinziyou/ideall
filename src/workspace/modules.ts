@@ -1,10 +1,7 @@
-// 旧模块配置保留路由→标签解析与插件兼容；桌面/移动导航由 navigation-sections 单源驱动。
-// 注: 「搜索」= 聚合搜索 (跳外部搜索引擎), 已并入「工具」; 顶栏搜索框/⌘K 统一面板搜本机内容, 两者职责分离。
-//
-// 导航有意分两源、各管一界面, 不是重复——勿强行合并 (二者经 module-meta 的 MODULE_META 共享身份, 已无手抄漂移):
-//   · 本文件 (modules.ts): 桌面 IDE 式工作区 (活动栏/侧栏/标签) + descriptorForPath 路由解析。
-//   · shell/nav-config.ts:  移动端 Sheet/底栏 + ⌘K 命令面板 (扁平 href 链接范式)。
-// 桌面是「模块→标签」、移动是「href→路由」两种范式; 命令面板经 router.push→OpenWorkspaceTab 标记桥接到同一标签, 故无需统一。
+// 旧模块目录保留给 toggleModule、路由→标签解析与插件兼容，不再驱动可见导航。
+// 桌面活动栏/侧栏和移动抽屉统一由 navigation-sections.ts 驱动；shell/nav-config.ts
+// 只服务仍采用 href 的底栏与命令面板。
+// 「搜索」是跳转外部搜索引擎的聚合工具；顶栏搜索框/⌘K 搜索本机内容，职责不同。
 
 import type { ComponentType } from "react"
 import { Bot, Compass, Globe, Hexagon, Search } from "lucide-react"

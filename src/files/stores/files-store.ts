@@ -8,7 +8,7 @@ import { FileMeta, StoredFile } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
-import { sortKeyBetween } from "@/files/sort-key"
+import { appendSortKey, maxSortKey } from "@/files/sort-key"
 import {
   idbDelete,
   idbGet,
@@ -50,24 +50,6 @@ async function allFileNodes(): Promise<FileNode[]> {
   return all.filter((n): n is FileNode => n.kind === "file")
 }
 
-/** 同级最大 sortKey (含删除标记)。 */
-function maxKey(nodes: { sortKey: string }[]): string | null {
-  const keys = nodes
-    .map((n) => n.sortKey)
-    .filter((k) => typeof k === "string" && k.length > 0)
-    .sort()
-  return keys.length ? keys[keys.length - 1] : null
-}
-
-/** 自 after 起生成一个严格递增键 (文件列表按 createdAt 展示, sortKey 仅供就绪)。 */
-function nextKey(after: string | null): string {
-  try {
-    return sortKeyBetween(after, null)
-  } catch {
-    return sortKeyBetween(null, null)
-  }
-}
-
 // ---- 读 ----
 
 /** 列出所有文件元数据 (不含 Blob), 按创建时间倒序 */
@@ -105,7 +87,7 @@ export async function addFile(file: File, tags: string[] = []): Promise<FileMeta
     kind: "file",
     title: file.name,
     parentId: null,
-    sortKey: nextKey(maxKey(existing)),
+    sortKey: appendSortKey(maxSortKey(existing)),
     tags,
     createdAt: now,
     updatedAt: now,
@@ -202,7 +184,7 @@ export async function restoreFile(file: StoredFile): Promise<void> {
     kind: "file",
     title: file.name,
     parentId: tomb?.parentId ?? null,
-    sortKey: tomb?.sortKey || nextKey(maxKey(existing)),
+    sortKey: tomb?.sortKey || appendSortKey(maxSortKey(existing)),
     tags: file.tags,
     createdAt: file.createdAt,
     updatedAt: tomb ? nextUpdatedAt(tomb.updatedAt, now) : now,
