@@ -370,8 +370,8 @@ export default function TabBar() {
   }, [activeId, tabs.length])
 
   return (
-    <div className="hidden h-9 shrink-0 items-stretch border-b bg-secondary/30 md:flex">
-      <div className="flex min-w-0 flex-1 items-stretch">
+    <div className="hidden h-9 min-w-0 shrink-0 items-stretch overflow-hidden border-b bg-secondary/30 md:flex">
+      <div className="flex min-w-0 flex-1 items-stretch overflow-hidden">
         <div
           role="tablist"
           className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"

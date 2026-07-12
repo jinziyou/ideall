@@ -6,7 +6,6 @@ import CommandTrigger from "@/shared/command-trigger"
 import MobileNav from "./mobile-nav"
 import WindowControls from "./window-controls"
 import { useTauriDragRegion } from "@/lib/use-tauri-drag-region"
-import WorkspaceSwitch from "@/workspace/workspace-switch"
 
 /**
  * 移动端顶栏 (md:hidden) —— 桌面端由左侧图标轨取代。已瘦身为 3+1 项:
@@ -19,12 +18,11 @@ export function Header() {
   const dragRegion = useTauriDragRegion()
 
   return (
-    <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-stretch gap-2 border-b bg-background/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
+    <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] min-w-0 items-stretch gap-2 overflow-hidden border-b bg-background/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
       <MobileNav />
       <Link href="/" className="flex shrink-0 items-center" aria-label="ideall 首页">
         <WonitaMark className="h-6 w-auto text-foreground" />
       </Link>
-      <WorkspaceSwitch compact />
       <CommandTrigger className="ml-1 h-8 min-w-0 max-w-[14rem] flex-1" />
       {/* 仅空白条带可拖拽; 勿挂整栏, 否则 WebView2 会吞子控件 mousedown。 */}
       <div

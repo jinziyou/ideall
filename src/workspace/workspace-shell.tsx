@@ -235,22 +235,22 @@ function MainWorkspaceShell({
       <GlobalShortcuts />
       <DirtyTabCloseDialog />
 
-      <div className="flex h-[var(--app-h,100dvh)] min-h-0 flex-col">
+      <div className="flex h-[var(--app-h,100dvh)] min-h-0 w-full max-w-full flex-col overflow-hidden">
         {/* 移动顶栏 (md:hidden 由组件内部控制; Tauri 窄窗兼作标题栏) */}
         <Header />
         {/* 桌面顶边栏 (hidden md:flex; Tauri 下兼作标题栏, 窗控已并入) */}
         <TopBar />
 
-        <div className="flex min-h-0 flex-1">
-          <div className="relative z-10 flex min-w-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div className="relative z-10 flex min-w-0 flex-1 overflow-hidden">
             <ActivityBar />
             <SecondarySidebar collapsed={sidebarCollapsed} />
             <div
               inert={aiMainInert}
               className={
                 aiDockMargin
-                  ? "flex min-w-0 flex-1 flex-col md:max-lg:mr-[25rem]"
-                  : "flex min-w-0 flex-1 flex-col"
+                  ? "flex min-w-0 flex-1 flex-col overflow-hidden md:max-lg:mr-[25rem]"
+                  : "flex min-w-0 flex-1 flex-col overflow-hidden"
               }
             >
               <TabBar />

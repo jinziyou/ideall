@@ -66,8 +66,13 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
       if (cursor !== undefined && page.nextCursor === cursor) {
         throw new Error(`Directory pagination cursor loop detected at ${JSON.stringify(cursor)}`)
       }
+      // 与侧栏一致：navigationHidden 仅保留路由/兼容身份，不进浏览 UI。
+      // 「文件」目录下的 panel:notes 管理面板即属此类，否则会多出一条同名记录。
+      const visibleEntries = page.entries.filter(
+        (entry) => entry.properties?.navigationHidden !== true,
+      )
       const loaded = await Promise.all(
-        page.entries.map(async (entry) => ({
+        visibleEntries.map(async (entry) => ({
           entry,
           file:
             entry.file && sameFileRef(entry.file.ref, entry.target)
