@@ -76,15 +76,15 @@ pnpm verify:smoke:static  # 静态导出生产形态冒烟
 
 默认 `pnpm app:dev` 内部走 `next dev -p 5020`。WSL 下编辑器（Cursor / VS Code Remote）的自动端口转发可能钉死 5020，导致反复报 `EADDRINUSE: address already in use :::5020`。
 
-换个端口启动即可绕开——用 Tauri 的 `--config` 内联覆盖 `devUrl` 与 `beforeDevCommand`；末尾参数经 `app:dev` 原样透传给 `tauri dev`：
+换个端口启动即可绕开。用 Tauri 的 `--config` 内联覆盖 `devUrl`；`app:dev` 会据此选择 Next 端口，并把参数透传给 `tauri dev`：
 
 ```bash
-pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026","beforeDevCommand":"pnpm exec next dev -p 5026"}}'
+pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026"}}'
 ```
 
-- `beforeDevCommand` 改为 `pnpm exec next dev -p 5026` → 前端开发服起在 5026。
-- `devUrl` 同步指到 5026 → Tauri 壳加载它。
-- 端口随意换（5026 仅示例，挑一个 `ss -ltn` 里没占用的即可）；若某些 pnpm 版本未透传参数，改用 `pnpm app:dev -- --config '...'`。
+- `app:dev` 读取 `devUrl` 后，在 5026 复用已有 Next 开发服或自行启动一个。
+- Tauri 壳使用同一个 `devUrl`，因此会加载 5026 上的开发服。
+- 端口可以按需调整；5026 仅为示例，可先用 `ss -ltn` 确认端口未被占用。
 
 ## 环境变量
 

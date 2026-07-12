@@ -6,14 +6,14 @@
 
 **设计风格：现代 · 面板 · 留白**
 
-**设计思想：借鉴linux一切皆文件思想，将所有功能统一抽象到存储、文件系统、文件、渲染引擎和显示这个模型中，不同的数据存储（本地、远程、app、第三方app），通过文件系统汇总展示为ideall中的文件，然后根据不同场景（如音频、开发）将同一个文件经引擎渲染展示为不同视图**
+**设计思想：借鉴 Linux“一切皆文件”的思想，将能力统一抽象为 Storage、FileSystem、IdeallFile、Engine 与 Display。不同存储来源（本地、远端、内置 App、第三方 App）经文件系统汇聚为 ideall 文件；同一文件可在音频、开发等场景中由不同 Engine 渲染为不同视图。**
 
-核心功能：ai agent、shell、浏览器、本地文件/远程文件，实现数据+链接+AI
+核心能力：AI Agent、Shell、浏览器、本地文件与远程文件，汇聚数据、链接与 AI。
 
 ## 项目组成
 
-| 组件             | 说明                                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| 组件       | 说明                                                                                                 |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
 | **ideall** | 项目本体：跨平台 App（Android / iOS / Windows / macOS / Linux），管理本地数据，并连接 AI、应用与 Web |
 | **wonita** | 数据服务（独立项目）：数据同步、资讯与社区；提供默认后端实现                                         |
 
@@ -35,14 +35,14 @@ Storage → FileSystem → IdeallFile → Engine → Display
   | **应用** | 搜索、本地应用 |
   | **设置** | 基本、AI |
 
-- 工作区即视图，只在顶栏切换，不作为左侧导航项：**文件**（默认文件视图 + AI Agent）、**音频**（文件视图 + 音频播放）、**开发**（文件视图 + Git + Shell）。切换工作区保留已有标签和脏草稿；若当前打开的是文件，会激活同一 `FileRef` 在新场景下的默认 Engine 标签。
+- 工作区即视图，通过全局命令面板（`⌘K` / `Ctrl+K`，或顶栏搜索入口）切换，不作为左侧导航项：**文件**（默认文件视图 + AI Agent）、**音频**（文件视图 + 音频播放）、**开发**（文件视图 + Git / 数据库 / Shell）。音频和开发工具显示在工作区 Dock 中，关闭 Dock 即返回文件工作区。切换工作区保留已有标签和脏草稿；若当前打开的是文件，会激活同一 `FileRef` 在新场景下的默认 Engine 标签。
 - 文件使用稳定 `FileRef` 寻址，路径和目录项只是投影。同一书签可同时出现在“书签”和“浏览器”中而不复制数据。
 - 普通打开由默认引擎在当前标签页显示；“打开方式”选择其他引擎时创建同一文件的独立 Engine 标签。只有文件 capability 与 Engine 策略同时允许时，才可另开独立 App 窗口。
 - 默认引擎支持按工作区、单文件或内容类型配置；任意“文件 + 引擎”都可设为首次启动界面。正常启动优先恢复上次关闭的工作现场。
-- 音频和 Code 是针对同一文件的场景化引擎；Git 与 Shell 是开发工作区的保持挂载工具。旧 Resource/Node 标签只在工作区水合边界迁移，旧路由和 Resource 深链只在深链解析边界转换为 File + Engine，运行期不保留第二套标签身份。
+- 音频和 Code 是针对同一文件的场景化引擎；Git、数据库与 Shell 是保持挂载的工作区工具。精确 legacy 路由 `/audio`、`/git`、`/database`、`/shell` 只切换对应 Workspace Dock，不创建标签；完整 App surface 通过 `FileRef + Engine` 深链打开。旧 Resource/Node 标签及其深链仍只在解析或水合边界迁移，运行期不保留第二套标签身份。
 - 普通领域 CRUD 即使经兼容 `FilesPort` 调用，也会进入 FileSystem registry；只有需要墓碑全量快照与原子批处理的同步流程使用独立的窄 `StorageSyncPort`。可信运行时扩展可把 FileSystem 与 Engine/renderer 作为一个组合贡献原子安装、卸载；package 的重放记录绑定版本、内容/权限摘要与经宿主恢复的 consent receipt，不从存储执行代码。
 
-完整契约、权限和迁移说明见 [文件系统与引擎架构](docs/file-system-engine-architecture.md)及 [architecture.md](docs/architecture.md)。
+完整契约、权限和迁移说明见 [文件系统与引擎架构](docs/file-system-engine-architecture.md)以及 [architecture.md](docs/architecture.md)。
 
 ## 开源客户端与后端服务
 
@@ -51,9 +51,9 @@ Storage → FileSystem → IdeallFile → Engine → Display
 |      | ideall（本仓库）                                          | wonita 后端服务（默认，可换）                   |
 | ---- | --------------------------------------------------------- | ----------------------------------------------- |
 | 内容 | Next.js 前端、本地 home、插件、BYO-key agent              | 采集、NLP、知识图谱、实体/事件追踪、鉴权 API    |
-| 许可 | [Apache 2.0](LICENSE)                                      | 闭源，官方运营（也可自实现`ServerPort` 替换） |
+| 许可 | [Apache 2.0](LICENSE)                                      | 闭源，官方运营（也可自行实现 `ServerPort` 替换） |
 | 角色 | 独立可用的本地终端                                        | 可选的「语料级智能」增强                        |
-| 商标 | **Wonita** 名称与官方 logo 不随 Apache 2.0 许可转让 | **Wonita** 品牌与官方数据                 |
+| 商标 | **Wonita** 名称与官方标识不随 Apache 2.0 许可转让          | **Wonita** 品牌与官方数据                       |
 
 **要点：**
 
@@ -77,8 +77,9 @@ git clone git@github.com:jinziyou/ideall.git
 cd ideall
 cp .env.example .env.local   # 按需选择官方或自托管后端地址
 pnpm install
-pnpm dev                     # 开发服 http://localhost:5020（也是 Tauri 壳的加载源）
-pnpm app:dev                 # 起 Tauri 桌面开发壳（加载上面的 dev 服）
+pnpm dev                     # 浏览器开发：启动 http://localhost:5020
+# 或
+pnpm app:dev                 # 桌面开发：复用或启动 Next 开发服，再启动 Tauri 壳
 ```
 
 ## 本地验证
@@ -96,10 +97,10 @@ pnpm verify:full          # 基础门禁 + 开发服冒烟（自动挑 5020-5023
 
 开箱默认连官方 wonita（`https://api.wonita.link` + iframe `https://www.wonita.link`），见 [`.env.example`](.env.example)。home / tool 不依赖后端；info / community 需可用后端（经 `ServerPort` 契约；wonita 是默认实现）。
 
-| 场景                          | 做法                                                                                                                                          |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **独立运行 / 官方后端** | 无需配置，或复制`.env.example` → `.env.local`                                                                                            |
-| **联调自建 / 本地后端** | 复制`.env.example` → `.env.local`，按需修改 `NEXT_PUBLIC_SERVER_ADDR` / `NEXT_PUBLIC_EMBED_BASE`（`.env.local` 不入库）。Tauri App 使用自建 embed 源时还须同步修改 `src-tauri/tauri.conf.json` 的 CSP `frame-src`，并让门户的 `frame-ancestors` 放行 ideall 后重新打包 |
+| 场景                       | 做法                                                                                                                                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **独立运行 / 官方后端**    | 无需配置，或复制 `.env.example` → `.env.local`                                                                                                                                                                                                  |
+| **联调自建 / 本地后端**    | 复制 `.env.example` → `.env.local`，按需修改 `NEXT_PUBLIC_SERVER_ADDR` / `NEXT_PUBLIC_EMBED_BASE`（`.env.local` 不入库）。Tauri App 使用自建 embed 源时还须同步修改 `src-tauri/tauri.conf.json` 的 CSP `frame-src`，并让门户的 `frame-ancestors` 放行 ideall 后重新打包 |
 
 客户端直连需后端放行 CORS（见 [docs/app.md](docs/app.md)）。
 
@@ -111,7 +112,7 @@ ideall 同一套代码经 **Tauri 2.0** 打包为跨平台客户端（Windows / 
 
 ideall 调用后端数据服务的类型来自 OpenAPI schema（经 `ServerPort` 契约消费；wonita 的 server 是其一个参考实现），**不手写 DTO**：
 
-```
+```text
 openapi/server.json             ← 已提交的契约源
 src/lib/api/server.d.ts         ← openapi-typescript 生成物
 scripts/sync-server-openapi.mjs ← 维护者刷新契约用（可选）

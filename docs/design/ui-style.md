@@ -16,7 +16,7 @@
 
 ## 2. 颜色
 
-- **语义令牌优先**：一律走 `globals.css` 的 HSL 令牌（`--background/--card/--muted/--accent/…`），禁止硬编码 hex / rgb 字面量；暗色差异只在 `.dark` 令牌层解决，组件里**不写** `dark:` 变体（现存例外 `kbd-node.tsx` 是待清理的历史债）。
+- **语义令牌优先**：一律走 `globals.css` 的 HSL 令牌（`--background/--card/--muted/--accent/…`），禁止新增未经约定的 hex / rgb 字面量；暗色差异原则上只在 `.dark` 令牌层解决。现存例外是 `kbd-node.tsx` 的历史阴影，以及 `code-block-node.tsx` 的语法高亮调色板；它们不应被复制为普通组件写法。
 - **强调色**：靛蓝 `--primary` 是唯一强调色，**每屏只给一个主操作**。
 - **`--pop` / `--flowback`**：严格保留给「关键动作 / 加入我的 / 流回」语义，不得兼职表示运行状态。
 - **`--spoke-*` 三色**（资讯蓝 / 社区绿 / 工具紫）：只用于小圆点、图标 tint、标签，**绝不大面积 fill**。
@@ -37,7 +37,7 @@
 - 间距三档：`gap-2`（组内）/ `gap-4`（行间）/ `space-y-8`（区段间）。
 - 内容列：`max-w-2xl / 3xl` + `mx-auto`（留白 = 现代感）。
 - Type ramp：标题 `text-base font-semibold` · 正文 `text-sm` · meta `text-[13px] text-muted-foreground`。
-- 壳层微字号（现状）：标签条 13px、活动栏 11px、徽标 10px——目前以任意值书写（58 处），**待令牌化**（`--text-meta/--text-micro`），新代码沿用现值、勿再发明新字号。
+- 壳层微字号（现状）：标签条 13px、活动栏 11px、徽标 10px——目前仍广泛使用任意值，**待令牌化**（`--text-meta/--text-micro`）；新代码沿用现值，勿再发明新字号。
 
 ## 5. 公共组件（先查再写）
 

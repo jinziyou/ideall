@@ -3,7 +3,7 @@
 本文记录 ideall 五层模型当前的实现约定：
 
 ```text
-Storage -> FileSystem -> IdeallFile -> Engine -> Display
+Storage → FileSystem → IdeallFile → Engine → Display
 ```
 
 ## 身份与挂载
@@ -40,8 +40,8 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 
 ## 工作区与固定导航分区
 
-- 工作区与视图是同一个 Display 概念，由 `WorkspaceKind = files | audio | development` 表达。工作区切换位于顶栏，不生成活动栏、目录树或移动导航项。
-- 文件工作区是默认基础视图，包含文件树、标签页、文件渲染和 AI Agent。音频工作区在其上增加保持挂载的音频播放区；开发工作区在其上增加保持挂载的 Git / Shell 工具区。音频播放区与音频 File Engine 共用 shell 级播放控制器和唯一媒体元素，切换文件或工作区不会产生并行播放器。
+- 工作区与视图是同一个 Display 概念，由 `WorkspaceKind = files | audio | development` 表达。工作区通过全局命令面板（`⌘K` / `Ctrl+K`，或顶栏搜索入口）切换，不生成活动栏、目录树或移动导航项。
+- 文件工作区是默认基础视图，包含文件树、标签页、文件渲染和 AI Agent。音频工作区在其上增加保持挂载的音频播放区；开发工作区在其上增加保持挂载的 Git / 数据库 / Shell 工具区。这些工具显示在工作区 Dock 中，关闭 Dock 会返回文件工作区。音频播放区与音频 File Engine 共用 shell 级播放控制器和唯一媒体元素，切换文件或工作区不会产生并行播放器。
 - 工作区切换只改变 Display 组合和无显式偏好时的 Engine 选择，不改变当前 `FileRef`、既有标签、脏草稿、根目录或文件系统挂载。若活动标签是文件，Display 会为同一 `FileRef` 激活新场景的默认 Engine 标签；旧 Engine 标签继续保留。隐藏工具区保持挂载，避免切换后中断播放或 Shell 会话。
 - 音频工作区对 `audio/*` 文件默认使用音频 Engine；开发工作区对通用文本文件默认使用 Code Engine；文件工作区使用通用预览。用户设置的单文件或 media type 偏好优先于这些默认策略。
 - 活动栏一级分区固定为：**我的**、**活动**、**浏览**、**应用**、**设置**。对应的二级侧栏分别为：“关注 / 书签 / 资源 / 文件”、“空间 / 任务 / 删除”、“新闻 / 社区 / 浏览器”、“搜索 / 本地应用”、“基本 / AI”。五个一级入口始终同时可见；本地与联网资源共享同一合成根、FileSystem 身份和 Engine 偏好。
@@ -50,7 +50,7 @@ Storage -> FileSystem -> IdeallFile -> Engine -> Display
 ## 启动与独立窗口
 
 - 根目录本身不作为内容页显示；桌面活动栏和移动导航订阅同一个完整合成根，并呈现相同的五个固定分区。二级侧栏使用稳定 `FileRef` 打开对应目标；provider 挂载变化不改变已打开标签的文件身份。
-- 文件深链使用 `?file=<FileRefKey>&engine=<engineId>`；旧 `?resource=`、`?node=` 和静态路由保留为兼容入口。
+- 文件及完整 App surface 的规范深链使用 `/home?file=<FileRefKey>&engine=<engineId>`。精确 legacy 路由 `/audio`、`/git`、`/database`、`/shell` 仅选择音频 Dock 或开发 Dock 的对应工具，不创建文件标签；旧 `?resource=`、`?node=` 与其余静态路由继续作为兼容入口。
 - 主窗口优先恢复 workspace 快照，包括当前导航分区、工作区、开发工具选择和标签。旧快照缺少工作区字段时回退文件工作区。没有可恢复标签时读取 `ideall:startup-target:v1`，无效时回退“我的”。
 - 独立窗口入口要求文件显式声明 `standalone-window` capability，同时 Engine descriptor 声明 `supportsStandaloneWindow`。程序化打开会重新 `stat`，独立窗口渲染入口也重复执行同一策略，不能用伪造 metadata 或 `display=window` 深链绕过。当前 `ideall.core` 的 Node 文件、音轨和数据库表可选择支持；远端文件、本机 App 和 Git 文件不会因此自动获得独立窗口权限。
 - 独立窗口使用 `file/engine/display=window` 内部深链，不恢复主 workspace。原生窗口创建命令仅授权 `main` 调用，URL 与 label 在 TypeScript 和 Rust 两侧校验；生成的 `engine-*` 窗口不继承主窗口的 secure-store、HTTP、Shell 或 guarded FS IPC capability。
