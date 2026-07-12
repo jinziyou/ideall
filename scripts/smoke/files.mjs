@@ -66,9 +66,9 @@ const PREVIEW_SAMPLES = [
     name: `ideall-preview-${RUN_ID}.csv`,
     mimeType: "text/csv",
     buffer: Buffer.from("name,score\nalpha,42\n"),
-    assert: async (dialog) => {
-      await dialog.getByText("score", { exact: true }).waitFor({ state: "visible" })
-      await dialog.getByText("alpha", { exact: true }).waitFor({ state: "visible" })
+    assert: async (panel) => {
+      await panel.getByText("name,score", { exact: true }).waitFor({ state: "visible" })
+      await panel.getByText("alpha,42", { exact: true }).waitFor({ state: "visible" })
     },
   },
   {
@@ -100,8 +100,8 @@ const PREVIEW_SAMPLES = [
     name: `ideall-preview-${RUN_ID}.wav`,
     mimeType: "audio/wav",
     buffer: createSilentWavBuffer(),
-    assert: async (dialog) => {
-      await dialog.locator("audio[controls]").waitFor({ state: "visible" })
+    assert: async (panel) => {
+      await panel.getByRole("button", { name: "播放", exact: true }).waitFor({ state: "visible" })
     },
   },
   {
@@ -118,10 +118,8 @@ const PREVIEW_SAMPLES = [
     name: `ideall-preview-${RUN_ID}.bin`,
     mimeType: "application/octet-stream",
     buffer: Buffer.from([0, 1, 2, 3]),
-    assert: async (dialog) => {
-      await dialog
-        .getByText("该类型不能在浏览器内可靠预览", { exact: false })
-        .waitFor({ state: "visible" })
+    assert: async (panel) => {
+      await panel.getByText("仅下载", { exact: true }).waitFor({ state: "visible" })
     },
   },
   {
@@ -135,8 +133,8 @@ const PREVIEW_SAMPLES = [
   },
 ]
 
-async function openToolbarFileMenu(page) {
-  const button = page.getByRole("button", { name: "文件操作", exact: true })
+async function openToolbarFileMenu(page, root = page) {
+  const button = root.getByRole("button", { name: "文件操作", exact: true })
   await button.waitFor({ state: "visible", timeout: 15000 })
   await button.click()
   await page.getByRole("menu").waitFor({ state: "visible", timeout: 10000 })
@@ -173,15 +171,14 @@ async function openResourcePreview(page, sample) {
   })
   await page.getByRole("button", { name: "操作", exact: true }).first().click()
   await page.getByRole("menuitem", { name: "预览", exact: true }).click()
-  const dialog = page.getByRole("dialog", { name: sample.name, exact: true })
-  await dialog.waitFor({ state: "visible", timeout: 15000 })
-  await sample.assert(dialog)
-  await page.keyboard.press("Escape")
-  await dialog.waitFor({ state: "hidden", timeout: 10000 })
+  const panel = page.locator('[role="tabpanel"][aria-hidden="false"]')
+  await panel.waitFor({ state: "visible", timeout: 15000 })
+  await sample.assert(panel)
 }
 
 const run = await createSmokeRun({ shotDir: SHOT_DIR })
 const { page, pageErrors, record, markStage } = run
+const activePanel = page.locator('[role="tabpanel"][aria-hidden="false"]')
 
 let uploadedId = null
 let currentName = FILE_NAME
@@ -210,27 +207,27 @@ try {
   record("上传 Markdown 文件并写入本地文件库", Boolean(uploadedId), uploadedId)
   await page.screenshot({ path: `${SHOT_DIR}/1-uploaded.png` })
 
-  markStage("open from sidebar")
-  // 活动栏“文件”已经是隐藏总根的直接子树；二级文件树直接展示其子项，
-  // 不再额外套旧版“资源”分组目录。
-  const uploadedTreeItem = page.getByRole("treeitem", { name: new RegExp(escapeRegex(FILE_NAME)) })
-  await uploadedTreeItem.waitFor({ state: "visible", timeout: 15000 })
-  record("侧栏文件树展示新文件", true)
-
-  await uploadedTreeItem.click()
-  const editor = page.locator(".cm-content").first()
+  markStage("open from resources")
+  // “文件”目录承载页面树，上传的二进制资源从资源管理列表进入 File + Engine 标签。
+  record("资源列表展示新文件", true)
+  await page.getByRole("button", { name: "操作", exact: true }).first().click()
+  await page.getByRole("menuitem", { name: "预览", exact: true }).click()
+  // 普通工作区默认使用只读预览；本场景需要显式切到可写的“开发”引擎。
+  await page.getByRole("button", { name: "通用预览", exact: true }).click()
+  await page.getByRole("menuitem", { name: "开发", exact: true }).first().click()
+  const editor = activePanel.locator(".cm-content")
   await editor.waitFor({ state: "visible", timeout: 30000 })
-  await page
+  await activePanel
     .getByText("Created by ideall files smoke.", { exact: true })
     .waitFor({ state: "visible", timeout: 15000 })
-  record("从侧栏打开文件标签", true)
+  record("从资源列表打开文件标签", true)
 
   markStage("edit and save")
   await editor.click()
   await page.keyboard.press("Control+A")
   await page.keyboard.type(EDITED_TEXT)
-  await page.getByRole("button", { name: "保存", exact: true }).click({ timeout: 15000 })
-  await page
+  await activePanel.getByRole("button", { name: "保存", exact: true }).click({ timeout: 15000 })
+  await activePanel
     .getByText("已保存", { exact: true })
     .first()
     .waitFor({ state: "visible", timeout: 15000 })
@@ -241,41 +238,43 @@ try {
   // 默认开发引擎直接在主标签中编辑；预览是另一个引擎，手动选择时由桌面壳打开独立窗口。
   // 此处刷新当前 FileRef + engine 标签，验证 write-blob 真正持久化，而非只检查成功 toast。
   await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 })
-  await page.locator(".cm-content").first().waitFor({ state: "visible", timeout: 30000 })
-  await page
+  await activePanel.locator(".cm-content").waitFor({ state: "visible", timeout: 30000 })
+  await activePanel
     .getByText("Edited by files smoke.", { exact: true })
     .waitFor({ state: "visible", timeout: 15000 })
-  await page
+  await activePanel
     .getByText(FAST_SAVE_TOKEN, { exact: false })
     .waitFor({ state: "visible", timeout: 15000 })
   record("刷新后开发引擎回显保存内容", true)
   record("快速输入后立即保存保留尾部 token", true)
 
   markStage("rename")
-  await openToolbarFileMenu(page)
+  await openToolbarFileMenu(page, activePanel)
   await page.getByRole("menuitem", { name: "重命名", exact: true }).click()
   const renameDialog = page.getByRole("dialog", { name: "重命名文件", exact: true })
   await renameDialog.getByLabel("名称", { exact: true }).fill(RENAMED_NAME)
   await renameDialog.getByRole("button", { name: "确定", exact: true }).click()
-  await page
+  await activePanel
     .getByRole("heading", { name: RENAMED_NAME, exact: true })
     .waitFor({ state: "visible", timeout: 15000 })
   currentName = RENAMED_NAME
   record("文件标签内重命名并同步标题", true)
 
   markStage("edit tags")
-  await openToolbarFileMenu(page)
+  await openToolbarFileMenu(page, activePanel)
   await page.getByRole("menuitem", { name: "编辑标签", exact: true }).click()
   const tagsDialog = page.getByRole("dialog", { name: "编辑标签", exact: true })
   await tagsDialog.getByLabel("标签", { exact: true }).fill(TAGS_TEXT)
   await tagsDialog.getByRole("button", { name: "保存", exact: true }).click()
-  await page.getByText("#smoke", { exact: true }).waitFor({ state: "visible", timeout: 15000 })
-  await page.getByText("#e2e", { exact: true }).waitFor({ state: "visible", timeout: 15000 })
+  await activePanel
+    .getByText("#smoke", { exact: true })
+    .waitFor({ state: "visible", timeout: 15000 })
+  await activePanel.getByText("#e2e", { exact: true }).waitFor({ state: "visible", timeout: 15000 })
   record("编辑标签并在工具栏展示", true)
   await page.screenshot({ path: `${SHOT_DIR}/3-renamed-tags.png` })
 
   markStage("delete undo")
-  await openToolbarFileMenu(page)
+  await openToolbarFileMenu(page, activePanel)
   await page.getByRole("menuitem", { name: "删除", exact: true }).click()
   const deleteDialog = page.getByRole("dialog", {
     name: new RegExp(`删除「${escapeRegex(RENAMED_NAME)}」\\?`),

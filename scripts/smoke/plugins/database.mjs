@@ -1,10 +1,10 @@
-import { SHOT_DIR, TABLE_NAME, deleteDb, openPluginPage } from "./shared.mjs"
+import { SHOT_DIR, TABLE_NAME, deleteDb, openPluginPage, openPluginSurface } from "./shared.mjs"
 
 export async function runDatabasePluginSmoke({ page, record, markStage }) {
   markStage("database")
   await openPluginPage(page, "/home")
   await deleteDb(page, "ideall:database")
-  await openPluginPage(page, "/database")
+  await openPluginSurface(page, "database")
   await page.getByRole("heading", { name: "数据库", exact: true }).waitFor({
     state: "visible",
     timeout: 30000,

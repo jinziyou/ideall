@@ -22,6 +22,12 @@ export const WORKSPACE_KEY = "ideall:workspace:v1"
 export const GIT_REPOS_KEY = "ideall:git:repos"
 export const CODE_IMPORT_REPO = `/tmp/ideall-code-import-${RUN_ID}`
 
+const PLUGIN_SURFACES = {
+  audio: { fileSystemId: "app.audio-library", engineId: "ideall.audio" },
+  database: { fileSystemId: "app.database", engineId: "ideall.database" },
+  git: { fileSystemId: "app.git-repositories", engineId: "ideall.git" },
+}
+
 export async function deleteDb(page, name) {
   await page.evaluate(
     async (dbName) =>
@@ -45,6 +51,17 @@ export async function resetWorkspace(page) {
 export async function openPluginPage(page, path) {
   await resetWorkspace(page).catch(() => {})
   await page.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded", timeout: 30000 })
+}
+
+/** 直接打开 App FileSystem 根；旧 /audio、/git、/database 路由现在只负责切换 Workspace Dock。 */
+export async function openPluginSurface(page, id) {
+  const surface = PLUGIN_SURFACES[id]
+  if (!surface) throw new Error(`unknown plugin surface: ${id}`)
+  const search = new URLSearchParams({
+    file: `${surface.fileSystemId}:root`,
+    engine: surface.engineId,
+  })
+  await openPluginPage(page, `/home?${search}`)
 }
 
 export async function seedLegacySecurityData(page) {

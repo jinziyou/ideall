@@ -197,9 +197,32 @@ export async function createSmokeRun({ shotDir, viewport = { width: 1280, height
   const browser = await chromium.launch()
   const page = await browser.newPage({ viewport })
 
-  page.on("pageerror", (e) => pageErrors.push(`[${stage}] ${String(e.message).split("\n")[0]}`))
-  page.on("console", (m) => {
-    if (m.type() === "error") pageErrors.push(`[${stage}] console: ${m.text().split("\n")[0]}`)
+  page.on("pageerror", (error) => {
+    pageErrors.push(`[${stage}] ${error.stack || error.message}`)
+  })
+  page.on("console", (message) => {
+    if (message.type() !== "error") return
+    const fallback = `[${stage}] console: ${message.text().split("\n")[0]}`
+    pageErrors.push(fallback)
+    void Promise.all(
+      message.args().map((argument) =>
+        argument
+          .evaluate((value) => {
+            if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`
+            if (typeof value === "string") return value
+            try {
+              return JSON.stringify(value)
+            } catch {
+              return String(value)
+            }
+          })
+          .catch(() => ""),
+      ),
+    ).then((details) => {
+      const detail = details.filter(Boolean).join(" ").trim()
+      const index = pageErrors.indexOf(fallback)
+      if (index >= 0 && detail) pageErrors[index] = `[${stage}] console: ${detail}`
+    })
   })
 
   return {

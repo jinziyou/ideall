@@ -52,31 +52,35 @@ function envSetting(env, key, fallback, range) {
 }
 
 export function parseRunnerArgs(argv, env = process.env) {
+  const help = argv.includes("--help") || argv.includes("-h")
+  // 帮助入口必须能在环境变量配置损坏时用于排障，因此只在实际运行时读取覆盖值。
+  const settingsEnv = help ? {} : env
   const options = {
-    timeoutMs: envSetting(env, "IDEALL_TEST_TIMEOUT_MS", DEFAULT_TIMEOUT_MS, {
+    timeoutMs: envSetting(settingsEnv, "IDEALL_TEST_TIMEOUT_MS", DEFAULT_TIMEOUT_MS, {
       min: 100,
       max: 60 * 60 * 1000,
     }),
     logLimitBytes:
-      envSetting(env, "IDEALL_TEST_LOG_LIMIT_KB", DEFAULT_LOG_LIMIT_KB, {
+      envSetting(settingsEnv, "IDEALL_TEST_LOG_LIMIT_KB", DEFAULT_LOG_LIMIT_KB, {
         min: 1,
         max: 64 * 1024,
       }) * 1024,
-    slowCount: envSetting(env, "IDEALL_TEST_SLOW_COUNT", DEFAULT_SLOW_COUNT, {
+    slowCount: envSetting(settingsEnv, "IDEALL_TEST_SLOW_COUNT", DEFAULT_SLOW_COUNT, {
       min: 0,
       max: 100,
     }),
-    termGraceMs: envSetting(env, "IDEALL_TEST_TERM_GRACE_MS", DEFAULT_TERM_GRACE_MS, {
+    termGraceMs: envSetting(settingsEnv, "IDEALL_TEST_TERM_GRACE_MS", DEFAULT_TERM_GRACE_MS, {
       min: 10,
       max: 60_000,
     }),
-    killGraceMs: envSetting(env, "IDEALL_TEST_KILL_GRACE_MS", DEFAULT_KILL_GRACE_MS, {
+    killGraceMs: envSetting(settingsEnv, "IDEALL_TEST_KILL_GRACE_MS", DEFAULT_KILL_GRACE_MS, {
       min: 10,
       max: 60_000,
     }),
     filters: [],
-    help: false,
+    help,
   }
+  if (help) return options
 
   const valueOptions = new Map([
     ["--timeout-ms", ["timeoutMs", 100, 60 * 60 * 1000, 1]],
@@ -86,11 +90,6 @@ export function parseRunnerArgs(argv, env = process.env) {
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index]
     if (argument === "--") continue
-    if (argument === "--help" || argument === "-h") {
-      options.help = true
-      continue
-    }
-
     const equals = argument.startsWith("--") ? argument.indexOf("=") : -1
     const optionName = equals > 0 ? argument.slice(0, equals) : argument
     const spec = valueOptions.get(optionName)
