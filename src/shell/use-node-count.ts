@@ -1,10 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { readFile } from "@/filesystem/registry"
 import { walkFileDirectory } from "@/filesystem/directory-walk"
 import { watchFileSet } from "@/filesystem/watch-set"
-import { trashRootRef } from "@/filesystem/trash-file-system"
 import {
   corePlaceRef,
   resourceRefForFile,
@@ -12,7 +10,6 @@ import {
 } from "@/filesystem/resource-file-system"
 
 const DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
-const CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
 const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 const COUNT_ROOTS = ["subscriptions", "bookmarks", "files", "notes"].map((place) =>
   corePlaceRef(place as CorePlaceId),
@@ -70,51 +67,6 @@ export function useNodeCount(): { count: number | null; flash: boolean } {
     }
     load()
     const watch = watchFileSet(COUNT_ROOTS, WATCH_CONTEXT, () => void load())
-    return () => {
-      alive = false
-      clearTimeout(flashTimer)
-      watch?.dispose()
-    }
-  }, [])
-
-  return { count, flash }
-}
-
-/** 回收站删除标记数量。删除/恢复/清空均经回收站 provider watch 刷新。 */
-export function useTrashCount(): { count: number | null; flash: boolean } {
-  const [count, setCount] = React.useState<number | null>(null)
-  const [flash, setFlash] = React.useState(false)
-  const prev = React.useRef<number | null>(null)
-
-  React.useEffect(() => {
-    let alive = true
-    let flashTimer: ReturnType<typeof setTimeout> | undefined
-    async function load() {
-      try {
-        const result = await readFile(trashRootRef, CONTENT_CONTEXT)
-        const n =
-          result.data != null &&
-          typeof result.data === "object" &&
-          "count" in result.data &&
-          typeof result.data.count === "number"
-            ? result.data.count
-            : 0
-        if (!alive) return
-        if (prev.current !== null && n > prev.current) {
-          setFlash(true)
-          clearTimeout(flashTimer)
-          flashTimer = setTimeout(() => {
-            if (alive) setFlash(false)
-          }, 650)
-        }
-        prev.current = n
-        setCount(n)
-      } catch {
-        /* 本地读取失败时静默, 不显示 badge */
-      }
-    }
-    load()
-    const watch = watchFileSet([trashRootRef], WATCH_CONTEXT, () => void load())
     return () => {
       alive = false
       clearTimeout(flashTimer)

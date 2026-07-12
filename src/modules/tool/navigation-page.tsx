@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
-import { PinToolButton } from "@/shared/feeders"
+import { PinToolButton } from "@/shared/feeders/pin-tool-button"
 
 // 工具·导航视图 (由工作区 registry 作为标签内容渲染; 不再是独立路由页)。
 type Site = { name: string; url: string; desc?: string }

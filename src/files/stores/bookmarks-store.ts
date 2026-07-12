@@ -9,7 +9,7 @@ import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { faviconForUrl } from "@/lib/favicon"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
-import { sortKeyBetween } from "@/files/sort-key"
+import { appendSortKeys, maxSortKey } from "@/files/sort-key"
 import { computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
 import {
   idbBulkPut,
@@ -80,32 +80,6 @@ async function allFolderNodes(): Promise<FolderNode[]> {
   return all.filter((n): n is FolderNode => n.kind === "folder")
 }
 
-/** 同级最大 sortKey (含删除标记, 避免复用删除标记键区)。 */
-function maxKey(nodes: { sortKey: string }[]): string | null {
-  const keys = nodes
-    .map((n) => n.sortKey)
-    .filter((k) => typeof k === "string" && k.length > 0)
-    .sort()
-  return keys.length ? keys[keys.length - 1] : null
-}
-
-/** 自 after 起生成 count 个严格递增键 (全局单调即天然组内唯一; 书签列表按 createdAt 展示, sortKey 仅供就绪)。 */
-function nextKeys(after: string | null, count: number): string[] {
-  const out: string[] = []
-  let prev = after
-  for (let i = 0; i < count; i++) {
-    let k: string
-    try {
-      k = sortKeyBetween(prev, null)
-    } catch {
-      k = sortKeyBetween(null, null)
-    }
-    out.push(k)
-    prev = k
-  }
-  return out
-}
-
 // ---- 收藏夹 ----
 
 export async function listFolders(): Promise<BookmarkFolder[]> {
@@ -121,7 +95,7 @@ export async function addFolder(name: string): Promise<BookmarkFolder> {
     kind: "folder",
     title: name.trim() || "未命名收藏夹",
     parentId: null,
-    sortKey: nextKeys(maxKey(existing), 1)[0],
+    sortKey: appendSortKeys(maxSortKey(existing), 1)[0],
     tags: [],
     createdAt: now,
     updatedAt: now,
@@ -190,7 +164,7 @@ export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
     kind: "bookmark",
     title: input.title.trim() || input.url,
     parentId: input.folderId ?? null,
-    sortKey: nextKeys(maxKey(existing), 1)[0],
+    sortKey: appendSortKeys(maxSortKey(existing), 1)[0],
     tags: input.tags ?? [],
     createdAt: now,
     updatedAt: now,
@@ -316,7 +290,7 @@ export async function moveFolder(id: string, pos?: InsertPos): Promise<void> {
 export async function restoreBookmark(bookmark: Bookmark): Promise<void> {
   const now = Date.now()
   const existing = await allBookmarkNodes()
-  const fallbackKey = nextKeys(maxKey(existing), 1)[0]
+  const fallbackKey = appendSortKeys(maxSortKey(existing), 1)[0]
   await idbReadModifyWrite<BookmarkNode>(STORE_NODES, bookmark.id, (current) => {
     // 软删后删除标记节点仍在 → 复用其 sortKey 恢复; 极端兜底 (节点不存在) 用追加键重建。
     const base =

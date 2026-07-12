@@ -24,10 +24,3 @@ export const CAPABILITY_OPTIONS: CapabilityOption[] = [
     hint: "读取工作区、规则、Skills 与 MCP 的脱敏配置正文",
   },
 ]
-
-const BY_PERM = new Map(CAPABILITY_OPTIONS.map((c) => [c.perm, c]))
-
-/** 能力位 → 短标签 (未知位回退原串)。 */
-export function capabilityLabel(perm: Permission): string {
-  return BY_PERM.get(perm)?.label ?? perm
-}

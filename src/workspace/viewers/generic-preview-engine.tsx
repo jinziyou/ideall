@@ -5,7 +5,7 @@ import { Download, FileQuestion, Loader2 } from "lucide-react"
 import type { IdeallFile } from "@protocol/file-system"
 import { readFile } from "@/filesystem/registry"
 import { Button } from "@/ui/button"
-import { fileReadResultToBlob } from "../file-engine-data"
+import { fileReadResultToBlob } from "@/filesystem/read-result"
 
 export default function GenericPreviewEngine({ file }: { file: IdeallFile }) {
   const [url, setUrl] = React.useState("")

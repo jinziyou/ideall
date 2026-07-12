@@ -38,3 +38,11 @@ export function formatBytes(bytes: number): string {
   const value = bytes / Math.pow(1024, i)
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
+
+/** 将秒数格式化为音视频控件使用的 mm:ss。 */
+export function formatDurationSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "00:00"
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = Math.floor(seconds % 60)
+  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
+}

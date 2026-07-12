@@ -5,11 +5,13 @@ import { toast } from "sonner"
 import type { IdeallFile } from "@protocol/file-system"
 import { invokeFileAction, readFile } from "@/filesystem/registry"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
+import { downloadBlob } from "@/lib/browser-download"
 import { fileTypeInfo } from "@/lib/format"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { fileMetaActionInput, fileReference, parseFileTags } from "../file-action-utils"
-import { fileReadResultToBlob, fileTags } from "../file-engine-data"
+import { fileReadResultToBlob } from "@/filesystem/read-result"
+import { fileTags } from "../file-engine-data"
 import { closeNodeTabs, renameNodeTab } from "../store"
 import { clearFileDraft } from "./file-draft"
 import FileViewerToolbar, { type FileToolbarFile } from "./file-viewer-toolbar"
@@ -26,17 +28,6 @@ const UI_CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } a
 
 function errorDescription(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
-}
-
-function downloadBlob(name: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement("a")
-  anchor.href = url
-  anchor.download = name
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 /** File-engine path for local Node files; all persisted data and actions go through FileSystem. */
@@ -100,7 +91,7 @@ export default function NodeFileEngineToolbar({
   const download = async () => {
     try {
       const result = await readFile(file.ref, UI_CONTENT_CONTEXT, { encoding: "binary" })
-      downloadBlob(displayName, fileReadResultToBlob(result))
+      downloadBlob(fileReadResultToBlob(result), displayName)
     } catch (reason) {
       toast.error("下载失败", { description: errorDescription(reason) })
     }

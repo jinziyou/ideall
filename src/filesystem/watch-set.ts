@@ -38,11 +38,13 @@ function mergeEvent(
   }
 }
 
+function uniqueRefKeys(refs: readonly (FileRef | undefined)[]): string[] {
+  const definedRefs = refs.filter((ref): ref is FileRef => ref !== undefined)
+  return [...new Set(definedRefs.map(fileRefKey))]
+}
+
 function routedRefKeys(event: FileSystemWatchEvent): string[] {
-  const refs = [event.ref, event.oldParent, event.newParent].filter(
-    (ref): ref is FileRef => ref !== undefined,
-  )
-  return [...new Set(refs.map(fileRefKey))]
+  return uniqueRefKeys([event.ref, event.oldParent, event.newParent])
 }
 
 function atomicEvents(event: FileSystemWatchEvent): FileSystemWatchEvent[] {
@@ -67,9 +69,7 @@ function atomicEvents(event: FileSystemWatchEvent): FileSystemWatchEvent[] {
 }
 
 function eventParentKeys(event: FileSystemWatchEvent): string[] {
-  return [
-    ...new Set([event.oldParent, event.newParent].filter(Boolean).map((ref) => fileRefKey(ref!))),
-  ]
+  return uniqueRefKeys([event.oldParent, event.newParent])
 }
 
 function eventIdentityKey(event: FileSystemWatchEvent): string {

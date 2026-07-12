@@ -2,12 +2,8 @@
 // 现有消费方继续从本文件导入，内部辅助函数不扩大为公共 API。
 
 export {
-  CORE_FILE_SYSTEM_ID,
-  CORE_PLACE_IDS,
-  CORE_ROOT_FILE_ID,
   aiTasksPanelFileRef,
   corePlaceRef,
-  coreRootRef,
   panelFileRef,
   panelForFile,
   resourceFileRef,

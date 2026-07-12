@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/ui/popover"
+import { PopoverClose } from "@/ui/popover"
 import { getSyncCode, subscribeSyncCode } from "@/lib/sync-code"
 import { formatBytes } from "@/lib/format"
 import { getSession, subscribeSession } from "@protocol/auth"
@@ -14,8 +14,7 @@ function getServerSnapshot(): string | null {
 }
 
 /**
- * 本机系统状态面板内容: 跨端同步状态 / 本地存储用量 / 发布身份, 以及双身份说明。
- * 可独立嵌入任意容器 (如右上角设置齿轮)；LocalDeviceChip 把它包进 Popover。
+ * 本机系统状态面板内容: 跨端同步状态 / 本地存储用量 / 发布身份。
  */
 export function LocalDeviceStatus({ inPopover = false }: { inPopover?: boolean }) {
   const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, getServerSnapshot)
@@ -102,34 +101,5 @@ export function LocalDeviceStatus({ inPopover = false }: { inPopover?: boolean }
         </Link>
       )}
     </div>
-  )
-}
-
-/**
- * 本地·此设备 归属标签 + 系统状态面板 (点开)。
- */
-export default function LocalDeviceChip({ compact = false }: { compact?: boolean }) {
-  const code = React.useSyncExternalStore(subscribeSyncCode, getSyncCode, getServerSnapshot)
-  const synced = Boolean(code)
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border bg-card py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-            compact ? "px-2" : "px-2.5",
-          )}
-        >
-          <Lock className="h-3.5 w-3.5" />
-          {synced && <span className="h-1.5 w-1.5 rounded-full bg-pop" />}
-          {!compact && <span className="hidden lg:inline">本机</span>}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72">
-        <LocalDeviceStatus inPopover />
-      </PopoverContent>
-    </Popover>
   )
 }

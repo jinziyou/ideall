@@ -5,6 +5,7 @@ import { FileAudio, LoaderCircle, Pause, Play, Volume2 } from "lucide-react"
 import type { IdeallFile } from "@protocol/file-system"
 import { readFile } from "@/filesystem/registry"
 import { base64ToBytes } from "@/lib/base64"
+import { formatDurationSeconds } from "@/lib/format"
 import { audioTrackIdFromRef } from "@/plugins/audio/audio-file-system"
 import {
   audioFilePlaybackKey,
@@ -106,7 +107,7 @@ export default function AudioFileEngine({ file }: { file: IdeallFile }) {
           />
           <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground">
             <span>
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatDurationSeconds(currentTime)} / {formatDurationSeconds(duration)}
             </span>
             <div className="flex items-center gap-2">
               <Volume2 className="h-4 w-4" />
@@ -142,11 +143,4 @@ export default function AudioFileEngine({ file }: { file: IdeallFile }) {
       </div>
     </div>
   )
-}
-
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "00:00"
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = Math.floor(seconds % 60)
-  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
 }

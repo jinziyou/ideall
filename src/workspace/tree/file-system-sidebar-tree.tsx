@@ -21,12 +21,10 @@ import {
 } from "@protocol/file-system"
 import { readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
-import { getTabs, openTarget, useActiveId, useActiveRootId } from "../store"
-import { coreFileRoot, fileRootRef, isCoreFileRootId } from "../file-roots"
-import { fileEngineTargetForTab } from "../file-tab"
-import { onTreeArrowNav, focusTreeSibling, forwardTreeFocus } from "./tree-keynav"
+import { openTarget } from "../store"
+import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import { readAllDirectoryEntries } from "./directory-pagination"
-import { fileCanExpand, useFileTreeExpansion } from "./file-tree-expansion"
+import { fileCanExpand } from "./file-tree-expansion"
 
 type LoadedEntry = { entry: DirectoryEntry; file: IdeallFile | null }
 
@@ -44,42 +42,6 @@ function fileIcon(file: IdeallFile | null) {
   if (file.mediaType.startsWith("audio/")) return FileAudio
   if (file.mediaType.startsWith("text/") || file.mediaType.includes("json")) return FileCode
   return File
-}
-
-function activeFileRef(activeId: string | null): FileRef | null {
-  const tab = getTabs().find((item) => item.id === activeId)
-  return fileEngineTargetForTab(tab)?.ref ?? null
-}
-
-export default function FileSystemSidebarTree() {
-  const rootId = useActiveRootId()
-  const directory = fileRootRef(rootId)
-  const activeId = useActiveId()
-  const { expanded, setExpanded } = useFileTreeExpansion()
-
-  return (
-    <nav
-      role="tree"
-      aria-label={`${isCoreFileRootId(rootId) ? coreFileRoot(rootId).label : "挂载"}文件树`}
-      tabIndex={0}
-      onFocus={forwardTreeFocus}
-      className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2 outline-none"
-    >
-      {directory ? (
-        <FileSystemTreeChildren
-          directory={directory}
-          depth={0}
-          activeRef={activeFileRef(activeId)}
-          rootId={rootId}
-          expanded={expanded}
-          onSetExpanded={setExpanded}
-          refreshKey="root"
-        />
-      ) : (
-        <p className="px-3 py-2 text-xs text-muted-foreground">挂载已断开</p>
-      )}
-    </nav>
-  )
 }
 
 export function FileSystemTreeChildren({

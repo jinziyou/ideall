@@ -1,6 +1,5 @@
-// 模块身份唯一数据来源 —— label + icon (+ 分区色) 的唯一出处。
-// 外壳导航 (shell/nav-config: 桌面头部 / 移动 Sheet / ⌘K 命令面板) 与工作区模块 (workspace/modules: 活动栏 / 二级侧栏 / 路由解析)
-// 都从此派生各自渲染结构 —— 改一个模块的名字 / 图标 / 分类色只改这里, 两侧自动一致 (杜绝手抄漂移)。
+// 旧模块目录与 href/搜索等兼容入口共用的身份数据：label + icon (+ 分区色)。
+// 五分区产品导航由 navigation-sections.ts 独立定义；本表不是当前可见导航的信息架构。
 // 注: 分区色存「字面量类名」(dot=小圆点 bg-spoke-*; tint=图标着色 text-spoke-*) ——
 //     Tailwind v4 按源码字面量扫描生成工具类, 不可用模板拼接 (拼接会被当成未用而不生成 → 掉色)。
 import {
@@ -35,7 +34,7 @@ export type ModuleMeta = {
   tintClass?: string
 }
 
-/** 在「外壳导航」与「工作区模块」两处都出现、需保持一致的模块身份原子。 */
+/** 在兼容模块与导航入口中重复出现、需保持一致的模块身份原子。 */
 export const MODULE_META = {
   overview: { label: "我的", icon: LayoutDashboard },
   // 产品区段名是「文件」; 底层 place/kind 仍为 notes/note。

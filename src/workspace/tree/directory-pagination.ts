@@ -4,12 +4,7 @@ import {
   type ReadAllDirectoryEntriesOptions as FileSystemReadAllDirectoryEntriesOptions,
 } from "@/filesystem/directory-pagination"
 
-export {
-  DIRECTORY_PAGE_SIZE,
-  MAX_DIRECTORY_ENTRIES,
-  MAX_DIRECTORY_PAGES,
-} from "@/filesystem/directory-pagination"
-export type { DirectoryPageReader } from "@/filesystem/directory-pagination"
+export { DIRECTORY_PAGE_SIZE } from "@/filesystem/directory-pagination"
 
 export type ReadAllDirectoryEntriesOptions = Omit<
   FileSystemReadAllDirectoryEntriesOptions,

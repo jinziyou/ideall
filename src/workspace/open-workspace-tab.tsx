@@ -1,8 +1,8 @@
 "use client"
 
-// 路由页标记: 不渲染 UI, 仅按当前路径 / ?resource= 或旧 ?node= 打开/激活对应工作区标签。
-// 所有 page.tsx 都 re-export 它, 使深链 / 刷新 / ⌘K / 侧栏 / 移动底栏 统一驱动标签。
-// 实际内容由根布局里持久挂载的 WorkspaceShell → TabHost 渲染 (keep-alive)。
+// 路由页标记: 不渲染 UI, 按当前路径 / query 打开目标或执行工作区命令。
+// 所有 page.tsx 都 re-export 它, 使深链 / 刷新 / ⌘K / 侧栏 / 移动底栏统一分发。
+// 标签内容由 WorkspaceShell → TabHost 渲染；Dock 命令则切换持久挂载的工作区工具。
 
 import * as React from "react"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -19,6 +19,7 @@ import {
   useHydrated,
 } from "./store"
 import { defaultFileForPath } from "./file-roots"
+import { workspaceCommandForPath } from "./workspace-route"
 import { panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
 
 function OpenWorkspaceTabInner() {
@@ -46,20 +47,12 @@ function OpenWorkspaceTabInner() {
         setRightPanel(true)
         return
       }
-      if (p === "/audio") {
-        setWorkspaceKind("audio")
-      }
-      if (p === "/git") {
-        setWorkspaceKind("development")
-        setDevelopmentTool("git")
-      }
-      if (p === "/database") {
-        setWorkspaceKind("development")
-        setDevelopmentTool("database")
-      }
-      if (p === "/shell") {
-        setWorkspaceKind("development")
-        setDevelopmentTool("shell")
+      const workspaceCommand = workspaceCommandForPath(p)
+      if (workspaceCommand) {
+        setWorkspaceKind(workspaceCommand.workspace)
+        if (workspaceCommand.developmentTool) {
+          setDevelopmentTool(workspaceCommand.developmentTool)
+        }
         return
       }
       // 路由驱动的打开 (移动底栏 / ⌘K / 深链 / 桌面 UrlSync 回写) 一律走「预览」(transient):

@@ -4,7 +4,7 @@ import { fileEngineTab } from "./file-tab"
 import { moduleForResource, resourcePath } from "./resource-tab"
 import type { TabDescriptor } from "./types"
 
-export function engineForResource(ref: ResourceRef): string {
+function engineForResource(ref: ResourceRef): string {
   if (ref.scheme === "node") {
     if (ref.kind === "note") return "ideall.note"
     if (ref.kind === "bookmark") return "ideall.bookmark"

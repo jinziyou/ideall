@@ -19,7 +19,7 @@ export const LEGACY_PUBLIC_STORAGE_KEYS = {
   SYNC_CODE: "wonita:sync:code",
 } as const
 
-export type SecureStoreKnownItem = {
+type SecureStoreKnownItem = {
   id: string
   label: string
   owner: string
@@ -27,7 +27,7 @@ export type SecureStoreKnownItem = {
   legacyKey?: string
 }
 
-export const SECURE_STORE_KNOWN_ITEMS: SecureStoreKnownItem[] = [
+const SECURE_STORE_KNOWN_ITEMS: SecureStoreKnownItem[] = [
   {
     id: "auth.token",
     label: "登录令牌",

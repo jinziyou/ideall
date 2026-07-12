@@ -53,9 +53,3 @@ export const PLUGIN_ENTRIES: PluginEntry[] = [
     descriptor: tabDescriptor("code"),
   },
 ]
-
-export const PLUGIN_MODULE_IDS = new Set(PLUGIN_ENTRIES.map((e) => e.descriptor.module))
-
-export function isPluginModule(id: string): boolean {
-  return PLUGIN_MODULE_IDS.has(id as (typeof PLUGIN_ENTRIES)[number]["descriptor"]["module"])
-}

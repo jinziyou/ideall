@@ -547,9 +547,9 @@ export function FileEngineContent({
         />
       ) : (
         <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-b bg-card px-3">
-          <h1 className="min-w-0 truncate text-xs font-normal text-muted-foreground">
+          <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">
             {file.name}
-          </h1>
+          </span>
           <div className="flex shrink-0 items-center gap-1">
             <GenericFileActionMenu file={file} />
             <EnginePicker file={file} engineId={activeEngineId} />

@@ -17,6 +17,7 @@ import type {
   FileWriteInput,
   ReadDirectoryOptions,
 } from "@/filesystem/types"
+import { paginateDirectoryItems } from "@/filesystem/provider-input"
 import { FileSystemError } from "@/filesystem/types"
 import { withFileWriteLock } from "@/filesystem/write-lock"
 import {
@@ -166,26 +167,6 @@ function assertAccess(
   throw new FileSystemError("permission-denied", `Missing ${permission} permission`, ref)
 }
 
-function parseOffset(ref: FileRef, cursor: string | undefined): number {
-  if (cursor === undefined) return 0
-  if (!/^(0|[1-9]\d*)$/.test(cursor)) {
-    throw new FileSystemError("invalid-input", `Invalid Agent config cursor: ${cursor}`, ref)
-  }
-  const offset = Number(cursor)
-  if (!Number.isSafeInteger(offset)) {
-    throw new FileSystemError("invalid-input", `Invalid Agent config cursor: ${cursor}`, ref)
-  }
-  return offset
-}
-
-function pageLimit(ref: FileRef, limit: number | undefined, total: number): number {
-  if (limit === undefined) return total
-  if (!Number.isSafeInteger(limit) || limit <= 0) {
-    throw new FileSystemError("invalid-input", "Agent config limit must be positive", ref)
-  }
-  return limit
-}
-
 function readRange(ref: FileRef, bytes: Uint8Array, options: FileReadOptions): Uint8Array {
   const range = options.range
   if (!range) return bytes
@@ -281,22 +262,18 @@ export function createAgentConfigFileSystem(
       if (!sameFileRef(ref, agentConfigRootRef)) {
         throw new FileSystemError("unsupported", "Agent config file is not a directory", ref)
       }
-      const offset = parseOffset(ref, options.cursor)
-      const limit = pageLimit(ref, options.limit, AGENT_PUBLIC_CONFIG_SECTIONS.length)
-      const items = AGENT_PUBLIC_CONFIG_SECTIONS.slice(offset, offset + limit)
-      const nextOffset = offset + items.length
+      const page = paginateDirectoryItems(ref, AGENT_PUBLIC_CONFIG_SECTIONS, options)
       return {
-        entries: items.map((section, index) => ({
+        entries: page.items.map((section, index) => ({
           entryId: section.id,
           parent: agentConfigRootRef,
           target: agentConfigFileRef(section.id),
           name: section.fileName,
           kind: "child",
-          sortKey: String(offset + index).padStart(3, "0"),
+          sortKey: String(page.offset + index).padStart(3, "0"),
           properties: { configSection: section.id, label: section.label, publicConfig: true },
         })),
-        nextCursor:
-          nextOffset < AGENT_PUBLIC_CONFIG_SECTIONS.length ? String(nextOffset) : undefined,
+        nextCursor: page.nextCursor,
       }
     },
     async read(ref, ctx, options: FileReadOptions = {}): Promise<FileReadResult> {

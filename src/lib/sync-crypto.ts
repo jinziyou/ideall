@@ -2,6 +2,7 @@
 // 由「同步码」(高熵随机串) 派生 storageId + 加密密钥; 明文 (关注列表) 只在浏览器内 AES-GCM 加密,
 // 上传的只有密文 —— wonita 服务读不到内容 (端到端加密)。
 import { base64ToBytes, bytesToBase64 } from "@/lib/base64"
+import { bytesToHex } from "@/lib/hex"
 
 const SALT = "wonita-sync"
 const INFO_ID = "wonita-sync-id-v1"
@@ -20,14 +21,10 @@ function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s) as Uint8Array<ArrayBuffer>
 }
 
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
-}
-
 /** 生成高熵同步码: 16 字节随机 → 32 位 hex, 每 8 位用 - 分组便于复制。 */
 export function generateSyncCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
-  return toHex(bytes).replace(/(.{8})(?=.)/g, "$1-")
+  return bytesToHex(bytes).replace(/(.{8})(?=.)/g, "$1-")
 }
 
 /** 规整同步码: 去掉非 hex 字符并小写, 保证两端派生一致。 */
@@ -58,7 +55,7 @@ export async function deriveKeys(code: string, scope: SyncScope = "subs"): Promi
     ikm,
     128,
   )
-  const storageId = toHex(new Uint8Array(idBits))
+  const storageId = bytesToHex(new Uint8Array(idBits))
   const key = await crypto.subtle.deriveKey(
     { name: "HKDF", hash: "SHA-256", salt: enc(SALT), info: enc(infoEnc) },
     ikm,

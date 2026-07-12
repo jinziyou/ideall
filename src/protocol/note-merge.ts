@@ -16,7 +16,8 @@ export type BlockMetaMap = Record<BlockId, BlockMeta>
 /** Plate 顶层块 (带稳定 id)。 */
 export type Block = { id?: string } & Record<string, unknown>
 
-function blockMapById(blocks: Block[]): Map<BlockId, Block> {
+/** content 块数组 → id 映射；跳过缺少有效 id 的污染数据。 */
+export function blockMapById(blocks: Block[]): Map<BlockId, Block> {
   const m = new Map<BlockId, Block>()
   // 防御: 跳过 null / 非对象元素 (污染数据), 取 .id 不崩。
   for (const b of blocks)

@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { downloadTextFile } from "@/lib/browser-download"
+import { formatDurationSeconds } from "@/lib/format"
 import { pluginDataFilename } from "@/plugins/shared/plugin-data"
 import { Button } from "@/ui/button"
 import { Slider } from "@/ui/slider"
@@ -447,7 +448,9 @@ export default function AudioPage({ embedded = false }: { embedded?: boolean } =
                   {currentTrack?.title ?? "未选择音频"}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {currentTrack ? `${formatTime(currentTime)} / ${formatTime(duration)}` : "--:--"}
+                  {currentTrack
+                    ? `${formatDurationSeconds(currentTime)} / ${formatDurationSeconds(duration)}`
+                    : "--:--"}
                 </p>
               </div>
             </div>
@@ -579,7 +582,7 @@ function TrackRow({
           {track.title}
         </p>
         <p className="truncate text-xs text-muted-foreground">
-          {[formatBytes(track.size), track.duration ? formatTime(track.duration) : null]
+          {[formatBytes(track.size), track.duration ? formatDurationSeconds(track.duration) : null]
             .filter(Boolean)
             .join(" · ")}
         </p>
@@ -594,13 +597,6 @@ function TrackRow({
       </button>
     </div>
   )
-}
-
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "00:00"
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`
 }
 
 function formatBytes(bytes: number): string {

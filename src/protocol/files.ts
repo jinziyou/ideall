@@ -107,7 +107,7 @@ export type NoteMeta = Omit<Note, "content"> & {
 /**
  * AI 智能体对话线程 (core 存储视角) —— 消息语义属 agent 插件域, 协议层以 unknown[] 表达
  * (同 NoteContent 不依赖编辑器实现)。插件经 FilesPort 读写, 在边界断言 messages 为其 AgentMessage[]。
- * 本地独占, 默认不跨端同步 (对象级 LWW 会截断 messages[]; 见 docs/design/ai-native-redesign.md §3 步 D)。
+ * 本地独占, 默认不跨端同步 (对象级 LWW 会截断 messages[]; 见 docs/design/archive/ai-native-redesign.md §3 步 D)。
  */
 export interface Thread {
   id: string

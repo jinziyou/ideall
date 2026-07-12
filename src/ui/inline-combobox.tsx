@@ -48,9 +48,11 @@ const InlineComboboxContext = React.createContext<InlineComboboxContextValue>(
 )
 
 const defaultFilter: FilterFn = ({ group, keywords = [], label, value }, search) => {
-  const uniqueTerms = new Set([value, ...keywords, group, label].filter(Boolean))
+  const uniqueTerms = new Set(
+    [value, ...keywords, group, label].filter((term): term is string => Boolean(term)),
+  )
 
-  return Array.from(uniqueTerms).some((keyword) => filterWords(keyword!, search))
+  return Array.from(uniqueTerms).some((keyword) => filterWords(keyword, search))
 }
 
 type InlineComboboxProps = {

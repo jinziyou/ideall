@@ -6,7 +6,7 @@ import type { Thread } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import { genId } from "@/lib/id"
-import { sortKeyBetween } from "@/files/sort-key"
+import { appendSortKey, maxSortKey } from "@/files/sort-key"
 import {
   idbGet,
   idbGetAllFromIndex,
@@ -58,24 +58,6 @@ async function allThreadNodes(): Promise<ThreadNode[]> {
   return all.filter((n): n is ThreadNode => n.kind === "thread")
 }
 
-/** 同级最大 sortKey。 */
-function maxKey(nodes: { sortKey: string }[]): string | null {
-  const keys = nodes
-    .map((n) => n.sortKey)
-    .filter((k) => typeof k === "string" && k.length > 0)
-    .sort()
-  return keys.length ? keys[keys.length - 1] : null
-}
-
-/** 自 after 起一个严格递增追加键 (线程列表按 updatedAt 展示, sortKey 仅供就绪)。 */
-function nextKey(after: string | null): string {
-  try {
-    return sortKeyBetween(after, null)
-  } catch {
-    return sortKeyBetween(null, null)
-  }
-}
-
 // ---- 读 ----
 
 /** 线程列表, 按最近更新倒序。 */
@@ -104,7 +86,7 @@ export async function createThread(): Promise<Thread> {
     createdAt: now,
     updatedAt: now,
   }
-  const sortKey = nextKey(maxKey(await allThreadNodes()))
+  const sortKey = appendSortKey(maxSortKey(await allThreadNodes()))
   await idbPut(STORE_NODES, threadToNode(thread, sortKey))
   notifyFilesUpdated({ kind: "thread", id: thread.id })
   return thread
@@ -114,7 +96,7 @@ export async function createThread(): Promise<Thread> {
 export async function saveThread(thread: Thread): Promise<void> {
   const all = await allThreadNodes()
   const cur = all.find((n) => n.id === thread.id)
-  const sortKey = cur?.sortKey || nextKey(maxKey(all))
+  const sortKey = cur?.sortKey || appendSortKey(maxSortKey(all))
   const updatedAt = cur ? nextUpdatedAt(cur.updatedAt) : Date.now()
   await idbPut(STORE_NODES, threadToNode({ ...thread, updatedAt }, sortKey))
   notifyFilesUpdated({ kind: "thread", id: thread.id })

@@ -4,7 +4,7 @@
 // {title,content,tags,onSaved} 推进本队列 (不依赖组件存活), 由独立 worker 串行消费 + 关窗冲刷。
 // 即便组件已卸载 / 被 LRU 逐出 / 关窗, 队列项仍在内存, worker 继续消费 → 草稿不随卸载丢失。
 //
-// 解决 (见 docs/design/ai-native-redesign.md §5.3 雷2): 原 fire-and-forget 卸载 flush 在
+// 解决 (见 docs/design/archive/ai-native-redesign.md §5.3 雷2): 原 fire-and-forget 卸载 flush 在
 // visibilitychange/pagehide 关窗时, 事件循环被掐断, await updateNote 来不及把 microtask 跑到
 // IndexedDB 提交点 → 丢草稿。写队列把落库与组件存活解耦, 并显式覆盖关窗边界。
 //

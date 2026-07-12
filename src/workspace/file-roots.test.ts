@@ -42,7 +42,7 @@ test("file roots: 旧细粒度 roots 归一到五分区", () => {
   }
 })
 
-test("file roots: database/git/audio routes target their mounted FileSystem roots", () => {
+test("file roots: legacy app prefixes retain mounted FileSystem fallback targets", () => {
   for (const id of ["database", "git", "audio"] as const) {
     const surface = BUILTIN_APP_SURFACES[id]
     assert.deepEqual(defaultFileForPath(`/${id}`), {

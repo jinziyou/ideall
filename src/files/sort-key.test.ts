@@ -5,7 +5,14 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import { sortKeyBetween, initialSortKey, sequentialSortKeys } from "@/files/sort-key"
+import {
+  appendSortKey,
+  appendSortKeys,
+  initialSortKey,
+  maxSortKey,
+  sequentialSortKeys,
+  sortKeyBetween,
+} from "@/files/sort-key"
 
 test("两者皆 null → 首个键; 末尾追加严格递增", () => {
   const k0 = initialSortKey()
@@ -50,6 +57,21 @@ test("sequentialSortKeys: 等长且严格递增", () => {
   for (let i = 1; i < keys.length; i++) {
     assert.ok(keys[i - 1] < keys[i], `第 ${i} 项应递增: ${keys[i - 1]} < ${keys[i]}`)
   }
+})
+
+test("追加辅助函数复用最大有效键并保持顺序", () => {
+  const first = initialSortKey()
+  const second = appendSortKey(first)
+  assert.equal(maxSortKey([{ sortKey: "" }, { sortKey: first }, { sortKey: second }]), second)
+  assert.equal(maxSortKey([{ sortKey: undefined }, { sortKey: 1 }]), null)
+
+  const appended = appendSortKeys(second, 3)
+  assert.equal(appended.length, 3)
+  assert.ok(second < appended[0] && appended[0] < appended[1] && appended[1] < appended[2])
+})
+
+test("追加辅助函数遇到损坏的旧键时回退到首个合法键", () => {
+  assert.equal(appendSortKey("invalid"), initialSortKey())
 })
 
 test("a >= b 抛错 (调用方须按顺序传入)", () => {

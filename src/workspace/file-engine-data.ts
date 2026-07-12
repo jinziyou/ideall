@@ -1,6 +1,4 @@
 import type { IdeallFile } from "@protocol/file-system"
-import type { FileReadResult } from "@/filesystem/types"
-import { base64ToBytes } from "@/lib/base64"
 
 export function fileTags(file: IdeallFile): string[] {
   const tags = file.properties?.tags
@@ -77,6 +75,7 @@ export function editTextDraft(current: TextDraftDocument, draft: string): TextDr
       version: current.pendingExternal.version,
     })
   }
+  if (current.draft === draft) return current
   return { ...current, draft }
 }
 
@@ -97,19 +96,4 @@ export function markTextDraftSaved(
     version,
     pendingExternal: undefined,
   }
-}
-
-export function fileReadResultToBlob(result: FileReadResult): Blob {
-  const { data } = result
-  if (data instanceof Blob) return data
-  if (typeof data === "string") return new Blob([data], { type: result.mediaType })
-  if (data instanceof ArrayBuffer) return new Blob([data], { type: result.mediaType })
-  if (ArrayBuffer.isView(data)) {
-    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice()
-    return new Blob([bytes], { type: result.mediaType })
-  }
-  if (data && typeof data === "object" && "base64" in data && typeof data.base64 === "string") {
-    return new Blob([base64ToBytes(data.base64)], { type: result.mediaType })
-  }
-  throw new TypeError("FileSystem read result is not byte-addressable")
 }
