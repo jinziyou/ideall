@@ -7,11 +7,18 @@ import {
 import { AGENT_CONFIG_SECTION_IDS, type AgentConfigSection } from "@/plugins/embed/protocol"
 import {
   AGENT_SETTINGS_STORAGE_KEY,
+  agentSettingsCredentialRevisionSnapshot as credentialRevisionSnapshot,
   agentSettingsSecuritySnapshot,
+  clearAgentSettingsApiKey,
   getAgentSettings,
+  hydrateAgentSettingsSecure,
+  isAgentSettingsCredentialConfigured,
+  replaceAgentSettingsPublicDurably,
+  setAgentSettingsApiKey,
   setAgentSettings,
   subscribeAgentSettings,
 } from "./agent-settings"
+import { decodeAgentSettingsDocument } from "../agent-settings-file-contract"
 import { AGENT_SECRETS_STORAGE_KEY, agentSecretsSecuritySnapshot } from "./agent-secrets"
 import {
   AGENT_MCP_STORAGE_KEY,
@@ -21,13 +28,28 @@ import {
 } from "./agent-mcp-registry"
 import { AGENT_RULES_STORAGE_KEY, getRules, replaceRules, subscribeRules } from "./agent-rules"
 import { AGENT_SKILLS_STORAGE_KEY, getSkills, replaceSkills, subscribeSkills } from "./agent-skills"
-import { AGENT_TASKS_STORAGE_KEY, getTasks, replaceTasks, subscribeTasks } from "./agent-tasks"
+import {
+  AGENT_TASKS_STORAGE_KEY,
+  getTasks,
+  refreshTasksRaw,
+  replaceTasksRaw,
+  subscribeTasks,
+} from "./agent-tasks"
 import {
   AGENT_WORKSPACES_STORAGE_KEY,
+  agentWorkspacesRevisionSnapshot as workspacesRevisionSnapshot,
+  createWorkspaceRaw,
   getWorkspacesState,
-  replacePublicWorkspacesState,
+  refreshAgentWorkspacesRaw,
+  replacePublicWorkspacesStateRaw,
+  setActiveWorkspaceRaw,
   subscribeWorkspaces,
 } from "./agent-workspace"
+import { withAgentWorkspaceFileWriteLocks } from "../agent-workspace-write-adapter"
+import type {
+  AgentWorkspaceActivateResult,
+  AgentWorkspaceCreateResult,
+} from "../agent-management-file-contract"
 import { ACP_SETTINGS_STORAGE_KEY } from "./acp/acp-settings"
 import {
   decodeAgentMcpServers,
@@ -89,7 +111,7 @@ type AgentPublicConfigSectionAdapter = AgentPublicConfigSectionDefinition &
   Readonly<{
     read(): unknown
     validate(value: unknown): void
-    write(value: unknown): void
+    write(value: unknown): void | Promise<void>
     subscribe(listener: () => void): () => void
     sanitize(value: unknown): unknown
   }>
@@ -141,7 +163,8 @@ const SECTION_ADAPTERS: Record<AgentPublicConfigSectionId, AgentPublicConfigSect
       decodePublicWorkspaces(value)
     },
     write(value) {
-      replacePublicWorkspacesState(decodePublicWorkspaces(value))
+      // provider/importer 已持有 tasks→workspaces；Raw 避免同锁重入。
+      return replacePublicWorkspacesStateRaw(decodePublicWorkspaces(value))
     },
     subscribe: subscribeWorkspaces,
     sanitize: sanitizeWorkspaces,
@@ -203,7 +226,8 @@ const SECTION_ADAPTERS: Record<AgentPublicConfigSectionId, AgentPublicConfigSect
       decodeAgentTasks(value)
     },
     write(value) {
-      replaceTasks(decodeAgentTasks(value))
+      // provider/importer 已持有 config:tasks 锁；直接调用 raw 原语避免同锁重入。
+      return replaceTasksRaw(decodeAgentTasks(value))
     },
     subscribe: subscribeTasks,
     sanitize: sanitizeTasks,
@@ -269,8 +293,35 @@ export function readAgentPublicConfigSection(id: AgentPublicConfigSectionId): un
 export function writeAgentPublicConfigSection(
   id: AgentPublicConfigSectionId,
   value: unknown,
-): void {
-  sectionAdapter(id).write(value)
+): void | Promise<void> {
+  const adapter = sectionAdapter(id)
+  adapter.validate(value)
+  return adapter.write(value)
+}
+
+/**
+ * FileSystem 的耐久写边界。公开 settings 改变凭据 endpoint 时，必须先确认旧凭据已从
+ * secure-store 删除，再提交新 endpoint；删除失败时公开文档保持原状。
+ */
+export async function writeAgentPublicConfigFileSection(
+  id: AgentPublicConfigSectionId,
+  value: unknown,
+): Promise<void> {
+  if (id !== "settings") {
+    await writeAgentPublicConfigSection(id, value)
+    return
+  }
+  await replaceAgentSettingsPublicDurably((current) => {
+    const next = decodeAgentSettingsPublic(value, current)
+    decodeAgentSettingsDocument({
+      baseURL: next.baseURL,
+      model: next.model,
+      includeHomeContext: next.includeHomeContext,
+      defaultAgentMode: next.defaultAgentMode,
+      approvalPolicy: next.approvalPolicy,
+    })
+    return next
+  })
 }
 
 /** 订阅与对应 UI 相同的 store 变更源，供 FileSystem watch 适配。 */
@@ -286,6 +337,78 @@ export function sanitizeAgentPublicConfigSection(
   value: unknown,
 ): unknown {
   return sectionAdapter(id).sanitize(value)
+}
+
+/**
+ * FileSystem 读取同步 store 快照前的耐久水合边界。settings 的语义版本依赖 secure-store
+ * 中的凭据存在性，必须先完成水合；tasks 同时影响 workspaces 的派生 taskCount。
+ */
+export async function prepareAgentPublicConfigSection(
+  id: AgentPublicConfigSectionId,
+): Promise<void> {
+  if (id === "settings") {
+    await hydrateAgentSettingsSecure()
+    return
+  }
+  // Agent provider 在 tasks/workspaces 的 prepare 外层已持有规范锁；这里只调用 Raw。
+  if (id === "tasks") {
+    await refreshTasksRaw()
+    return
+  }
+  if (id === "workspaces") {
+    await refreshTasksRaw()
+    await refreshAgentWorkspacesRaw()
+  }
+}
+
+/** settings.json 之外的本机凭据通道：只暴露布尔状态，永不返回密钥。 */
+export function agentSettingsCredentialConfiguredSnapshot(): boolean {
+  return isAgentSettingsCredentialConfigured()
+}
+
+/** 只投影不透明 revision，公开设置正文和导出均不包含该本机元数据。 */
+export function agentSettingsCredentialRevisionSnapshot(): string {
+  return credentialRevisionSnapshot()
+}
+
+/** workspace 的本机单调 revision；不包含或派生任何凭据内容。 */
+export function agentWorkspacesRevisionSnapshot(): string {
+  return workspacesRevisionSnapshot()
+}
+
+export async function readAgentSettingsCredentialConfigured(): Promise<boolean> {
+  const settings = await hydrateAgentSettingsSecure()
+  return Boolean(settings.apiKey.trim())
+}
+
+export function writeAgentSettingsApiKey(apiKey: string): Promise<void> {
+  return setAgentSettingsApiKey(apiKey)
+}
+
+export function deleteAgentSettingsApiKey(): Promise<void> {
+  return clearAgentSettingsApiKey()
+}
+
+export async function createAgentWorkspace(name?: string): Promise<AgentWorkspaceCreateResult> {
+  const workspace = await createWorkspaceRaw(name)
+  return { workspaceId: workspace.id, name: workspace.name }
+}
+
+export class AgentWorkspaceNotFoundError extends Error {
+  constructor() {
+    super("Agent workspace not found")
+    this.name = "AgentWorkspaceNotFoundError"
+  }
+}
+
+export async function activateAgentWorkspace(
+  workspaceId: string,
+): Promise<AgentWorkspaceActivateResult> {
+  if (!getWorkspacesState().workspaces.some((workspace) => workspace.id === workspaceId)) {
+    throw new AgentWorkspaceNotFoundError()
+  }
+  await setActiveWorkspaceRaw(workspaceId)
+  return { workspaceId }
 }
 
 export function createAgentConfigExport(
@@ -307,22 +430,37 @@ export function parseAgentConfigExport(raw: string): AgentConfigExport {
   )
 }
 
-export async function exportAgentConfigJson(): Promise<string> {
-  const publicByStorageKey = new Map<string, unknown>(
-    AGENT_PUBLIC_CONFIG_SECTIONS.map((item) => [
-      item.storageKey,
-      readAgentPublicConfigSection(item.id),
-    ]),
-  )
-  const values = Object.fromEntries(
-    KEYS.map((key) => [
-      key,
-      publicByStorageKey.get(key) ?? sanitizeAgentStorageValue(key, readJson(key)),
-    ]),
-  )
-  return stringifyPluginDataPackage(createAgentConfigExport(values))
+/**
+ * tasks 与 workspaces 共同组成 workspace 公开快照；刷新和读取必须位于同一双锁临界区，
+ * 否则两次顺序加锁之间仍可能混入 task/workspace mutation，导出撕裂状态。
+ */
+function withFreshAgentRuntimeConfig<T>(read: () => T): Promise<T> {
+  return withAgentWorkspaceFileWriteLocks(async () => {
+    await refreshTasksRaw()
+    await refreshAgentWorkspacesRaw()
+    return read()
+  })
 }
 
+export async function exportAgentConfigJson(): Promise<string> {
+  return withFreshAgentRuntimeConfig(() => {
+    const publicByStorageKey = new Map<string, unknown>(
+      AGENT_PUBLIC_CONFIG_SECTIONS.map((item) => [
+        item.storageKey,
+        readAgentPublicConfigSection(item.id),
+      ]),
+    )
+    const values = Object.fromEntries(
+      KEYS.map((key) => [
+        key,
+        publicByStorageKey.get(key) ?? sanitizeAgentStorageValue(key, readJson(key)),
+      ]),
+    )
+    return stringifyPluginDataPackage(createAgentConfigExport(values))
+  })
+}
+
+/** Store 级导入原语；生产 PluginDataPort 必须经 agent-settings-write-adapter 取得 settings 锁。 */
 export async function importAgentConfigJson(raw: string): Promise<{ keys: number }> {
   const pack = parseAgentConfigExport(raw)
   const publicByStorageKey = new Map<string, AgentPublicConfigSectionId>(
@@ -334,10 +472,15 @@ export async function importAgentConfigJson(raw: string): Promise<{ keys: number
     const publicId = publicByStorageKey.get(key)
     if (publicId) sectionAdapter(publicId).validate(value)
   }
+  // 生产 importer 已持有全部 section 锁；凭据保留策略必须基于最新 workspace 真值。
+  if (entries.some(([key]) => key === AGENT_WORKSPACES_STORAGE_KEY)) {
+    await refreshAgentWorkspacesRaw()
+  }
   let keys = 0
   for (const [key, value] of entries) {
     const publicId = publicByStorageKey.get(key)
-    if (publicId) writeAgentPublicConfigSection(publicId, value)
+    if (publicId === "settings") await writeAgentPublicConfigFileSection(publicId, value)
+    else if (publicId) await writeAgentPublicConfigSection(publicId, value)
     else writeJson(key, value)
     keys += 1
   }
@@ -349,12 +492,22 @@ export async function inspectAgentConfigData(): Promise<{
   bytes: number
   localSensitiveValues: number
 }> {
-  const values = Object.fromEntries(KEYS.map((key) => [key, readJson(key)]))
-  const settings = agentSettingsSecuritySnapshot()
-  const secrets = agentSecretsSecuritySnapshot()
-  return {
-    keys: Object.values(values).filter((value) => value !== undefined).length,
-    bytes: new TextEncoder().encode(JSON.stringify(values)).byteLength,
-    localSensitiveValues: Number(settings.localApiKeyPresent) + secrets.localValueCount,
-  }
+  return withFreshAgentRuntimeConfig(() => {
+    const publicByStorageKey = new Map<string, unknown>(
+      AGENT_PUBLIC_CONFIG_SECTIONS.map((item) => [
+        item.storageKey,
+        readAgentPublicConfigSection(item.id),
+      ]),
+    )
+    const values = Object.fromEntries(
+      KEYS.map((key) => [key, publicByStorageKey.get(key) ?? readJson(key)]),
+    )
+    const settings = agentSettingsSecuritySnapshot()
+    const secrets = agentSecretsSecuritySnapshot()
+    return {
+      keys: Object.values(values).filter((value) => value !== undefined).length,
+      bytes: new TextEncoder().encode(JSON.stringify(values)).byteLength,
+      localSensitiveValues: Number(settings.localApiKeyPresent) + secrets.localValueCount,
+    }
+  })
 }

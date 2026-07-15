@@ -1,46 +1,63 @@
 "use client"
 
-import * as React from "react"
 import { Boxes, ChevronRight } from "lucide-react"
+import type { FileRef } from "@protocol/file-system"
+import { AGENT_WORKSPACES_FILE_REF } from "@/filesystem/builtin-app-roots"
 import { getUiActions } from "@/lib/ui-actions"
+import { useFileDocument } from "@/shared/use-file-document"
 import { Chip } from "@/ui/chip"
 import { EmptyState } from "@/ui/empty-state"
 import {
-  createWorkspace,
-  getServerWorkspacesState,
-  getWorkspacesState,
-  subscribeWorkspaces,
-  type AgentWorkspace,
-} from "../lib/agent-workspace"
-import { getServerTasks, getTasks, subscribeTasks } from "../lib/agent-tasks"
+  AGENT_WORKSPACE_CREATE_ACTION,
+  decodeAgentWorkspaceCreateResult,
+  decodeAgentWorkspacesDocument,
+} from "../agent-management-file-contract"
 import { AddButton, AiPage, ListRow } from "./ui-kit"
 
-function openSpace(workspace: Pick<AgentWorkspace, "id" | "name">): void {
-  getUiActions()?.openAiTasks?.(workspace.id, workspace.name)
+function openSpace(workspaceId: string, name: string): void {
+  getUiActions()?.openAiTasks?.(workspaceId, name)
 }
 
-export default function AgentSpaces() {
-  const state = React.useSyncExternalStore(
-    subscribeWorkspaces,
-    getWorkspacesState,
-    getServerWorkspacesState,
-  )
-  const tasks = React.useSyncExternalStore(subscribeTasks, getTasks, getServerTasks)
-  const taskCounts = React.useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const task of tasks) counts.set(task.workspaceId, (counts.get(task.workspaceId) ?? 0) + 1)
-    return counts
-  }, [tasks])
+export default function AgentSpaces({
+  fileRef = AGENT_WORKSPACES_FILE_REF,
+}: {
+  fileRef?: FileRef
+}) {
+  const workspacesDocument = useFileDocument(fileRef, decodeAgentWorkspacesDocument)
+  const state = workspacesDocument.data
 
-  function createSpace() {
-    openSpace(createWorkspace())
+  async function createSpace() {
+    if (workspacesDocument.acting) return
+    try {
+      const result = decodeAgentWorkspaceCreateResult(
+        await workspacesDocument.invoke(AGENT_WORKSPACE_CREATE_ACTION),
+      )
+      openSpace(result.workspaceId, result.name)
+    } catch {
+      // useFileDocument 已保留结构化错误，页面内统一展示。
+    }
   }
 
-  const action = <AddButton label="新建空间" onClick={createSpace} />
+  const action = (
+    <AddButton
+      label={workspacesDocument.acting ? "正在创建…" : "新建空间"}
+      onClick={() => void createSpace()}
+    />
+  )
 
   return (
     <AiPage title="空间" icon={Boxes} action={action}>
-      {state.workspaces.length === 0 ? (
+      {workspacesDocument.loading && !state ? (
+        <p className="py-12 text-center text-sm text-muted-foreground">正在读取空间…</p>
+      ) : workspacesDocument.error && !state ? (
+        <EmptyState
+          icon={Boxes}
+          title="空间读取失败"
+          description="文件系统暂不可用，请稍后重试。"
+          variant="halo"
+          bordered={false}
+        />
+      ) : !state || state.workspaces.length === 0 ? (
         <EmptyState
           icon={Boxes}
           title="还没有空间"
@@ -52,14 +69,14 @@ export default function AgentSpaces() {
       ) : (
         <div className="space-y-2">
           {state.workspaces.map((workspace) => {
-            const count = taskCounts.get(workspace.id) ?? 0
+            const count = workspace.taskCount
             return (
               <ListRow
                 key={workspace.id}
                 leading={<Boxes className="h-4 w-4 text-muted-foreground" />}
                 title={workspace.name}
                 subtitle={count === 0 ? "还没有任务" : `${count} 个任务`}
-                onClick={() => openSpace(workspace)}
+                onClick={() => openSpace(workspace.id, workspace.name)}
                 trailing={
                   <>
                     {workspace.id === state.activeId && <Chip tone="info">当前</Chip>}

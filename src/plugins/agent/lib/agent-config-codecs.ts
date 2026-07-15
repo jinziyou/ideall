@@ -1,5 +1,9 @@
 import type { Permission } from "@/plugins/embed/protocol"
 import { AGENT_CONFIGURABLE_PERMISSIONS } from "@/plugins/embed/grant"
+import {
+  MAX_AGENT_MANAGEMENT_STRING_LENGTH,
+  MAX_AGENT_TASK_ITEMS,
+} from "../agent-management-file-contract"
 import { AGENT_SECRETS_STORAGE_KEY } from "./agent-secrets"
 import { AGENT_SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS, type AgentSettings } from "./agent-settings"
 import {
@@ -542,9 +546,11 @@ export function decodeAgentMcpServers(value: unknown): McpServer[] {
 }
 
 export function decodeAgentTasks(value: unknown): AgentTask[] {
-  const records = requireArray(value, "Agent 任务").map((item, index) =>
-    requireRecord(item, `Agent 任务[${index}]`),
-  )
+  const items = requireArray(value, "Agent 任务")
+  if (items.length > MAX_AGENT_TASK_ITEMS) {
+    throw new Error(`Agent 任务不能超过 ${MAX_AGENT_TASK_ITEMS} 项`)
+  }
+  const records = items.map((item, index) => requireRecord(item, `Agent 任务[${index}]`))
   assertUniqueRecordIds(records, "Agent 任务")
   return records.map((record, index) => {
     const label = `Agent 任务[${index}]`
@@ -553,13 +559,31 @@ export function decodeAgentTasks(value: unknown): AgentTask[] {
       ["id", "workspaceId", "status", "starred", "createdAt", "updatedAt"],
       label,
     )
+    const id = requireString(record, "id", label, true)
+    const workspaceId = requireString(record, "workspaceId", label, true)
+    if (
+      id.length > MAX_AGENT_MANAGEMENT_STRING_LENGTH ||
+      workspaceId.length > MAX_AGENT_MANAGEMENT_STRING_LENGTH
+    ) {
+      throw new Error(`Agent 任务标识不能超过 ${MAX_AGENT_MANAGEMENT_STRING_LENGTH} 个字符`)
+    }
+    try {
+      encodeURIComponent(id)
+    } catch {
+      throw new Error(`${label}.id包含无效 Unicode`)
+    }
+    const createdAt = requireNumber(record, "createdAt", label)
+    const updatedAt = requireNumber(record, "updatedAt", label)
+    if (!Number.isSafeInteger(createdAt) || !Number.isSafeInteger(updatedAt)) {
+      throw new Error(`${label}时间戳必须是非负安全整数`)
+    }
     return {
-      id: requireString(record, "id", label, true),
-      workspaceId: requireString(record, "workspaceId", label, true),
+      id,
+      workspaceId,
       status: requireEnum(record, "status", ["active", "running", "done", "failed"], label),
       starred: requireBoolean(record, "starred", label),
-      createdAt: requireNumber(record, "createdAt", label),
-      updatedAt: requireNumber(record, "updatedAt", label),
+      createdAt,
+      updatedAt,
     }
   })
 }

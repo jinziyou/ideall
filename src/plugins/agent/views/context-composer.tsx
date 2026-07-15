@@ -1,11 +1,12 @@
 "use client"
 
 // 上下文组合器: 把一个 AI 工作区的「数据 + 能力 + 规则 + 提示词 + 模型」收敛为可勾选的五组, 每组都有默认。
-// 直接读写当前工作区 (saveWorkspace), 改动即时进入 resolveRun (下次发送生效)。
+// 通过 workspace adapter 合并锁内最新快照，改动即时进入 resolveRun (下次发送生效)。
 // 安全: 能力位只能在 AGENT_CONFIGURABLE_PERMISSIONS 内选择；敏感配置读取默认关闭。
 
 import * as React from "react"
 import { getFilesPort } from "@protocol/files"
+import { toast } from "sonner"
 import { Checkbox } from "@/ui/checkbox"
 import { Input } from "@/ui/input"
 import { Label } from "@/ui/label"
@@ -18,11 +19,26 @@ import { BUILTIN_SKILLS } from "../lib/agent-skills"
 import { getRules, getServerRules, subscribeRules } from "../lib/agent-rules"
 import { PROVIDER_PRESETS } from "../lib/agent-settings"
 import {
-  saveWorkspace,
+  AgentWorkspaceCredentialTargetConflictError,
+  agentWorkspaceCredentialTarget,
+  updateWorkspace,
+  updateWorkspaceApiKey,
+} from "../agent-workspace-write-adapter"
+import {
   type AgentWorkspace,
   type WorkspaceCapabilities,
   type WorkspaceData,
 } from "../lib/agent-workspace"
+import { useWorkspaceTextDraft } from "./use-workspace-text-draft"
+import {
+  acknowledgeWorkspaceModelSelection,
+  beginWorkspaceModelSelection,
+  createWorkspaceModelSelectionCoordinator,
+  createWorkspaceModelSelectionDisplayState,
+  reconcileWorkspaceModelSelectionDisplay,
+  rejectWorkspaceModelSelection,
+  type WorkspaceModelSelectionDisplayState,
+} from "./workspace-model-selection"
 
 const APP_OPTIONS = [infoEmbedManifest, communityEmbedManifest]
 const APP_IDS = APP_OPTIONS.map((a) => a.id)
@@ -83,8 +99,183 @@ function toggleNullable(
   return allIds.length === next.length && allIds.every((a) => next.includes(a)) ? null : next
 }
 
-export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
+export default function ContextComposer({
+  ws,
+  sourceVersion,
+}: {
+  ws: AgentWorkspace
+  sourceVersion: string
+}) {
   const [folders, setFolders] = React.useState<{ id: string; name: string }[]>([])
+  const durableModelSelection = modelSelectionValue(ws)
+  const [modelSelectionDisplay, setModelSelectionDisplay] =
+    React.useState<WorkspaceModelSelectionDisplayState>(() =>
+      createWorkspaceModelSelectionDisplayState(ws.id, durableModelSelection, sourceVersion),
+    )
+  const modelSelectionDisplayRef = React.useRef(modelSelectionDisplay)
+  const visibleModelSelection = reconcileWorkspaceModelSelectionDisplay(
+    modelSelectionDisplay,
+    ws.id,
+    durableModelSelection,
+    sourceVersion,
+  )
+  const updateModelSelectionDisplay = React.useCallback(
+    (
+      updater: (
+        current: WorkspaceModelSelectionDisplayState,
+      ) => WorkspaceModelSelectionDisplayState,
+    ) => {
+      const next = updater(modelSelectionDisplayRef.current)
+      modelSelectionDisplayRef.current = next
+      setModelSelectionDisplay(next)
+    },
+    [],
+  )
+  const keepFailedDraft = React.useCallback(() => {
+    toast.error("保存工作区失败")
+    return "keep" as const
+  }, [])
+
+  const osDirDraft = useWorkspaceTextDraft({
+    workspaceId: ws.id,
+    sourceValue: ws.data.osDir ?? "",
+    sourceVersion,
+    context: undefined,
+    async commit(workspaceId, osDir) {
+      const updated = await updateWorkspace(workspaceId, (current) => ({
+        ...current,
+        data: { ...current.data, osDir: osDir || null },
+      }))
+      if (!updated) throw new Error("Agent workspace no longer exists")
+      return updated.data.osDir ?? ""
+    },
+    onError: keepFailedDraft,
+  })
+  const instructionsDraft = useWorkspaceTextDraft({
+    workspaceId: ws.id,
+    sourceValue: ws.prompt.instructions,
+    sourceVersion,
+    context: undefined,
+    async commit(workspaceId, instructions) {
+      const updated = await updateWorkspace(workspaceId, (current) => ({
+        ...current,
+        prompt: { ...current.prompt, instructions },
+      }))
+      if (!updated) throw new Error("Agent workspace no longer exists")
+      return updated.prompt.instructions
+    },
+    onError: keepFailedDraft,
+  })
+  const baseUrlDraft = useWorkspaceTextDraft({
+    workspaceId: ws.id,
+    sourceValue: ws.model.baseURL,
+    sourceVersion,
+    context: undefined,
+    async commit(workspaceId, baseURL) {
+      const updated = await updateWorkspace(workspaceId, (current) => ({
+        ...current,
+        model: { ...current.model, baseURL },
+      }))
+      if (!updated) throw new Error("Agent workspace no longer exists")
+      return updated.model.baseURL
+    },
+    onError: keepFailedDraft,
+  })
+  const modelDraft = useWorkspaceTextDraft({
+    workspaceId: ws.id,
+    sourceValue: ws.model.model,
+    sourceVersion,
+    context: undefined,
+    async commit(workspaceId, model) {
+      const updated = await updateWorkspace(workspaceId, (current) => ({
+        ...current,
+        model: { ...current.model, model },
+      }))
+      if (!updated) throw new Error("Agent workspace no longer exists")
+      return updated.model.model
+    },
+    onError: keepFailedDraft,
+  })
+  const apiKeyTarget = ws.model.useGlobal
+    ? null
+    : agentWorkspaceCredentialTarget(baseUrlDraft.value)
+  const apiKeyDraft = useWorkspaceTextDraft({
+    workspaceId: ws.id,
+    sourceValue: ws.model.apiKey,
+    sourceVersion,
+    context: apiKeyTarget,
+    async commit(workspaceId, apiKey, expectedTarget) {
+      // A visible endpoint draft must become durable before its key can be bound to that target.
+      await baseUrlDraft.flush()
+      const updated = await updateWorkspaceApiKey(workspaceId, expectedTarget, apiKey)
+      if (!updated) throw new Error("Agent workspace no longer exists")
+      return updated.model.apiKey
+    },
+    onError(error) {
+      if (error instanceof AgentWorkspaceCredentialTargetConflictError) {
+        toast.error("模型地址已变化，请重新输入 API Key")
+        return "clear"
+      }
+      toast.error("保存工作区 API Key 失败")
+      return "keep"
+    },
+  })
+  const flushBaseUrlDraft = baseUrlDraft.flush
+  const flushModelDraft = modelDraft.flush
+  const flushApiKeyDraft = apiKeyDraft.flush
+
+  const modelSelection = React.useMemo(
+    () =>
+      createWorkspaceModelSelectionCoordinator<string>({
+        async flushDrafts() {
+          // Wait for every queue to settle even if one rejects. Returning on the first rejection
+          // would let a remaining old draft finish after the direct preset write.
+          const results = await Promise.allSettled([
+            flushBaseUrlDraft(),
+            flushModelDraft(),
+            flushApiKeyDraft(),
+          ])
+          const failed = results.find(
+            (result): result is PromiseRejectedResult => result.status === "rejected",
+          )
+          if (failed) throw failed.reason
+        },
+        async apply(selection) {
+          const updated = await updateWorkspace(ws.id, (current) => {
+            if (selection === GLOBAL_MODEL) {
+              return { ...current, model: { ...current.model, useGlobal: true } }
+            }
+            if (selection === CUSTOM_PRESET) {
+              return { ...current, model: { ...current.model, useGlobal: false } }
+            }
+            const preset = PROVIDER_PRESETS.find((candidate) => candidate.label === selection)
+            if (!preset) return current
+            return {
+              ...current,
+              model: {
+                ...current.model,
+                useGlobal: false,
+                baseURL: preset.baseURL,
+                model: preset.model || current.model.model,
+              },
+            }
+          })
+          if (!updated) throw new Error("Agent workspace no longer exists")
+        },
+        onError(failure) {
+          toast.error(
+            failure.phase === "flush" ? "模型草稿保存失败，未切换模型" : "保存工作区模型失败",
+          )
+        },
+      }),
+    [flushApiKeyDraft, flushBaseUrlDraft, flushModelDraft, ws.id],
+  )
+
+  React.useEffect(() => {
+    updateModelSelectionDisplay((current) =>
+      reconcileWorkspaceModelSelectionDisplay(current, ws.id, durableModelSelection, sourceVersion),
+    )
+  }, [durableModelSelection, sourceVersion, updateModelSelectionDisplay, ws.id])
 
   React.useEffect(() => {
     let alive = true
@@ -101,10 +292,15 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
     }
   }, [])
 
-  const save = (p: Partial<AgentWorkspace>) => saveWorkspace({ ...ws, ...p })
-  const patchData = (p: Partial<WorkspaceData>) => save({ data: { ...ws.data, ...p } })
-  const patchCaps = (p: Partial<WorkspaceCapabilities>) =>
-    save({ capabilities: { ...ws.capabilities, ...p } })
+  const commit = (updater: (current: AgentWorkspace) => AgentWorkspace) => {
+    void updateWorkspace(ws.id, updater).catch(() => toast.error("保存工作区失败"))
+  }
+  const patchData = (updater: (current: WorkspaceData) => WorkspaceData) => {
+    commit((current) => ({ ...current, data: updater(current.data) }))
+  }
+  const patchCaps = (updater: (current: WorkspaceCapabilities) => WorkspaceCapabilities) => {
+    commit((current) => ({ ...current, capabilities: updater(current.capabilities) }))
+  }
 
   const skillIds = ws.capabilities.skillIds
   const appIds = ws.capabilities.appIds
@@ -117,7 +313,7 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
           <Section title="数据">
             <Row
               checked={ws.data.includeHome}
-              onChange={(v) => patchData({ includeHome: v })}
+              onChange={(v) => patchData((current) => ({ ...current, includeHome: v }))}
               label="带上「我的」概览"
             />
             {ws.data.includeHome && (
@@ -126,7 +322,12 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                   <Row
                     key={k.key}
                     checked={ws.data.home[k.key]}
-                    onChange={(v) => patchData({ home: { ...ws.data.home, [k.key]: v } })}
+                    onChange={(v) =>
+                      patchData((current) => ({
+                        ...current,
+                        home: { ...current.home, [k.key]: v },
+                      }))
+                    }
                     label={k.label}
                   />
                 ))}
@@ -136,7 +337,12 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
               <Label className="text-xs">本地目录</Label>
               <Select
                 value={ws.data.dirNodeId ?? DEFAULT_DIR}
-                onValueChange={(v) => patchData({ dirNodeId: v === DEFAULT_DIR ? null : v })}
+                onValueChange={(v) =>
+                  patchData((current) => ({
+                    ...current,
+                    dirNodeId: v === DEFAULT_DIR ? null : v,
+                  }))
+                }
               >
                 <SelectTrigger className="h-8">
                   <SelectValue />
@@ -153,8 +359,9 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
               <Input
                 className="h-8"
                 placeholder="本地文件夹路径（桌面端，未启用文件系统访问时仅记录）"
-                value={ws.data.osDir ?? ""}
-                onChange={(e) => patchData({ osDir: e.target.value || null })}
+                value={osDirDraft.value}
+                onChange={(e) => osDirDraft.setValue(e.target.value)}
+                onBlur={() => void osDirDraft.flush().catch(() => {})}
               />
             </div>
           </Section>
@@ -170,11 +377,12 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                   key={c.perm}
                   checked={ws.capabilities.permissions.includes(c.perm)}
                   onChange={(v) =>
-                    patchCaps({
+                    patchCaps((current) => ({
+                      ...current,
                       permissions: v
-                        ? [...new Set([...ws.capabilities.permissions, c.perm])]
-                        : ws.capabilities.permissions.filter((p) => p !== c.perm),
-                    })
+                        ? [...new Set([...current.permissions, c.perm])]
+                        : current.permissions.filter((p) => p !== c.perm),
+                    }))
                   }
                   label={c.label}
                 />
@@ -187,7 +395,10 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                   key={s.id}
                   checked={skillIds ? skillIds.includes(s.id) : true}
                   onChange={(v) =>
-                    patchCaps({ skillIds: toggleNullable(skillIds, SKILL_IDS, s.id, v) })
+                    patchCaps((current) => ({
+                      ...current,
+                      skillIds: toggleNullable(current.skillIds, SKILL_IDS, s.id, v),
+                    }))
                   }
                   label={s.label}
                 />
@@ -199,7 +410,12 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                 <Row
                   key={a.id}
                   checked={appIds ? appIds.includes(a.id) : true}
-                  onChange={(v) => patchCaps({ appIds: toggleNullable(appIds, APP_IDS, a.id, v) })}
+                  onChange={(v) =>
+                    patchCaps((current) => ({
+                      ...current,
+                      appIds: toggleNullable(current.appIds, APP_IDS, a.id, v),
+                    }))
+                  }
                   label={a.name}
                 />
               ))}
@@ -216,32 +432,39 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
             <Textarea
               rows={3}
               placeholder="例如：你是我的科研助理，围绕本工作目录的资料作答…"
-              value={ws.prompt.instructions}
-              onChange={(e) => save({ prompt: { ...ws.prompt, instructions: e.target.value } })}
+              value={instructionsDraft.value}
+              onChange={(e) => instructionsDraft.setValue(e.target.value)}
+              onBlur={() => void instructionsDraft.flush().catch(() => {})}
             />
           </Section>
 
           {/* —— 模型 —— */}
           <Section title="模型">
             <Select
-              value={ws.model.useGlobal ? GLOBAL_MODEL : (presetLabel(ws) ?? CUSTOM_PRESET)}
+              value={visibleModelSelection.value}
               onValueChange={(v) => {
-                if (v === GLOBAL_MODEL) {
-                  save({ model: { ...ws.model, useGlobal: true } })
-                } else if (v === CUSTOM_PRESET) {
-                  save({ model: { ...ws.model, useGlobal: false } })
-                } else {
-                  const p = PROVIDER_PRESETS.find((x) => x.label === v)
-                  if (p)
-                    save({
-                      model: {
-                        ...ws.model,
-                        useGlobal: false,
-                        baseURL: p.baseURL,
-                        model: p.model || ws.model.model,
-                      },
-                    })
-                }
+                const intent = beginWorkspaceModelSelection(
+                  modelSelectionDisplayRef.current,
+                  ws.id,
+                  durableModelSelection,
+                  sourceVersion,
+                  v,
+                )
+                modelSelectionDisplayRef.current = intent.state
+                setModelSelectionDisplay(intent.state)
+                void modelSelection
+                  .select(v)
+                  .then((applied) => {
+                    if (!applied) return
+                    updateModelSelectionDisplay((current) =>
+                      acknowledgeWorkspaceModelSelection(current, intent.token),
+                    )
+                  })
+                  .catch(() => {
+                    updateModelSelectionDisplay((current) =>
+                      rejectWorkspaceModelSelection(current, intent.token),
+                    )
+                  })
               }}
             >
               <SelectTrigger className="h-8">
@@ -262,22 +485,25 @@ export default function ContextComposer({ ws }: { ws: AgentWorkspace }) {
                 <Input
                   className="h-8"
                   placeholder="API Base URL（如 https://api.deepseek.com/v1）"
-                  value={ws.model.baseURL}
-                  onChange={(e) => save({ model: { ...ws.model, baseURL: e.target.value } })}
+                  value={baseUrlDraft.value}
+                  onChange={(e) => baseUrlDraft.setValue(e.target.value)}
+                  onBlur={() => void baseUrlDraft.flush().catch(() => {})}
                 />
                 <Input
                   className="h-8"
                   placeholder="模型名（如 deepseek-chat）"
-                  value={ws.model.model}
-                  onChange={(e) => save({ model: { ...ws.model, model: e.target.value } })}
+                  value={modelDraft.value}
+                  onChange={(e) => modelDraft.setValue(e.target.value)}
+                  onBlur={() => void modelDraft.flush().catch(() => {})}
                 />
                 <Input
                   className="h-8"
                   type="password"
                   autoComplete="off"
                   placeholder="API Key（仅存本机）"
-                  value={ws.model.apiKey}
-                  onChange={(e) => save({ model: { ...ws.model, apiKey: e.target.value } })}
+                  value={apiKeyDraft.value}
+                  onChange={(e) => apiKeyDraft.setValue(e.target.value)}
+                  onBlur={() => void apiKeyDraft.flush().catch(() => {})}
                 />
               </div>
             )}
@@ -292,6 +518,10 @@ function presetLabel(ws: AgentWorkspace): string | null {
   return PROVIDER_PRESETS.find((p) => p.baseURL === ws.model.baseURL)?.label ?? null
 }
 
+function modelSelectionValue(ws: AgentWorkspace): string {
+  return ws.model.useGlobal ? GLOBAL_MODEL : (presetLabel(ws) ?? CUSTOM_PRESET)
+}
+
 /** 规则引用选择: 全局规则恒生效 (只读列示); 工作空间级规则可勾选加入本工作区 ruleIds。 */
 function WorkspaceRulesPicker({ ws }: { ws: AgentWorkspace }) {
   const rules = React.useSyncExternalStore(subscribeRules, getRules, getServerRules)
@@ -300,10 +530,12 @@ function WorkspaceRulesPicker({ ws }: { ws: AgentWorkspace }) {
   const refs = new Set(ws.rules.ruleIds)
 
   function toggle(id: string, on: boolean) {
-    const next = on
-      ? Array.from(new Set([...ws.rules.ruleIds, id]))
-      : ws.rules.ruleIds.filter((x) => x !== id)
-    saveWorkspace({ ...ws, rules: { ruleIds: next } })
+    void updateWorkspace(ws.id, (current) => {
+      const ruleIds = on
+        ? Array.from(new Set([...current.rules.ruleIds, id]))
+        : current.rules.ruleIds.filter((candidate) => candidate !== id)
+      return { ...current, rules: { ruleIds } }
+    }).catch(() => toast.error("保存工作区规则失败"))
   }
 
   return (

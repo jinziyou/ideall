@@ -12,40 +12,30 @@ import {
   secureSet,
 } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
+import {
+  DEFAULT_AGENT_SETTINGS_DOCUMENT,
+  PROVIDER_PRESETS,
+  type AgentSettingsDocument,
+} from "../agent-settings-file-contract"
+
+export { PROVIDER_PRESETS } from "../agent-settings-file-contract"
 
 export const AGENT_SETTINGS_STORAGE_KEY = "ideall:agent:settings"
 export const LEGACY_AGENT_SETTINGS_STORAGE_KEY = "wonita:agent:settings"
+/** 仅记录成功凭据 mutation 次数；不包含、派生或暴露任何 API Key 内容。 */
+export const AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY =
+  "ideall:agent:settings:credential-revision"
 const API_KEY_SECURE_KEY = SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY
+const CREDENTIAL_REVISION_PATTERN = /^(0|[1-9]\d{0,63})$/
 
-export interface AgentSettings {
-  /** OpenAI 兼容 API base (不含 /chat/completions) */
-  baseURL: string
-  /** 模型名 */
-  model: string
+export interface AgentSettings extends AgentSettingsDocument {
   /** 用户的 API Key (仅存本地) */
   apiKey: string
-  /** 是否把 home 数据 (关注/书签/资源) 作上下文一并发送 */
-  includeHomeContext: boolean
-  /** 新对话是否默认启用智能体工具循环。 */
-  defaultAgentMode: boolean
-  /** 工具调用审批默认策略: confirm=逐次确认 (默认, 安全); auto=自动允许低风险工具, 危险/外部工具仍确认。 */
-  approvalPolicy: "confirm" | "auto"
 }
 
-/** 常见 OpenAI 兼容端点预设 (仅填 baseURL/model, key 仍需用户自填)。 */
-export const PROVIDER_PRESETS: { label: string; baseURL: string; model: string }[] = [
-  { label: "DeepSeek", baseURL: "https://api.deepseek.com/v1", model: "deepseek-chat" },
-  { label: "OpenAI", baseURL: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-  { label: "本地 vLLM", baseURL: "http://127.0.0.1:8000/v1", model: "" },
-]
-
 export const DEFAULT_SETTINGS: AgentSettings = {
-  baseURL: PROVIDER_PRESETS[0].baseURL,
-  model: PROVIDER_PRESETS[0].model,
+  ...DEFAULT_AGENT_SETTINGS_DOCUMENT,
   apiKey: "",
-  includeHomeContext: true,
-  defaultAgentMode: true,
-  approvalPolicy: "confirm",
 }
 
 export function isConfigured(s: AgentSettings): boolean {
@@ -58,10 +48,18 @@ let lastParsed: AgentSettings = DEFAULT_SETTINGS
 let cachedApiKey = ""
 let secureHydrated = false
 let secureHydrating: Promise<AgentSettings> | null = null
+let credentialMutationTail: Promise<void> = Promise.resolve()
+let volatileCredentialRevision = 0n
 const listeners = new Set<() => void>()
 
 function notify() {
-  listeners.forEach((l) => l())
+  for (const listener of [...listeners]) {
+    try {
+      listener()
+    } catch {
+      // 单个 Display/adapter 的订阅错误不能把已经持久化的凭据误报为写入失败。
+    }
+  }
 }
 
 function storage(): Storage | undefined {
@@ -70,6 +68,35 @@ function storage(): Storage | undefined {
   } catch {
     return undefined
   }
+}
+
+function readCredentialRevision(): bigint {
+  let raw: string | null = null
+  try {
+    raw = storage()?.getItem(AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY) ?? null
+  } catch {
+    return volatileCredentialRevision
+  }
+  if (!raw || !CREDENTIAL_REVISION_PATTERN.test(raw)) return volatileCredentialRevision
+  const persisted = BigInt(raw)
+  if (persisted > volatileCredentialRevision) volatileCredentialRevision = persisted
+  return volatileCredentialRevision
+}
+
+function advanceCredentialRevision(): string {
+  const next = readCredentialRevision() + 1n
+  volatileCredentialRevision = next
+  try {
+    storage()?.setItem(AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY, String(next))
+  } catch {
+    // 无可用 public storage 时仍保持当前进程单调；secure-store 已提交，不能反转成功结果。
+  }
+  return String(next)
+}
+
+/** FileSystem version 使用的不透明单调值；缺失旧数据兼容为当前进程基线。 */
+export function agentSettingsCredentialRevisionSnapshot(): string {
+  return String(readCredentialRevision())
 }
 
 function readPublicSettingsRaw(s: Storage): string | null {
@@ -100,6 +127,17 @@ function parseSettings(raw: string | null): AgentSettings {
 function publicSettings(next: AgentSettings): Omit<AgentSettings, "apiKey"> & { apiKey?: string } {
   const { apiKey: _apiKey, ...rest } = next
   return rest
+}
+
+function sameObservableSettings(left: AgentSettings, right: AgentSettings): boolean {
+  return (
+    left.baseURL === right.baseURL &&
+    left.model === right.model &&
+    left.apiKey === right.apiKey &&
+    left.includeHomeContext === right.includeHomeContext &&
+    left.defaultAgentMode === right.defaultAgentMode &&
+    left.approvalPolicy === right.approvalPolicy
+  )
 }
 
 function persistSettings(next: AgentSettings): void {
@@ -145,13 +183,54 @@ export function getAgentSettings(): AgentSettings {
 }
 
 export function setAgentSettings(next: AgentSettings): void {
+  commitAgentSettingsAfterSecurePersistence(next)
+  const persistence = next.apiKey
+    ? secureSet(API_KEY_SECURE_KEY, next.apiKey).then(() => undefined)
+    : secureDelete(API_KEY_SECURE_KEY)
+  void persistence
+    .then(() => {
+      advanceCredentialRevision()
+      notify()
+    })
+    .catch(() => {})
+}
+
+/**
+ * 仅用于已经完成 secure-store 事务的适配器：提交公开设置与内存快照，但不再启动
+ * fire-and-forget 凭据写。调用方必须保证 next.apiKey 与已持久化状态一致。
+ */
+function commitAgentSettingsAfterSecurePersistence(next: AgentSettings): void {
   cachedApiKey = next.apiKey
   lastParsed = { ...next }
   lastRaw = null
   persistSettings(next)
-  if (next.apiKey) void secureSet(API_KEY_SECURE_KEY, next.apiKey)
-  else void secureDelete(API_KEY_SECURE_KEY)
   notify()
+}
+
+/** Store 级耐久原语；复合 UI 必须经 agent-settings-write-adapter 取得 FileRef 写锁。 */
+export function persistAgentSettings(next: AgentSettings): Promise<void> {
+  return enqueueCredentialMutation(async () => {
+    await hydrateAgentSettingsSecure()
+    if (next.apiKey) await secureSet(API_KEY_SECURE_KEY, next.apiKey)
+    else await secureDelete(API_KEY_SECURE_KEY)
+    advanceCredentialRevision()
+    commitAgentSettingsAfterSecurePersistence(next)
+  })
+}
+
+/** 公开文件写事务：解析、必要的凭据清除与公开快照提交在同一凭据队列内完成。 */
+export function replaceAgentSettingsPublicDurably(
+  resolveNext: (current: AgentSettings) => AgentSettings,
+): Promise<void> {
+  return enqueueCredentialMutation(async () => {
+    const current = await hydrateAgentSettingsSecure()
+    const next = resolveNext(current)
+    if (current.apiKey && !next.apiKey) {
+      await secureDelete(API_KEY_SECURE_KEY)
+      advanceCredentialRevision()
+    }
+    commitAgentSettingsAfterSecurePersistence(next)
+  })
 }
 
 export function subscribeAgentSettings(cb: () => void): () => void {
@@ -159,9 +238,66 @@ export function subscribeAgentSettings(cb: () => void): () => void {
   return () => listeners.delete(cb)
 }
 
+/** 只返回是否存在凭据；供 FileSystem version/watch 使用，不暴露值。 */
+export function isAgentSettingsCredentialConfigured(): boolean {
+  return Boolean((cachedApiKey || secureFallbackGet(API_KEY_SECURE_KEY) || "").trim())
+}
+
+function commitCredential(apiKey: string): void {
+  const s = storage()
+  let raw: string | null = null
+  try {
+    raw = s ? readPublicSettingsRaw(s) : null
+  } catch {
+    raw = null
+  }
+  cachedApiKey = apiKey
+  lastRaw = raw
+  lastParsed = { ...parseSettings(raw), apiKey }
+  secureHydrated = true
+  notify()
+}
+
+function enqueueCredentialMutation(operation: () => Promise<void>): Promise<void> {
+  const pending = credentialMutationTail.then(operation, operation)
+  credentialMutationTail = pending.then(
+    () => undefined,
+    () => undefined,
+  )
+  return pending
+}
+
+/** FileSystem credential action 的持久化边界；完成后才通知 watch 订阅者。 */
+export function setAgentSettingsApiKey(apiKey: string): Promise<void> {
+  return enqueueCredentialMutation(async () => {
+    await hydrateAgentSettingsSecure()
+    await secureSet(API_KEY_SECURE_KEY, apiKey)
+    advanceCredentialRevision()
+    commitCredential(apiKey)
+  })
+}
+
+export function clearAgentSettingsApiKey(): Promise<void> {
+  return enqueueCredentialMutation(async () => {
+    await hydrateAgentSettingsSecure()
+    await secureDelete(API_KEY_SECURE_KEY)
+    advanceCredentialRevision()
+    commitCredential("")
+  })
+}
+
 export async function hydrateAgentSettingsSecure(): Promise<AgentSettings> {
   if (secureHydrating) return secureHydrating
+  if (secureHydrated) {
+    // Public settings may have changed through the storage event path, but the secure credential
+    // cache is already authoritative for this process. Refresh that public projection without
+    // touching secure-store or publishing another watch invalidation.
+    getAgentSettings()
+    return lastParsed
+  }
   secureHydrating = (async () => {
+    const previous = lastParsed
+    const previousRevision = agentSettingsCredentialRevisionSnapshot()
     const s = storage()
     const raw = s ? readPublicSettingsRaw(s) : null
     const parsed = parseSettings(raw)
@@ -171,13 +307,19 @@ export async function hydrateAgentSettingsSecure(): Promise<AgentSettings> {
     } else if (!isTauri() && parsed.apiKey) {
       cachedApiKey = parsed.apiKey
       await secureSet(API_KEY_SECURE_KEY, parsed.apiKey)
+      advanceCredentialRevision()
     }
     const next = { ...parsed, apiKey: cachedApiKey }
     persistSettings(next)
     lastRaw = null
     lastParsed = next
     secureHydrated = true
-    notify()
+    if (
+      !sameObservableSettings(previous, next) ||
+      previousRevision !== agentSettingsCredentialRevisionSnapshot()
+    ) {
+      notify()
+    }
     return next
   })().finally(() => {
     secureHydrating = null

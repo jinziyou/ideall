@@ -6,21 +6,17 @@
 
 import * as React from "react"
 import { KeyRound, Loader2, Plug, Plus, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useFileDocument } from "@/shared/use-file-document"
 import { Chip } from "@/ui/chip"
+import { EmptyState } from "@/ui/empty-state"
 import { Panel, SettingRow } from "@/ui/panel"
 import { StatusDot, CountBadge, type Tone } from "@/ui/status-dot"
 import { Switch } from "@/ui/switch"
 
 import { AiPage, ListRow, AddButton } from "./ui-kit"
 import {
-  getMcpServers,
-  subscribeMcpServers,
-  getServerMcpServers,
-  createMcpServer,
-  saveMcpServer,
-  setMcpEnabled,
-  deleteMcpServer,
   runStatusOf,
   MCP_TRANSPORTS,
   LOOPBACK_ID,
@@ -28,8 +24,15 @@ import {
   type McpTransport,
   type McpRunStatus,
 } from "../lib/agent-mcp-registry"
+import {
+  AGENT_MCP_CREATE_ACTION,
+  AGENT_MCP_PROBE_ACTION,
+  agentConfigFileRef,
+  type AgentMcpCreateResult,
+  type AgentMcpProbeResult,
+} from "../agent-config-file-system"
 import { CAPABILITY_OPTIONS } from "../lib/agent-capabilities"
-import { probeMcpServer } from "../lib/agent-mcp"
+import { decodeAgentMcpServers } from "../lib/agent-config-codecs"
 import {
   subscribeSecrets,
   getSecrets,
@@ -71,16 +74,24 @@ const STATUS_TONE: Record<McpRunStatus, Tone> = {
   pending: "idle",
 }
 
+const MCP_FILE_REF = agentConfigFileRef("mcp")
+
+type UpdateMcpServer = (updater: (server: McpServer) => McpServer) => Promise<unknown>
+
+function reportMcpWriteError(error: unknown): void {
+  toast.error("MCP 配置保存失败", {
+    description: error instanceof Error ? error.message : String(error),
+  })
+}
+
 function transportLabel(transport: McpTransport): string {
   return MCP_TRANSPORTS.find((t) => t.value === transport)?.label ?? transport
 }
 
 export default function AiMcp() {
-  const servers = React.useSyncExternalStore(
-    subscribeMcpServers,
-    getMcpServers,
-    getServerMcpServers,
-  )
+  const document = useFileDocument(MCP_FILE_REF, decodeAgentMcpServers)
+  const updateServers = document.update
+  const servers = document.data ?? []
 
   const [selectedId, setSelectedId] = React.useState<string | undefined>(servers[0]?.id)
   const selected = servers.find((s) => s.id === selectedId) ?? servers[0]
@@ -103,21 +114,56 @@ export default function AiMcp() {
     setDialogOpen(true)
   }
 
-  function submit() {
-    const created = createMcpServer({
+  async function submit() {
+    const now = Date.now()
+    const created: McpServer = {
+      // provider 生成最终身份；占位 id 只用于复用完整 MCP 输入 codec。
+      id: "pending-mcp-create",
       name: name.trim() || "未命名服务器",
       transport,
       command,
       args,
       url,
-    })
-    setSelectedId(created.id)
-    setDialogOpen(false)
+      env: [],
+      headers: [],
+      auth: "none",
+      enabled: true,
+      builtin: false,
+      createdAt: now,
+      updatedAt: now,
+    }
+    try {
+      const result = await document.invoke<AgentMcpCreateResult>(AGENT_MCP_CREATE_ACTION, created)
+      setSelectedId(result.serverId)
+      setDialogOpen(false)
+    } catch (error) {
+      reportMcpWriteError(error)
+    }
   }
 
-  function remove(id: string) {
-    deleteMcpServer(id)
-    setSelectedId(LOOPBACK_ID)
+  const updateServer = React.useCallback(
+    (id: string, updater: (server: McpServer) => McpServer) => {
+      const updatedAt = Date.now()
+      return updateServers((current) =>
+        current.map((server) => (server.id === id ? { ...updater(server), updatedAt } : server)),
+      )
+    },
+    [updateServers],
+  )
+
+  async function remove(id: string) {
+    try {
+      await updateServers((current) =>
+        current.filter((server) => server.id !== id || server.builtin),
+      )
+      setSelectedId(LOOPBACK_ID)
+    } catch (error) {
+      reportMcpWriteError(error)
+    }
+  }
+
+  function retryRead() {
+    void document.refresh().catch(() => {})
   }
 
   return (
@@ -126,32 +172,76 @@ export default function AiMcp() {
       icon={Plug}
       action={
         <>
-          <Button variant="outline" size="sm" onClick={() => setSecretsOpen(true)}>
-            <KeyRound className="h-4 w-4" />
-            密钥
-          </Button>
-          <AddButton label="添加服务器" onClick={openDialog} />
+          {document.saving || document.acting ? <Chip tone="neutral">保存中</Chip> : null}
+          {document.error && document.data !== null ? <Chip tone="error">操作失败</Chip> : null}
+          {document.data !== null ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setSecretsOpen(true)}>
+                <KeyRound className="h-4 w-4" />
+                密钥
+              </Button>
+              <AddButton label="添加服务器" onClick={openDialog} />
+            </>
+          ) : null}
         </>
       }
     >
-      <div className="space-y-8">
-        {/* 服务器列表 */}
-        <div className="space-y-2">
-          {servers.map((server) => (
-            <ServerRow
-              key={server.id}
-              server={server}
-              active={selected?.id === server.id}
-              onSelect={() => setSelectedId(server.id)}
-            />
-          ))}
-        </div>
+      {document.loading && document.data === null ? (
+        <EmptyState icon={Plug} title="正在读取 MCP 配置…" variant="halo" bordered={false} />
+      ) : document.data === null ? (
+        <EmptyState
+          icon={Plug}
+          title="MCP 配置读取失败"
+          description="文件系统暂不可用，请稍后重试。"
+          variant="halo"
+          bordered={false}
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={retryRead}>
+              重新读取
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-8">
+          {/* 服务器列表 */}
+          <div className="space-y-2">
+            {servers.map((server) => (
+              <ServerRow
+                key={server.id}
+                server={server}
+                active={selected?.id === server.id}
+                onSelect={() => setSelectedId(server.id)}
+                onUpdate={(updater) => updateServer(server.id, updater)}
+              />
+            ))}
+          </div>
 
-        {/* 选中项详情 (key=id: 切换 server 重挂, 清空测试结果) */}
-        {selected && (
-          <ServerDetail key={selected.id} server={selected} onDelete={() => remove(selected.id)} />
-        )}
-      </div>
+          {/* 选中项详情 (key=id: 切换 server 重挂, 清空测试结果) */}
+          {selected && (
+            <ServerDetail
+              key={selected.id}
+              server={selected}
+              onUpdate={(updater) => updateServer(selected.id, updater)}
+              onDelete={() => void remove(selected.id)}
+              onProbe={(serverId) =>
+                document.invoke<AgentMcpProbeResult>(AGENT_MCP_PROBE_ACTION, { serverId })
+              }
+            />
+          )}
+
+          {document.error ? (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+            >
+              <span>MCP 配置操作失败，请重新读取后再试。</span>
+              <Button type="button" variant="outline" size="sm" onClick={retryRead}>
+                重试读取
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* 添加服务器对话框 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -229,7 +319,9 @@ export default function AiMcp() {
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={submit}>添加</Button>
+            <Button onClick={() => void submit()} disabled={document.acting}>
+              {document.acting ? "正在添加…" : "添加"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -320,10 +412,12 @@ function ServerRow({
   server,
   active,
   onSelect,
+  onUpdate,
 }: {
   server: McpServer
   active: boolean
   onSelect: () => void
+  onUpdate: UpdateMcpServer
 }) {
   const isLoopback = server.transport === "loopback"
   const subtitle = isLoopback
@@ -342,7 +436,9 @@ function ServerRow({
           {isLoopback && <CountBadge>{CAPABILITY_OPTIONS.length}</CountBadge>}
           <Switch
             checked={server.enabled}
-            onChange={(v) => setMcpEnabled(server.id, v)}
+            onChange={(enabled) => {
+              void onUpdate((current) => ({ ...current, enabled })).catch(reportMcpWriteError)
+            }}
             label="启用"
           />
         </>
@@ -352,11 +448,26 @@ function ServerRow({
 }
 
 /** 选中项详情面板: 按传输分派 (loopback 无状态 / 外部带状态, 守 hooks 规则)。 */
-function ServerDetail({ server, onDelete }: { server: McpServer; onDelete: () => void }) {
+function ServerDetail({
+  server,
+  onUpdate,
+  onDelete,
+  onProbe,
+}: {
+  server: McpServer
+  onUpdate: UpdateMcpServer
+  onDelete: () => void
+  onProbe: (serverId: string) => Promise<AgentMcpProbeResult>
+}) {
   return server.transport === "loopback" ? (
     <LoopbackDetail />
   ) : (
-    <ExternalServerDetail server={server} onDelete={onDelete} />
+    <ExternalServerDetail
+      server={server}
+      onUpdate={onUpdate}
+      onDelete={onDelete}
+      onProbe={onProbe}
+    />
   )
 }
 
@@ -380,21 +491,35 @@ function LoopbackDetail() {
   )
 }
 
-function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelete: () => void }) {
+function ExternalServerDetail({
+  server,
+  onUpdate,
+  onDelete,
+  onProbe,
+}: {
+  server: McpServer
+  onUpdate: UpdateMcpServer
+  onDelete: () => void
+  onProbe: (serverId: string) => Promise<AgentMcpProbeResult>
+}) {
   const isStdio = server.transport === "stdio"
   const [probing, setProbing] = React.useState(false)
-  const [probe, setProbe] = React.useState<Awaited<ReturnType<typeof probeMcpServer>> | null>(null)
+  const [probe, setProbe] = React.useState<AgentMcpProbeResult | null>(null)
 
   async function test() {
     setProbing(true)
     setProbe(null)
     try {
-      setProbe(await probeMcpServer(server))
+      setProbe(await onProbe(server.id))
+    } catch {
+      setProbe({ ok: false, error: "文件系统无法执行连接测试" })
     } finally {
       setProbing(false)
     }
   }
-  const patchHeaders = (next: McpServer["headers"]) => saveMcpServer({ ...server, headers: next })
+  const patchHeaders = (headers: McpServer["headers"]) => {
+    void onUpdate((current) => ({ ...current, headers })).catch(reportMcpWriteError)
+  }
 
   // OAuth (手动粘贴授权码); forceAuthRefresh 在授权状态变化后强制重读 localStorage。
   const [, forceAuthRefresh] = React.useReducer((x: number) => x + 1, 0)
@@ -509,7 +634,7 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
             </SettingRow>
             <SettingRow label="参数">
               <span className="font-mono text-[13px] text-muted-foreground">
-                {server.args || "无"}
+                为保护本机配置，启动参数不在公开文件中显示
               </span>
             </SettingRow>
           </>
@@ -590,11 +715,15 @@ function ExternalServerDetail({ server, onDelete }: { server: McpServer; onDelet
             <Switch
               checked={server.auth === "oauth"}
               onChange={(v) => {
-                saveMcpServer({ ...server, auth: v ? "oauth" : "none" })
-                if (!v) {
-                  clearMcpAuth(server.id) // 关 OAuth 时清本地 token, 避免「已授权」假象与陈旧 token
-                  forceAuthRefresh()
-                }
+                void onUpdate((current) => ({ ...current, auth: v ? "oauth" : "none" }))
+                  .then(() => {
+                    if (!v) {
+                      // 关 OAuth 时清本地 token, 避免「已授权」假象与陈旧 token。
+                      clearMcpAuth(server.id)
+                      forceAuthRefresh()
+                    }
+                  })
+                  .catch(reportMcpWriteError)
               }}
               label="OAuth"
             />

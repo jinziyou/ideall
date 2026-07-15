@@ -20,8 +20,8 @@ import {
   getAgentSettings,
   hydrateAgentSettingsSecure,
   PROVIDER_PRESETS,
-  setAgentSettings,
 } from "../lib/agent-settings"
+import { persistAgentSettingsWithFileLock } from "../agent-settings-write-adapter"
 import { AcpSettings, getAcpSettings, setAcpSettings } from "../lib/acp/acp-settings"
 import { disableAcpServer, enableAcpServer, runExposeSelfTest } from "../lib/acp/acp-expose"
 import { detectAgents, type DetectedAgent } from "../lib/acp/acp-detect"
@@ -126,7 +126,12 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
       toast.error("请填写模型名")
       return
     }
-    setAgentSettings(next)
+    try {
+      await persistAgentSettingsWithFileLock(next)
+    } catch {
+      toast.error("API Key 安全存储失败，请重试")
+      return
+    }
 
     // ACP 暴露开关: 持久化并即时启停监听 (仅桌面 App; web/dev 仅存设置不起监听)。
     setAcpSettings(acp)

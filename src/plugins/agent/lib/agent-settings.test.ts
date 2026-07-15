@@ -2,20 +2,30 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { SECURE_STORE_KEYS, secureFallbackStorageKey } from "@/lib/secure-store"
 import {
+  AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY,
   AGENT_SETTINGS_STORAGE_KEY,
   LEGACY_AGENT_SETTINGS_STORAGE_KEY,
+  agentSettingsCredentialRevisionSnapshot,
   agentSettingsSecuritySnapshot,
+  clearAgentSettingsApiKey,
   getAgentSettings,
   hydrateAgentSettingsSecure,
+  isAgentSettingsCredentialConfigured,
+  setAgentSettingsApiKey,
   setAgentSettings,
+  subscribeAgentSettings,
 } from "./agent-settings"
-import { writeAgentPublicConfigSection } from "./agent-data-port"
+import { writeAgentPublicConfigFileSection, writeAgentPublicConfigSection } from "./agent-data-port"
 
 const mem = new Map<string, string>()
+let removeFailure: Error | null = null
 const localStorageStub: Storage = {
   getItem: (key: string) => (mem.has(key) ? mem.get(key)! : null),
   setItem: (key: string, value: string) => void mem.set(key, value),
-  removeItem: (key: string) => void mem.delete(key),
+  removeItem: (key: string) => {
+    if (removeFailure) throw removeFailure
+    mem.delete(key)
+  },
   clear: () => mem.clear(),
   key: (i: number) => [...mem.keys()][i] ?? null,
   get length() {
@@ -152,6 +162,97 @@ test("public settings write: baseURL 脱敏且 API Key 只在同 endpoint 保留
     defaultAgentMode: false,
     approvalPolicy: "auto",
   })
+  assert.equal(getAgentSettings().apiKey, "")
+  assert.equal(
+    mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY)),
+    undefined,
+  )
+})
+
+test("agent settings credential actions: await secure persistence before publishing status", async () => {
+  mem.clear()
+  const snapshots: boolean[] = []
+  const unsubscribe = subscribeAgentSettings(() => {
+    snapshots.push(isAgentSettingsCredentialConfigured())
+  })
+  const unsubscribeBroken = subscribeAgentSettings(() => {
+    throw new Error("listener failure")
+  })
+
+  await setAgentSettingsApiKey("sk-action-test")
+  assert.equal(isAgentSettingsCredentialConfigured(), true)
+  assert.equal(
+    mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY)),
+    "sk-action-test",
+  )
+
+  await clearAgentSettingsApiKey()
+  assert.equal(isAgentSettingsCredentialConfigured(), false)
+  assert.equal(
+    mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY)),
+    undefined,
+  )
+  assert.deepEqual(snapshots.slice(-2), [true, false])
+  unsubscribeBroken()
+  unsubscribe()
+})
+
+test("agent settings credential revision: persists monotonically without storing key material", async () => {
+  mem.clear()
+
+  await setAgentSettingsApiKey("sk-revision-A")
+  const first = agentSettingsCredentialRevisionSnapshot()
+  await setAgentSettingsApiKey("sk-revision-B")
+  const second = agentSettingsCredentialRevisionSnapshot()
+  await clearAgentSettingsApiKey()
+  const third = agentSettingsCredentialRevisionSnapshot()
+
+  assert.ok(BigInt(second) > BigInt(first))
+  assert.ok(BigInt(third) > BigInt(second))
+  assert.equal(mem.get(AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY), third)
+  assert.equal(first.includes("sk-revision-A"), false)
+  assert.equal(second.includes("sk-revision-B"), false)
+  assert.equal(mem.get(AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY)?.includes("sk-"), false)
+})
+
+test("agent settings FileSystem write: endpoint changes clear credentials before public commit", async () => {
+  mem.clear()
+  setAgentSettings({
+    baseURL: "https://old.example.test/v1",
+    model: "old-model",
+    apiKey: "",
+    includeHomeContext: true,
+    defaultAgentMode: true,
+    approvalPolicy: "confirm",
+  })
+  await setAgentSettingsApiKey("sk-target-bound")
+
+  removeFailure = new Error("secure delete unavailable")
+  try {
+    await assert.rejects(
+      writeAgentPublicConfigFileSection("settings", {
+        baseURL: "https://new.example.test/v1",
+        model: "new-model",
+        includeHomeContext: false,
+        defaultAgentMode: false,
+        approvalPolicy: "auto",
+      }),
+      /secure delete unavailable/,
+    )
+    assert.equal(getAgentSettings().baseURL, "https://old.example.test/v1")
+    assert.equal(getAgentSettings().apiKey, "sk-target-bound")
+  } finally {
+    removeFailure = null
+  }
+
+  await writeAgentPublicConfigFileSection("settings", {
+    baseURL: "https://new.example.test/v1",
+    model: "new-model",
+    includeHomeContext: false,
+    defaultAgentMode: false,
+    approvalPolicy: "auto",
+  })
+  assert.equal(getAgentSettings().baseURL, "https://new.example.test/v1")
   assert.equal(getAgentSettings().apiKey, "")
   assert.equal(
     mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY)),

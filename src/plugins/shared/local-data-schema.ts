@@ -18,6 +18,19 @@ export type LocalDataSchema = {
   parseAs?: "json" | "text"
   validate?: (value: unknown, raw: string) => string[]
   repair?: (value: unknown, raw: string) => LocalDataSchemaRepairPatch | null
+  /**
+   * Owner 可把 fresh inspect → repair → apply → inspect 放进自己的规范 mutation 锁域。
+   * 注入 Storage 主要用于诊断测试；hook 可据此保留通用的直接写入语义。
+   */
+  repairMutation?: <T>(
+    operation: () => Promise<T>,
+    context: LocalDataSchemaRepairOwnerContext,
+  ) => Promise<T>
+  /** Owner 已有耐久 store 时通过该入口提交，避免共享层绕过 revision/失效协议。 */
+  applyRepair?: (
+    patch: LocalDataSchemaRepairPatch,
+    context: LocalDataSchemaRepairApplyContext,
+  ) => void | Promise<void>
 }
 
 export type LocalDataSchemaRepairPatch =
@@ -41,7 +54,17 @@ export type LocalDataSchemaInspection = {
 }
 
 type StorageLike = Pick<Storage, "getItem">
-type MutableStorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">
+export type MutableStorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">
+
+export type LocalDataSchemaRepairOwnerContext = Readonly<{
+  storage: MutableStorageLike
+  storageInjected: boolean
+}>
+
+export type LocalDataSchemaRepairApplyContext = LocalDataSchemaRepairOwnerContext &
+  Readonly<{
+    applyDefault(): void
+  }>
 
 export type IndexedDbListing = { name?: string | null; version?: number | null }
 
@@ -410,10 +433,10 @@ export async function repairLocalDataSchema(
 ): Promise<LocalDataSchemaRepairResult> {
   const schema = schemas.get(id)
   if (!schema) throw new Error(`未知 schema: ${id}`)
-  const before = await (schema.storage === "indexedDB"
-    ? inspectIndexedDbSchema(schema, {})
-    : Promise.resolve(inspectStorageSchema(schema, input)))
   if (!schema.repair || schema.storage === "indexedDB") {
+    const before = await (schema.storage === "indexedDB"
+      ? inspectIndexedDbSchema(schema, {})
+      : Promise.resolve(inspectStorageSchema(schema, input)))
     return {
       id: schema.id,
       label: schema.label,
@@ -424,6 +447,7 @@ export async function repairLocalDataSchema(
   }
   const storage = mutableStorageForSchema(schema, input)
   if (!storage) {
+    const before = inspectStorageSchema(schema, input)
     return {
       id: schema.id,
       label: schema.label,
@@ -432,37 +456,56 @@ export async function repairLocalDataSchema(
       before,
     }
   }
-  if (!["warning", "error"].includes(before.status)) {
-    return {
-      id: schema.id,
-      label: schema.label,
-      ok: true,
-      detail: "无需修复",
-      before,
-      after: before,
-    }
+  const ownerContext: LocalDataSchemaRepairOwnerContext = {
+    storage,
+    storageInjected:
+      schema.storage === "localStorage"
+        ? input.localStorage !== undefined
+        : input.sessionStorage !== undefined,
   }
+  const repair = async (): Promise<LocalDataSchemaRepairResult> => {
+    // 必须在 owner mutation hook 内重新 inspect；锁外的诊断快照不能作为提交基线。
+    const before = inspectStorageSchema(schema, input)
+    if (!["warning", "error"].includes(before.status)) {
+      return {
+        id: schema.id,
+        label: schema.label,
+        ok: true,
+        detail: "无需修复",
+        before,
+        after: before,
+      }
+    }
 
-  const raw = storage.getItem(schema.key)
-  let parsed: unknown = raw ?? ""
-  if (schema.parseAs === "json" && raw) {
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      parsed = undefined
+    const raw = storage.getItem(schema.key)
+    let parsed: unknown = raw ?? ""
+    if (schema.parseAs === "json" && raw) {
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        parsed = undefined
+      }
     }
+    const patch =
+      before.status === "error" && parsed === undefined
+        ? schema.repair!(undefined, raw ?? "")
+        : schema.repair!(parsed, raw ?? "")
+    if (!patch) {
+      return { id: schema.id, label: schema.label, ok: false, detail: "没有可执行修复", before }
+    }
+    const applyDefault = () => {
+      if (patch.action === "remove") storage.removeItem(schema.key)
+      else storage.setItem(schema.key, encodeRepairValue(schema, patch.value))
+    }
+    if (schema.applyRepair) {
+      await schema.applyRepair(patch, { ...ownerContext, applyDefault })
+    } else {
+      applyDefault()
+    }
+    const after = inspectStorageSchema(schema, input)
+    return { id: schema.id, label: schema.label, ok: true, detail: patch.detail, before, after }
   }
-  const patch =
-    before.status === "error" && parsed === undefined
-      ? schema.repair(undefined, raw ?? "")
-      : schema.repair(parsed, raw ?? "")
-  if (!patch) {
-    return { id: schema.id, label: schema.label, ok: false, detail: "没有可执行修复", before }
-  }
-  if (patch.action === "remove") storage.removeItem(schema.key)
-  else storage.setItem(schema.key, encodeRepairValue(schema, patch.value))
-  const after = inspectStorageSchema(schema, input)
-  return { id: schema.id, label: schema.label, ok: true, detail: patch.detail, before, after }
+  return schema.repairMutation ? schema.repairMutation(repair, ownerContext) : repair()
 }
 
 export async function repairLocalDataSchemas(

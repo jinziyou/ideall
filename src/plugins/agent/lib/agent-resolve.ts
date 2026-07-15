@@ -5,12 +5,14 @@
 import { toExternalServer, type ConnectAgentOpts } from "./agent-mcp"
 import type { AgentWorkspace } from "./agent-workspace"
 import {
+  getWorkspace,
   homeSelectionOf,
   hydrateAgentWorkspaceSecretsSecure,
   resolveModel,
   workspaceRulesText,
 } from "./agent-workspace"
 import { getMcpServers, LOOPBACK_ID } from "./agent-mcp-registry"
+import { hydrateAgentSettingsSecure } from "./agent-settings"
 import { resolveSkills } from "./agent-skills"
 import {
   assembleSystemPrompt,
@@ -37,7 +39,12 @@ export async function resolveWorkspaceRun(
   useAgent: boolean,
 ): Promise<ResolvedRun | null> {
   await hydrateAgentWorkspaceSecretsSecure()
-  const m = resolveModel(ws)
+  // 水合会先按耐久 revision 刷新；随后必须按稳定 id 重取，不能继续使用调用前的旧 render 快照。
+  const currentWorkspace = getWorkspace(ws.id)
+  if (!currentWorkspace) return null
+  // 全局模型的 API key 也来自 secure-store；冷启动不能依赖 getAgentSettings 的后台水合。
+  if (currentWorkspace.model.useGlobal) await hydrateAgentSettingsSecure()
+  const m = resolveModel(currentWorkspace)
   if (!m.apiKey.trim() || !m.baseURL.trim() || !m.model.trim()) return null
 
   // MCP 注册表 → 本次运行的工具源: loopback 开关 + 启用的外部 server (sse/http/stdio)。
@@ -52,24 +59,24 @@ export async function resolveWorkspaceRun(
     )
     .map(toExternalServer)
   // 自动技能 (本工作区可用 + invocation:auto) → 合成工具供模型自调用。
-  const autoSkills = resolveSkills(ws.capabilities.skillIds)
+  const autoSkills = resolveSkills(currentWorkspace.capabilities.skillIds)
     .filter((s) => s.invocation === "auto")
     .map((s) => ({ id: s.id, name: s.label, description: s.hint, prompt: s.prompt }))
 
   const mcp: ConnectAgentOpts = {
-    permissions: ws.capabilities.permissions,
-    toolAllowlist: ws.capabilities.toolAllowlist,
+    permissions: currentWorkspace.capabilities.permissions,
+    toolAllowlist: currentWorkspace.capabilities.toolAllowlist,
     loopbackEnabled: loopback ? loopback.enabled : true,
     externalServers,
     autoSkills,
   }
 
   // 精确模式「原样发送」: 直接用用户编辑后的最终提示 (冻结快照, 不再取数)。
-  if (ws.prompt.precise && ws.prompt.override.trim()) {
-    return { ...m, system: ws.prompt.override, mcp }
+  if (currentWorkspace.prompt.precise && currentWorkspace.prompt.override.trim()) {
+    return { ...m, system: currentWorkspace.prompt.override, mcp }
   }
 
-  const sel = homeSelectionOf(ws)
+  const sel = homeSelectionOf(currentWorkspace)
   let homeContext = ""
   let referenced = ""
   let browser = ""
@@ -92,13 +99,13 @@ export async function resolveWorkspaceRun(
       homeContext,
       referenced,
       browser,
-      instructions: ws.prompt.instructions,
-      rules: workspaceRulesText(ws),
+      instructions: currentWorkspace.prompt.instructions,
+      rules: workspaceRulesText(currentWorkspace),
       examples: "",
       // 可用技能 (auto): 普通对话感知 + 智能体模式合成「应用技能」(use_skill) 工具供模型按描述选用。
       skills: autoSkills.map((s) => ({ name: s.name, description: s.description })),
     }),
-    ws.prompt.template,
+    currentWorkspace.prompt.template,
   )
   return { ...m, system, mcp }
 }

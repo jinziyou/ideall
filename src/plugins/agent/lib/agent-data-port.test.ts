@@ -1,5 +1,8 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
+import { registerFilesPort, type FilesPort, type ThreadTask } from "@protocol/files"
+import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
+import { withFileWriteLock } from "@/filesystem/write-lock"
 import {
   AGENT_DATA_SPEC,
   AGENT_EXPORT_KIND,
@@ -18,14 +21,17 @@ import { AGENT_SETTINGS_STORAGE_KEY, getAgentSettings, setAgentSettings } from "
 import { AGENT_SECRETS_STORAGE_KEY } from "./agent-secrets"
 import {
   AGENT_WORKSPACES_STORAGE_KEY,
-  createWorkspace,
   getActiveWorkspace,
   getWorkspace,
   getWorkspacesState,
   resolveModel,
-  saveWorkspace,
   type WorkspacesState,
 } from "./agent-workspace"
+import {
+  createWorkspace,
+  updateWorkspace,
+  withAgentWorkspaceFileWriteLocks,
+} from "../agent-workspace-write-adapter"
 import { AGENT_MCP_STORAGE_KEY } from "./agent-mcp-registry"
 import type { McpServer } from "./agent-mcp-registry"
 import { AGENT_RULES_STORAGE_KEY, activeRulesText, getRules, type AgentRule } from "./agent-rules"
@@ -48,6 +54,14 @@ Object.defineProperty(globalThis, "localStorage", {
   value: localStorageStub,
   configurable: true,
 })
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 test("public config section registry: file definitions are complete, ordered, and unique", () => {
   assert.deepEqual(
@@ -443,25 +457,35 @@ test("public config data port: skills write uses the real store and subscription
   assert.ok(skills.some((skill) => skill.id === "summarize-active" && skill.builtin))
 })
 
-test("public config data port: workspace API Key is target-bound to model endpoint", () => {
+test("public config data port: workspace API Key is target-bound to model endpoint", async () => {
   let workspace = getActiveWorkspace()
-  if (!workspace) workspace = createWorkspace("安全测试")
-  saveWorkspace({
-    ...workspace,
+  if (!workspace) workspace = await createWorkspace("安全测试")
+  await updateWorkspace(workspace.id, (current) => ({
+    ...current,
     model: {
       useGlobal: false,
       baseURL: "https://api.example.test/v1",
       model: "m",
       apiKey: "workspace-key",
     },
-  })
+  }))
   const secureKey = secureFallbackStorageKey(`ideall:agent:workspace:${workspace.id}:apiKey`)
-  assert.equal(mem.get(secureKey), "workspace-key")
+  const configuredEnvelope = JSON.parse(mem.get(AGENT_WORKSPACES_STORAGE_KEY) ?? "null") as {
+    _revision: string
+  }
+  assert.deepEqual(JSON.parse(mem.get(secureKey) ?? "null"), {
+    version: 2,
+    target: "https://api.example.test/v1",
+    apiKey: "workspace-key",
+    revision: configuredEnvelope._revision,
+  })
 
   const sameOrigin = readAgentPublicConfigSection("workspaces") as WorkspacesState
   sameOrigin.workspaces[0].model.baseURL =
     "https://user:pass@api.example.test/v1?key=query-secret#fragment-secret"
-  writeAgentPublicConfigSection("workspaces", sameOrigin)
+  await withAgentWorkspaceFileWriteLocks(() =>
+    writeAgentPublicConfigSection("workspaces", sameOrigin),
+  )
   const preserved = getWorkspace(workspace.id)
   assert.ok(preserved)
   assert.equal(preserved.model.baseURL, "https://api.example.test/v1")
@@ -469,11 +493,21 @@ test("public config data port: workspace API Key is target-bound to model endpoi
 
   const redirected = readAgentPublicConfigSection("workspaces") as WorkspacesState
   redirected.workspaces[0].model.baseURL = "https://api.example.test/v2"
-  writeAgentPublicConfigSection("workspaces", redirected)
+  await withAgentWorkspaceFileWriteLocks(() =>
+    writeAgentPublicConfigSection("workspaces", redirected),
+  )
   const changed = getWorkspace(workspace.id)
   assert.ok(changed)
   assert.equal(resolveModel(changed).apiKey, "")
-  assert.equal(mem.get(secureKey), undefined)
+  const redirectedEnvelope = JSON.parse(mem.get(AGENT_WORKSPACES_STORAGE_KEY) ?? "null") as {
+    _revision: string
+  }
+  assert.deepEqual(JSON.parse(mem.get(secureKey) ?? "null"), {
+    version: 2,
+    target: null,
+    apiKey: "",
+    revision: redirectedEnvelope._revision,
+  })
 })
 
 function validRule(id: string): AgentRule {
@@ -491,8 +525,8 @@ function validRule(id: string): AgentRule {
   }
 }
 
-test("public config data port: malformed sections and duplicate ids are atomically rejected", () => {
-  if (getWorkspacesState().workspaces.length === 0) createWorkspace("校验测试")
+test("public config data port: malformed sections and duplicate ids are atomically rejected", async () => {
+  if (getWorkspacesState().workspaces.length === 0) await createWorkspace("校验测试")
   const workspace = readAgentPublicConfigSection("workspaces") as WorkspacesState
   ;(workspace.workspaces[0].data.home as unknown as { files: unknown }).files = "yes"
 
@@ -588,4 +622,70 @@ test("agent config import: validates every public section before committing any 
   await assert.rejects(() => importAgentConfigJson(JSON.stringify(pack)))
   assert.deepEqual(getAgentSettings(), beforeSettings)
   assert.equal(JSON.stringify(getRules()), beforeRules)
+})
+
+test("public config data port: task writes retain the caller lock until Storage settles", async () => {
+  const task: ThreadTask = {
+    id: "thread-async-write",
+    workspaceId: "workspace-async-write",
+    status: "active",
+    starred: false,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const replaceEntered = deferred<void>()
+  const replaceResult = deferred<{ revision: number; tasks: ThreadTask[] }>()
+  const unregister = registerFilesPort({
+    async migrateLegacyThreadTasks(tasks) {
+      return {
+        revision: 41,
+        tasks: [...tasks],
+        migrated: false,
+        imported: 0,
+        skipped: tasks.length,
+      }
+    },
+    async replaceThreadTasks(tasks, expectedRevision) {
+      assert.equal(expectedRevision, 41)
+      assert.deepEqual(tasks, [task])
+      replaceEntered.resolve()
+      return replaceResult.promise
+    },
+  } as FilesPort)
+
+  let writeSettled = false
+  let competingWriterEntered = false
+  let write: Promise<void> | undefined
+  let competingWriter: Promise<void> | undefined
+  try {
+    write = withFileWriteLock(AGENT_TASKS_FILE_REF, () =>
+      writeAgentPublicConfigSection("tasks", [task]),
+    )
+    void write.then(
+      () => {
+        writeSettled = true
+      },
+      () => {
+        writeSettled = true
+      },
+    )
+    await replaceEntered.promise
+
+    competingWriter = withFileWriteLock(AGENT_TASKS_FILE_REF, () => {
+      competingWriterEntered = true
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(writeSettled, false)
+    assert.equal(competingWriterEntered, false)
+
+    replaceResult.resolve({ revision: 42, tasks: [task] })
+    await Promise.all([write, competingWriter])
+    assert.equal(writeSettled, true)
+    assert.equal(competingWriterEntered, true)
+  } finally {
+    replaceResult.resolve({ revision: 42, tasks: [task] })
+    await Promise.allSettled([write, competingWriter].filter((item) => item !== undefined))
+    unregister()
+  }
 })

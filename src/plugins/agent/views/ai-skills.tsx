@@ -5,20 +5,16 @@
 
 import * as React from "react"
 import { Sparkles } from "lucide-react"
+import { toast } from "sonner"
+import { genId } from "@/lib/id"
+import { useFileDocument } from "@/shared/use-file-document"
 import { Chip } from "@/ui/chip"
 import { Panel } from "@/ui/panel"
 import { Switch } from "@/ui/switch"
 
-import {
-  getSkills,
-  subscribeSkills,
-  getServerSkills,
-  createSkill,
-  saveSkill,
-  setSkillEnabled,
-  deleteSkill,
-  type AgentSkill,
-} from "../lib/agent-skills"
+import { agentConfigFileRef } from "../agent-config-file-system"
+import { decodeAgentSkills } from "../lib/agent-config-codecs"
+import type { AgentSkill } from "../lib/agent-skills"
 import { AddButton, AiPage, ListRow } from "./ui-kit"
 import { EmptyState } from "@/ui/empty-state"
 
@@ -29,18 +25,72 @@ import { Label } from "@/ui/label"
 import { Textarea } from "@/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
 
-export default function AiSkills() {
-  const skills = React.useSyncExternalStore(subscribeSkills, getSkills, getServerSkills)
-  const [selectedId, setSelectedId] = React.useState<string | null>(() => skills[0]?.id ?? null)
+const SKILLS_FILE_REF = agentConfigFileRef("skills")
 
-  const selected = React.useMemo<AgentSkill | null>(
-    () => skills.find((s) => s.id === selectedId) ?? null,
-    [skills, selectedId],
-  )
+function createCustomSkill(): AgentSkill {
+  return {
+    id: genId("skill"),
+    label: "新技能",
+    hint: "",
+    prompt: "",
+    needsActiveNode: undefined,
+    agentMode: undefined,
+    builtin: false,
+    enabled: true,
+    invocation: "auto",
+  }
+}
+
+function reportSkillsWriteError(error: unknown): void {
+  toast.error("技能配置保存失败", {
+    id: "agent-skills-write-error",
+    description: error instanceof Error ? error.message : String(error),
+  })
+}
+
+export default function AiSkills() {
+  const document = useFileDocument(SKILLS_FILE_REF, decodeAgentSkills)
+  const updateSkills = document.update
+  const skills = document.data ?? []
+  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+
+  const selected: AgentSkill | null =
+    skills.find((skill) => skill.id === selectedId) ?? skills[0] ?? null
 
   function patch(field: Partial<AgentSkill>) {
     if (!selected) return
-    saveSkill({ ...selected, ...field })
+    const id = selected.id
+    void updateSkills((current) =>
+      current.map((skill) =>
+        skill.id === id ? { ...skill, ...field, id, builtin: skill.builtin } : skill,
+      ),
+    ).catch(reportSkillsWriteError)
+  }
+
+  function addSkill() {
+    const created = createCustomSkill()
+    void updateSkills((current) => [...current, created])
+      .then(() => setSelectedId(created.id))
+      .catch(reportSkillsWriteError)
+  }
+
+  function toggleSkill(id: string, enabled: boolean) {
+    void updateSkills((current) =>
+      current.map((skill) => (skill.id === id ? { ...skill, enabled } : skill)),
+    ).catch(reportSkillsWriteError)
+  }
+
+  function removeSkill(id: string) {
+    void updateSkills((current) =>
+      current.filter((skill) => skill.id !== id || skill.builtin === true),
+    )
+      .then(() => setSelectedId((current) => (current === id ? null : current)))
+      .catch(reportSkillsWriteError)
+  }
+
+  function retryLoad() {
+    document.clearError()
+    void document.refresh().catch(() => {})
   }
 
   return (
@@ -48,30 +98,35 @@ export default function AiSkills() {
       title="Skills"
       icon={Sparkles}
       action={
-        <AddButton
-          label="新建技能"
-          onClick={() => {
-            const s = createSkill({ label: "新技能" })
-            setSelectedId(s.id)
-          }}
-        />
+        <>
+          {document.saving ? <Chip tone="neutral">保存中</Chip> : null}
+          {document.error ? <Chip tone="error">操作失败</Chip> : null}
+          {document.data !== null ? <AddButton label="新建技能" onClick={addSkill} /> : null}
+        </>
       }
     >
-      {skills.length === 0 ? (
+      {document.loading && document.data === null ? (
+        <EmptyState icon={Sparkles} title="正在读取技能…" variant="halo" bordered={false} />
+      ) : document.data === null ? (
+        <EmptyState
+          icon={Sparkles}
+          title="技能配置读取失败"
+          description="请检查文件系统状态后重试。"
+          variant="halo"
+          bordered={false}
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={retryLoad}>
+              重试
+            </Button>
+          }
+        />
+      ) : skills.length === 0 ? (
         <EmptyState
           icon={Sparkles}
           title="还没有技能"
           variant="halo"
           bordered={false}
-          action={
-            <AddButton
-              label="新建技能"
-              onClick={() => {
-                const s = createSkill({ label: "新技能" })
-                setSelectedId(s.id)
-              }}
-            />
-          }
+          action={<AddButton label="新建技能" onClick={addSkill} />}
         />
       ) : (
         <div className="space-y-8">
@@ -90,7 +145,7 @@ export default function AiSkills() {
                     <Chip tone="neutral">{skill.invocation === "manual" ? "手动" : "自动"}</Chip>
                     <Switch
                       checked={skill.enabled !== false}
-                      onChange={(v) => setSkillEnabled(skill.id, v)}
+                      onChange={(enabled) => toggleSkill(skill.id, enabled)}
                       label={`启用 ${skill.label}`}
                     />
                   </>
@@ -104,14 +159,7 @@ export default function AiSkills() {
               title={selected.label || "未命名技能"}
               action={
                 !selected.builtin ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      deleteSkill(selected.id)
-                      setSelectedId(null)
-                    }}
-                  >
+                  <Button variant="destructive" size="sm" onClick={() => removeSkill(selected.id)}>
                     删除
                   </Button>
                 ) : undefined
@@ -190,6 +238,18 @@ export default function AiSkills() {
               </div>
             </Panel>
           )}
+
+          {document.error ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+            >
+              <span>技能配置操作失败，已保留最近一次可用内容。</span>
+              <Button type="button" variant="outline" size="sm" onClick={retryLoad}>
+                重试
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </AiPage>

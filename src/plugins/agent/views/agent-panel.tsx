@@ -16,13 +16,13 @@ import type { AgentMessage, AgentThread, AgentToolEvent } from "../lib/model"
 import type { ResolvedRun } from "../lib/agent-resolve"
 import {
   createThread,
-  deleteThread,
   getThread,
   listThreads,
   makeMessage,
   saveThread,
   titleFromMessage,
 } from "../lib/agent-store"
+import { deleteTaskOrThread } from "../agent-task-write-adapter"
 import {
   getAgentSettings,
   hydrateAgentSettingsSecure,
@@ -59,6 +59,9 @@ export interface AgentPanelProps {
   skills?: AgentSkill[]
   onOpenSettings?: () => void
   scopeIds?: string[]
+  createScopedThread?: () => Promise<AgentThread>
+  deleteScopedThread?: (id: string) => Promise<void>
+  /** @deprecated 使用 createScopedThread；保留给尚未迁移的嵌入调用方。 */
   onThreadCreated?: (id: string) => void
   newLabel?: string
   emptyLabel?: string
@@ -74,6 +77,8 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
     skills = BUILTIN_SKILLS,
     onOpenSettings,
     scopeIds,
+    createScopedThread,
+    deleteScopedThread,
     onThreadCreated,
     newLabel = "新对话",
     emptyLabel = "还没有对话",
@@ -210,9 +215,10 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
   async function removeThread(id: string) {
     if (sendingRef.current) return
     try {
-      await deleteThread(id)
-    } catch {
-      /* 忽略 */
+      await (deleteScopedThread ?? deleteTaskOrThread)(id)
+    } catch (error) {
+      toast.error("无法删除对话", { description: String(error) })
+      return
     }
     if (id === activeId) {
       setActiveId(null)
@@ -247,10 +253,12 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
 
     let thread: AgentThread
     let createdNew = false
+    let createdThreadId: string | null = null
     try {
       if (!activeId) {
-        const created = await createThread()
+        const created = await (createScopedThread ?? createThread)()
         createdNew = true
+        createdThreadId = created.id
         thread = { ...created, title: titleFromMessage(text), messages: convo }
       } else {
         const existing = await getThread(activeId)
@@ -258,7 +266,9 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
           thread = { ...existing, messages: convo }
         } else {
           createdNew = true
-          thread = { ...(await createThread()), title: titleFromMessage(text), messages: convo }
+          const created = await (createScopedThread ?? createThread)()
+          createdThreadId = created.id
+          thread = { ...created, title: titleFromMessage(text), messages: convo }
         }
       }
       await saveThread(thread)
@@ -266,6 +276,13 @@ const AgentPanel = React.forwardRef<AgentPanelHandle, AgentPanelProps>(function 
       if (createdNew) onThreadCreated?.(thread.id)
       refreshThreads()
     } catch (e) {
+      if (createdThreadId) {
+        try {
+          await (deleteScopedThread ?? deleteTaskOrThread)(createdThreadId)
+        } catch {
+          // 保留原始保存错误；残留项仍在列表中可见并可重试删除。
+        }
+      }
       toast.error("无法保存对话", { description: String(e) })
       sendingRef.current = false
       return
