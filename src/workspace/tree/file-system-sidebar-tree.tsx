@@ -19,16 +19,22 @@ import {
   type FileRef,
   type IdeallFile,
 } from "@protocol/file-system"
-import { readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
+import { readFileDirectory, watchFile } from "@/filesystem/registry"
+import {
+  projectDirectoryEntryMetadata,
+  resolveDirectoryEntryMetadata,
+  type DirectoryEntryMetadata,
+} from "@/filesystem/directory-metadata"
 import type { IdeallPath } from "@/filesystem/path"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
+import { useIncrementalList } from "@/lib/use-incremental-list"
 import { openTarget } from "../store"
 import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import { readAllDirectoryEntries } from "./directory-pagination"
 import { fileCanExpand } from "./file-tree-expansion"
 import { navigationEntryPath } from "./navigation-tree-path"
 
-type LoadedEntry = { entry: DirectoryEntry; file: IdeallFile | null }
+type LoadedEntry = DirectoryEntryMetadata
 
 function fileIcon(file: IdeallFile | null) {
   if (!file) return File
@@ -78,7 +84,7 @@ export function FileSystemTreeChildren({
     setLoading(true)
     setError(false)
     const directoryRef = { fileSystemId, fileId }
-    readAllDirectoryEntries((options) =>
+    void readAllDirectoryEntries((options) =>
       readFileDirectory(
         directoryRef,
         { actor: "ui", permissions: [], intent: "directory" },
@@ -89,18 +95,17 @@ export function FileSystemTreeChildren({
         const visibleEntries = directoryEntries.filter(
           (entry) => entry.properties?.navigationHidden !== true,
         )
-        const loaded = await Promise.all(
-          visibleEntries.map(async (entry) => ({
-            entry,
-            file:
-              entry.file && sameFileRef(entry.file.ref, entry.target)
-                ? entry.file
-                : await statFile(entry.target, {
-                    actor: "ui",
-                    permissions: [],
-                    intent: "metadata",
-                  }).catch(() => null),
-          })),
+        const projected = projectDirectoryEntryMetadata(visibleEntries)
+        if (alive) {
+          setItems(projected)
+          setLoading(false)
+        }
+        const loaded = await resolveDirectoryEntryMetadata(
+          projected,
+          { actor: "ui", permissions: [], intent: "metadata" },
+          (next) => {
+            if (alive) setItems([...next])
+          },
         )
         if (alive) setItems(loaded)
       })
@@ -127,25 +132,36 @@ export function FileSystemTreeChildren({
     }
   }, [fileId, fileSystemId])
 
+  const { visible, hasMore, sentinelRef, total } = useIncrementalList(items, {
+    pageSize: 80,
+    resetKey: `${fileSystemId}\u0000${fileId}\u0000${revision}`,
+  })
+
   if (loading) return <div className="mx-2 my-1 h-7 animate-pulse rounded bg-muted/50" />
   if (error) return <p className="px-3 py-2 text-xs text-muted-foreground">文件系统暂不可用</p>
   if (items.length === 0) return <p className="px-3 py-2 text-xs text-muted-foreground">暂无文件</p>
 
-  return items.map(({ entry, file }) => (
-    <FileTreeRow
-      key={entry.entryId}
-      entry={entry}
-      file={file}
-      depth={depth}
-      activeRef={activeRef}
-      rootId={rootId}
-      expanded={expanded}
-      onSetExpanded={onSetExpanded}
-      refreshKey={`${refreshKey}:${revision}`}
-      navigationBasePath={navigationBasePath}
-      onOpen={onOpen}
-    />
-  ))
+  return (
+    <>
+      {visible.map(({ entry, file }) => (
+        <FileTreeRow
+          key={entry.entryId}
+          entry={entry}
+          file={file}
+          depth={depth}
+          activeRef={activeRef}
+          rootId={rootId}
+          expanded={expanded}
+          onSetExpanded={onSetExpanded}
+          refreshKey={`${refreshKey}:${revision}`}
+          navigationBasePath={navigationBasePath}
+          onOpen={onOpen}
+          deferOffscreen={total > 80}
+        />
+      ))}
+      {hasMore ? <div ref={sentinelRef} className="h-px" aria-hidden /> : null}
+    </>
+  )
 }
 
 function FileTreeRow({
@@ -159,6 +175,7 @@ function FileTreeRow({
   refreshKey,
   navigationBasePath,
   onOpen,
+  deferOffscreen,
 }: {
   entry: DirectoryEntry
   file: IdeallFile | null
@@ -170,6 +187,7 @@ function FileTreeRow({
   refreshKey: string
   navigationBasePath?: IdeallPath
   onOpen?: (file: IdeallFile, expandable: boolean) => void
+  deferOffscreen: boolean
 }) {
   const Icon = fileIcon(file)
   const expandable = fileCanExpand(file)
@@ -234,6 +252,7 @@ function FileTreeRow({
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
         className={cn(
           "group flex cursor-pointer items-center gap-1 rounded-shell py-1.5 pr-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          deferOffscreen && "[contain-intrinsic-size:32px] [content-visibility:auto]",
           active
             ? "bg-primary/10 font-medium text-primary"
             : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",

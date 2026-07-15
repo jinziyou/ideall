@@ -31,13 +31,15 @@ import {
 } from "../capability-surfaces"
 import { planTransientTabOpen } from "../tab-lifecycle"
 import { getFileSystem, statFile, subscribeFileSystems } from "@/filesystem/registry"
+import { rememberFileMetadata } from "@/filesystem/metadata-cache"
+import { navigationDirectoryRef } from "@/filesystem/navigation-file-system"
 import { directoryEntryPreferredEngine } from "@/filesystem/directory-entry"
 import { ideallPathSegments, resolveIdeallPath, type IdeallPath } from "@/filesystem/path"
 import { aiTasksPanelFileRef, panelFileRef } from "@/filesystem/resource-file-system"
 import { engineRegistry } from "@/engines/builtin"
 import { enginePreferencesStorageKey, readEnginePreferences } from "@/engines/preferences"
 import { openEngineWindow } from "@/lib/engine-window"
-import { fileRefKey, sameFileRef, type FileRef } from "@protocol/file-system"
+import { fileRefKey, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import { activateAgentWorkspaceBeforeOpen } from "../agent-workspace-navigation"
 import { openTab, type OpenTabOptions } from "./tab-lifecycle"
 import {
@@ -175,6 +177,7 @@ async function openFileTarget(
         ? hintedFile
         : await statFile(target.ref, { actor: "ui", permissions: [], intent: "metadata" })
     if (!file || !canCommit()) return false
+    rememberFileMetadata(file)
 
     // stat 期间工作区可能切换；无显式 Engine 时按当前场景重新解析。
     const workspaceKind = workspaceState().workspaceKind
@@ -337,7 +340,7 @@ export function openTarget(target: OpenTarget, source: ActiveSource = "user"): b
   }
 }
 
-export function toggleFileRoot(rootId: string, path?: IdeallPath): void {
+export function toggleFileRoot(rootId: string, path?: IdeallPath, file?: IdeallFile): void {
   invalidatePendingFileOpen()
   const state = workspaceState()
   const root = coreFileRoot(rootId)
@@ -351,10 +354,26 @@ export function toggleFileRoot(rootId: string, path?: IdeallPath): void {
     sidebarCollapsed: false,
     activeSource: "user",
   })
-  void openPathTarget(
-    { type: "path", path: path ?? root.defaultPath, transient: true, rootId: root.id },
-    "user",
-  )
+  const navigationPath = path ?? root.defaultPath
+  if (file && sameFileRef(file.ref, navigationDirectoryRef(root.id))) {
+    void openFileTarget(
+      {
+        type: "file",
+        ref: file.ref,
+        file,
+        engineId: "ideall.directory",
+        transient: true,
+        rootId: root.id,
+        navigationPath,
+      },
+      "user",
+    )
+  } else {
+    void openPathTarget(
+      { type: "path", path: navigationPath, transient: true, rootId: root.id },
+      "user",
+    )
+  }
 }
 
 export function toggleMountedFileRoot(ref: FileRef): void {

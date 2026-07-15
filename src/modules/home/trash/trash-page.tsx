@@ -23,6 +23,7 @@ import { fileRefKey, type FileRef } from "@protocol/file-system"
 import { trashItemRef, trashRootRef, type TrashFileItem } from "@/filesystem/trash-file-system"
 import { invokeFileAction, watchFile } from "@/filesystem/registry"
 import { readCompleteDirectory } from "@/filesystem/directory-walk"
+import { useTabActive } from "@/workspace/tab-active-context"
 import {
   createTrashEmptyConfirmationRequestGate,
   prepareTrashEmptyConfirmation,
@@ -103,6 +104,7 @@ function KindIcon({ item }: { item: TrashFileItem }) {
 }
 
 export default function TrashPage({ rootRef = trashRootRef }: { rootRef?: FileRef } = {}) {
+  const active = useTabActive()
   const rootFileSystemId = rootRef.fileSystemId
   const rootFileId = rootRef.fileId
   const stableRootRef = React.useMemo<FileRef>(
@@ -189,6 +191,7 @@ export default function TrashPage({ rootRef = trashRootRef }: { rootRef?: FileRe
   )
 
   React.useEffect(() => {
+    if (!active) return
     const confirmationRequests = emptyConfirmationRequests.current
     const coordinator = refreshCoordinator.current
     const target = coordinator.activate(rootKey)
@@ -201,7 +204,7 @@ export default function TrashPage({ rootRef = trashRootRef }: { rootRef?: FileRe
       confirmationRequests.cancel()
       handle?.dispose()
     }
-  }, [refresh, rootKey, stableRootRef])
+  }, [active, refresh, rootKey, stableRootRef])
 
   function cancelEmptyConfirmationPreparation() {
     emptyConfirmationRequests.current.cancel()

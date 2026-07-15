@@ -10,7 +10,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { isTauri, browserRelease } from "@/lib/tauri"
-import { useTabs, useActiveId, useDirtyTabIds, useSuspendReadyTabIds } from "./store"
+import { useTabs, useActiveId, useDirtyTabIds, useLru, useSuspendReadyTabIds } from "./store"
 import { TabContent, tabLayout } from "./registry"
 import { TabActiveContext } from "./tab-active-context"
 import { tabElId, tabPanelId } from "./tab-view-type"
@@ -40,6 +40,7 @@ export default function TabHost() {
   const tabs = useTabs()
   const activeId = useActiveId()
   const dirtyTabIds = useDirtyTabIds()
+  const lru = useLru()
   const suspendReadyTabIds = useSuspendReadyTabIds()
 
   // dirty Engine 即使已按 LRU 卸载，关闭/刷新窗口时仍必须保留全局告警。
@@ -59,25 +60,6 @@ export default function TabHost() {
     if (activeTab && isBrowserResourceTab(activeTab)) return
     if (isTauri()) void browserRelease().catch(() => {})
   }, [activeId, tabs])
-
-  // LRU 顺序: 最近激活在末尾。openTab 即激活, 故每个曾打开的标签都进过此表。
-  // 用 React 官方「渲染期按 key 调整派生态」模式维护 (非 effect): 当 activeId / 标签集变化时
-  // 在 render 期重排一次, React 会以新态重渲染后再提交, 避免 set-state-in-effect 的级联渲染。
-  const [lru, setLru] = React.useState<string[]>([])
-  const [syncKey, setSyncKey] = React.useState("")
-  const curKey = (activeId ?? "") + "|" + tabs.map((t) => t.id).join(",")
-  if (curKey !== syncKey) {
-    setSyncKey(curKey)
-    setLru((prev) => {
-      const ids = new Set(tabs.map((t) => t.id))
-      let next = prev.filter((id) => ids.has(id)) // 清掉已关闭的标签
-      if (activeId && ids.has(activeId)) {
-        next = next.filter((id) => id !== activeId)
-        next.push(activeId) // 激活项移到末尾 (最近)
-      }
-      return next
-    })
-  }
 
   if (tabs.length === 0) {
     return (

@@ -30,6 +30,7 @@ import { MODULE_DOT } from "./module-dot"
 import { nodeResourceRefForTab } from "./resource-tab"
 import { FileTypeIcon } from "@/shared/file-type-icon"
 import { fileEngineTargetForTab } from "./file-tab"
+import { tabRevealDelta, tabScrollBehavior } from "./tab-scroll"
 
 /** Chrome 近似: 最小保留色点 + 截断标题, 最大 ~240px; 溢出时横向滚动。 */
 const TAB_MIN_PX = 96
@@ -363,11 +364,19 @@ export default function TabBar() {
   const dragIdRef = React.useRef<string | null>(null)
   const tabRefs = React.useRef(new Map<string, HTMLDivElement>())
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!activeId) return
     const el = tabRefs.current.get(activeId)
-    el?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" })
-  }, [activeId, tabs.length])
+    const scroller = el?.parentElement
+    if (!el || !scroller) return
+    const delta = tabRevealDelta(el.getBoundingClientRect(), scroller.getBoundingClientRect())
+    if (delta === 0) return
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
+    scroller.scrollTo({
+      behavior: tabScrollBehavior(reducedMotion),
+      left: scroller.scrollLeft + delta,
+    })
+  }, [activeId, tabs])
 
   return (
     <div className="hidden h-9 min-w-0 shrink-0 items-stretch overflow-hidden border-b bg-secondary/30 md:flex">

@@ -11,6 +11,7 @@ import { Input } from "@/ui/input"
 import { EmptyState } from "@/ui/empty-state"
 import { SurfacePanel } from "@/ui/panel"
 import { StatusDot, type Tone } from "@/ui/status-dot"
+import { useTabActive } from "@/lib/tab-active-context"
 import { executeStreaming, type ShellLine } from "./shell-commands"
 
 type HistoryStatus = "running" | "exited" | "error" | "stopped"
@@ -30,6 +31,7 @@ type HistoryItem = {
 const MAX_COMMAND_HISTORY = 50
 
 export default function ShellPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const active = useTabActive()
   const [history, setHistory] = React.useState<HistoryItem[]>([])
   const [commandHistory, setCommandHistory] = React.useState<string[]>([])
   const [historyCursor, setHistoryCursor] = React.useState<number | null>(null)
@@ -45,16 +47,16 @@ export default function ShellPage({ embedded = false }: { embedded?: boolean } =
   const historyDraftRef = React.useRef("")
 
   React.useEffect(() => {
-    if (scrollRef.current) {
+    if (active && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [history])
+  }, [active, history])
 
   React.useEffect(() => {
-    if (!running) return
+    if (!active || !running) return
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [running])
+  }, [active, running])
 
   React.useEffect(() => {
     return () => {

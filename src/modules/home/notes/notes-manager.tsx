@@ -19,12 +19,14 @@ import {
   resourceRefForFile,
 } from "@/filesystem/resource-file-system"
 import { watchFile } from "@/filesystem/registry"
+import { useTabActive } from "@/workspace/tab-active-context"
 import { createNoteFile, listNoteFiles } from "./note-file-system"
 
 const NOTES_ROOT_REF = corePlaceRef("notes")
 const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 
 export default function NotesManager() {
+  const active = useTabActive()
   const [notes, setNotes] = React.useState<NoteMeta[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState("")
@@ -40,6 +42,7 @@ export default function NotesManager() {
   }, [])
 
   React.useEffect(() => {
+    if (!active) return
     void reload()
     let watch: ReturnType<typeof watchFile> = null
     try {
@@ -48,7 +51,7 @@ export default function NotesManager() {
       // 首次读取仍可用于不支持 watch 的 provider。
     }
     return () => watch?.dispose()
-  }, [reload])
+  }, [active, reload])
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()

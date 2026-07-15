@@ -24,8 +24,9 @@ export interface IncrementalList<T> {
  */
 export function useIncrementalList<T>(
   items: T[],
-  opts: { pageSize?: number; resetKey?: string } = {},
+  opts: { enabled?: boolean; pageSize?: number; resetKey?: string } = {},
 ): IncrementalList<T> {
+  const enabled = opts.enabled ?? true
   const pageSize = opts.pageSize ?? 60
   const resetKey = opts.resetKey ?? ""
 
@@ -43,7 +44,7 @@ export function useIncrementalList<T>(
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
-    if (!hasMore) return
+    if (!enabled || !hasMore) return
     const el = sentinelRef.current
     if (!el) return
     const io = new IntersectionObserver(
@@ -54,7 +55,7 @@ export function useIncrementalList<T>(
     )
     io.observe(el)
     return () => io.disconnect()
-  }, [hasMore, pageSize, total])
+  }, [enabled, hasMore, pageSize, total])
 
   return { visible, hasMore, sentinelRef, shown, total }
 }

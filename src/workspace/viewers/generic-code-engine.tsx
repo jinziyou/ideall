@@ -84,6 +84,7 @@ export default function GenericCodeEngine({
   const conflicted = document.fileKey === fileKey && document.pendingExternal != null
 
   React.useEffect(() => {
+    if (!active) return
     let alive = true
     const identityChanged = loadedFileKey.current !== fileKey
     if (identityChanged) {
@@ -127,7 +128,7 @@ export default function GenericCodeEngine({
     return () => {
       alive = false
     }
-  }, [file.version, fileKey, previewRange, ref])
+  }, [active, file.version, fileKey, previewRange, ref])
 
   React.useEffect(() => {
     setTabDirty(tabId, dirty)

@@ -11,6 +11,8 @@ import { parseFileEngineSearch } from "./file-tab"
 import { descriptorForPath } from "./modules"
 import {
   cancelRouteFileOpen,
+  getActiveId,
+  getTabs,
   openRouteFileTarget,
   openTab,
   setDevelopmentTool,
@@ -22,6 +24,7 @@ import { defaultFileForPath } from "./file-roots"
 import { workspaceCommandForPath } from "./workspace-route"
 import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { capabilitySurface } from "./capability-surfaces"
+import { activeTabMatchesRouteDescriptor, activeTabMatchesRouteFile } from "./route-open-guard"
 
 function OpenWorkspaceTabInner() {
   const pathname = usePathname()
@@ -34,9 +37,12 @@ function OpenWorkspaceTabInner() {
     cancelRouteFileOpen()
     const run = () => {
       const p = pathname || "/"
+      const stateTabs = getTabs()
+      const activeTab = stateTabs.find((tab) => tab.id === getActiveId())
       // /ai: AI 全局设置标签。常驻打开 (区别于下方其余路由统一用的 transient 预览)。
       if (p === "/ai" || p.startsWith("/ai/")) {
         const surface = capabilitySurface("agent-settings")
+        if (activeTabMatchesRouteFile(activeTab, surface)) return
         void openRouteFileTarget({
           type: "file",
           ref: surface.ref,
@@ -68,15 +74,15 @@ function OpenWorkspaceTabInner() {
       const rawSearch = search.toString()
       const fileTarget = parseFileEngineSearch(rawSearch)
       if (fileTarget && search.get("display") !== "window") {
+        if (activeTabMatchesRouteFile(activeTab, fileTarget)) return
         void openRouteFileTarget({ type: "file", ...fileTarget, transient: true }, "user")
         return
       }
       const resourceRef = parseResourceSearch(rawSearch)
       if (resourceRef) {
-        void openRouteFileTarget(
-          { type: "file", ref: resourceFileRef(resourceRef), transient: true },
-          "user",
-        )
+        const ref = resourceFileRef(resourceRef)
+        if (activeTabMatchesRouteFile(activeTab, { ref })) return
+        void openRouteFileTarget({ type: "file", ref, transient: true }, "user")
         return
       }
       // 根路由不抢激活标签：外壳优先保留恢复现场；无快照时再打开用户配置的
@@ -84,11 +90,14 @@ function OpenWorkspaceTabInner() {
       if (p === "/" || p === "/home") return
       const defaultFile = defaultFileForPath(p)
       if (defaultFile) {
+        if (activeTabMatchesRouteFile(activeTab, defaultFile)) return
         void openRouteFileTarget({ type: "file", ...defaultFile, transient: true }, "user")
         return
       }
       const d = descriptorForPath(p)
-      if (d) openTab(d, "user", { transient: true })
+      if (d && !activeTabMatchesRouteDescriptor(activeTab, d)) {
+        openTab(d, "user", { transient: true })
+      }
     }
     run()
     return cancelRouteFileOpen

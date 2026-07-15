@@ -16,6 +16,7 @@ import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import { watchFile } from "@/filesystem/registry"
 import { undoableToast } from "@/lib/undo-toast"
 import { EmptyState } from "@/ui/empty-state"
+import { useTabActive } from "@/workspace/tab-active-context"
 import {
   SUBSCRIPTIONS_ROOT,
   deleteSubscriptionFile,
@@ -67,6 +68,7 @@ export default function SubscriptionFeed({
   title?: string
   dotClass?: string
 } = {}) {
+  const active = useTabActive()
   const [state, setState] = React.useState<Loaded | null>(null)
   const [view, setView] = React.useState<"grid" | "list">("grid")
   // 取消关注进行中的项 (按 sub.id): 防重复触发, 并禁用对应的取消按钮
@@ -93,6 +95,11 @@ export default function SubscriptionFeed({
   }, [types])
 
   React.useEffect(() => {
+    if (!active) {
+      mountedRef.current = false
+      seqRef.current += 1
+      return
+    }
     mountedRef.current = true
     void load()
     const watch = watchFile(SUBSCRIPTIONS_ROOT, WATCH_CONTEXT, () => void load())
@@ -100,7 +107,7 @@ export default function SubscriptionFeed({
       mountedRef.current = false
       watch?.dispose()
     }
-  }, [load])
+  }, [active, load])
 
   async function unsubscribe(sub: FileSubscription) {
     if (pending.has(sub.id)) return // 防重: 同一项取消关注进行中不再触发

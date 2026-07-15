@@ -44,7 +44,7 @@ const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
 export default function FileViewer({ nodeId }: NodeViewerProps) {
   const active = useTabActive()
   const [revision, setRevision] = React.useState(0)
-  const preview = useFilePreview(nodeId, revision)
+  const preview = useFilePreview(nodeId, revision, active)
   const { file, loading } = preview
   const tabs = useTabs()
   const tabId = React.useMemo(() => {

@@ -2,9 +2,17 @@
 
 import * as React from "react"
 import { File, Folder, RefreshCw } from "lucide-react"
-import { sameFileRef, type DirectoryEntry, type IdeallFile } from "@protocol/file-system"
-import { readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
+import { sameFileRef, type IdeallFile } from "@protocol/file-system"
+import { readFileDirectory, watchFile } from "@/filesystem/registry"
+import {
+  projectDirectoryEntryMetadata,
+  resolveDirectoryEntryMetadata,
+  type DirectoryEntryMetadata,
+} from "@/filesystem/directory-metadata"
+import { statFileCached } from "@/filesystem/metadata-cache"
 import type { FileSystemWatchEvent } from "@/filesystem/types"
+import { useIncrementalList } from "@/lib/use-incremental-list"
+import { cn } from "@/lib/utils"
 import { Button } from "@/ui/button"
 import {
   DirectoryWatchRequestGate,
@@ -12,9 +20,11 @@ import {
   planDirectoryWatchEvent,
 } from "../directory-watch-plan"
 import { openTarget, useActiveRootId } from "../store"
+import { useTabActive } from "../tab-active-context"
 import { DIRECTORY_PAGE_SIZE } from "../tree/directory-pagination"
 
-type LoadedEntry = { entry: DirectoryEntry; file: IdeallFile | null }
+type LoadedEntry = DirectoryEntryMetadata
+type LoadedPage = { entries: LoadedEntry[]; nextCursor?: string }
 
 function replaceKnownVersions(
   versions: Map<string, string>,
@@ -28,6 +38,7 @@ function replaceKnownVersions(
 }
 
 export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
+  const active = useTabActive()
   const activeRootId = useActiveRootId()
   const [entries, setEntries] = React.useState<LoadedEntry[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -56,7 +67,7 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
   }, [])
 
   const readPage = React.useCallback(
-    async (cursor?: string): Promise<{ entries: LoadedEntry[]; nextCursor?: string }> => {
+    async (cursor?: string, onProgress?: (page: LoadedPage) => void): Promise<LoadedPage> => {
       const directoryRef = { fileSystemId, fileId }
       const page = await readFileDirectory(
         directoryRef,
@@ -71,18 +82,12 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
       const visibleEntries = page.entries.filter(
         (entry) => entry.properties?.navigationHidden !== true,
       )
-      const loaded = await Promise.all(
-        visibleEntries.map(async (entry) => ({
-          entry,
-          file:
-            entry.file && sameFileRef(entry.file.ref, entry.target)
-              ? entry.file
-              : await statFile(entry.target, {
-                  actor: "ui",
-                  permissions: [],
-                  intent: "metadata",
-                }).catch(() => null),
-        })),
+      const projected = projectDirectoryEntryMetadata(visibleEntries)
+      onProgress?.({ entries: projected, nextCursor: page.nextCursor })
+      const loaded = await resolveDirectoryEntryMetadata(
+        projected,
+        { actor: "ui", permissions: [], intent: "metadata" },
+        (entries) => onProgress?.({ entries: [...entries], nextCursor: page.nextCursor }),
       )
       return { entries: loaded, nextCursor: page.nextCursor }
     },
@@ -90,6 +95,7 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
   )
 
   React.useEffect(() => {
+    if (!active) return
     const epoch = ++loadEpoch.current
     const watchRequests = watchRequestsRef.current
     let loaded = false
@@ -103,15 +109,20 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
     setEntries([])
     setNextCursor(undefined)
     setError(null)
-    void readPage()
+    const commit = (page: LoadedPage) => {
+      if (loadEpoch.current !== epoch) return
+      loaded = true
+      entriesRef.current = page.entries
+      nextCursorRef.current = page.nextCursor
+      replaceKnownVersions(knownVersionsRef.current, page.entries)
+      setEntries(page.entries)
+      setNextCursor(page.nextCursor)
+      setLoading(false)
+    }
+    void readPage(undefined, commit)
       .then((page) => {
         if (loadEpoch.current !== epoch) return
-        loaded = true
-        entriesRef.current = page.entries
-        nextCursorRef.current = page.nextCursor
-        replaceKnownVersions(knownVersionsRef.current, page.entries)
-        setEntries(page.entries)
-        setNextCursor(page.nextCursor)
+        commit(page)
       })
       .catch((reason) => {
         if (loadEpoch.current === epoch) {
@@ -131,7 +142,7 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
         watchRequests.reset()
       }
     }
-  }, [readPage, revision])
+  }, [active, readPage, revision])
 
   const loadMore = async () => {
     const cursor = nextCursor
@@ -141,23 +152,25 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
     setLoadingMore(true)
     setError(null)
     try {
-      const page = await readPage(cursor)
-      if (loadEpoch.current !== epoch) return
-      const nextEntries = (() => {
-        const current = entriesRef.current
-        const seen = new Set(current.map((item) => item.entry.entryId))
+      const base = entriesRef.current
+      const mergePage = (page: LoadedPage) => {
+        if (loadEpoch.current !== epoch) return
+        const seen = new Set(base.map((item) => item.entry.entryId))
         const added = page.entries.filter((item) => {
           if (seen.has(item.entry.entryId)) return false
           seen.add(item.entry.entryId)
           return true
         })
-        return [...current, ...added]
-      })()
-      entriesRef.current = nextEntries
-      nextCursorRef.current = page.nextCursor
-      replaceKnownVersions(knownVersionsRef.current, nextEntries)
-      setEntries(nextEntries)
-      setNextCursor(page.nextCursor)
+        const nextEntries = [...base, ...added]
+        entriesRef.current = nextEntries
+        nextCursorRef.current = page.nextCursor
+        replaceKnownVersions(knownVersionsRef.current, nextEntries)
+        setEntries(nextEntries)
+        setNextCursor(page.nextCursor)
+      }
+      const page = await readPage(cursor, mergePage)
+      if (loadEpoch.current !== epoch) return
+      mergePage(page)
     } catch (reason) {
       if (loadEpoch.current === epoch) {
         setError(reason instanceof Error ? reason.message : String(reason))
@@ -222,11 +235,11 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
 
         const token = watchRequestsRef.current.start(operation.key, operation.version)
         if (!token) return
-        void statFile(operation.target, {
-          actor: "ui",
-          permissions: [],
-          intent: "metadata",
-        })
+        void statFileCached(
+          operation.target,
+          { actor: "ui", permissions: [], intent: "metadata" },
+          { refresh: true },
+        )
           .then((nextFile) => {
             if (!mountedRef.current || !watchRequestsRef.current.accepts(token)) return
             watchRequestsRef.current.invalidate(operation.key)
@@ -271,6 +284,7 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
   )
 
   React.useEffect(() => {
+    if (!active) return
     try {
       return watchFile(
         { fileSystemId, fileId },
@@ -280,7 +294,13 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
     } catch {
       return undefined
     }
-  }, [fileId, fileSystemId, handleWatchEvent])
+  }, [active, fileId, fileSystemId, handleWatchEvent])
+
+  const { visible, hasMore, sentinelRef, shown, total } = useIncrementalList(entries, {
+    enabled: active,
+    pageSize: 80,
+    resetKey: `${fileSystemId}\u0000${fileId}\u0000${revision}`,
+  })
 
   return (
     <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-4 overflow-y-auto p-4 sm:p-6">
@@ -308,7 +328,7 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card">
-          {entries.map(({ entry, file: child }) => {
+          {visible.map(({ entry, file: child }) => {
             const Icon = child?.kind === "directory" ? Folder : File
             const preferredEngine =
               typeof entry.properties?.preferredEngine === "string"
@@ -332,7 +352,10 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
                 disabled={!child}
                 onClick={() => openChild(true)}
                 onDoubleClick={() => openChild(false)}
-                className="flex w-full items-center gap-3 border-b px-3 py-2.5 text-left text-sm last:border-b-0 hover:bg-accent/50 disabled:opacity-50"
+                className={cn(
+                  "flex w-full items-center gap-3 border-b px-3 py-2.5 text-left text-sm last:border-b-0 hover:bg-accent/50 disabled:opacity-50",
+                  total > 80 && "[contain-intrinsic-size:41px] [content-visibility:auto]",
+                )}
               >
                 <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{entry.name}</span>
@@ -342,8 +365,16 @@ export default function FileDirectoryEngine({ file }: { file: IdeallFile }) {
               </button>
             )
           })}
+          {hasMore ? (
+            <div
+              ref={sentinelRef}
+              className="border-t p-2 text-center text-xs text-muted-foreground"
+            >
+              已显示 {shown} / {total}
+            </div>
+          ) : null}
           {error ? <div className="border-t p-3 text-sm text-destructive">{error}</div> : null}
-          {nextCursor !== undefined ? (
+          {!hasMore && nextCursor !== undefined ? (
             <div className="border-t p-2 text-center">
               <Button
                 variant="ghost"

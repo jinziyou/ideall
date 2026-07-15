@@ -37,6 +37,7 @@ import { EmptyState } from "@/ui/empty-state"
 import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
 import { downloadStoredFile, readStoredNodeFile } from "./file-preview"
 import { openTarget } from "@/workspace/store"
+import { useTabActive } from "@/workspace/tab-active-context"
 import { loadManagedFiles, type ManagedFile } from "./file-manager-data"
 
 // 类型筛选分组: 把细分 FileKind 归并为用户可理解的几类
@@ -72,7 +73,7 @@ type ViewMode = "grid" | "list"
  * 图片缩略图: 仅在缩略图滚入视口后才读取自身 Blob 并建 ObjectURL, 卸载时释放。
  * 懒加载避免列表里所有图片文件在挂载即一次性 getFile + createObjectURL (本地优先场景可达上千个)。
  */
-function Thumbnail({ id }: { id: string }) {
+function ActiveThumbnail({ id }: { id: string }) {
   const [src, setSrc] = React.useState<string | null>(null)
   const [visible, setVisible] = React.useState(false)
   const placeholderRef = React.useRef<HTMLDivElement | null>(null)
@@ -98,16 +99,16 @@ function Thumbnail({ id }: { id: string }) {
   React.useEffect(() => {
     if (!visible) return
     let url: string | null = null
-    let active = true
+    let alive = true
     readStoredNodeFile(id)
       .then((loaded) => {
-        if (!active || !loaded) return
+        if (!alive || !loaded) return
         url = URL.createObjectURL(loaded.file.blob)
         setSrc(url)
       })
       .catch(() => {})
     return () => {
-      active = false
+      alive = false
       if (url) URL.revokeObjectURL(url)
     }
   }, [id, visible])
@@ -122,7 +123,20 @@ function Thumbnail({ id }: { id: string }) {
   return <img src={src} alt="" className="h-full w-full object-cover" />
 }
 
+function Thumbnail({ id }: { id: string }) {
+  const active = useTabActive()
+  if (!active) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+      </div>
+    )
+  }
+  return <ActiveThumbnail id={id} />
+}
+
 export default function FileManager() {
+  const tabActive = useTabActive()
   const [files, setFiles] = React.useState<ManagedFile[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState("")
@@ -146,15 +160,16 @@ export default function FileManager() {
 
   // 首次挂载加载: setState 仅发生在 await 之后, 满足 react-hooks 规则
   React.useEffect(() => {
-    let active = true
+    if (!tabActive) return
+    let alive = true
     async function load() {
       try {
         const list = await loadManagedFiles()
-        if (active) setFiles(list)
+        if (alive) setFiles(list)
       } catch (e) {
         toast.error("读取文件失败", { description: String(e) })
       } finally {
-        if (active) setLoading(false)
+        if (alive) setLoading(false)
       }
     }
     void load()
@@ -165,10 +180,10 @@ export default function FileManager() {
       // 首次目录读取仍可用于尚未实现 watch 的 provider。
     }
     return () => {
-      active = false
+      alive = false
       watch?.dispose()
     }
-  }, [])
+  }, [tabActive])
 
   const handleUpload = React.useCallback(
     async (fileList: FileList | File[]) => {

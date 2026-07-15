@@ -14,9 +14,14 @@ export function workspaceState(): WorkspaceState {
 }
 
 export function patchWorkspace(patch: Partial<WorkspaceState>): void {
+  const current = workspaceState()
+  const changed = (Object.keys(patch) as Array<keyof WorkspaceState>).some(
+    (key) => !Object.is(current[key], patch[key]),
+  )
+  if (!changed) return
   if (patch.tabs) {
     const nextIds = new Set(patch.tabs.map((tab) => tab.id))
-    for (const tab of workspaceState().tabs) {
+    for (const tab of current.tabs) {
       if (!nextIds.has(tab.id)) clearEngineSuspendSnapshot(tab.id)
     }
   }
@@ -46,5 +51,8 @@ export function hideBrowserWebviewUnlessBrowserTab(
   tab: Pick<TabDescriptor, "kind" | "params">,
 ): void {
   if (isBrowserResourceTab(tab)) return
+  const state = workspaceState()
+  const current = state.tabs.find((candidate) => candidate.id === state.activeId)
+  if (!current || !isBrowserResourceTab(current)) return
   if (isTauri()) void browserRelease().catch(() => {})
 }

@@ -83,7 +83,7 @@ export async function readStoredNodeFile(fileId: string): Promise<{
  * 加载文件 + (文本类) 截断预览; 自动 createObjectURL / 卸载时 revoke。
  * key=fileId 重挂时由 useState 初值起步于 loading (调用方对切换文件用 key 重挂)。
  */
-export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
+export function useFilePreview(fileId: string, revision = 0, enabled = true): FilePreviewState {
   const ref = React.useMemo(() => storedNodeFileRef(fileId), [fileId])
   const [reloadNonce, setReloadNonce] = React.useState(0)
   const [file, setFile] = React.useState<StoredFile | null>(null)
@@ -96,6 +96,7 @@ export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
   const reload = React.useCallback(() => setReloadNonce((v) => v + 1), [])
 
   React.useEffect(() => {
+    if (!enabled) return
     let active = true
     let generation = 0
     let objectUrl: string | null = null
@@ -172,7 +173,7 @@ export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
       watch?.dispose()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [fileId, ref, revision, reloadNonce])
+  }, [enabled, fileId, ref, revision, reloadNonce])
 
   return { file, ref, version, url, text, textTruncated, loading, error, reload }
 }

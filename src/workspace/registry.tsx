@@ -21,7 +21,8 @@ import { resolveNodeResourceViewer, resourceLayout } from "./resource-engines"
 import { RESOURCE_TAB_KIND, nodeResourceRefForTab, parseResourceTabParams } from "./resource-tab"
 import type { ResourceRef } from "@protocol/resource"
 import { sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
-import { getFileSystem, statFile, subscribeFileSystems, watchFile } from "@/filesystem/registry"
+import { getFileSystem, subscribeFileSystems, watchFile } from "@/filesystem/registry"
+import { cachedFileMetadata, statFileCached } from "@/filesystem/metadata-cache"
 import { AUDIO_LIBRARY_ROOT_REF } from "@/filesystem/builtin-app-roots"
 import { corePlaceRef, panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { trashRootRef } from "@/filesystem/trash-file-system"
@@ -59,6 +60,7 @@ import { canOpenStandaloneWindow } from "./standalone-window-policy"
 import { audioManifest } from "@/plugins/audio/manifest"
 import { databaseManifest } from "@/plugins/database/manifest"
 import { gitManifest } from "@/plugins/git/manifest"
+import { useTabActive } from "./tab-active-context"
 
 // 关注流含全部动态来源: 发布者 / 实体 / 搜索 (资讯) + 社区发布者 peer; 内容汇入「我的」。
 const FOLLOW_TYPES: SubscriptionType[] = ["publisher", "entity", "search", "peer"]
@@ -496,9 +498,12 @@ export function FileEngineContent({
   display?: "tab" | "window"
 }) {
   useEngineRegistryRevision()
-  const [file, setFile] = React.useState<IdeallFile | null>(null)
-  const [error, setError] = React.useState<string | null>(null)
+  const tabActive = useTabActive()
   const { fileSystemId, fileId } = refValue
+  const [file, setFile] = React.useState<IdeallFile | null>(() =>
+    cachedFileMetadata({ fileSystemId, fileId }),
+  )
+  const [error, setError] = React.useState<string | null>(null)
   // registry 用全局通知即可，但 snapshot 取当前 provider 对象：无关挂载变化时 Object.is
   // 保持相同，不会清空所有 Engine 子树；同 id 卸载/重装时对象变化才重新 stat/watch。
   const providerSnapshot = React.useSyncExternalStore(
@@ -527,14 +532,21 @@ export function FileEngineContent({
   )
 
   React.useEffect(() => {
+    if (display === "tab" && !tabActive) return
     let alive = true
     let request = 0
     setError(null)
-    setFile(null)
+    // Navigation already resolved this metadata before opening the tab. Paint from that snapshot
+    // immediately, then verify it in the background; provider identity guards stale generations.
+    setFile(cachedFileMetadata({ fileSystemId, fileId }))
 
     const refresh = () => {
       const currentRequest = ++request
-      void statFile({ fileSystemId, fileId }, { actor: "ui", permissions: [], intent: "metadata" })
+      void statFileCached(
+        { fileSystemId, fileId },
+        { actor: "ui", permissions: [], intent: "metadata" },
+        { refresh: true },
+      )
         .then((next) => {
           if (!alive || currentRequest !== request) return
           setFile(next)
@@ -562,7 +574,7 @@ export function FileEngineContent({
       alive = false
       watchHandle?.dispose()
     }
-  }, [fileId, fileSystemId, missingMessage, providerSnapshot])
+  }, [display, fileId, fileSystemId, missingMessage, providerSnapshot, tabActive])
 
   if (error) {
     return <div className="p-6 text-sm text-destructive">{error}</div>
@@ -660,8 +672,8 @@ function renderTabBody(tab: Tab): React.ReactNode {
   return <div className="p-6 text-sm text-muted-foreground">标签尚未规范为文件视图：{tab.kind}</div>
 }
 
-export function TabContent({ tab }: { tab: Tab }) {
+export const TabContent = React.memo(function TabContent({ tab }: { tab: Tab }) {
   // 标签级错误边界: 单标签渲染崩溃 / chunk 加载失败只炸掉本面板 (错误卡 + 重试),
   // 标签条、侧栏与其他标签全部存活 —— 不再击穿 layout 落到 global-error 替换整个外壳。
   return <ErrorBoundary label="此标签">{renderTabBody(tab)}</ErrorBoundary>
-}
+})

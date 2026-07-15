@@ -2,7 +2,11 @@
 
 import { ChevronRight } from "lucide-react"
 import { fileRefKey, sameFileRef } from "@protocol/file-system"
-import { directoryEntryIconHint, directoryEntryTargetKindHint } from "@/filesystem/directory-entry"
+import {
+  directoryEntryIconHint,
+  directoryEntryPreferredEngine,
+  directoryEntryTargetKindHint,
+} from "@/filesystem/directory-entry"
 import { navigationDirectoryRef } from "@/filesystem/navigation-file-system"
 import { joinIdeallPath } from "@/filesystem/path"
 import { cn } from "@/lib/utils"
@@ -66,10 +70,13 @@ export default function NavigationSidebarList({
           if (expandable) setExpanded(targetRef, true)
           openTarget(
             {
-              type: "path",
-              path: itemPath,
+              type: "file",
+              ref: targetRef,
+              ...(file ? { file } : {}),
+              engineId: directoryEntryPreferredEngine(entry),
               title: entry.name,
               rootId: section.id,
+              navigationPath: itemPath,
               transient,
             },
             "user",

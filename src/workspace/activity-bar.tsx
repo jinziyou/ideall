@@ -14,14 +14,17 @@ export default function ActivityBar() {
   const navigation = useNavigationDirectory(IDEALL_ROOT_REF)
   const loadedSections = navigation.items.flatMap(({ entry }) => {
     const section = navigationSectionForEntry(entry)
-    return section ? [section] : []
+    return section ? [{ section, file: entry.file ?? null }] : []
   })
-  const sections = loadedSections.length > 0 ? loadedSections : NAVIGATION_SECTIONS
+  const sections =
+    loadedSections.length > 0
+      ? loadedSections
+      : NAVIGATION_SECTIONS.map((section) => ({ section, file: null }))
 
   return (
     <aside className="hidden h-full w-14 shrink-0 flex-col items-center overflow-y-auto border-r bg-card px-2 py-2.5 md:flex">
       <div className="flex w-full flex-col gap-1">
-        {sections.map((section) => {
+        {sections.map(({ section, file }) => {
           const Icon = section.icon
           const active = activeRootId === section.id
           return (
@@ -29,7 +32,7 @@ export default function ActivityBar() {
               key={section.id}
               type="button"
               onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => toggleFileRoot(section.id, section.path)}
+              onClick={() => toggleFileRoot(section.id, section.path, file ?? undefined)}
               aria-current={active ? "true" : undefined}
               aria-expanded={active && !sidebarCollapsed}
               title={section.label}
