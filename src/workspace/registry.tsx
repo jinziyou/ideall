@@ -23,7 +23,8 @@ import type { ResourceRef } from "@protocol/resource"
 import { sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import { getFileSystem, statFile, subscribeFileSystems, watchFile } from "@/filesystem/registry"
 import { AUDIO_LIBRARY_ROOT_REF } from "@/filesystem/builtin-app-roots"
-import { panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
+import { corePlaceRef, panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
+import { trashRootRef } from "@/filesystem/trash-file-system"
 import { engineRegistry } from "@/engines/builtin"
 import {
   EnginePreferenceStore,
@@ -49,7 +50,7 @@ import {
   resolveFileEngineRenderer,
   subscribeFileEngineRenderers,
 } from "./file-engine-renderer"
-import { openTarget } from "./store"
+import { openTarget, renameNodeTab } from "./store"
 import { useActiveRootId, useWorkspaceKind } from "./store"
 import { writeStartupTarget } from "./startup-target"
 import NodeFileEngineToolbar from "./viewers/node-file-engine-toolbar"
@@ -97,16 +98,20 @@ const InstalledAppEngine = React.lazy(() => import("./viewers/installed-app-engi
 
 type Entry = { render: (tab: Tab) => React.ReactNode }
 
+function renderSubscriptionsSurface(): React.ReactNode {
+  return (
+    <div className="flex flex-col gap-6">
+      <SyncPanel />
+      <SubscriptionFeed types={FOLLOW_TYPES} title="关注流" dotClass="bg-spoke-info" />
+    </div>
+  )
+}
+
 const REGISTRY: Partial<Record<StaticTabKind, Entry>> = {
   "home-overview": { render: () => <Overview /> },
   "home-notes": { render: () => <NotesManager /> },
   subscriptions: {
-    render: () => (
-      <div className="flex flex-col gap-6">
-        <SyncPanel />
-        <SubscriptionFeed types={FOLLOW_TYPES} title="关注流" dotClass="bg-spoke-info" />
-      </div>
-    ),
+    render: renderSubscriptionsSurface,
   },
   "home-publications": { render: () => <MyPublications /> },
   "home-resources": { render: () => <FileManager /> },
@@ -229,11 +234,43 @@ export function registerBuiltInFileEngineRenderers(
         ? renderNodeResource(resource)
         : unsupportedEngine(file, descriptor.engineId)
     }
+  const rootRenderer =
+    (root: FileRef, render: (file: IdeallFile) => React.ReactNode): FileEngineRenderer =>
+    ({ file, descriptor }) =>
+      sameFileRef(file.ref, root) ? render(file) : unsupportedEngine(file, descriptor.engineId)
 
   disposers.push(registerRenderer(registry, "ideall.note", nodeRenderer("note")))
   disposers.push(registerRenderer(registry, "ideall.bookmark", nodeRenderer("bookmark")))
   disposers.push(registerRenderer(registry, "ideall.feed", nodeRenderer("feed")))
   disposers.push(registerRenderer(registry, "ideall.thread", nodeRenderer("thread")))
+  disposers.push(
+    registerRenderer(
+      registry,
+      "ideall.subscriptions",
+      rootRenderer(corePlaceRef("subscriptions"), renderSubscriptionsSurface),
+    ),
+  )
+  disposers.push(
+    registerRenderer(
+      registry,
+      "ideall.bookmarks",
+      rootRenderer(corePlaceRef("bookmarks"), () => <BookmarkManager />),
+    ),
+  )
+  disposers.push(
+    registerRenderer(
+      registry,
+      "ideall.resources",
+      rootRenderer(corePlaceRef("files"), () => <FileManager />),
+    ),
+  )
+  disposers.push(
+    registerRenderer(
+      registry,
+      "ideall.trash",
+      rootRenderer(trashRootRef, (file) => <TrashPage rootRef={file.ref} />),
+    ),
+  )
   disposers.push(
     registerRenderer(registry, "ideall.directory", ({ file }) => (
       <FileDirectoryEngine file={file} />
@@ -474,6 +511,14 @@ export function FileEngineContent({
     legacyResource?.scheme === "node" && legacyResource.kind === "file"
       ? "该文件不存在或已删除。"
       : "文件不存在或挂载已断开"
+
+  React.useEffect(() => {
+    if (!file) return
+    const resource = resourceRefForFile(file.ref)
+    if (resource?.scheme === "node" && resource.kind === "file") {
+      renameNodeTab(resource, file.name)
+    }
+  }, [file])
 
   React.useSyncExternalStore(
     subscribeFileEngineRenderers,

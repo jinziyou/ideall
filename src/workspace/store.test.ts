@@ -8,6 +8,7 @@ import { resourceKey } from "@protocol/resource"
 import {
   openTab,
   openTarget,
+  openRouteFileTarget,
   promoteTab,
   promoteActiveTab,
   toggleModule,
@@ -48,18 +49,45 @@ import {
   registerResourceSource,
 } from "@/filesystem/resource-sources/registry"
 import type { ResourceSourceProvider } from "@/filesystem/resource-sources/types"
-import { registerBuiltInEngines } from "@/engines/builtin"
+import { engineRegistry, registerBuiltInEngines } from "@/engines/builtin"
 import { parseFileEngineTabParams } from "./file-tab"
 import { legacyResourceTab } from "./resource-tab"
 import { resourceFileTab } from "./resource-file-tab"
 import { registerBuiltInFileSystems } from "@/filesystem/builtin"
 import { aiTasksPanelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
-import { registerFileSystem } from "@/filesystem/registry"
+import { getFileSystem, registerFileSystem } from "@/filesystem/registry"
 import { FileSystemError, type FileSystemProvider } from "@/filesystem/types"
-import { AUDIO_LIBRARY_ROOT_REF } from "@/filesystem/builtin-app-roots"
+import {
+  AGENT_SETTINGS_FILE_REF,
+  AGENT_TASKS_FILE_REF,
+  AGENT_WORKSPACES_FILE_REF,
+  AUDIO_LIBRARY_ROOT_REF,
+  INSTALLED_APPS_ROOT_REF,
+  SETTINGS_ROOT_REF,
+} from "@/filesystem/builtin-app-roots"
+import { installedAppsFileSystem } from "@/modules/apps/installed-app-file-system"
+import { installedAppsEngineDescriptor } from "@/modules/apps/installed-apps-engine"
+import { navigationDirectoryRef } from "@/filesystem/navigation-file-system"
+import { agentManifest } from "@/plugins/agent/manifest"
+import { settingsManifest } from "@/modules/home/settings/manifest"
 
 registerBuiltInEngines()
 registerBuiltInFileSystems()
+
+const agentRuntimeExtension = agentManifest.runtimeExtensionFactory.create()
+const settingsRuntimeExtension = settingsManifest.runtimeExtensionFactory.create()
+const agentConfigFileSystem = agentRuntimeExtension.fileSystems[0]!.provider
+const settingsFileSystem = settingsRuntimeExtension.fileSystems[0]!.provider
+const agentSettingsEngineDescriptor = agentRuntimeExtension.engines.find(
+  ({ descriptor }) => descriptor.engineId === "ideall.agent-settings",
+)!.descriptor
+const agentSpacesEngineDescriptor = agentRuntimeExtension.engines.find(
+  ({ descriptor }) => descriptor.engineId === "ideall.agent-spaces",
+)!.descriptor
+const agentTasksEngineDescriptor = agentRuntimeExtension.engines.find(
+  ({ descriptor }) => descriptor.engineId === "ideall.agent-tasks",
+)!.descriptor
+const settingsEngineDescriptor = settingsRuntimeExtension.engines[0]!.descriptor
 
 // —— 标签描述符夹具 (跨五分区导航) ——
 const HOME = tabDescriptor("home-overview")
@@ -67,74 +95,114 @@ const INFO = tabDescriptor("info")
 const COMMUNITY = tabDescriptor("community")
 const TOOL = tabDescriptor("tool-search")
 
-test("settings 与 AI 管理入口统一打开 panel 文件", async () => {
+async function waitForWorkspaceState(
+  predicate: () => boolean,
+  message: string,
+  timeoutMs = 1_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  assert.equal(predicate(), true, message)
+}
+
+test("settings 与 AI 管理入口打开真实配置文件，旧 AI 子页保持兼容", async () => {
   closeAllTabs()
 
-  openSettings()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
-    ref: { fileSystemId: "ideall.core", fileId: "panel:settings" },
-    engineId: "ideall.panel",
-  })
-  assert.equal(getActiveRootId(), "settings")
+  const disposers = [
+    getFileSystem(settingsFileSystem.descriptor.fileSystemId)
+      ? () => {}
+      : registerFileSystem(settingsFileSystem),
+    getFileSystem(agentConfigFileSystem.descriptor.fileSystemId)
+      ? () => {}
+      : registerFileSystem(agentConfigFileSystem),
+    engineRegistry.get(settingsEngineDescriptor.engineId)
+      ? () => {}
+      : engineRegistry.register(settingsEngineDescriptor),
+    engineRegistry.get(agentSettingsEngineDescriptor.engineId)
+      ? () => {}
+      : engineRegistry.register(agentSettingsEngineDescriptor),
+  ]
 
-  openAiSettings()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
-    ref: { fileSystemId: "ideall.core", fileId: "panel:ai-settings" },
-    engineId: "ideall.panel-fill",
-  })
-  assert.equal(getActiveRootId(), "settings")
+  try {
+    openSettings()
+    await waitForWorkspaceState(
+      () => getTabs().some((tab) => tab.navigationPath === "/settings/basic"),
+      "basic settings did not open",
+    )
+    assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
+      ref: { fileSystemId: "app.settings", fileId: "root" },
+      engineId: "ideall.settings",
+    })
+    assert.equal(getTabs().at(-1)?.path, "/settings/basic")
+    assert.equal(getActiveRootId(), "settings")
 
-  openAiSection("ai-mcp")
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
-    ref: { fileSystemId: "ideall.core", fileId: "panel:ai-mcp" },
-    engineId: "ideall.panel-fill",
-  })
-  assert.equal(
-    getTabs().some((tab) => tab.kind === "home-settings"),
-    false,
-  )
-  assert.equal(
-    getTabs().some((tab) => tab.kind === "ai-settings"),
-    false,
-  )
-  assert.equal(
-    getTabs().some((tab) => tab.kind === "ai-mcp"),
-    false,
-  )
+    openAiSettings()
+    await waitForWorkspaceState(
+      () => getTabs().some((tab) => tab.navigationPath === "/settings/ai"),
+      "AI settings did not open",
+    )
+    assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
+      ref: { fileSystemId: "app.agent-config", fileId: "config:settings" },
+      engineId: "ideall.agent-settings",
+    })
+    assert.equal(getTabs().at(-1)?.path, "/settings/ai")
+    assert.equal(getActiveRootId(), "settings")
 
-  openAiTasks("ws /100%", "项目任务")
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  const taskTab = getTabs().at(-1)
-  assert.equal(taskTab?.title, "项目任务")
-  assert.deepEqual(parseFileEngineTabParams(taskTab?.params), {
-    ref: {
-      fileSystemId: "ideall.core",
-      fileId: "panel:ai-tasks:ws%20%2F100%25",
-    },
-    engineId: "ideall.panel-fill",
-  })
-  assert.equal(getActiveRootId(), "activity")
-  assert.equal(
-    getTabs().some((tab) => tab.kind === "ai-tasks"),
-    false,
-  )
+    openAiSection("ai-mcp")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
+      ref: { fileSystemId: "ideall.core", fileId: "panel:ai-mcp" },
+      engineId: "ideall.panel-fill",
+    })
+    assert.equal(
+      getTabs().some((tab) => tab.kind === "home-settings"),
+      false,
+    )
+    assert.equal(
+      getTabs().some((tab) => tab.kind === "ai-settings"),
+      false,
+    )
+    assert.equal(
+      getTabs().some((tab) => tab.kind === "ai-mcp"),
+      false,
+    )
 
-  const taskRef = aiTasksPanelFileRef("ws /100%")
-  openTarget({ type: "file", ref: taskRef, engineId: "ideall.preview", title: "另一种视图" })
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.equal(
-    getTabs().filter((tab) => parseFileEngineTabParams(tab.params)?.ref.fileId === taskRef.fileId)
-      .length,
-    2,
-  )
-  closeFileTabs(taskRef)
-  assert.equal(
-    getTabs().some((tab) => parseFileEngineTabParams(tab.params)?.ref.fileId === taskRef.fileId),
-    false,
-  )
+    openAiTasks("ws /100%", "项目任务")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const taskTab = getTabs().at(-1)
+    assert.equal(taskTab?.title, "项目任务")
+    assert.deepEqual(parseFileEngineTabParams(taskTab?.params), {
+      ref: {
+        fileSystemId: "ideall.core",
+        fileId: "panel:ai-tasks:ws%20%2F100%25",
+      },
+      engineId: "ideall.panel-fill",
+    })
+    assert.equal(getActiveRootId(), "activity")
+    assert.equal(
+      getTabs().some((tab) => tab.kind === "ai-tasks"),
+      false,
+    )
+
+    const taskRef = aiTasksPanelFileRef("ws /100%")
+    openTarget({ type: "file", ref: taskRef, engineId: "ideall.preview", title: "另一种视图" })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.equal(
+      getTabs().filter((tab) => parseFileEngineTabParams(tab.params)?.ref.fileId === taskRef.fileId)
+        .length,
+      2,
+    )
+    closeFileTabs(taskRef)
+    assert.equal(
+      getTabs().some((tab) => parseFileEngineTabParams(tab.params)?.ref.fileId === taskRef.fileId),
+      false,
+    )
+  } finally {
+    closeAllTabs()
+    for (const dispose of disposers.reverse()) dispose()
+  }
 })
 
 function openNodeResource(
@@ -700,6 +768,281 @@ test("toggleFileRoot 可直接选择五个固定导航分区", async () => {
     assert.equal(getActiveModule(), moduleId)
   }
   await new Promise((resolve) => setTimeout(resolve, 0))
+})
+
+test("path target: 五个导航根目录保持各自 root 与 module 归属", async () => {
+  const fixtures = [
+    ["home", "home"],
+    ["activity", "agent"],
+    ["browse", "info"],
+    ["apps", "apps"],
+    ["settings", "home"],
+  ] as const
+
+  for (const [rootId, moduleId] of fixtures) {
+    closeAllTabs()
+    const path = `/${rootId}` as const
+    openTarget({ type: "path", path, transient: true })
+    await waitForWorkspaceState(
+      () => getTabs().some((tab) => tab.navigationPath === path),
+      `navigation root did not open: ${path}`,
+    )
+
+    const opened = getTabs().find((tab) => tab.navigationPath === path)
+    assert.deepEqual(parseFileEngineTabParams(opened?.params), {
+      ref: navigationDirectoryRef(rootId),
+      engineId: "ideall.directory",
+    })
+    assert.equal(opened?.module, moduleId)
+    assert.equal(opened?.rootId, rootId)
+    assert.equal(getActiveModule(), moduleId)
+    assert.equal(getActiveRootId(), rootId)
+  }
+})
+
+test("path target: 目录与管理能力入口打开真实文件 + 语义 Engine，并保留导航位置", async () => {
+  const unregisterAppsFileSystem = getFileSystem(INSTALLED_APPS_ROOT_REF.fileSystemId)
+    ? () => {}
+    : registerFileSystem(installedAppsFileSystem)
+  const unregisterAppsEngine = engineRegistry.get(installedAppsEngineDescriptor.engineId)
+    ? () => {}
+    : engineRegistry.register(installedAppsEngineDescriptor)
+  const unregisterAgentFileSystem = getFileSystem(agentConfigFileSystem.descriptor.fileSystemId)
+    ? () => {}
+    : registerFileSystem(agentConfigFileSystem)
+  const unregisterSettingsFileSystem = getFileSystem(settingsFileSystem.descriptor.fileSystemId)
+    ? () => {}
+    : registerFileSystem(settingsFileSystem)
+  const unregisterCapabilityEngines = [
+    agentSettingsEngineDescriptor,
+    agentSpacesEngineDescriptor,
+    agentTasksEngineDescriptor,
+    settingsEngineDescriptor,
+  ].map((descriptor) =>
+    engineRegistry.get(descriptor.engineId) ? () => {} : engineRegistry.register(descriptor),
+  )
+  const fixtures = [
+    {
+      path: "/home/following",
+      ref: { fileSystemId: "ideall.core", fileId: "place:subscriptions" },
+      engineId: "ideall.subscriptions",
+      module: "subscriptions",
+      rootId: "home",
+    },
+    {
+      path: "/home/bookmarks",
+      ref: { fileSystemId: "ideall.core", fileId: "place:bookmarks" },
+      engineId: "ideall.bookmarks",
+      module: "home",
+      rootId: "home",
+    },
+    {
+      path: "/home/resources",
+      ref: { fileSystemId: "ideall.core", fileId: "place:files" },
+      engineId: "ideall.resources",
+      module: "home",
+      rootId: "home",
+    },
+    {
+      path: "/activity/deleted",
+      ref: { fileSystemId: "ideall.trash", fileId: "root" },
+      engineId: "ideall.trash",
+      module: "trash",
+      rootId: "activity",
+    },
+    {
+      path: "/apps/local-apps",
+      ref: INSTALLED_APPS_ROOT_REF,
+      engineId: "ideall.installed-apps",
+      module: "apps",
+      rootId: "apps",
+    },
+    {
+      path: "/activity/spaces",
+      ref: AGENT_WORKSPACES_FILE_REF,
+      engineId: "ideall.agent-spaces",
+      module: "agent",
+      rootId: "activity",
+    },
+    {
+      path: "/activity/tasks",
+      ref: AGENT_TASKS_FILE_REF,
+      engineId: "ideall.agent-tasks",
+      module: "agent",
+      rootId: "activity",
+    },
+    {
+      path: "/settings/basic",
+      ref: SETTINGS_ROOT_REF,
+      engineId: "ideall.settings",
+      module: "home",
+      rootId: "settings",
+    },
+    {
+      path: "/settings/ai",
+      ref: AGENT_SETTINGS_FILE_REF,
+      engineId: "ideall.agent-settings",
+      module: "agent",
+      rootId: "settings",
+    },
+  ] as const
+
+  try {
+    for (const fixture of fixtures) {
+      closeAllTabs()
+      openTarget({ type: "path", path: fixture.path })
+      await waitForWorkspaceState(
+        () => getTabs().some((tab) => tab.navigationPath === fixture.path),
+        `path target did not open: ${fixture.path}`,
+      )
+
+      const opened = getTabs().find((tab) => tab.navigationPath === fixture.path)
+      assert.ok(opened, fixture.path)
+      assert.deepEqual(parseFileEngineTabParams(opened.params), {
+        ref: fixture.ref,
+        engineId: fixture.engineId,
+      })
+      assert.equal(opened.module, fixture.module)
+      assert.equal(opened.rootId, fixture.rootId)
+      assert.equal(opened.path, fixture.path)
+      assert.equal(getActiveRootId(), fixture.rootId)
+    }
+
+    closeAllTabs()
+    openTarget({ type: "path", path: "/home/bookmarks" })
+    await waitForWorkspaceState(
+      () => getTabs().some((tab) => tab.navigationPath === "/home/bookmarks"),
+      "bookmarks path target did not open",
+    )
+    const id = getActiveId()!
+
+    // 旧 panel FileRef 只在打开边界充当 alias，不能产生第二个代理标签。
+    assert.equal(
+      await openRouteFileTarget({
+        type: "file",
+        ref: { fileSystemId: "ideall.core", fileId: "panel:bookmarks" },
+        engineId: "ideall.panel",
+      }),
+      true,
+    )
+    assert.equal(getTabs().filter((tab) => tab.id === id).length, 1)
+    assert.deepEqual(parseFileEngineTabParams(getTabs()[0]?.params), {
+      ref: { fileSystemId: "ideall.core", fileId: "place:bookmarks" },
+      engineId: "ideall.bookmarks",
+    })
+    assert.equal(getTabs()[0]?.navigationPath, "/home/bookmarks")
+  } finally {
+    closeAllTabs()
+    for (const unregister of unregisterCapabilityEngines.reverse()) unregister()
+    unregisterSettingsFileSystem()
+    unregisterAgentFileSystem()
+    unregisterAppsEngine()
+    unregisterAppsFileSystem()
+  }
+})
+
+test("directory target: runtime mount 晚到时短暂等待 provider 后再打开", async () => {
+  closeAllTabs()
+  assert.equal(getFileSystem(INSTALLED_APPS_ROOT_REF.fileSystemId), null)
+  assert.equal(engineRegistry.get(installedAppsEngineDescriptor.engineId), null)
+
+  const opening = openRouteFileTarget({
+    type: "file",
+    ref: INSTALLED_APPS_ROOT_REF,
+    engineId: installedAppsEngineDescriptor.engineId,
+    rootId: "apps",
+    navigationPath: "/apps/local-apps",
+  })
+  await Promise.resolve()
+
+  const unregisterEngine = engineRegistry.register(installedAppsEngineDescriptor)
+  const unregisterFileSystem = registerFileSystem(installedAppsFileSystem)
+  try {
+    assert.equal(await opening, true)
+    assert.deepEqual(parseFileEngineTabParams(getTabs().at(-1)?.params), {
+      ref: INSTALLED_APPS_ROOT_REF,
+      engineId: "ideall.installed-apps",
+    })
+    assert.equal(getTabs().at(-1)?.rootId, "apps")
+    assert.equal(getTabs().at(-1)?.module, "apps")
+    assert.equal(getTabs().at(-1)?.navigationPath, "/apps/local-apps")
+  } finally {
+    closeAllTabs()
+    unregisterFileSystem()
+    unregisterEngine()
+  }
+})
+
+test("directory path: runtime provider 晚到后打开规范目录", async () => {
+  closeAllTabs()
+  assert.equal(getFileSystem(INSTALLED_APPS_ROOT_REF.fileSystemId), null)
+  assert.equal(engineRegistry.get(installedAppsEngineDescriptor.engineId), null)
+
+  assert.equal(openTarget({ type: "path", path: "/apps/local-apps" }), true)
+  await Promise.resolve()
+
+  const unregisterEngine = engineRegistry.register(installedAppsEngineDescriptor)
+  const unregisterFileSystem = registerFileSystem(installedAppsFileSystem)
+  try {
+    await waitForWorkspaceState(
+      () => getTabs().some((tab) => tab.navigationPath === "/apps/local-apps"),
+      "installed apps directory did not open after provider registration",
+    )
+    const opened = getTabs().find((tab) => tab.navigationPath === "/apps/local-apps")
+    assert.deepEqual(parseFileEngineTabParams(opened?.params), {
+      ref: INSTALLED_APPS_ROOT_REF,
+      engineId: "ideall.installed-apps",
+    })
+    assert.equal(opened?.module, "apps")
+    assert.equal(opened?.rootId, "apps")
+    assert.equal(opened?.path, "/apps/local-apps")
+  } finally {
+    closeAllTabs()
+    unregisterFileSystem()
+    unregisterEngine()
+  }
+})
+
+test("capability path: runtime provider 晚到后打开规范文件，并折叠旧 panel alias", async () => {
+  closeAllTabs()
+  assert.equal(getFileSystem(AGENT_WORKSPACES_FILE_REF.fileSystemId), null)
+  assert.equal(engineRegistry.get(agentSpacesEngineDescriptor.engineId), null)
+
+  assert.equal(openTarget({ type: "path", path: "/activity/spaces" }), true)
+  await Promise.resolve()
+
+  const unregisterEngine = engineRegistry.register(agentSpacesEngineDescriptor)
+  const unregisterFileSystem = registerFileSystem(agentConfigFileSystem)
+  try {
+    await waitForWorkspaceState(
+      () => getTabs().some((tab) => tab.navigationPath === "/activity/spaces"),
+      "spaces capability did not open after provider registration",
+    )
+    const canonical = getTabs().find((tab) => tab.navigationPath === "/activity/spaces")
+    assert.deepEqual(parseFileEngineTabParams(canonical?.params), {
+      ref: AGENT_WORKSPACES_FILE_REF,
+      engineId: "ideall.agent-spaces",
+    })
+    assert.equal(canonical?.module, "agent")
+    assert.equal(canonical?.rootId, "activity")
+    assert.equal(canonical?.path, "/activity/spaces")
+
+    assert.equal(
+      await openRouteFileTarget({
+        type: "file",
+        ref: { fileSystemId: "ideall.core", fileId: "panel:spaces" },
+        engineId: "ideall.panel",
+      }),
+      true,
+    )
+    assert.equal(getTabs().length, 1)
+    assert.equal(getTabs()[0]?.id, canonical?.id)
+    assert.equal(getTabs()[0]?.navigationPath, "/activity/spaces")
+  } finally {
+    closeAllTabs()
+    unregisterFileSystem()
+    unregisterEngine()
+  }
 })
 
 test("toggleMountedFileRoot opens a mounted app's real root through its semantic engine", async () => {

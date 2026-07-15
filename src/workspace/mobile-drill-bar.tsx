@@ -6,12 +6,9 @@
 // 相邻标签 (通常即来处列表); 若关闭后已无标签, 落到该节点所属分区列表 (预览方式, 不堆常驻)。
 // 面包屑 = 「分区 / 标题」; 分区名从 HOME_PLACES 单源取。
 import { ChevronLeft } from "lucide-react"
-import { panelFileRef } from "@/filesystem/resource-file-system"
 import { nodeResourceRefForTab } from "./resource-tab"
 import { getTabs, openTarget, requestCloseTab, useActiveId, useTabs } from "./store"
 import { homePlaceForNodeKind } from "./tree/home-places"
-
-const OVERVIEW_FILE = panelFileRef("home")
 
 export default function MobileDrillBar() {
   const tabs = useTabs()
@@ -27,9 +24,10 @@ export default function MobileDrillBar() {
     // 关掉的是唯一标签 → 主区留白无处可去, 落到该节点所属分区列表 (预览槽, 不堆常驻)。
     if (getTabs().length === 0) {
       openTarget({
-        type: "file",
-        ref: place?.defaultFile ?? OVERVIEW_FILE,
+        type: "path",
+        path: place?.defaultPath ?? "/home",
         transient: true,
+        rootId: "home",
       })
     }
   }

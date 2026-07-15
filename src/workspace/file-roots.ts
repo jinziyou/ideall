@@ -1,8 +1,10 @@
 import type { ComponentType } from "react"
-import { fileRefKey, parseFileRefKey, type FileRef } from "@protocol/file-system"
+import { fileRefKey, parseFileRefKey, sameFileRef, type FileRef } from "@protocol/file-system"
 import type { ResourceRef } from "@protocol/resource"
+import type { IdeallPath } from "@/filesystem/path"
 import type { ModuleId } from "./types"
-import { corePlaceRef, panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
+import { panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
+import { navigationDirectoryRef } from "@/filesystem/navigation-file-system"
 import {
   AUDIO_LIBRARY_ROOT_REF,
   DATABASE_ROOT_REF,
@@ -13,6 +15,8 @@ import {
   navigationSectionIdForRoot,
   type NavigationSectionId,
 } from "./navigation-sections"
+import { directorySurfaceForPath } from "./directory-surfaces"
+import { capabilitySurfaceForPath } from "./capability-surfaces"
 
 /**
  * 五个固定导航分区。旧的细粒度文件根仍保留稳定 FileRef，但不再作为一级入口。
@@ -26,7 +30,8 @@ export type CoreFileRoot = {
   icon: ComponentType<{ className?: string }>
   module: ModuleId
   colorClass?: string
-  defaultFile?: FileRef
+  /** 选择活动栏入口时跟随的 FileSystem 路径链接。 */
+  defaultPath: IdeallPath
 }
 
 const resource = (ref: ResourceRef) => resourceFileRef(ref)
@@ -76,13 +81,18 @@ export const CORE_FILE_ROOTS: readonly CoreFileRoot[] = NAVIGATION_SECTIONS.map(
   icon: section.icon,
   module: SECTION_MODULE[section.id],
   colorClass: section.colorClass,
-  defaultFile: section.items[0]?.target.ref,
+  defaultPath: section.path,
 }))
 
 export const MOUNTED_FILE_ROOT_PREFIX = "mount:"
 
 export function isCoreFileRootId(value: string): value is CoreFileRootId {
   return CORE_FILE_ROOTS.some((root) => root.id === value)
+}
+
+/** navigation FileSystem 的分区目录 FileRef 到工作区根的反向映射。 */
+export function coreFileRootForRef(ref: FileRef): CoreFileRoot | null {
+  return CORE_FILE_ROOTS.find((root) => sameFileRef(ref, navigationDirectoryRef(root.id))) ?? null
 }
 
 export function normalizeNavigationRootId(rootId: string | null | undefined): CoreFileRootId {
@@ -95,40 +105,40 @@ export function mountedFileRootId(ref: FileRef): string {
 
 export function fileRootRef(rootId: string): FileRef | null {
   if (isCoreFileRootId(rootId)) {
-    const representative = {
-      home: "home",
-      activity: "workspace",
-      browse: "info",
-      apps: "apps",
-      settings: "system",
-    } as const
-    return corePlaceRef(representative[rootId])
+    return navigationDirectoryRef(rootId)
   }
   return rootId.startsWith(MOUNTED_FILE_ROOT_PREFIX)
     ? parseFileRefKey(rootId.slice(MOUNTED_FILE_ROOT_PREFIX.length))
     : null
 }
 
-export function defaultFileForPath(pathname: string): { ref: FileRef; rootId: string } | null {
-  if (pathname.startsWith("/home/settings")) {
-    return { ref: panelFileRef("settings"), rootId: "settings" }
+export function defaultFileForPath(
+  pathname: string,
+): { ref: FileRef; rootId: string; engineId?: string; navigationPath?: IdeallPath } | null {
+  const capabilitySurface = capabilitySurfaceForPath(pathname)
+  if (capabilitySurface) {
+    return {
+      ref: capabilitySurface.ref,
+      engineId: capabilitySurface.engineId,
+      rootId: capabilitySurface.rootId,
+      navigationPath: capabilitySurface.navigationPath,
+    }
   }
-  if (pathname.startsWith("/home/subscriptions")) {
-    return { ref: panelFileRef("subscriptions"), rootId: "home" }
+  const directorySurface = directorySurfaceForPath(pathname)
+  if (directorySurface) {
+    return {
+      ref: directorySurface.ref,
+      engineId: directorySurface.engineId,
+      rootId: directorySurface.rootId,
+      navigationPath: directorySurface.navigationPath,
+    }
   }
   if (pathname.startsWith("/home/publications")) {
     return { ref: panelFileRef("publications"), rootId: "browse" }
   }
-  if (pathname.startsWith("/home/bookmarks")) {
-    return { ref: panelFileRef("bookmarks"), rootId: "home" }
-  }
-  if (pathname.startsWith("/home/resources")) {
-    return { ref: panelFileRef("files"), rootId: "home" }
-  }
   if (pathname.startsWith("/home/notes")) {
     return { ref: panelFileRef("notes"), rootId: "home" }
   }
-  if (pathname.startsWith("/apps")) return { ref: panelFileRef("apps"), rootId: "apps" }
   if (pathname.startsWith("/info")) {
     return { ref: resource({ scheme: "info", kind: "home", id: "default" }), rootId: "browse" }
   }
@@ -162,12 +172,8 @@ export function defaultFileForPath(pathname: string): { ref: FileRef; rootId: st
       return { ref: surface.ref, rootId: "apps" }
     }
   }
-  const systemPanel = (["shell", "code", "trash"] as const).find((id) =>
-    pathname.startsWith(`/${id}`),
-  )
-  return systemPanel
-    ? { ref: panelFileRef(systemPanel), rootId: systemPanel === "trash" ? "activity" : "apps" }
-    : null
+  const systemPanel = (["shell", "code"] as const).find((id) => pathname.startsWith(`/${id}`))
+  return systemPanel ? { ref: panelFileRef(systemPanel), rootId: "apps" } : null
 }
 
 export function coreFileRoot(id: string | null | undefined): CoreFileRoot {

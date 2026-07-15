@@ -1,9 +1,4 @@
-import {
-  DIRECTORY_MEDIA_TYPE,
-  sameFileRef,
-  type FileRef,
-  type IdeallFile,
-} from "@protocol/file-system"
+import { sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import type {
   DirectoryPage,
   FileAction,
@@ -14,15 +9,17 @@ import type {
 } from "@/filesystem/types"
 import { paginateDirectoryItems } from "@/filesystem/provider-input"
 import { FileSystemError } from "@/filesystem/types"
+import {
+  INSTALLED_APPS_FILE_SYSTEM_ID,
+  INSTALLED_APPS_ROOT_REF,
+  INSTALLED_APPS_ROOT_MEDIA_TYPE,
+} from "@/filesystem/builtin-app-roots"
 import { launchInstalledApp, listInstalledApps, type InstalledApp } from "@/lib/installed-apps"
 
-export const INSTALLED_APPS_FILE_SYSTEM_ID = "third-party.installed-apps"
+export { INSTALLED_APPS_FILE_SYSTEM_ID }
 export const INSTALLED_APP_MEDIA_TYPE = "application/vnd.ideall.installed-app+json"
 
-export const installedAppsRootRef: FileRef = {
-  fileSystemId: INSTALLED_APPS_FILE_SYSTEM_ID,
-  fileId: "root",
-}
+export const installedAppsRootRef = INSTALLED_APPS_ROOT_REF
 
 export function installedAppFileRef(appId: string): FileRef {
   if (!appId) throw new FileSystemError("invalid-input", "Installed app id cannot be empty")
@@ -240,9 +237,10 @@ export function createInstalledAppsFileSystem(
           ref,
           kind: "directory",
           name: "本机应用",
-          mediaType: DIRECTORY_MEDIA_TYPE,
+          mediaType: INSTALLED_APPS_ROOT_MEDIA_TYPE,
           capabilities: ["read-directory", "actions"],
           source: this.descriptor.source,
+          properties: { installedAppsRoot: true },
         }
       }
       const app = await findApp(ref)

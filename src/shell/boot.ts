@@ -12,7 +12,7 @@ import { registerBuiltInFileSystems } from "@/filesystem/builtin"
 import { registerBuiltInEngines } from "@/engines/builtin"
 import { registerBuiltInFileEngineRenderers } from "@/workspace/registry"
 import { isTauri } from "@/lib/tauri"
-import { filesPort } from "@/files/files-port"
+import { filesPort } from "@/files/files-runtime-port"
 import { storageSyncPort } from "@/files/storage-sync-port"
 import {
   openTarget,
@@ -35,7 +35,6 @@ import {
 import { openInBrowserTab } from "@/workspace/browser-open"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
-import { appsManifest } from "@/modules/apps/manifest"
 import { syncManifest } from "@/plugins/sync/manifest"
 import { shellManifest } from "@/plugins/shell/manifest"
 import { gitManifest } from "@/plugins/git/manifest"
@@ -47,6 +46,10 @@ import { runtimeExtensionCatalog } from "./runtime-extensions"
 import { registerPluginDataPorts } from "@/plugins/shared/plugin-data-registry"
 import { registerLocalDataSchemas } from "@/plugins/shared/local-data-schema"
 import { runRegistrationTransaction } from "./boot-transaction"
+import {
+  activateBundledRuntimeExtensions,
+  discoverBundledRuntimeExtensions,
+} from "./boot-runtime-extensions"
 
 let bootState: "idle" | "registering" | "ready" = "idle"
 
@@ -117,18 +120,11 @@ export function registerAll(): void {
             databaseManifest,
             audioManifest,
             codeManifest,
-            agentManifest,
           ].map((manifest) => () => manifest.register()),
         ),
-      // 内置第三方 App connector 也走生产 runtime factory 路径。
-      () => {
-        const undiscover = runtimeExtensionCatalog.discoverBuiltin(
-          appsManifest.runtimeExtensionFactory,
-        )
-        return () => {
-          void undiscover().catch(() => {})
-        }
-      },
+      // 随包 FileSystem + Engine + Display 统一走生产 runtime factory 路径；Catalog/Registry
+      // 会跨 provider、mount、descriptor 与 renderer 做同批安装和逆序回滚。
+      () => discoverBundledRuntimeExtensions(runtimeExtensionCatalog),
       // 持久化快照只重放可信 factory id，不承载可执行代码。
       () => runtimeExtensionCatalog.hydrate(),
     ])
@@ -138,8 +134,8 @@ export function registerAll(): void {
     throw error
   }
 
-  // 随包连接器默认启用；单个可选扩展失败只记录在 catalog，不中断整个 shell 启动。
-  void runtimeExtensionCatalog.tryActivate(appsManifest.runtimeExtensionFactory.id)
+  // 随包能力默认启用；单个扩展失败只记录在 catalog，不中断整个 shell 启动。
+  void activateBundledRuntimeExtensions(runtimeExtensionCatalog)
 }
 
 /**

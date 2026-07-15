@@ -6,12 +6,15 @@ import { Menu } from "lucide-react"
 import { Button } from "@/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/ui/sheet"
 import { WonitaMark } from "@/shared/wonita-mark"
+import { IDEALL_ROOT_REF } from "@/filesystem/root-ref"
 import NavigationSidebarList from "@/workspace/navigation-sidebar-list"
 import {
   NAVIGATION_SECTIONS,
   isNavigationSectionId,
   navigationSection,
+  navigationSectionForEntry,
 } from "@/workspace/navigation-sections"
+import { useNavigationDirectory } from "@/workspace/use-navigation-directory"
 import { toggleFileRoot, useActiveId, useActiveRootId } from "@/workspace/store"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
 import AccountMenu from "./account-menu"
@@ -22,7 +25,14 @@ export default function MobileNav() {
   const [open, setOpen] = React.useState(false)
   const activeId = useActiveId()
   const activeRootId = useActiveRootId()
-  const section = navigationSection(activeRootId)
+  const navigation = useNavigationDirectory(IDEALL_ROOT_REF)
+  const loadedSections = navigation.items.flatMap(({ entry }) => {
+    const next = navigationSectionForEntry(entry)
+    return next ? [next] : []
+  })
+  const sections = loadedSections.length > 0 ? loadedSections : NAVIGATION_SECTIONS
+  const section =
+    sections.find((item) => item.id === activeRootId) ?? navigationSection(activeRootId)
   const SectionIcon = section.icon
   const lastActive = React.useRef(activeId)
   const close = () => setOpen(false)
@@ -51,7 +61,8 @@ export default function MobileNav() {
           <Select
             value={section.id}
             onValueChange={(rootId) => {
-              if (isNavigationSectionId(rootId)) toggleFileRoot(rootId)
+              if (!isNavigationSectionId(rootId)) return
+              toggleFileRoot(rootId, sections.find((item) => item.id === rootId)?.path)
             }}
           >
             <SelectTrigger className="h-9">
@@ -61,7 +72,7 @@ export default function MobileNav() {
               </span>
             </SelectTrigger>
             <SelectContent>
-              {NAVIGATION_SECTIONS.map((item) => (
+              {sections.map((item) => (
                 <SelectItem key={item.id} value={item.id}>
                   {item.label}
                 </SelectItem>

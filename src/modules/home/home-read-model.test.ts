@@ -53,5 +53,21 @@ test("buildHomeActivity: 按时间倒序合并最近动态并截断到 12 条", 
     ["sub:publisher:a", "f:f1", "bm:b1"],
   )
   assert.deepEqual(activity[1].fileType, { name: "report.pdf", type: "application/pdf" })
+  assert.deepEqual(
+    activity.slice(0, 3).map((item) => item.path),
+    ["/home/following", "/home/resources", "/home/bookmarks"],
+  )
   assert.ok(!activity.some((item) => item.title === "无标题"), "超出最近 12 条的旧笔记被截断")
+})
+
+test("buildHomeActivity: 文件动态只生成规范 FileSystem path", () => {
+  const [note] = buildHomeActivity({
+    subs: [],
+    bookmarks: [],
+    files: [],
+    notes: [{ id: "n1", title: "N", createdAt: 1 }],
+  })
+
+  assert.equal(note.path, "/home/files")
+  assert.equal("href" in note, false)
 })

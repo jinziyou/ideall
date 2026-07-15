@@ -4,13 +4,19 @@
 
 import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { IDEALL_ROOT_REF } from "@/filesystem/root-ref"
 import NavigationSidebarList from "./navigation-sidebar-list"
-import { navigationSection } from "./navigation-sections"
+import { navigationSection, navigationSectionForEntry } from "./navigation-sections"
 import { useActiveRootId, setSidebarCollapsed } from "./store"
+import { useNavigationDirectory } from "./use-navigation-directory"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
   const activeRootId = useActiveRootId()
-  const title = navigationSection(activeRootId).label
+  const navigation = useNavigationDirectory(IDEALL_ROOT_REF)
+  const loadedSection = navigation.items
+    .map(({ entry }) => navigationSectionForEntry(entry))
+    .find((section) => section?.id === activeRootId)
+  const title = loadedSection?.label ?? navigationSection(activeRootId).label
 
   return (
     <aside

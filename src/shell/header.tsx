@@ -1,8 +1,9 @@
 "use client"
 
-import Link from "next/link"
 import { WonitaMark } from "@/shared/wonita-mark"
 import CommandTrigger from "@/shared/command-trigger"
+import { HOME_TARGET } from "@/shell/nav-config"
+import { openTarget } from "@/workspace/store"
 import MobileNav from "./mobile-nav"
 import WindowControls from "./window-controls"
 import { useTauriDragRegion } from "@/lib/use-tauri-drag-region"
@@ -20,9 +21,14 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] min-w-0 items-stretch gap-2 overflow-hidden border-b bg-background/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
       <MobileNav />
-      <Link href="/" className="flex shrink-0 items-center" aria-label="ideall 首页">
+      <button
+        type="button"
+        onClick={() => openTarget(HOME_TARGET)}
+        className="flex shrink-0 items-center"
+        aria-label="ideall 首页"
+      >
         <WonitaMark className="h-6 w-auto text-foreground" />
-      </Link>
+      </button>
       <CommandTrigger className="ml-1 h-8 min-w-0 max-w-[14rem] flex-1" />
       {/* 仅空白条带可拖拽; 勿挂整栏, 否则 WebView2 会吞子控件 mousedown。 */}
       <div

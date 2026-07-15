@@ -166,6 +166,73 @@ const config = [
       ],
     },
   },
+
+  // 已完成 FileSystem 化的 Agent Display 不得重新直连 feature store/provider 实现。
+  // 这里重列 plugin frame 禁令，因为 flat config 的 no-restricted-imports 不跨块合并。
+  {
+    files: [
+      "src/plugins/agent/views/ai-settings.tsx",
+      "src/plugins/agent/views/agent-spaces.tsx",
+      "src/plugins/agent/views/agent-task-list.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            WIRE_DTO,
+            NO_APP,
+            NO_UI_STORAGE_BYPASS,
+            {
+              group: ["@/shell", "@/shell/**", "@/workspace", "@/workspace/**"],
+              message: "Agent Display 不得反向 import 外壳/工作区；触达工作区只准经 UI action port",
+            },
+            {
+              group: [
+                "../lib",
+                "../lib/**",
+                "@/plugins/agent/lib",
+                "@/plugins/agent/lib/**",
+                "@protocol/flowback",
+              ],
+              message:
+                "能力 Display 的读取、写入和订阅必须经 FileSystem registry；底层 store/catalog 只允许 provider 适配器访问",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // 基本设置 Display 同样只能消费文件文档；受控 shell 视图与 workspace 导航动作仍可复用。
+  {
+    files: ["src/modules/home/settings/settings-page.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            WIRE_DTO,
+            NO_APP,
+            NO_UI_STORAGE_BYPASS,
+            {
+              group: [
+                "@/modules/home/settings/settings-file-system",
+                "./settings-file-system",
+                "@/lib/theme",
+                "@/lib/sync-code",
+                "@protocol/auth",
+                "@/plugins/embed/connections",
+                "@/shell/runtime-extensions",
+              ],
+              message:
+                "SettingsPage 的读取、写入和订阅必须经 FileSystem registry；底层 store/catalog 只允许 provider 适配器访问",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]
 
 export default config

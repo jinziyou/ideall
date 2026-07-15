@@ -1,6 +1,7 @@
 import type { ResourceRef } from "@protocol/resource"
 import type { FileRef, IdeallFile } from "@protocol/file-system"
 import { parseResourceSearch } from "@protocol/resource"
+import type { IdeallPath } from "@/filesystem/path"
 import type { TabDescriptor } from "./types"
 import { resourceFileTab } from "./resource-file-tab"
 
@@ -14,6 +15,17 @@ export type OpenTarget =
       transient?: boolean
       display?: "tab" | "window"
       /** 从某个活动栏根目录打开时保留该空间锚点。 */
+      rootId?: string
+      /** 解引用前的目录位置，不参与 FileRef 或标签身份。 */
+      navigationPath?: IdeallPath
+    }
+  | {
+      type: "path"
+      path: IdeallPath
+      engineId?: string
+      title?: string
+      transient?: boolean
+      display?: "tab" | "window"
       rootId?: string
     }
   | { type: "tab"; descriptor: TabDescriptor; transient?: boolean }

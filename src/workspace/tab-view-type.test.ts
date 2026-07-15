@@ -26,6 +26,19 @@ test("file-engine panel tabs preserve their display classification", () => {
   )
 })
 
+test("semantic management Displays remain classified as configuration tabs", () => {
+  const fixtures = [
+    [{ fileSystemId: "app.agent-config", fileId: "config:workspaces" }, "ideall.agent-spaces"],
+    [{ fileSystemId: "app.agent-config", fileId: "config:tasks" }, "ideall.agent-tasks"],
+    [{ fileSystemId: "app.agent-config", fileId: "config:settings" }, "ideall.agent-settings"],
+    [{ fileSystemId: "app.settings", fileId: "root" }, "ideall.settings"],
+  ] as const
+
+  for (const [ref, engineId] of fixtures) {
+    assert.equal(tabViewType(tabFor(ref, engineId)), "config")
+  }
+})
+
 test("node resources remain discoverable after migration to file-engine tabs", () => {
   const ref = resourceFileRef({ scheme: "node", kind: "note", id: "note-1" })
   assert.deepEqual(nodeResourceRefForTab(tabFor(ref, "ideall.note")), {

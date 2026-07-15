@@ -10,6 +10,25 @@ export type ThemeChoice = "light" | "dark" | "system"
 
 export const THEME_KEY = "ideall:theme"
 export const LEGACY_THEME_KEY = "wonita-theme"
+const themeChoiceListeners = new Set<() => void>()
+
+function notifyThemeChoice(): void {
+  for (const listener of themeChoiceListeners) {
+    try {
+      listener()
+    } catch {
+      // 一个观察者不能阻断主题落盘或其它观察者。
+    }
+  }
+}
+
+/** 同进程主题选择订阅；跨标签变化仍由消费方监听 storage 事件。 */
+export function subscribeThemeChoice(listener: () => void): () => void {
+  themeChoiceListeners.add(listener)
+  return () => {
+    themeChoiceListeners.delete(listener)
+  }
+}
 
 /**
  * 让浏览器 tab favicon 跟随「手动」主题选择 (而非仅 OS prefers-color-scheme)。
@@ -52,6 +71,7 @@ export function getThemeChoice(): ThemeChoice {
 }
 
 export function applyTheme(choice: ThemeChoice) {
+  if (typeof window === "undefined" || typeof document === "undefined") return
   const dark =
     choice === "dark" ||
     (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
@@ -70,5 +90,9 @@ export function setThemeChoice(choice: ThemeChoice) {
   } catch {
     /* 忽略持久化失败 */
   }
-  applyTheme(choice)
+  try {
+    applyTheme(choice)
+  } finally {
+    notifyThemeChoice()
+  }
 }

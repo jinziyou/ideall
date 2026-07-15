@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
 import {
   AudioLines,
   Bookmark,
@@ -32,14 +31,26 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/ui/command"
-import { setThemeChoice } from "@/lib/theme"
+import { setSettingsThemeChoice } from "@/modules/home/settings/settings-write-adapter"
 import { getSyncCode, subscribeSyncCode } from "@/lib/sync-code"
 import { checkForUpdate } from "@/lib/updater"
 import { isTauri } from "@/lib/tauri"
-import { CMDK_OPEN, openCommandPalette } from "@/lib/command-palette-bus"
+import { CMDK_OPEN } from "@/lib/command-palette-bus"
 import { getSyncPort } from "@protocol/sync"
 import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
-import { HOME_SUBPAGES, SPOKES } from "@/shell/nav-config"
+import {
+  BOOKMARKS_TARGET,
+  BROWSER_TARGET,
+  CODE_TARGET,
+  FOLLOWING_TARGET,
+  HOME_SUBPAGES,
+  INSTALLED_APPS_TARGET,
+  OVERVIEW_TARGET,
+  SPOKES,
+  SYSTEM_TARGETS,
+  TRASH_TARGET,
+  type ShellNavigationTarget,
+} from "@/shell/nav-config"
 import {
   loadLocalSearchItems,
   LOCAL_SEARCH_ICON,
@@ -65,10 +76,6 @@ import { FileTypeIcon } from "@/shared/file-type-icon"
 const LOCAL_SEARCH_DEBOUNCE_MS = 160
 const LOCAL_SEARCH_LIMIT_PER_GROUP = 20
 
-// openCommandPalette / CMDK_OPEN 已抽到 @/lib/command-palette-bus (纯事件总线),
-// 使 components 的触发器无需反向 import app/shell; 此处 re-export 维持既有 ./command-palette 导入点。
-export { openCommandPalette }
-
 /**
  * ⌘K 统一面板 —— 全局唯一实例 (挂根布局), 本地搜索与命令的单一入口 (顶栏搜索框同样唤起它)。
  * 直接输入 = 搜本机内容 (文件/关注/书签/资源) + 匹配命令; 输入 `>` 前缀 = 只看命令 (VS Code 惯例)。
@@ -77,7 +84,6 @@ export { openCommandPalette }
  * 由 ⌘K / Ctrl+K 或任意 openCommandPalette() 触发器 (顶栏搜索框 / 移动顶栏 / 各页页头) 唤起。
  */
 export default function CommandPalettePanel({ initialOpen = false }: { initialOpen?: boolean }) {
-  const router = useRouter()
   const [open, setOpen] = React.useState(initialOpen)
   // 受控输入: 内容项 (文件/书签/资源/关注) 仅在用户输入时才展示, 避免一打开就糊一屏本机内容
   // (⌘K 主要是命令/跳转入口; 内容搜索是兑现占位文案「跳到书签」的补充)。
@@ -148,9 +154,9 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
     }
   }, [open, commandMode, query])
 
-  function go(href: string) {
+  function go(target: ShellNavigationTarget) {
     setOpen(false)
-    router.push(href)
+    openTarget(target)
   }
 
   function switchWorkspace(
@@ -164,7 +170,9 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
 
   function toggleTheme() {
     setOpen(false)
-    setThemeChoice(document.documentElement.classList.contains("dark") ? "light" : "dark")
+    void setSettingsThemeChoice(
+      document.documentElement.classList.contains("dark") ? "light" : "dark",
+    ).catch(() => toast.error("主题切换失败"))
   }
 
   function syncNow(c: string) {
@@ -288,38 +296,42 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
         <CommandSeparator />
         <CommandGroup heading="发现">
           {SPOKES.map((s) => (
-            <CommandItem key={s.href} value={`> 发现 ${s.label}`} onSelect={() => go(s.href)}>
+            <CommandItem key={s.id} value={`> 发现 ${s.label}`} onSelect={() => go(s.target)}>
               <span className={`h-2 w-2 rounded-full ${s.dot}`} />
               {s.label}
-              <CommandShortcut className="font-mono">{s.href}</CommandShortcut>
+              {s.shortcut ? (
+                <CommandShortcut className="font-mono">{s.shortcut}</CommandShortcut>
+              ) : null}
             </CommandItem>
           ))}
           {/* 浏览器 (内嵌 webview) 与 应用 (本机已装应用) 均仅桌面 App 可用; 移动端不放 (无法工作)。 */}
           {isDesktop && (
-            <CommandItem value="> 发现 浏览器 browser web 网页" onSelect={() => go("/browser")}>
+            <CommandItem value="> 发现 浏览器 browser web 网页" onSelect={() => go(BROWSER_TARGET)}>
               <Globe className="h-4 w-4" />
               浏览器
-              <CommandShortcut className="font-mono">/browser</CommandShortcut>
+              <CommandShortcut className="font-mono">{BROWSER_TARGET.path}</CommandShortcut>
             </CommandItem>
           )}
           {isDesktop && (
-            <CommandItem value="> 应用 apps 本机应用 installed 启动" onSelect={() => go("/apps")}>
+            <CommandItem
+              value="> 应用 apps 本机应用 installed 启动"
+              onSelect={() => go(INSTALLED_APPS_TARGET)}
+            >
               <LayoutGrid className="h-4 w-4" />
               应用
-              <CommandShortcut className="font-mono">/apps</CommandShortcut>
+              <CommandShortcut className="font-mono">{INSTALLED_APPS_TARGET.path}</CommandShortcut>
             </CommandItem>
           )}
           {isDesktop && (
-            <CommandItem value="> Code code 开发 diagnostics 诊断" onSelect={() => go("/code")}>
+            <CommandItem value="> Code code 开发 diagnostics 诊断" onSelect={() => go(CODE_TARGET)}>
               <Braces className="h-4 w-4" />
               Code
-              <CommandShortcut className="font-mono">/code</CommandShortcut>
             </CommandItem>
           )}
-          <CommandItem value="> 回收站 trash deleted 删除 恢复" onSelect={() => go("/trash")}>
+          <CommandItem value="> 回收站 trash deleted 删除 恢复" onSelect={() => go(TRASH_TARGET)}>
             <Trash2 className="h-4 w-4" />
             回收站
-            <CommandShortcut className="font-mono">/trash</CommandShortcut>
+            <CommandShortcut className="font-mono">{TRASH_TARGET.path}</CommandShortcut>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
@@ -330,10 +342,22 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
             新建页面
           </CommandItem>
           {HOME_SUBPAGES.map((p) => (
-            <CommandItem key={p.href} value={`> 我的 ${p.label}`} onSelect={() => go(p.href)}>
+            <CommandItem key={p.id} value={`> 我的 ${p.label}`} onSelect={() => go(p.target)}>
               <p.icon className="h-4 w-4" />
               {p.label}
-              <CommandShortcut className="font-mono">{p.href}</CommandShortcut>
+              {p.shortcut ? (
+                <CommandShortcut className="font-mono">{p.shortcut}</CommandShortcut>
+              ) : null}
+            </CommandItem>
+          ))}
+          {SYSTEM_TARGETS.map((item) => (
+            <CommandItem
+              key={item.id}
+              value={`> 我的 系统 ${item.label}`}
+              onSelect={() => go(item.target)}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
             </CommandItem>
           ))}
         </CommandGroup>
@@ -384,17 +408,20 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
           ) : (
             <CommandItem
               value="> 开启跨端同步 setup sync 同步码"
-              onSelect={() => go("/home/subscriptions")}
+              onSelect={() => go(FOLLOWING_TARGET)}
             >
               <RefreshCw className="h-4 w-4" />
               开启跨端同步…
             </CommandItem>
           )}
-          <CommandItem value="> 去新建书签 收藏" onSelect={() => go("/home/bookmarks")}>
+          <CommandItem value="> 去新建书签 收藏" onSelect={() => go(BOOKMARKS_TARGET)}>
             <Bookmark className="h-4 w-4" />
             去新建书签
           </CommandItem>
-          <CommandItem value="> 回到「我的」 home 概览 dashboard" onSelect={() => go("/home")}>
+          <CommandItem
+            value="> 回到「我的」 home 概览 dashboard"
+            onSelect={() => go(OVERVIEW_TARGET)}
+          >
             <Hexagon className="h-4 w-4" />
             回到「我的」
           </CommandItem>

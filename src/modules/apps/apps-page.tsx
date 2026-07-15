@@ -212,7 +212,7 @@ function AppTile({
   )
 }
 
-export default function AppsPage() {
+export default function AppsPage({ rootRef = installedAppsRootRef }: { rootRef?: FileRef } = {}) {
   const [apps, setApps] = React.useState<InstalledAppItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -224,7 +224,7 @@ export default function AppsPage() {
     setLoading(true)
     setError(null)
     try {
-      const page = await readFileDirectory(installedAppsRootRef, {
+      const page = await readFileDirectory(rootRef, {
         actor: "ui",
         permissions: [],
         intent: "directory",
@@ -250,7 +250,7 @@ export default function AppsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [rootRef])
 
   React.useEffect(() => {
     void load()

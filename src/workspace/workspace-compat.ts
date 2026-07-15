@@ -1,16 +1,19 @@
 import type { FileRef } from "@protocol/file-system"
 import type { ResourceRef } from "@protocol/resource"
 import { getFileSystem } from "@/filesystem/registry"
+import { normalizeIdeallPath } from "@/filesystem/path"
 import {
   aiTasksPanelFileRef,
   panelFileRef,
   panelForFile,
+  placeForFile,
   resourceRefForFile,
 } from "@/filesystem/resource-file-system"
 import {
   BUILTIN_APP_SURFACES,
   builtinAppSurfaceForLegacyPanel,
   builtinAppSurfaceForRoot,
+  coreFileRootForRef,
   isCoreFileRootId,
   normalizeNavigationRootId,
 } from "./file-roots"
@@ -20,6 +23,18 @@ import { resourceFileTab, rootForResource } from "./resource-file-tab"
 import { isStaticTabKind, type StaticTabKind } from "./tab-definitions"
 import { tabKey } from "./tab-key"
 import type { ModuleId, Tab } from "./types"
+import {
+  directorySurface,
+  directorySurfaceForLegacyPanel,
+  directorySurfaceForRef,
+  type DirectorySurface,
+} from "./directory-surfaces"
+import {
+  capabilitySurfaceForLegacyPanel,
+  capabilitySurfaceForRef,
+  capabilitySurfaceForStaticKind,
+  type CapabilitySurface,
+} from "./capability-surfaces"
 
 const VALID_MODULES = new Set(
   Object.keys({
@@ -48,10 +63,33 @@ export function validWorkspaceModule(value: unknown): ModuleId | null {
     : null
 }
 
+function validNavigationPath(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  try {
+    return normalizeIdeallPath(value)
+  } catch {
+    return undefined
+  }
+}
+
 export function inferredRootIdForFile(ref: FileRef): string | undefined {
+  const navigationRoot = coreFileRootForRef(ref)
+  if (navigationRoot) return navigationRoot.id
+  const capabilitySurface = capabilitySurfaceForRef(ref)
+  if (capabilitySurface) return capabilitySurface.rootId
+  const directorySurface = directorySurfaceForRef(ref)
+  if (directorySurface) return directorySurface.rootId
   if (builtinAppSurfaceForRoot(ref)) return "apps"
   const resource = resourceRefForFile(ref)
   if (resource) return rootForResource(resource)
+  const place = placeForFile(ref)
+  if (place) {
+    if (["home", "subscriptions", "bookmarks", "files", "notes"].includes(place)) return "home"
+    if (place === "workspace") return "activity"
+    if (["info", "community", "browser"].includes(place)) return "browse"
+    if (place === "system") return "settings"
+    return "apps"
+  }
 
   const panel = panelForFile(ref)
   if (panel) {
@@ -88,6 +126,31 @@ function hydratePanelFileTab(
   return { ...descriptor, id: tabKey(descriptor) }
 }
 
+type SemanticSurface = DirectorySurface | CapabilitySurface
+
+function surfaceNavigationPath(surface: SemanticSurface, value: unknown): string {
+  const path = validNavigationPath(value)
+  return path && !surface.legacyPaths.includes(path as `/${string}`) ? path : surface.navigationPath
+}
+
+function hydrateSemanticSurfaceTab(
+  surface: SemanticSurface,
+  tab: Tab,
+  engineId = surface.engineId,
+): Tab {
+  const descriptor = fileEngineTab(
+    { ref: surface.ref, name: tab.title || surface.ref.fileId },
+    engineId,
+    {
+      module: surface.module,
+      rootId: surface.rootId,
+      ...(engineId === surface.engineId ? { path: surface.navigationPath } : {}),
+      navigationPath: surfaceNavigationPath(surface, tab.navigationPath),
+    },
+  )
+  return { ...descriptor, id: tabKey(descriptor) }
+}
+
 function migrateStaticWorkspaceTab(tab: Tab & { kind: StaticTabKind }): Tab | null {
   switch (tab.kind) {
     case "home-overview":
@@ -95,15 +158,20 @@ function migrateStaticWorkspaceTab(tab: Tab & { kind: StaticTabKind }): Tab | nu
     case "home-notes":
       return hydratePanelFileTab(panelFileRef("notes"), tab, "home")
     case "subscriptions":
-      return hydratePanelFileTab(panelFileRef("subscriptions"), tab, "home")
+      return hydrateSemanticSurfaceTab(directorySurface("subscriptions"), tab)
     case "home-publications":
       return hydratePanelFileTab(panelFileRef("publications"), tab, "browse")
     case "home-resources":
-      return hydratePanelFileTab(panelFileRef("files"), tab, "home")
+      return hydrateSemanticSurfaceTab(directorySurface("resources"), tab)
     case "home-bookmarks":
-      return hydratePanelFileTab(panelFileRef("bookmarks"), tab, "home")
+      return hydrateSemanticSurfaceTab(directorySurface("bookmarks"), tab)
     case "home-settings":
-      return hydratePanelFileTab(panelFileRef("settings"), tab, "settings")
+    case "ai-settings":
+    case "agent-spaces":
+    case "agent-task-list": {
+      const surface = capabilitySurfaceForStaticKind(tab.kind)
+      return surface ? hydrateSemanticSurfaceTab(surface, tab) : null
+    }
     case "info":
       return hydrateResourceFileTab({ scheme: "info", kind: "home", id: "default" }, tab)
     case "community":
@@ -115,7 +183,7 @@ function migrateStaticWorkspaceTab(tab: Tab & { kind: StaticTabKind }): Tab | nu
     case "tool-navigation":
       return hydrateResourceFileTab({ scheme: "tool", kind: "navigation", id: "default" }, tab)
     case "apps":
-      return hydratePanelFileTab(panelFileRef("apps"), tab, "apps")
+      return hydrateSemanticSurfaceTab(directorySurface("installed-apps"), tab)
     case "shell":
       return hydratePanelFileTab(panelFileRef("shell"), tab, "apps", "ideall.shell")
     case "git":
@@ -127,18 +195,13 @@ function migrateStaticWorkspaceTab(tab: Tab & { kind: StaticTabKind }): Tab | nu
     case "code":
       return hydratePanelFileTab(panelFileRef("code"), tab, "apps")
     case "trash":
-      return hydratePanelFileTab(panelFileRef("trash"), tab, "activity")
+      return hydrateSemanticSurfaceTab(directorySurface("trash"), tab)
     case "browser-view":
       return hydrateResourceFileTab({ scheme: "browser", kind: "page", id: "default" }, tab)
-    case "ai-settings":
     case "ai-mcp":
     case "ai-skills":
     case "ai-rules":
       return hydratePanelFileTab(panelFileRef(tab.kind), tab, "settings", "ideall.panel-fill")
-    case "agent-spaces":
-      return hydratePanelFileTab(panelFileRef("spaces"), tab, "activity")
-    case "agent-task-list":
-      return hydratePanelFileTab(panelFileRef("tasks"), tab, "activity")
     case "ai-tasks": {
       const workspaceId = tab.params?.workspaceId
       return workspaceId
@@ -169,6 +232,12 @@ export function migrateWorkspaceTab(tab: Tab): Tab | null {
   if (tab.kind === FILE_ENGINE_TAB_KIND) {
     const target = parseFileEngineTabParams(tab.params)
     if (!target) return null
+    const legacyDirectorySurface = directorySurfaceForLegacyPanel(target.ref)
+    if (legacyDirectorySurface) return hydrateSemanticSurfaceTab(legacyDirectorySurface, tab)
+    const legacyCapabilitySurface = capabilitySurfaceForLegacyPanel(target.ref)
+    if (legacyCapabilitySurface) {
+      return hydrateSemanticSurfaceTab(legacyCapabilitySurface, tab)
+    }
     const surface = builtinAppSurfaceForLegacyPanel(target.ref)
     if (surface) {
       return hydratePanelFileTab(
@@ -178,10 +247,25 @@ export function migrateWorkspaceTab(tab: Tab): Tab | null {
         surface.engineId,
       )
     }
+    const directorySurface = directorySurfaceForRef(target.ref)
+    if (directorySurface) {
+      if (target.engineId === "ideall.panel" || target.engineId === "ideall.panel-fill") {
+        return hydrateSemanticSurfaceTab(directorySurface, tab)
+      }
+      return hydrateSemanticSurfaceTab(directorySurface, tab, target.engineId)
+    }
+    const capabilitySurface = capabilitySurfaceForRef(target.ref)
+    if (capabilitySurface) {
+      if (target.engineId === "ideall.panel" || target.engineId === "ideall.panel-fill") {
+        return hydrateSemanticSurfaceTab(capabilitySurface, tab)
+      }
+      return hydrateSemanticSurfaceTab(capabilitySurface, tab, target.engineId)
+    }
     const inferredRootId = inferredRootIdForFile(target.ref)
     return {
       ...tab,
       id: tabKey(tab),
+      navigationPath: validNavigationPath(tab.navigationPath),
       rootId:
         tab.rootId && isCoreFileRootId(tab.rootId)
           ? tab.rootId
@@ -191,7 +275,7 @@ export function migrateWorkspaceTab(tab: Tab): Tab | null {
   if (isStaticTabKind(tab.kind)) {
     return migrateStaticWorkspaceTab(tab as Tab & { kind: StaticTabKind })
   }
-  return { ...tab, id: tabKey(tab) }
+  return { ...tab, id: tabKey(tab), navigationPath: validNavigationPath(tab.navigationPath) }
 }
 
 export function migrateWorkspaceTabs(tabs: readonly Tab[]): {

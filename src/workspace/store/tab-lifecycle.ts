@@ -64,7 +64,15 @@ export function openTab(
     patchWorkspace({
       ...plan,
       tabs: plan.tabs.map((tab) =>
-        tab.id === plan.activeId ? { ...tab, rootId: activeRootId } : tab,
+        tab.id === plan.activeId
+          ? {
+              ...tab,
+              rootId: activeRootId,
+              ...(canonicalDescriptor.navigationPath
+                ? { navigationPath: canonicalDescriptor.navigationPath }
+                : {}),
+            }
+          : tab,
       ),
       activeModule: descriptor.module,
       activeRootId,
@@ -75,7 +83,17 @@ export function openTab(
 
   const exists = state.tabs.some((tab) => tab.id === id)
   const tabs = exists
-    ? state.tabs.map((tab) => (tab.id === id ? { ...tab, rootId: activeRootId } : tab))
+    ? state.tabs.map((tab) =>
+        tab.id === id
+          ? {
+              ...tab,
+              rootId: activeRootId,
+              ...(canonicalDescriptor.navigationPath
+                ? { navigationPath: canonicalDescriptor.navigationPath }
+                : {}),
+            }
+          : tab,
+      )
     : evictColdTabs({
         tabs: [...state.tabs, { ...canonicalDescriptor, id }],
         transientId: state.transientId,

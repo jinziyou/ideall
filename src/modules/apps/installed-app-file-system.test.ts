@@ -1,11 +1,13 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { FileSystemError } from "@/filesystem/types"
+import { INSTALLED_APPS_ROOT_MEDIA_TYPE } from "@/filesystem/builtin-app-roots"
 import type { InstalledApp } from "@/lib/installed-apps"
 import {
   createInstalledAppsFileSystem,
   installedAppFileRef,
   installedAppFromFile,
+  installedAppsRootRef,
 } from "./installed-app-file-system"
 
 function app(id: string, name = id): InstalledApp {
@@ -17,6 +19,29 @@ function app(id: string, name = id): InstalledApp {
     iconPath: `/icons/${id}.png`,
   }
 }
+
+test("installed apps filesystem: root advertises its semantic directory contract", async () => {
+  let scans = 0
+  const fs = createInstalledAppsFileSystem({
+    async listInstalledApps() {
+      scans += 1
+      return []
+    },
+    async launchInstalledApp() {},
+  })
+
+  const root = await fs.stat(installedAppsRootRef, {
+    actor: "ui",
+    permissions: [],
+    intent: "metadata",
+  })
+
+  assert.ok(root)
+  assert.equal(root.kind, "directory")
+  assert.equal(root.mediaType, INSTALLED_APPS_ROOT_MEDIA_TYPE)
+  assert.equal(root.properties?.installedAppsRoot, true)
+  assert.equal(scans, 0, "root metadata must not enumerate host applications")
+})
 
 test("installed apps filesystem: every app is a stable third-party file with readable metadata", async () => {
   let apps = [app("alpha", "Alpha"), app("beta", "Beta")]

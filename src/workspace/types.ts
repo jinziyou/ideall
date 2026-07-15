@@ -39,6 +39,11 @@ export type TabDescriptor = {
   params?: Record<string, string>
   /** 打开该文件时所在的合成根子树；不参与标签身份。 */
   rootId?: string
+  /**
+   * 打开文件时所跟随的 ideall 目录位置；仅用于符号链接高亮与恢复，不参与标签身份。
+   * 同一 FileRef + Engine 从另一条路径打开时仍复用当前标签并更新此位置。
+   */
+  navigationPath?: string
 }
 
 /** 已打开的标签实例。 */

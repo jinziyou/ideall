@@ -20,7 +20,8 @@ import {
 } from "./store"
 import { defaultFileForPath } from "./file-roots"
 import { workspaceCommandForPath } from "./workspace-route"
-import { panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
+import { capabilitySurface } from "./capability-surfaces"
 
 function OpenWorkspaceTabInner() {
   const pathname = usePathname()
@@ -34,11 +35,14 @@ function OpenWorkspaceTabInner() {
     const run = () => {
       const p = pathname || "/"
       // /ai: AI 全局设置标签。常驻打开 (区别于下方其余路由统一用的 transient 预览)。
-      if (p.startsWith("/ai")) {
+      if (p === "/ai" || p.startsWith("/ai/")) {
+        const surface = capabilitySurface("agent-settings")
         void openRouteFileTarget({
           type: "file",
-          ref: panelFileRef("ai-settings"),
-          rootId: "settings",
+          ref: surface.ref,
+          engineId: surface.engineId,
+          rootId: surface.rootId,
+          navigationPath: surface.navigationPath,
         })
         return
       }

@@ -20,11 +20,13 @@ import {
   type IdeallFile,
 } from "@protocol/file-system"
 import { readFileDirectory, statFile, watchFile } from "@/filesystem/registry"
+import type { IdeallPath } from "@/filesystem/path"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
 import { openTarget } from "../store"
 import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
 import { readAllDirectoryEntries } from "./directory-pagination"
 import { fileCanExpand } from "./file-tree-expansion"
+import { navigationEntryPath } from "./navigation-tree-path"
 
 type LoadedEntry = { entry: DirectoryEntry; file: IdeallFile | null }
 
@@ -52,6 +54,7 @@ export function FileSystemTreeChildren({
   expanded,
   onSetExpanded,
   refreshKey,
+  navigationBasePath,
   onOpen,
 }: {
   directory: FileRef
@@ -61,6 +64,7 @@ export function FileSystemTreeChildren({
   expanded: Set<string>
   onSetExpanded: (ref: FileRef, expanded: boolean) => void
   refreshKey: string
+  navigationBasePath?: IdeallPath
   onOpen?: (file: IdeallFile, expandable: boolean) => void
 }) {
   const [items, setItems] = React.useState<LoadedEntry[]>([])
@@ -138,6 +142,7 @@ export function FileSystemTreeChildren({
       expanded={expanded}
       onSetExpanded={onSetExpanded}
       refreshKey={`${refreshKey}:${revision}`}
+      navigationBasePath={navigationBasePath}
       onOpen={onOpen}
     />
   ))
@@ -152,6 +157,7 @@ function FileTreeRow({
   expanded,
   onSetExpanded,
   refreshKey,
+  navigationBasePath,
   onOpen,
 }: {
   entry: DirectoryEntry
@@ -162,6 +168,7 @@ function FileTreeRow({
   expanded: Set<string>
   onSetExpanded: (ref: FileRef, expanded: boolean) => void
   refreshKey: string
+  navigationBasePath?: IdeallPath
   onOpen?: (file: IdeallFile, expandable: boolean) => void
 }) {
   const Icon = fileIcon(file)
@@ -169,6 +176,7 @@ function FileTreeRow({
   const open = expandable ? expanded.has(fileRefKey(file.ref)) : false
   const active = Boolean(file && activeRef && sameFileRef(file.ref, activeRef))
   const badge = file?.properties?.badge
+  const navigationPath = navigationEntryPath(navigationBasePath, entry.pathName)
 
   const openFile = (transient: boolean) => {
     if (!file) return
@@ -189,6 +197,7 @@ function FileTreeRow({
         title: entry.name,
         transient,
         rootId,
+        ...(navigationPath ? { navigationPath } : {}),
       },
       "user",
     )
@@ -262,6 +271,7 @@ function FileTreeRow({
           expanded={expanded}
           onSetExpanded={onSetExpanded}
           refreshKey={refreshKey}
+          navigationBasePath={navigationPath}
           onOpen={onOpen}
         />
       )}

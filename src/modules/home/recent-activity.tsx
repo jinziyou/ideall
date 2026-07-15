@@ -1,8 +1,9 @@
-import Link from "next/link"
 import { ChevronRight, CornerDownLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/lib/format"
 import { FileTypeIcon } from "@/shared/file-type-icon"
+import { directorySurface } from "@/workspace/directory-surfaces"
+import { openTarget } from "@/workspace/store"
 import type { HomeActivityItem } from "./home-read-model"
 
 /** 一条「最近动态」记录: 把本机关注 / 书签 / 资源 / 笔记的动作按时间归并。 */
@@ -61,13 +62,14 @@ export function RecentActivity({ items }: { items: ActivityItem[] }) {
                     )}
                   />
                 )}
-                <Link
-                  href={it.href}
+                <button
+                  type="button"
+                  onClick={() => openTarget({ type: "path", path: it.path, transient: true })}
                   className="flex min-w-0 flex-1 items-center gap-2 text-sm hover:underline"
                 >
                   <span className="shrink-0 text-muted-foreground">{it.label}</span>
                   <span className="truncate font-medium">{it.title}</span>
-                </Link>
+                </button>
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                   {formatTime(it.ts)}
                 </span>
@@ -76,13 +78,20 @@ export function RecentActivity({ items }: { items: ActivityItem[] }) {
           </ol>
         </div>
       ))}
-      <Link
-        href="/home/subscriptions"
+      <button
+        type="button"
+        onClick={() =>
+          openTarget({
+            type: "path",
+            path: directorySurface("subscriptions").navigationPath,
+            transient: true,
+          })
+        }
         className="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:text-pop"
       >
         查看全部
         <ChevronRight className="h-4 w-4" />
-      </Link>
+      </button>
     </div>
   )
 }

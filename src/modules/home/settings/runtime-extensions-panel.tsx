@@ -3,11 +3,9 @@
 import * as React from "react"
 import { Loader2, Puzzle, RefreshCw, ShieldOff, Trash2 } from "lucide-react"
 import type {
-  RuntimeExtensionCatalogState,
-  RuntimeExtensionHealth,
-  RuntimeExtensionSource,
-} from "@/shell/runtime-extensions"
-import { runtimeExtensionCatalog } from "@/shell/runtime-extensions"
+  RuntimeExtensionSettingsDocument,
+  RuntimeExtensionSettingsHealth,
+} from "./settings-contract"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
 import { Button } from "@/ui/button"
 import { Chip } from "@/ui/chip"
@@ -15,18 +13,13 @@ import { EmptyState } from "@/ui/empty-state"
 import { Panel } from "@/ui/panel"
 import type { Tone } from "@/ui/status-dot"
 
-export type RuntimeExtensionCatalogView = Pick<
-  typeof runtimeExtensionCatalog,
-  "states" | "subscribe" | "revision" | "retry" | "revoke" | "uninstall"
->
-
 type HealthPresentation = Readonly<{
   label: string
   tone: Tone | "neutral"
   description: string
 }>
 
-const HEALTH: Record<RuntimeExtensionHealth, HealthPresentation> = {
+const HEALTH: Record<RuntimeExtensionSettingsHealth, HealthPresentation> = {
   discovered: {
     label: "待验证",
     tone: "idle",
@@ -66,12 +59,14 @@ const HEALTH: Record<RuntimeExtensionHealth, HealthPresentation> = {
 }
 
 export function runtimeExtensionHealthPresentation(
-  health: RuntimeExtensionHealth,
+  health: RuntimeExtensionSettingsHealth,
 ): HealthPresentation {
   return HEALTH[health]
 }
 
-export function runtimeExtensionSourceLabel(source: RuntimeExtensionSource | null): string {
+export function runtimeExtensionSourceLabel(
+  source: RuntimeExtensionSettingsDocument["source"],
+): string {
   if (!source) return "未知来源"
   return `${source.kind === "builtin" ? "内置" : "软件包"} · ${source.id}`
 }
@@ -87,12 +82,12 @@ export function runtimeExtensionFailureMessage(failure: unknown): string | null 
   }
 }
 
-export function runtimeExtensionActionPolicy(state: RuntimeExtensionCatalogState): Readonly<{
+export function runtimeExtensionActionPolicy(state: RuntimeExtensionSettingsDocument): Readonly<{
   retry: boolean
   revoke: boolean
   uninstall: boolean
 }> {
-  const hasGrant = state.desired || state.consentReceipt != null
+  const hasGrant = state.desired
   const retry =
     state.health === "quarantined" ||
     (["ready", "degraded"].includes(state.health) && (state.source?.kind === "builtin" || hasGrant))
@@ -108,24 +103,22 @@ export function runtimeExtensionActionPolicy(state: RuntimeExtensionCatalogState
 
 type DangerousAction = Readonly<{
   kind: "revoke" | "uninstall"
-  extension: RuntimeExtensionCatalogState
+  extension: RuntimeExtensionSettingsDocument
 }>
 
-function subscribeToCatalog(catalog: RuntimeExtensionCatalogView, listener: () => void) {
-  return catalog.subscribe(listener)
-}
+export type RuntimeExtensionPanelAction = "retry" | "revoke" | "uninstall"
 
 export function RuntimeExtensionsPanel({
-  catalog = runtimeExtensionCatalog,
+  extensions,
+  loading = false,
+  disabled = false,
+  onAction,
 }: {
-  catalog?: RuntimeExtensionCatalogView
+  extensions: readonly RuntimeExtensionSettingsDocument[]
+  loading?: boolean
+  disabled?: boolean
+  onAction(id: string, action: RuntimeExtensionPanelAction): Promise<boolean>
 }) {
-  React.useSyncExternalStore(
-    React.useCallback((listener) => subscribeToCatalog(catalog, listener), [catalog]),
-    React.useCallback(() => catalog.revision(), [catalog]),
-    () => 0,
-  )
-  const extensions = catalog.states()
   const [busy, setBusy] = React.useState<{ id: string; action: string } | null>(null)
   const [actionFailure, setActionFailure] = React.useState<{ id: string; message: string } | null>(
     null,
@@ -133,11 +126,11 @@ export function RuntimeExtensionsPanel({
   const [dangerousAction, setDangerousAction] = React.useState<DangerousAction | null>(null)
 
   const run = React.useCallback(
-    async (id: string, action: "retry" | "revoke" | "uninstall") => {
+    async (id: string, action: RuntimeExtensionPanelAction) => {
       setBusy({ id, action })
       setActionFailure(null)
       try {
-        const changed = await catalog[action](id)
+        const changed = await onAction(id, action)
         if (action === "retry" && !changed) {
           setActionFailure({
             id,
@@ -153,7 +146,7 @@ export function RuntimeExtensionsPanel({
         setBusy(null)
       }
     },
-    [catalog],
+    [onAction],
   )
 
   return (
@@ -162,7 +155,12 @@ export function RuntimeExtensionsPanel({
         查看由可信宿主发现的文件系统与渲染引擎扩展。权限必须经过明确授权，卸载不会删除来源数据。
       </p>
 
-      {extensions.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          正在读取运行时扩展文件…
+        </div>
+      ) : extensions.length === 0 ? (
         <EmptyState
           icon={Puzzle}
           title="暂无运行时扩展"
@@ -179,7 +177,7 @@ export function RuntimeExtensionsPanel({
               actionFailure?.id === extension.id
                 ? actionFailure.message
                 : runtimeExtensionFailureMessage(extension.failure)
-            const isBusy = busy?.id === extension.id
+            const isBusy = disabled || busy?.id === extension.id
             return (
               <article key={extension.id} className="space-y-4 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">

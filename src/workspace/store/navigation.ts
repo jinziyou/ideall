@@ -10,6 +10,7 @@ import {
   builtinAppSurfaceForLegacyPanel,
   coreFileRoot,
   coreFileRootForModule,
+  isCoreFileRootId,
   normalizeNavigationRootId,
 } from "../file-roots"
 import { FILE_ENGINE_TAB_KIND, fileEngineTab, fileEngineTargetForTab } from "../file-tab"
@@ -17,35 +18,51 @@ import { DEFAULT_STARTUP_TARGET, readStartupTarget } from "../startup-target"
 import { canOpenStandaloneWindow } from "../standalone-window-policy"
 import { resolveWorkspaceEngine } from "../workspace-engine"
 import { inferredRootIdForFile, migrateWorkspaceTab } from "../workspace-compat"
+import {
+  directorySurfaceForLegacyPanel,
+  directorySurfaceForPath,
+  directorySurfaceForRef,
+} from "../directory-surfaces"
+import {
+  capabilitySurface,
+  capabilitySurfaceForLegacyPanel,
+  capabilitySurfaceForPath,
+  capabilitySurfaceForRef,
+} from "../capability-surfaces"
 import { planTransientTabOpen } from "../tab-lifecycle"
-import { statFile } from "@/filesystem/registry"
+import { getFileSystem, statFile, subscribeFileSystems } from "@/filesystem/registry"
+import { directoryEntryPreferredEngine } from "@/filesystem/directory-entry"
+import { ideallPathSegments, resolveIdeallPath, type IdeallPath } from "@/filesystem/path"
 import { aiTasksPanelFileRef, panelFileRef } from "@/filesystem/resource-file-system"
 import { engineRegistry } from "@/engines/builtin"
 import { enginePreferencesStorageKey, readEnginePreferences } from "@/engines/preferences"
 import { openEngineWindow } from "@/lib/engine-window"
-import { setActiveWorkspace } from "@/plugins/agent/lib/agent-workspace"
 import { fileRefKey, sameFileRef, type FileRef } from "@protocol/file-system"
+import { activateAgentWorkspaceBeforeOpen } from "../agent-workspace-navigation"
 import { openTab, type OpenTabOptions } from "./tab-lifecycle"
 import {
   fileOpenRequests,
   hideBrowserWebviewUnlessBrowserTab,
   invalidatePendingFileOpen,
   patchWorkspace,
+  pathOpenRequests,
   routeFileOpenRequests,
   workspaceEngineOpenRequests,
   workspaceState,
 } from "./runtime"
 
 export function openSettings(): void {
-  openTarget({ type: "file", ref: panelFileRef("settings"), rootId: "settings" })
+  const surface = capabilitySurface("settings")
+  openTarget({ type: "path", path: surface.navigationPath, rootId: surface.rootId })
 }
 
 export function openAiSettings(options?: OpenTabOptions): void {
+  const surface = capabilitySurface("agent-settings")
   patchWorkspace({ activeModule: "agent", sidebarCollapsed: true })
   openTarget({
-    type: "file",
-    ref: panelFileRef("ai-settings"),
-    rootId: "settings",
+    type: "path",
+    path: surface.navigationPath,
+    rootId: surface.rootId,
     transient: options?.transient,
   })
 }
@@ -64,14 +81,38 @@ export function openAiSection(
 }
 
 export function openAiTasks(workspaceId: string, title: string, options?: OpenTabOptions): void {
-  setActiveWorkspace(workspaceId)
+  const ref = aiTasksPanelFileRef(workspaceId)
   patchWorkspace({ activeModule: "agent", sidebarCollapsed: true })
-  openTarget({
-    type: "file",
-    ref: aiTasksPanelFileRef(workspaceId),
-    title,
-    rootId: "activity",
-    transient: options?.transient,
+  void activateAgentWorkspaceBeforeOpen(workspaceId, () => {
+    openTarget({
+      type: "file",
+      ref,
+      title,
+      rootId: "activity",
+      transient: options?.transient,
+    })
+  })
+}
+
+/** 随包 runtime mount 在 BootGate 返回后的微任务中原子安装；给旧启动目标/极早点击一次短暂等待。 */
+function waitForFileSystem(fileSystemId: string, timeoutMs = 500): Promise<boolean> {
+  if (getFileSystem(fileSystemId)) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let unsubscribe = () => {}
+    const finish = (available: boolean) => {
+      if (settled) return
+      settled = true
+      unsubscribe()
+      if (timer) clearTimeout(timer)
+      resolve(available)
+    }
+    unsubscribe = subscribeFileSystems(() => {
+      if (getFileSystem(fileSystemId)) finish(true)
+    })
+    timer = setTimeout(() => finish(false), timeoutMs)
+    if (getFileSystem(fileSystemId)) finish(true)
   })
 }
 
@@ -79,7 +120,31 @@ async function openFileTarget(
   target: Extract<OpenTarget, { type: "file" }>,
   source: ActiveSource,
   shouldCommit?: () => boolean,
+  preservePathRequest = false,
 ): Promise<boolean> {
+  if (!preservePathRequest) pathOpenRequests.invalidate()
+  const legacyDirectorySurface = directorySurfaceForLegacyPanel(target.ref)
+  if (legacyDirectorySurface) {
+    target = {
+      ...target,
+      ref: legacyDirectorySurface.ref,
+      file: undefined,
+      engineId: legacyDirectorySurface.engineId,
+      rootId: legacyDirectorySurface.rootId,
+      navigationPath: target.navigationPath ?? legacyDirectorySurface.navigationPath,
+    }
+  }
+  const legacyCapabilitySurface = capabilitySurfaceForLegacyPanel(target.ref)
+  if (legacyCapabilitySurface) {
+    target = {
+      ...target,
+      ref: legacyCapabilitySurface.ref,
+      file: undefined,
+      engineId: legacyCapabilitySurface.engineId,
+      rootId: legacyCapabilitySurface.rootId,
+      navigationPath: target.navigationPath ?? legacyCapabilitySurface.navigationPath,
+    }
+  }
   const legacySurface = builtinAppSurfaceForLegacyPanel(target.ref)
   if (legacySurface) {
     target = {
@@ -97,6 +162,13 @@ async function openFileTarget(
   if (navigationRootId) patchWorkspace({ activeRootId: navigationRootId })
 
   try {
+    const directorySurface = directorySurfaceForRef(target.ref)
+    const capabilitySurface = capabilitySurfaceForRef(target.ref)
+    const semanticSurface = directorySurface ?? capabilitySurface
+    if (semanticSurface && !(await waitForFileSystem(semanticSurface.ref.fileSystemId))) {
+      return false
+    }
+    if (!canCommit()) return false
     const hintedFile = target.file && sameFileRef(target.file.ref, target.ref) ? target.file : null
     const file =
       target.display !== "window" && hintedFile
@@ -138,12 +210,14 @@ async function openFileTarget(
     )?.rootId
     const requestedRootId = target.rootId ?? existingRootId ?? inferredRootIdForFile(file.ref)
     const rootId = requestedRootId ? normalizeNavigationRootId(requestedRootId) : undefined
+    const canonicalSurface = semanticSurface?.engineId === engineId ? semanticSurface : null
+    const navigationPath = target.navigationPath ?? canonicalSurface?.navigationPath
     openTab(
-      fileEngineTab(
-        { ref: file.ref, name: target.title || file.name },
-        engineId,
-        rootId ? { rootId } : {},
-      ),
+      fileEngineTab({ ref: file.ref, name: target.title || file.name }, engineId, {
+        ...(rootId ? { rootId } : {}),
+        ...(canonicalSurface ? { path: canonicalSurface.navigationPath } : {}),
+        ...(navigationPath ? { navigationPath } : {}),
+      }),
       source,
       { transient: target.transient },
     )
@@ -151,6 +225,51 @@ async function openFileTarget(
       patchWorkspace({ activeRootId: rootId })
     }
     return true
+  } catch {
+    return false
+  }
+}
+
+async function openPathTarget(
+  target: Extract<OpenTarget, { type: "path" }>,
+  source: ActiveSource,
+): Promise<boolean> {
+  const request = pathOpenRequests.begin()
+  try {
+    const pathSegments = ideallPathSegments(target.path)
+    const isNavigationRoot = pathSegments.length === 1 && isCoreFileRootId(pathSegments[0]!)
+    const semanticSurface =
+      !isNavigationRoot &&
+      (directorySurfaceForPath(target.path) ?? capabilitySurfaceForPath(target.path))
+    if (semanticSurface && !(await waitForFileSystem(semanticSurface.ref.fileSystemId))) {
+      return false
+    }
+    if (!request.isCurrent()) return false
+    const resolved = await resolveIdeallPath(target.path, {
+      actor: "ui",
+      permissions: [],
+      intent: "metadata",
+    })
+    if (!resolved || !request.isCurrent()) return false
+    const link = resolved.entries.at(-1)
+    const pathRoot = pathSegments[0]
+    const rootId = target.rootId ?? (pathRoot ? normalizeNavigationRootId(pathRoot) : undefined)
+    return await openFileTarget(
+      {
+        type: "file",
+        ref: resolved.ref,
+        file: resolved.file,
+        engineId: target.engineId ?? directoryEntryPreferredEngine(link),
+        title: target.title ?? link?.name ?? resolved.file.name,
+        transient: target.transient,
+        display: target.display,
+        rootId,
+        navigationPath: resolved.path,
+      },
+      source,
+      request.isCurrent,
+      true,
+    )
   } catch {
     return false
   }
@@ -207,6 +326,9 @@ export function openTarget(target: OpenTarget, source: ActiveSource = "user"): b
     case "file":
       void openFileTarget(target, source)
       return true
+    case "path":
+      void openPathTarget(target, source)
+      return true
     case "command":
       invalidatePendingFileOpen()
       if (target.command === "open-ai-panel") setRightPanel(true)
@@ -215,7 +337,7 @@ export function openTarget(target: OpenTarget, source: ActiveSource = "user"): b
   }
 }
 
-export function toggleFileRoot(rootId: string): void {
+export function toggleFileRoot(rootId: string, path?: IdeallPath): void {
   invalidatePendingFileOpen()
   const state = workspaceState()
   const root = coreFileRoot(rootId)
@@ -229,12 +351,10 @@ export function toggleFileRoot(rootId: string): void {
     sidebarCollapsed: false,
     activeSource: "user",
   })
-  if (root.defaultFile) {
-    void openFileTarget(
-      { type: "file", ref: root.defaultFile, transient: true, rootId: root.id },
-      "user",
-    )
-  }
+  void openPathTarget(
+    { type: "path", path: path ?? root.defaultPath, transient: true, rootId: root.id },
+    "user",
+  )
 }
 
 export function toggleMountedFileRoot(ref: FileRef): void {

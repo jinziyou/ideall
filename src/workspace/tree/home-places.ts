@@ -1,8 +1,8 @@
 import type { ComponentType } from "react"
 import { MessagesSquare } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
-import type { FileRef } from "@protocol/file-system"
-import { corePlaceRef, panelFileRef } from "@/filesystem/resource-file-system"
+import type { IdeallPath } from "@/filesystem/path"
+import { directorySurface } from "../directory-surfaces"
 import { MODULE_META } from "../module-meta"
 
 export type HomePlaceId = "subscriptions" | "bookmarks" | "resources" | "notes" | "workspace"
@@ -18,8 +18,8 @@ export type HomePlace = {
   id: HomePlaceId
   label: string
   icon: ComponentType<{ className?: string }>
-  /** 区段头点击打开的文件; 缺省 = 纯容器, 点击仅展开/折叠子树。 */
-  defaultFile?: FileRef
+  /** 区段头点击解析的规范文件系统路径；缺省 = 纯容器。 */
+  defaultPath?: IdeallPath
   /** 区段展开后懒加载的本地节点 kind。 */
   childKinds: NodeKind[]
   /** 区段下的静态子容器, 例如「工作区 / 对话」。 */
@@ -32,21 +32,21 @@ export const HOME_PLACES: HomePlace[] = [
     id: "subscriptions",
     label: MODULE_META.subscriptions.label,
     icon: MODULE_META.subscriptions.icon,
-    defaultFile: panelFileRef("subscriptions"),
+    defaultPath: directorySurface("subscriptions").navigationPath,
     childKinds: ["feed"],
   },
   {
     id: "bookmarks",
     label: MODULE_META.bookmarks.label,
     icon: MODULE_META.bookmarks.icon,
-    defaultFile: panelFileRef("bookmarks"),
+    defaultPath: directorySurface("bookmarks").navigationPath,
     childKinds: ["folder", "bookmark"],
   },
   {
     id: "resources",
     label: MODULE_META.resources.label,
     icon: MODULE_META.resources.icon,
-    defaultFile: panelFileRef("files"),
+    defaultPath: directorySurface("resources").navigationPath,
     childKinds: ["file"],
   },
   {
@@ -54,7 +54,7 @@ export const HOME_PLACES: HomePlace[] = [
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
     // 与侧栏「文件」一致: 打开 notes place 目录 (页树), 而非独立笔记面板。
-    defaultFile: corePlaceRef("notes"),
+    defaultPath: "/home/files",
     childKinds: ["note"],
   },
   {

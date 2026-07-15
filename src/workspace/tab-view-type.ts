@@ -6,6 +6,7 @@ import { tabDefinitionViewType, type TabViewType } from "./tab-definitions"
 import { RESOURCE_TAB_KIND } from "./resource-tab"
 import { FILE_ENGINE_TAB_KIND, fileEngineTargetForTab } from "./file-tab"
 import { panelForFile } from "@/filesystem/resource-file-system"
+import { capabilitySurfaceForRef } from "./capability-surfaces"
 
 export type { TabViewType }
 
@@ -25,6 +26,7 @@ export const TAB_VIEW_LABEL: Record<TabViewType, string> = {
 export function tabViewType(tab: Tab): TabViewType {
   if (tab.kind === FILE_ENGINE_TAB_KIND) {
     const target = fileEngineTargetForTab(tab)
+    if (target && capabilitySurfaceForRef(target.ref)) return "config"
     const panel = target ? panelForFile(target.ref) : null
     return panel ? (tabDefinitionViewType(panel.tabKind) ?? "content") : "content"
   }

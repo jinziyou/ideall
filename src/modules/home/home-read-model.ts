@@ -1,11 +1,13 @@
 import type { DirectoryEntry } from "@protocol/file-system"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import { walkFileDirectory } from "@/filesystem/directory-walk"
+import type { IdeallPath } from "@/filesystem/path"
 import {
   corePlaceRef,
   resourceRefForFile,
   type CorePlaceId,
 } from "@/filesystem/resource-file-system"
+import { directorySurface } from "@/workspace/directory-surfaces"
 import { SUB_SPOKE_META } from "./subscriptions/subscription-meta"
 
 export type HomeActivityItem = {
@@ -14,7 +16,7 @@ export type HomeActivityItem = {
   dotClass: string
   label: string
   title: string
-  href: string
+  path: IdeallPath
   fileType?: { name: string; type: string }
 }
 
@@ -51,7 +53,7 @@ export function buildHomeActivity({
       dotClass: "bg-pop",
       label: "文件",
       title: n.title || "无标题",
-      href: "/home/notes",
+      path: "/home/files",
     })
   }
   for (const s of subs) {
@@ -62,7 +64,7 @@ export function buildHomeActivity({
       dotClass: m.dotClass,
       label: m.actionLabel,
       title: s.title,
-      href: "/home/subscriptions",
+      path: directorySurface("subscriptions").navigationPath,
     })
   }
   for (const b of bookmarks) {
@@ -72,7 +74,7 @@ export function buildHomeActivity({
       dotClass: "bg-pop",
       label: "书签",
       title: b.title,
-      href: "/home/bookmarks",
+      path: directorySurface("bookmarks").navigationPath,
     })
   }
   for (const f of files) {
@@ -82,7 +84,7 @@ export function buildHomeActivity({
       dotClass: "bg-pop",
       label: "添加资源",
       title: f.name,
-      href: "/home/resources",
+      path: directorySurface("resources").navigationPath,
       fileType: { name: f.name, type: f.type },
     })
   }

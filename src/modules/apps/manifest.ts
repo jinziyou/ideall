@@ -1,14 +1,15 @@
 import { installedAppsFileSystem } from "./installed-app-file-system"
+import { installedAppsEngineContribution } from "./installed-apps-engine"
 
 export const appsManifest = {
   id: "apps" as const,
   runtimeExtensionFactory: {
     id: "ideall.installed-apps",
     label: "本机应用连接器",
-    version: 1,
+    version: 2,
     source: { kind: "builtin" as const, id: "ideall" },
     // 内置贡献由发布物本身信任；这两个值是发行身份，不冒充运行时计算的签名/哈希。
-    digest: "builtin/ideall.installed-apps/v1",
+    digest: "builtin/ideall.installed-apps/v2",
     permissionDigest: "builtin/ideall.installed-apps/permissions/v1",
     permissions: ["fs:read", "apps:launch"] as const,
     create() {
@@ -25,6 +26,7 @@ export const appsManifest = {
             },
           },
         ],
+        engines: [installedAppsEngineContribution],
       }
     },
   },

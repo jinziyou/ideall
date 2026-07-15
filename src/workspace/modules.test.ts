@@ -7,6 +7,7 @@ import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { parseFileEngineTabParams } from "./file-tab"
 import { BUILTIN_APP_SURFACES } from "./file-roots"
 import { NAVIGATION_SECTIONS } from "./navigation-sections"
+import { DIRECTORY_SURFACES } from "./directory-surfaces"
 import { descriptorForPath, descriptorForResource, moduleById } from "./modules"
 
 test("descriptorForPath: 根路径与 /home 落到「我的」概览", () => {
@@ -17,7 +18,7 @@ test("descriptorForPath: 根路径与 /home 落到「我的」概览", () => {
 
 test("descriptorForPath: 精确匹配各模块面板路由", () => {
   assert.equal(descriptorForPath("/home/notes")?.kind, "home-notes")
-  assert.equal(descriptorForPath("/home/bookmarks")?.kind, "home-bookmarks")
+  assert.equal(descriptorForPath("/home/bookmarks")?.kind, "file-engine")
   assert.equal(descriptorForPath("/home/publications")?.module, "publications")
   const toolAi = descriptorForPath("/tool/ai")
   assert.equal(toolAi?.kind, "file-engine")
@@ -25,7 +26,7 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
     ref: resourceFileRef({ scheme: "tool", kind: "ai", id: "default" }),
     engineId: "ideall.connected",
   })
-  assert.equal(descriptorForPath("/apps")?.kind, "apps")
+  assert.equal(descriptorForPath("/apps")?.kind, "apps", "旧路由仍走 static 兼容读路径")
   const browser = descriptorForPath("/browser")
   assert.equal(browser?.kind, "file-engine")
   assert.deepEqual(parseFileEngineTabParams(browser?.params), {
@@ -41,6 +42,49 @@ test("descriptorForPath: 精确匹配各模块面板路由", () => {
     })
   }
   assert.equal(descriptorForPath("/code")?.kind, "code")
+  assert.equal(descriptorForPath("/trash")?.kind, "trash", "旧路由仍走 static 兼容读路径")
+})
+
+test("module entries: 五个目录入口只生成真实 root + 语义 Engine 的规范 descriptor", () => {
+  const descriptors = [
+    moduleById("subscriptions").entries[0]?.descriptor,
+    moduleById("home").entries.find((entry) => entry.label === "书签")?.descriptor,
+    moduleById("home").entries.find((entry) => entry.label === "资源")?.descriptor,
+    moduleById("trash").entries[0]?.descriptor,
+    moduleById("apps").entries[0]?.descriptor,
+  ]
+
+  assert.equal(descriptors.length, DIRECTORY_SURFACES.length)
+  for (const [index, surface] of DIRECTORY_SURFACES.entries()) {
+    const descriptor = descriptors[index]
+    assert.ok(descriptor, surface.id)
+    assert.equal(descriptor.kind, "file-engine", surface.id)
+    assert.deepEqual(parseFileEngineTabParams(descriptor.params), {
+      ref: surface.ref,
+      engineId: surface.engineId,
+    })
+    assert.equal(descriptor.module, surface.module)
+    assert.equal(descriptor.rootId, surface.rootId)
+    assert.equal(descriptor.path, surface.navigationPath)
+    assert.equal(descriptor.navigationPath, surface.navigationPath)
+  }
+})
+
+test("descriptorForPath: 规范目录 URL 生成规范 file-engine descriptor，旧 URL 仍可读取", () => {
+  for (const surface of DIRECTORY_SURFACES) {
+    const descriptor = descriptorForPath(surface.navigationPath)
+    assert.ok(descriptor, surface.id)
+    assert.equal(descriptor.kind, "file-engine", surface.id)
+    assert.deepEqual(parseFileEngineTabParams(descriptor.params), {
+      ref: surface.ref,
+      engineId: surface.engineId,
+    })
+    assert.equal(descriptor.path, surface.navigationPath)
+    assert.equal(descriptor.navigationPath, surface.navigationPath)
+  }
+
+  assert.equal(descriptorForPath("/home/subscriptions")?.kind, "subscriptions")
+  assert.equal(descriptorForPath("/apps")?.kind, "apps")
   assert.equal(descriptorForPath("/trash")?.kind, "trash")
 })
 
@@ -90,19 +134,19 @@ test("descriptorForResource: ?resource 优先, 兼容旧 ?node 深链", () => {
   assert.equal(descriptorForResource(""), null)
 })
 
-test("navigation sections: 五个分区及活动栏项目固定且同时可见", () => {
+test("navigation sections: 五个 FileSystem 路径入口固定且同时可见", () => {
   assert.deepEqual(
     NAVIGATION_SECTIONS.map((section) => ({
       id: section.id,
       label: section.label,
-      items: section.items.map((item) => item.label),
+      path: section.path,
     })),
     [
-      { id: "home", label: "我的", items: ["关注", "书签", "资源", "文件"] },
-      { id: "activity", label: "活动", items: ["空间", "任务", "删除"] },
-      { id: "browse", label: "浏览", items: ["新闻", "社区", "浏览器"] },
-      { id: "apps", label: "应用", items: ["搜索", "本地应用"] },
-      { id: "settings", label: "设置", items: ["基本", "AI"] },
+      { id: "home", label: "我的", path: "/home" },
+      { id: "activity", label: "活动", path: "/activity" },
+      { id: "browse", label: "浏览", path: "/browse" },
+      { id: "apps", label: "应用", path: "/apps" },
+      { id: "settings", label: "设置", path: "/settings" },
     ],
   )
 })

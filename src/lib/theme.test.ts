@@ -1,6 +1,12 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { LEGACY_THEME_KEY, THEME_KEY, getThemeChoice } from "./theme"
+import {
+  LEGACY_THEME_KEY,
+  THEME_KEY,
+  getThemeChoice,
+  setThemeChoice,
+  subscribeThemeChoice,
+} from "./theme"
 
 const mem = new Map<string, string>()
 const localStorageStub: Storage = {
@@ -32,4 +38,17 @@ test("theme: 新旧主题键同时存在时 canonical 主题胜出", () => {
   assert.equal(getThemeChoice(), "light")
   assert.equal(mem.get(THEME_KEY), "light")
   assert.equal(mem.get(LEGACY_THEME_KEY), undefined)
+})
+
+test("theme: 同进程 choice 改变即使没有 DOM class 变化也通知观察者", () => {
+  mem.clear()
+  const choices: string[] = []
+  const dispose = subscribeThemeChoice(() => choices.push(getThemeChoice()))
+
+  setThemeChoice("dark")
+  setThemeChoice("system")
+  dispose()
+  setThemeChoice("light")
+
+  assert.deepEqual(choices, ["dark", "system"])
 })

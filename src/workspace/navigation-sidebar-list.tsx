@@ -2,13 +2,22 @@
 
 import { ChevronRight } from "lucide-react"
 import { fileRefKey, sameFileRef } from "@protocol/file-system"
+import { directoryEntryIconHint, directoryEntryTargetKindHint } from "@/filesystem/directory-entry"
+import { navigationDirectoryRef } from "@/filesystem/navigation-file-system"
+import { joinIdeallPath } from "@/filesystem/path"
 import { cn } from "@/lib/utils"
 import { fileEngineTargetForTab } from "./file-tab"
-import { navigationSection, type NavigationSectionId } from "./navigation-sections"
+import {
+  navigationIconForHint,
+  navigationSection,
+  type NavigationSectionId,
+} from "./navigation-sections"
 import { openTarget, useActiveId, useActiveRootId, useTabs } from "./store"
 import { FileSystemTreeChildren } from "./tree/file-system-sidebar-tree"
-import { useFileTreeExpansion } from "./tree/file-tree-expansion"
+import { fileCanExpand, useFileTreeExpansion } from "./tree/file-tree-expansion"
+import { isNavigationPathAtOrBelow } from "./tree/navigation-tree-path"
 import { focusTreeSibling, forwardTreeFocus, onTreeArrowNav } from "./tree/tree-keynav"
+import { useNavigationDirectory } from "./use-navigation-directory"
 
 export default function NavigationSidebarList({
   sectionId,
@@ -21,8 +30,11 @@ export default function NavigationSidebarList({
   const activeId = useActiveId()
   const tabs = useTabs()
   const section = navigationSection(sectionId ?? activeRootId)
-  const activeFile = fileEngineTargetForTab(tabs.find((tab) => tab.id === activeId))?.ref ?? null
+  const activeTab = tabs.find((tab) => tab.id === activeId)
+  const activeFile = fileEngineTargetForTab(activeTab)?.ref ?? null
+  const activeNavigationPath = activeTab?.navigationPath
   const { expanded, setExpanded } = useFileTreeExpansion()
+  const navigation = useNavigationDirectory(navigationDirectoryRef(section.id))
 
   return (
     <nav
@@ -32,20 +44,31 @@ export default function NavigationSidebarList({
       onFocus={forwardTreeFocus}
       className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2 outline-none"
     >
-      {section.items.map((item) => {
-        const Icon = item.icon
-        const active = Boolean(activeFile && sameFileRef(activeFile, item.target.ref))
-        const expandable = item.target.kind === "directory"
-        const open = expandable && expanded.has(fileRefKey(item.target.ref))
+      {navigation.loading && navigation.items.length === 0 ? (
+        <div className="mx-2 my-1 h-7 animate-pulse rounded bg-muted/50" />
+      ) : navigation.unavailable ? (
+        <p className="px-3 py-2 text-xs text-muted-foreground">导航文件系统暂不可用</p>
+      ) : null}
+      {navigation.items.map(({ entry, file }) => {
+        const Icon = navigationIconForHint(directoryEntryIconHint(entry))
+        const itemPath = entry.pathName ? joinIdeallPath(section.path, entry.pathName) : null
+        const active =
+          activeNavigationPath && itemPath
+            ? isNavigationPathAtOrBelow(activeNavigationPath, itemPath)
+            : Boolean(activeFile && sameFileRef(activeFile, entry.target))
+        const expandable =
+          fileCanExpand(file) || directoryEntryTargetKindHint(entry) === "directory"
+        const targetRef = file?.ref ?? entry.target
+        const open = expandable && expanded.has(fileRefKey(targetRef))
 
         const openItem = (transient: boolean) => {
-          if (expandable) setExpanded(item.target.ref, true)
+          if (!itemPath) return
+          if (expandable) setExpanded(targetRef, true)
           openTarget(
             {
-              type: "file",
-              ref: item.target.ref,
-              engineId: item.target.engineId,
-              title: item.label,
+              type: "path",
+              path: itemPath,
+              title: entry.name,
               rootId: section.id,
               transient,
             },
@@ -55,7 +78,7 @@ export default function NavigationSidebarList({
         }
 
         return (
-          <div key={item.id}>
+          <div key={entry.entryId}>
             <div
               role="treeitem"
               tabIndex={-1}
@@ -72,12 +95,12 @@ export default function NavigationSidebarList({
                 } else if (event.key === "ArrowRight") {
                   if (expandable && !open) {
                     event.preventDefault()
-                    setExpanded(item.target.ref, true)
+                    setExpanded(targetRef, true)
                   } else if (focusTreeSibling(event.currentTarget, 1)) event.preventDefault()
                 } else if (event.key === "ArrowLeft") {
                   if (expandable && open) {
                     event.preventDefault()
-                    setExpanded(item.target.ref, false)
+                    setExpanded(targetRef, false)
                   } else if (focusTreeSibling(event.currentTarget, -1)) event.preventDefault()
                 }
               }}
@@ -92,7 +115,7 @@ export default function NavigationSidebarList({
                 aria-hidden
                 onClick={(event) => {
                   event.stopPropagation()
-                  if (expandable) setExpanded(item.target.ref, !open)
+                  if (expandable) setExpanded(targetRef, !open)
                 }}
                 className={cn(
                   "grid h-5 w-5 shrink-0 place-items-center rounded transition-transform hover:bg-accent",
@@ -103,17 +126,18 @@ export default function NavigationSidebarList({
                 <ChevronRight className="h-3.5 w-3.5" />
               </span>
               <Icon className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
             </div>
             {expandable && open && (
               <FileSystemTreeChildren
-                directory={item.target.ref}
+                directory={targetRef}
                 depth={1}
                 activeRef={activeFile}
                 rootId={section.id}
                 expanded={expanded}
                 onSetExpanded={setExpanded}
-                refreshKey={`navigation:${section.id}:${item.id}`}
+                refreshKey={`navigation:${section.id}:${entry.entryId}`}
+                navigationBasePath={itemPath ?? undefined}
                 onOpen={(_file, childExpandable) => {
                   if (!childExpandable) onNavigate?.()
                 }}

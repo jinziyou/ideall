@@ -25,6 +25,8 @@ const TAB_DEFINITIONS = {
     path: "/home/notes",
     layout: "padded",
   },
+  // subscriptions/home-resources/home-bookmarks/apps/trash 只用于读取旧 static tab / URL；
+  // 新入口使用真实 root + Engine。
   subscriptions: {
     module: "subscriptions",
     title: "关注",

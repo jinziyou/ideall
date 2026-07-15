@@ -11,6 +11,8 @@ import { PLUGIN_ENTRIES } from "./plugin-entries"
 import { tabDescriptor } from "./tab-definitions"
 import { descriptorForResourceSearch } from "./open-target"
 import { resourceFileTab } from "./resource-file-tab"
+import { fileEngineTab } from "./file-tab"
+import { directorySurface, type DirectorySurfaceId } from "./directory-surfaces"
 
 export type SidebarEntry = {
   label: string
@@ -28,6 +30,16 @@ export type ModuleConfig = {
   entries: SidebarEntry[]
 }
 
+function directorySurfaceDescriptor(id: DirectorySurfaceId, title: string): TabDescriptor {
+  const surface = directorySurface(id)
+  return fileEngineTab({ ref: surface.ref, name: title }, surface.engineId, {
+    module: surface.module,
+    rootId: surface.rootId,
+    path: surface.navigationPath,
+    navigationPath: surface.navigationPath,
+  })
+}
+
 const homeEntries: SidebarEntry[] = [
   {
     label: MODULE_META.overview.label,
@@ -42,13 +54,13 @@ const homeEntries: SidebarEntry[] = [
   {
     label: MODULE_META.resources.label,
     icon: MODULE_META.resources.icon,
-    descriptor: tabDescriptor("home-resources"),
+    descriptor: directorySurfaceDescriptor("resources", MODULE_META.resources.label),
   },
   {
     // 「我的」语境下的书签区段 (底层仍是 bookmark 节点)。
     label: MODULE_META.bookmarks.label,
     icon: MODULE_META.bookmarks.icon,
-    descriptor: tabDescriptor("home-bookmarks"),
+    descriptor: directorySurfaceDescriptor("bookmarks", MODULE_META.bookmarks.label),
   },
 ]
 
@@ -72,7 +84,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "关注流",
         icon: MODULE_META.subscriptions.icon,
-        descriptor: tabDescriptor("subscriptions"),
+        descriptor: directorySurfaceDescriptor("subscriptions", MODULE_META.subscriptions.label),
       },
     ],
   },
@@ -86,7 +98,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: "全部应用",
         icon: MODULE_META.apps.icon,
-        descriptor: tabDescriptor("apps"),
+        descriptor: directorySurfaceDescriptor("installed-apps", MODULE_META.apps.label),
       },
     ],
   },
@@ -108,7 +120,7 @@ export const MODULES: ModuleConfig[] = [
       {
         label: MODULE_META.trash.label,
         icon: MODULE_META.trash.icon,
-        descriptor: tabDescriptor("trash"),
+        descriptor: directorySurfaceDescriptor("trash", MODULE_META.trash.label),
       },
     ],
   },
@@ -213,7 +225,7 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (exact) return exact.descriptor
   // /home/agent 是「打开右侧 AI 栏」的虚拟命令路由, 不对应任何标签 → 显式 null。
   if (pathname.startsWith("/home/agent")) return null
-  // 前缀回退
+  // 前缀回退仅解析旧 URL；新入口直接使用上方规范 file/path descriptor。
   if (pathname.startsWith("/home/subscriptions")) return tabDescriptor("subscriptions")
   if (pathname.startsWith("/home/settings")) return tabDescriptor("home-settings")
   if (pathname.startsWith("/home")) return homeEntries[0].descriptor

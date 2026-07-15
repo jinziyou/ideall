@@ -1,4 +1,5 @@
 import type { ComponentType } from "react"
+import type { DirectoryEntry } from "@protocol/file-system"
 import {
   AppWindow,
   Bookmark,
@@ -18,134 +19,102 @@ import {
   Trash2,
   Users,
 } from "lucide-react"
-import type { FileRef } from "@protocol/file-system"
-import type { ResourceRef } from "@protocol/resource"
-import { corePlaceRef, panelFileRef, resourceFileRef } from "@/filesystem/resource-file-system"
+import { joinIdeallPath, type IdeallPath } from "@/filesystem/path"
+import type { NavigationSectionId as FileSystemNavigationSectionId } from "@/filesystem/navigation-file-system"
 
 type NavigationIcon = ComponentType<{ className?: string }>
 
-export type NavigationSectionId = "home" | "activity" | "browse" | "apps" | "settings"
-
-export type NavigationItem = Readonly<{
-  id: string
-  label: string
-  icon: NavigationIcon
-  target: Readonly<{
-    ref: FileRef
-    engineId?: string
-    kind?: "file" | "directory"
-  }>
-}>
+export type NavigationSectionId = FileSystemNavigationSectionId
 
 export type NavigationSection = Readonly<{
   id: NavigationSectionId
+  /** FileSystem 尚未完成首次读取时使用的显示回退，不是目录结构或目标的来源。 */
   label: string
+  path: IdeallPath
   icon: NavigationIcon
   colorClass?: string
-  items: readonly NavigationItem[]
 }>
 
-const panel = (id: string, engineId = "ideall.panel") => ({
-  ref: panelFileRef(id),
-  engineId,
-})
-
-const resource = (ref: ResourceRef, engineId = "ideall.connected") => ({
-  ref: resourceFileRef(ref),
-  engineId,
-})
-
 /**
- * 产品导航的唯一信息架构。一级分区始终同时可见，不再按数据来源切换镜头；
- * 叶项只保存稳定 FileRef，打开后的标签身份仍由 File + Engine 决定。
+ * Display 只保留五个稳定分区的图标/颜色装饰。名称、顺序、目录项和 link target
+ * 均来自 ideall.root 与 navigation FileSystem，不能在这里再维护第二份信息架构。
  */
 export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   {
     id: "home",
     label: "我的",
+    path: "/home",
     icon: Home,
-    items: [
-      { id: "following", label: "关注", icon: Rss, target: panel("subscriptions") },
-      { id: "bookmarks", label: "书签", icon: Bookmark, target: panel("bookmarks") },
-      { id: "resources", label: "资源", icon: FolderOpen, target: panel("files") },
-      {
-        id: "files",
-        label: "文件",
-        icon: FileText,
-        target: {
-          ref: corePlaceRef("notes"),
-          engineId: "ideall.directory",
-          kind: "directory",
-        },
-      },
-    ],
   },
   {
     id: "activity",
     label: "活动",
+    path: "/activity",
     icon: History,
-    items: [
-      { id: "spaces", label: "空间", icon: Boxes, target: panel("spaces") },
-      { id: "tasks", label: "任务", icon: Sparkles, target: panel("tasks") },
-      { id: "deleted", label: "删除", icon: Trash2, target: panel("trash") },
-    ],
   },
   {
     id: "browse",
     label: "浏览",
+    path: "/browse",
     icon: Compass,
     colorClass: "text-spoke-community",
-    items: [
-      {
-        id: "news",
-        label: "新闻",
-        icon: Newspaper,
-        target: resource({ scheme: "info", kind: "home", id: "default" }),
-      },
-      {
-        id: "community",
-        label: "社区",
-        icon: Users,
-        target: resource({ scheme: "community", kind: "home", id: "default" }),
-      },
-      {
-        id: "browser",
-        label: "浏览器",
-        icon: Compass,
-        target: resource({ scheme: "browser", kind: "page", id: "default" }, "ideall.browser"),
-      },
-    ],
   },
   {
     id: "apps",
     label: "应用",
+    path: "/apps",
     icon: AppWindow,
     colorClass: "text-spoke-tool",
-    items: [
-      {
-        id: "search",
-        label: "搜索",
-        icon: Search,
-        target: resource({ scheme: "tool", kind: "search", id: "default" }),
-      },
-      { id: "local-apps", label: "本地应用", icon: AppWindow, target: panel("apps") },
-    ],
   },
   {
     id: "settings",
     label: "设置",
+    path: "/settings",
     icon: Settings,
-    items: [
-      { id: "basic", label: "基本", icon: SlidersHorizontal, target: panel("settings") },
-      {
-        id: "ai",
-        label: "AI",
-        icon: Bot,
-        target: panel("ai-settings", "ideall.panel-fill"),
-      },
-    ],
   },
 ] as const
+
+const NAVIGATION_ICONS: Readonly<Record<string, NavigationIcon>> = {
+  home: Home,
+  history: History,
+  compass: Compass,
+  "app-window": AppWindow,
+  settings: Settings,
+  rss: Rss,
+  bookmark: Bookmark,
+  "folder-open": FolderOpen,
+  "file-text": FileText,
+  boxes: Boxes,
+  sparkles: Sparkles,
+  trash: Trash2,
+  "trash-2": Trash2,
+  newspaper: Newspaper,
+  users: Users,
+  search: Search,
+  sliders: SlidersHorizontal,
+  "sliders-horizontal": SlidersHorizontal,
+  bot: Bot,
+}
+
+export function navigationIconForHint(
+  hint: unknown,
+  fallback: NavigationIcon = FileText,
+): NavigationIcon {
+  return typeof hint === "string" ? (NAVIGATION_ICONS[hint] ?? fallback) : fallback
+}
+
+/** 把根目录 link 与纯 Display 装饰合成可见分区；目标与名称始终取自目录项。 */
+export function navigationSectionForEntry(entry: DirectoryEntry): NavigationSection | null {
+  const id = entry.properties?.navigationSection
+  if (typeof id !== "string" || !isNavigationSectionId(id) || !entry.pathName) return null
+  const presentation = navigationSection(id)
+  return {
+    ...presentation,
+    label: entry.name,
+    path: joinIdeallPath("/", entry.pathName),
+    icon: navigationIconForHint(entry.properties?.iconHint, presentation.icon),
+  }
+}
 
 export function navigationSection(id: string | null | undefined): NavigationSection {
   return NAVIGATION_SECTIONS.find((section) => section.id === id) ?? NAVIGATION_SECTIONS[0]

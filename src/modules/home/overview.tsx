@@ -52,8 +52,8 @@ const NEXT_ACTIONS = [
 
 function openHomeSection(id: string) {
   const place = HOME_PLACES.find((s) => s.id === id)
-  if (place?.defaultFile) {
-    openTarget({ type: "file", ref: place.defaultFile })
+  if (place?.defaultPath) {
+    openTarget({ type: "path", path: place.defaultPath })
     return
   }
   setRightPanel(true)

@@ -2,17 +2,18 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import type { RuntimeExtensionCatalogState } from "@/shell/runtime-extensions"
+import type { RuntimeExtensionSettingsDocument } from "./settings-contract"
 import {
   RuntimeExtensionsPanel,
   runtimeExtensionActionPolicy,
   runtimeExtensionFailureMessage,
   runtimeExtensionHealthPresentation,
   runtimeExtensionSourceLabel,
-  type RuntimeExtensionCatalogView,
 } from "./runtime-extensions-panel"
 
-function state(patch: Partial<RuntimeExtensionCatalogState> = {}): RuntimeExtensionCatalogState {
+function state(
+  patch: Partial<RuntimeExtensionSettingsDocument> = {},
+): RuntimeExtensionSettingsDocument {
   return {
     id: "example.extension",
     label: "Example",
@@ -21,7 +22,6 @@ function state(patch: Partial<RuntimeExtensionCatalogState> = {}): RuntimeExtens
     permissions: ["fs:read"],
     digest: "digest",
     permissionDigest: "permissions",
-    consentReceipt: "receipt",
     desired: true,
     health: "active",
     failure: null,
@@ -30,16 +30,7 @@ function state(patch: Partial<RuntimeExtensionCatalogState> = {}): RuntimeExtens
   }
 }
 
-function catalog(states: RuntimeExtensionCatalogState[]): RuntimeExtensionCatalogView {
-  return {
-    states: () => states,
-    subscribe: () => () => undefined,
-    revision: () => 1,
-    retry: async () => true,
-    revoke: async () => true,
-    uninstall: async () => true,
-  }
-}
+const onAction = async () => true
 
 test("runtime extensions panel: health, source and failure presentation are explicit", () => {
   assert.deepEqual(runtimeExtensionHealthPresentation("quarantined"), {
@@ -60,9 +51,7 @@ test("runtime extensions panel: health, source and failure presentation are expl
 
 test("runtime extensions panel: action policy does not fake consent or revoke builtin trust", () => {
   assert.deepEqual(
-    runtimeExtensionActionPolicy(
-      state({ health: "consent-required", consentReceipt: null, desired: false }),
-    ),
+    runtimeExtensionActionPolicy(state({ health: "consent-required", desired: false })),
     { retry: false, revoke: false, uninstall: false },
   )
   assert.deepEqual(
@@ -82,34 +71,31 @@ test("runtime extensions panel: action policy does not fake consent or revoke bu
     { retry: false, revoke: false, uninstall: false },
   )
   assert.deepEqual(
-    runtimeExtensionActionPolicy(
-      state({ health: "consent-required", consentReceipt: "persisted", desired: true }),
-    ),
+    runtimeExtensionActionPolicy(state({ health: "consent-required", desired: true })),
     { retry: false, revoke: true, uninstall: true },
   )
   assert.deepEqual(
-    runtimeExtensionActionPolicy(
-      state({ source: null, health: "unavailable", permissions: [], consentReceipt: null }),
-    ),
+    runtimeExtensionActionPolicy(state({ source: null, health: "unavailable", permissions: [] })),
     { retry: false, revoke: false, uninstall: true },
   )
 })
 
-test("runtime extensions panel: renders empty, permission and quarantine diagnostics", () => {
+test("runtime extensions panel: renders controlled empty, permission and quarantine diagnostics", () => {
   const empty = renderToStaticMarkup(
-    createElement(RuntimeExtensionsPanel, { catalog: catalog([]) }),
+    createElement(RuntimeExtensionsPanel, { extensions: [], onAction }),
   )
   assert.match(empty, /暂无运行时扩展/)
 
   const populated = renderToStaticMarkup(
     createElement(RuntimeExtensionsPanel, {
-      catalog: catalog([
+      extensions: [
         state({
           health: "quarantined",
-          failure: new Error("socket cleanup failed"),
+          failure: "socket cleanup failed",
           pendingCleanup: ["lifecycle", "filesystem:remote"],
         }),
-      ]),
+      ],
+      onAction,
     }),
   )
   assert.match(populated, /Example/)
@@ -120,13 +106,14 @@ test("runtime extensions panel: renders empty, permission and quarantine diagnos
 
   const builtin = renderToStaticMarkup(
     createElement(RuntimeExtensionsPanel, {
-      catalog: catalog([
+      extensions: [
         state({
           source: { kind: "builtin", id: "ideall" },
           health: "active",
           desired: true,
         }),
-      ]),
+      ],
+      onAction,
     }),
   )
   assert.match(builtin, /不能在此卸载或撤销信任/)

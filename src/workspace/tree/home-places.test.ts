@@ -2,31 +2,18 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import { HOME_PLACES, homePlaceById, homePlaceForNodeKind } from "./home-places"
 
-test("home places: 锁定「我的」区段顺序与默认 FileRef", () => {
+test("home places: 锁定「我的」区段顺序与规范默认 path", () => {
   assert.deepEqual(
     HOME_PLACES.map((place) => place.id),
     ["subscriptions", "bookmarks", "resources", "notes", "workspace"],
   )
 
   const subscriptions = homePlaceById("subscriptions")
-  assert.deepEqual(subscriptions?.defaultFile, {
-    fileSystemId: "ideall.core",
-    fileId: "panel:subscriptions",
-  })
-  assert.deepEqual(homePlaceById("bookmarks")?.defaultFile, {
-    fileSystemId: "ideall.core",
-    fileId: "panel:bookmarks",
-  })
-  assert.deepEqual(homePlaceById("resources")?.defaultFile, {
-    fileSystemId: "ideall.core",
-    fileId: "panel:files",
-  })
-  assert.deepEqual(homePlaceById("notes")?.defaultFile, {
-    fileSystemId: "ideall.core",
-    fileId: "place:notes",
-  })
-
-  assert.equal(homePlaceById("workspace")?.defaultFile, undefined)
+  assert.equal(subscriptions?.defaultPath, "/home/following")
+  assert.equal(homePlaceById("bookmarks")?.defaultPath, "/home/bookmarks")
+  assert.equal(homePlaceById("resources")?.defaultPath, "/home/resources")
+  assert.equal(homePlaceById("notes")?.defaultPath, "/home/files")
+  assert.equal(homePlaceById("workspace")?.defaultPath, undefined)
   assert.deepEqual(
     homePlaceById("workspace")?.staticChildren?.map((child) => ({
       id: child.id,

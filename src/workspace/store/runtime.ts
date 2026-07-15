@@ -32,11 +32,13 @@ export function dirtyTabSet(): Set<string> {
 }
 
 export const fileOpenRequests = new NavigationRequestCoordinator()
+export const pathOpenRequests = new NavigationRequestCoordinator()
 export const routeFileOpenRequests = new NavigationRequestCoordinator()
 export const workspaceEngineOpenRequests = new NavigationRequestCoordinator()
 
 export function invalidatePendingFileOpen(): void {
   fileOpenRequests.invalidate()
+  pathOpenRequests.invalidate()
 }
 
 /** 切离浏览器标签时收起原生子 webview，避免其覆盖其他渲染引擎。 */

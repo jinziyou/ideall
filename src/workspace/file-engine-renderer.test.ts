@@ -5,6 +5,16 @@ import type { EngineDescriptor } from "@protocol/engine"
 import type { IdeallFile } from "@protocol/file-system"
 import { BUILTIN_ENGINES } from "@/engines/builtin"
 import { EngineRegistry } from "@/engines/registry"
+import {
+  INSTALLED_APPS_ROOT_MEDIA_TYPE,
+  INSTALLED_APPS_ROOT_REF,
+} from "@/filesystem/builtin-app-roots"
+import { corePlaceRef } from "@/filesystem/resource-file-system"
+import { TRASH_ROOT_MEDIA_TYPE, trashRootRef } from "@/filesystem/trash-file-system"
+import {
+  installedAppsEngineDescriptor,
+  installedAppsEngineRenderer,
+} from "@/modules/apps/installed-apps-engine"
 import { FileEngineRendererRegistry, FileEngineRendererRegistryError } from "./file-engine-renderer"
 import { registerBuiltInFileEngineRenderers } from "./registry"
 
@@ -175,4 +185,97 @@ test("installed app files use the dedicated metadata and launch Display", () => 
 
   assert.ok(React.isValidElement(element))
   assert.equal((element.props as { file?: IdeallFile }).file, appFile)
+})
+
+function isUnsupportedSurface(node: React.ReactNode): boolean {
+  if (!React.isValidElement(node)) return false
+  const className = (node.props as { className?: unknown }).className
+  return typeof className === "string" && className.includes("items-center")
+}
+
+test("directory Displays guard the exact semantic root, not only matching metadata", () => {
+  const registry = new FileEngineRendererRegistry()
+  registerBuiltInFileEngineRenderers(registry)
+  const fixtures = [
+    {
+      engineId: "ideall.subscriptions",
+      ref: corePlaceRef("subscriptions"),
+      mediaType: "inode/directory",
+      properties: { place: "subscriptions", rootChild: true },
+    },
+    {
+      engineId: "ideall.bookmarks",
+      ref: corePlaceRef("bookmarks"),
+      mediaType: "inode/directory",
+      properties: { place: "bookmarks", rootChild: true },
+    },
+    {
+      engineId: "ideall.resources",
+      ref: corePlaceRef("files"),
+      mediaType: "inode/directory",
+      properties: { place: "files", rootChild: true },
+    },
+    {
+      engineId: "ideall.trash",
+      ref: trashRootRef,
+      mediaType: TRASH_ROOT_MEDIA_TYPE,
+      properties: { trashRoot: true },
+    },
+  ] as const
+
+  for (const fixture of fixtures) {
+    const descriptor = BUILTIN_ENGINES.find(({ engineId }) => engineId === fixture.engineId)!
+    const renderer = registry.get(fixture.engineId)!
+    const exactRoot: IdeallFile = {
+      ref: fixture.ref,
+      kind: "directory",
+      name: fixture.engineId,
+      mediaType: fixture.mediaType,
+      capabilities: ["read-directory"],
+      source: { kind: "local", id: "fixture" },
+      properties: fixture.properties,
+    }
+    const metadataLookalike: IdeallFile = {
+      ...exactRoot,
+      ref: { ...fixture.ref, fileId: `${fixture.ref.fileId}:lookalike` },
+    }
+
+    assert.equal(isUnsupportedSurface(renderer({ file: exactRoot, descriptor })), false)
+    assert.equal(
+      isUnsupportedSurface(renderer({ file: metadataLookalike, descriptor })),
+      true,
+      fixture.engineId,
+    )
+  }
+
+  const installedRoot: IdeallFile = {
+    ref: INSTALLED_APPS_ROOT_REF,
+    kind: "directory",
+    name: "本机应用",
+    mediaType: INSTALLED_APPS_ROOT_MEDIA_TYPE,
+    capabilities: ["read-directory"],
+    source: { kind: "third-party", id: "installed-apps" },
+    properties: { installedAppsRoot: true },
+  }
+  assert.equal(
+    isUnsupportedSurface(
+      installedAppsEngineRenderer({
+        file: installedRoot,
+        descriptor: installedAppsEngineDescriptor,
+      }),
+    ),
+    false,
+  )
+  assert.equal(
+    isUnsupportedSurface(
+      installedAppsEngineRenderer({
+        file: {
+          ...installedRoot,
+          ref: { ...INSTALLED_APPS_ROOT_REF, fileId: "root:lookalike" },
+        },
+        descriptor: installedAppsEngineDescriptor,
+      }),
+    ),
+    true,
+  )
 })

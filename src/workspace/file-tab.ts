@@ -8,7 +8,9 @@ import {
 import { panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
 import type { ModuleId, Tab, TabDescriptor } from "./types"
 import { moduleForResource } from "./resource-tab"
-import { builtinAppSurfaceForRoot } from "./file-roots"
+import { builtinAppSurfaceForRoot, coreFileRootForRef } from "./file-roots"
+import { directorySurfaceForRef } from "./directory-surfaces"
+import { capabilitySurfaceForRef } from "./capability-surfaces"
 
 export const FILE_ENGINE_TAB_KIND = "file-engine"
 
@@ -18,12 +20,18 @@ export type FileEngineTabTarget = {
 }
 
 function moduleForFile(ref: FileRef): ModuleId {
+  const navigationRoot = coreFileRootForRef(ref)
+  if (navigationRoot) return navigationRoot.module
   const resource = resourceRefForFile(ref)
   if (resource) return moduleForResource(resource)
   const panel = panelForFile(ref)
   if (panel) return panel.module as ModuleId
   const appSurface = builtinAppSurfaceForRoot(ref)
   if (appSurface) return appSurface.module
+  const capabilitySurface = capabilitySurfaceForRef(ref)
+  if (capabilitySurface) return capabilitySurface.module
+  const directorySurface = directorySurfaceForRef(ref)
+  if (directorySurface) return directorySurface.module
   return "home"
 }
 

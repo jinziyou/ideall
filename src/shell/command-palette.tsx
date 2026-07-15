@@ -1,13 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { CMDK_OPEN, openCommandPalette } from "@/lib/command-palette-bus"
+import { CMDK_OPEN } from "@/lib/command-palette-bus"
 
 const CommandPalettePanel = React.lazy(() => import("./command-palette-panel"))
-
-// openCommandPalette / CMDK_OPEN 已抽到 @/lib/command-palette-bus (纯事件总线),
-// 使 components 的触发器无需反向 import app/shell; 此处 re-export 维持既有 ./command-palette 导入点。
-export { openCommandPalette }
 
 /**
  * ⌘K 面板轻量宿主: 首次快捷键 / openCommandPalette() 之前不加载完整命令面板实现。
