@@ -115,7 +115,8 @@ if (fixtureMode) {
   test("runTestFile times out and escalates TERM to KILL", async () => {
     const result = await runTestFile(SELF, {
       ...fixtureOptions("hang"),
-      timeoutMs: 150,
+      // 覆盖率全量测试后的高负载环境也要留出 fixture 安装 SIGTERM handler 的启动窗口。
+      timeoutMs: 500,
     })
     assert.equal(result.timedOut, true)
     if (process.platform !== "win32") assert.equal(result.forced, true)
@@ -151,7 +152,9 @@ if (fixtureMode) {
         IDEALL_FIXTURE_PORT: String(port),
         IDEALL_FIXTURE_PID_FILE: pidFile,
       }),
-      timeoutMs: 500,
+      // 这里要验证“已启动的孙进程”会被进程组清理；覆盖率全量测试后的 CPU 负载下，
+      // 两层 Node 冷启动偶尔超过 500ms。给前置监听留足时间，不改变 TERM→KILL 的短宽限期。
+      timeoutMs: 2_000,
     })
     assert.equal(result.timedOut, true)
     assert.equal(result.processTreeStopped, true)

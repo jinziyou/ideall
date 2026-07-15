@@ -26,6 +26,13 @@ const requiredFiles = [
   "home.html",
   "home/notes.html",
   "home/resources.html",
+  "home/following.html",
+  "activity/spaces.html",
+  "activity/tasks.html",
+  "activity/deleted.html",
+  "apps/local-apps.html",
+  "settings/basic.html",
+  "settings/ai.html",
   "code.html",
   "trash.html",
 ]

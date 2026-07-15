@@ -4,6 +4,23 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 import { ensureMovingTagFetchRefspecs } from "./git-fetch-config.mjs"
 
+const HELP = `用法:
+  pnpm git:setup
+  node scripts/git-setup.mjs
+
+说明:
+  为 origin 添加移动发布标签的强制更新 fetch refspec。该配置只修改当前仓库。
+`
+const args = process.argv.slice(2)
+if (args.includes("--help") || args.includes("-h")) {
+  console.log(HELP.trimEnd())
+  process.exit(0)
+}
+if (args.length > 0) {
+  console.error(`[git:setup] 未知参数: ${args.join(" ")}`)
+  process.exit(1)
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const added = ensureMovingTagFetchRefspecs(root)
 if (added > 0) {

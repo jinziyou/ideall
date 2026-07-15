@@ -52,7 +52,7 @@ jobs:
             ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-next-
       - name: Build
-        run: pnpm build && pnpm verify:bundle
+        run: pnpm app:export
 
 # 另两道门拆在独立工作流 (带 paths 过滤, 省 CI 分钟数):
 #   rust.yml  — clippy 零警告 + cargo test (仅 src-tauri/** 改动时跑)

@@ -33,8 +33,8 @@ env:
   NEXT_PUBLIC_EMBED_BASE: ${{ vars.NEXT_PUBLIC_EMBED_BASE || 'https://www.wonita.link' }}
 
 jobs:
-  # 判定是否构建: tag / main 手动 → 总是; main 推送 → 仅当本次改动含"非文档/非配置"文件才构建
-  # (纯文档 docs/*.md / CI 配置 / .prettier* 等提交跳过全平台构建, 省 CI)。
+  # 判定是否构建: tag / main 手动 → 总是; main 推送 → 仅当本次改动含应用或发布链文件才构建。
+  # 纯文档、非发布 workflow 与格式配置跳过；app-build 本身和共享 setup action 必须触发构建。
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -57,52 +57,7 @@ jobs:
       - id: decide
         env:
           BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-              echo "::error::手动 edge 发布只允许从 main 运行，当前 ref=$GITHUB_REF"
-              exit 1
-            fi
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # 首次 push 的 before 为全零；强推后的旧提交也可能不在仓库中。无可靠 base 时保守构建。
-          ZERO_SHA="0000000000000000000000000000000000000000"
-          if [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "$ZERO_SHA" ] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
-            echo "缺少有效 push base ($BEFORE_SHA) → 保守构建"
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! changed="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA")"; then
-            echo "无法比较 $BEFORE_SHA..$GITHUB_SHA → 保守构建"
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          rust="$(printf '%s\n' "$changed" | grep -E '^src-tauri/' || true)"
-          if [ -n "$rust" ]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "rust=false" >> "$GITHUB_OUTPUT"
-          fi
-          # 捕获"非文档/配置"改动再判非空 (不用 grep -q, 避免其在管道下的早退/SIGPIPE 怪异退出码)。
-          app="$(printf '%s\n' "$changed" | grep -vE '^(docs/|LICENSE$|.*\.md$|\.github/workflows/|\.github/dependabot\.yml$|\.gitignore$|\.prettierignore$|\.prettierrc.*|\.editorconfig$)' || true)"
-          if [ -n "$app" ]; then
-            echo "含应用改动, 构建:"; printf '  %s\n' "$app"
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "仅文档/配置改动 → 跳过 App 构建"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: node scripts/app-build-gate.mjs
 
   preflight:
     needs: gate

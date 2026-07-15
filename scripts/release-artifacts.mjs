@@ -44,6 +44,58 @@ function strictString(value, label) {
   return value
 }
 
+function assertSafeAssetName(name, label) {
+  if (typeof name !== "string" || name.trim().length === 0) {
+    throw new Error(`${label}: asset 名称必须是非空字符串`)
+  }
+  if (
+    name === "." ||
+    name === ".." ||
+    path.posix.isAbsolute(name) ||
+    path.win32.isAbsolute(name) ||
+    path.posix.basename(name) !== name ||
+    path.win32.basename(name) !== name
+  ) {
+    throw new Error(`${label}: asset 名称必须是单一文件名: ${JSON.stringify(name)}`)
+  }
+  return name
+}
+
+function validateManifestEntries(entries, label) {
+  const names = new Set()
+  for (const entry of entries) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      !Number.isSafeInteger(entry.size) ||
+      entry.size <= 0 ||
+      typeof entry.sha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(entry.sha256)
+    ) {
+      throw new Error(`${label}: manifest file 条目无效`)
+    }
+    assertSafeAssetName(entry.name, label)
+    if (names.has(entry.name)) {
+      throw new Error(`${label}: stage manifest 内 asset 名称冲突: ${entry.name}`)
+    }
+    names.add(entry.name)
+  }
+}
+
+function resolveStageAsset(manifestFile, name, label) {
+  const manifestDir = realpathSync(path.dirname(manifestFile))
+  const assetDir = realpathSync(path.join(path.dirname(manifestFile), "assets"))
+  if (!isInside(manifestDir, assetDir)) {
+    throw new Error(`${label}: stage assets 目录越出 stage: ${assetDir}`)
+  }
+
+  const source = realpathSync(path.join(assetDir, name))
+  if (!isInside(assetDir, source)) {
+    throw new Error(`${label}: workflow artifact 越出 stage assets: ${name}`)
+  }
+  return source
+}
+
 export function stageReleaseArtifacts({ label, version, artifactPaths, outputDir, root = ROOT }) {
   const target = LABELS[label]
   if (!target) throw new Error(`未知 desktop label: ${label}`)
@@ -108,6 +160,7 @@ function readStageManifest(file, version) {
   if (!Array.isArray(raw.files) || raw.files.length === 0) {
     throw new Error(`stage manifest 没有 files: ${file}`)
   }
+  validateManifestEntries(raw.files, raw.label)
   return raw
 }
 
@@ -223,17 +276,9 @@ export function prepareReleaseArtifacts({
   for (const [label, manifest] of byLabel) {
     const files = []
     for (const entry of manifest.data.files) {
-      if (
-        typeof entry?.name !== "string" ||
-        !Number.isSafeInteger(entry.size) ||
-        entry.size <= 0 ||
-        !/^[a-f0-9]{64}$/.test(entry.sha256)
-      ) {
-        throw new Error(`${label}: manifest file 条目无效`)
-      }
       if (names.has(entry.name)) throw new Error(`跨平台 Release asset 名称冲突: ${entry.name}`)
       names.add(entry.name)
-      const source = path.join(path.dirname(manifest.file), "assets", entry.name)
+      const source = resolveStageAsset(manifest.file, entry.name, label)
       const stats = statSync(source)
       if (stats.size !== entry.size || sha256(source) !== entry.sha256) {
         throw new Error(`${label}: workflow artifact 校验失败: ${entry.name}`)

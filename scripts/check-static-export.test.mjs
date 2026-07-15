@@ -13,6 +13,13 @@ const REQUIRED_FILES = [
   "home.html",
   "home/notes.html",
   "home/resources.html",
+  "home/following.html",
+  "activity/spaces.html",
+  "activity/tasks.html",
+  "activity/deleted.html",
+  "apps/local-apps.html",
+  "settings/basic.html",
+  "settings/ai.html",
   "code.html",
   "trash.html",
 ]
@@ -70,4 +77,24 @@ test("check-static-export requires regular HTML and JavaScript files", async () 
   const chunkDirectoryRoot = await createFixture({ chunkDirectory: true })
   const chunkResult = runCheck(chunkDirectoryRoot)
   assert.equal(chunkResult.status, 1)
+})
+
+test("check-static-export requires canonical navigation pages and retains legacy entry checks", async () => {
+  for (const relative of [
+    "home/following.html",
+    "activity/spaces.html",
+    "activity/tasks.html",
+    "activity/deleted.html",
+    "apps/local-apps.html",
+    "settings/basic.html",
+    "settings/ai.html",
+    "home/resources.html",
+    "trash.html",
+  ]) {
+    const root = await createFixture()
+    await rm(path.join(root, "out", relative))
+
+    const result = runCheck(root)
+    assert.equal(result.status, 1, `${relative} should be required`)
+  }
 })

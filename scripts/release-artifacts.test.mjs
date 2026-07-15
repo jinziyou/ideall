@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -30,23 +30,7 @@ function writeArtifact(dir, name, contents = name) {
   return file
 }
 
-test("release preflight 校验 embed CSP 和 updater key id", () => {
-  const keys = makeMinisignFixtures()
-  assert.equal(
-    assertEmbedOriginAllowed(
-      "https://portal.example.test/info",
-      "default-src 'self'; frame-src 'self' https://portal.example.test;",
-    ),
-    "https://portal.example.test",
-  )
-  assert.throws(
-    () => assertEmbedOriginAllowed("https://evil.example", "frame-src 'self'"),
-    /不在 Tauri CSP/,
-  )
-  assert.equal(assertSignatureMatchesPublicKey(keys.signature, keys.publicKey), "0102030405060708")
-})
-
-test("artifact-first 聚合四个平台并确定性生成 latest.json 与 SHA256SUMS", (t) => {
+function createReleaseFixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), "ideall-release-artifacts-"))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const keys = makeMinisignFixtures()
@@ -97,11 +81,17 @@ test("artifact-first 聚合四个平台并确定性生成 latest.json 与 SHA256
       root,
     })
   }
+  return { root, stageRoot, version }
+}
 
-  const outputDir = path.join(root, "ready")
-  const result = prepareReleaseArtifacts({
+function stageManifestFile(stageRoot, label) {
+  return path.join(stageRoot, `desktop-${label}`, "manifest.json")
+}
+
+function prepareFixture({ root, stageRoot, version }) {
+  return prepareReleaseArtifacts({
     inputDir: stageRoot,
-    outputDir,
+    outputDir: path.join(root, "ready"),
     version,
     tag: "app-v0.1.0",
     repository: "jinziyou/ideall",
@@ -109,6 +99,29 @@ test("artifact-first 聚合四个平台并确定性生成 latest.json 与 SHA256
     pubDate: "2026-07-11T00:00:00.000Z",
     root,
   })
+}
+
+test("release preflight 校验 embed CSP 和 updater key id", () => {
+  const keys = makeMinisignFixtures()
+  assert.equal(
+    assertEmbedOriginAllowed(
+      "https://portal.example.test/info",
+      "default-src 'self'; frame-src 'self' https://portal.example.test;",
+    ),
+    "https://portal.example.test",
+  )
+  assert.throws(
+    () => assertEmbedOriginAllowed("https://evil.example", "frame-src 'self'"),
+    /不在 Tauri CSP/,
+  )
+  assert.equal(assertSignatureMatchesPublicKey(keys.signature, keys.publicKey), "0102030405060708")
+})
+
+test("artifact-first 聚合四个平台并确定性生成 latest.json 与 SHA256SUMS", (t) => {
+  const fixture = createReleaseFixture(t)
+  const { root } = fixture
+  const outputDir = path.join(root, "ready")
+  const result = prepareFixture(fixture)
   assert.deepEqual(result.manifest.updaterPlatforms, [
     "darwin-aarch64",
     "darwin-aarch64-app",
@@ -126,6 +139,63 @@ test("artifact-first 聚合四个平台并确定性生成 latest.json 与 SHA256
   )
   assert.equal(result.latest.platforms["windows-x86_64"].url.endsWith(".msi"), true)
   assert.match(readFileSync(path.join(outputDir, "SHA256SUMS"), "utf8"), /latest\.json/)
+})
+
+test("prepare 拒绝不安全的 stage manifest asset 名称", async (t) => {
+  const cases = [
+    ["空名", "", /名称必须是非空字符串/],
+    ["上级路径", "../escape", /名称必须是单一文件名/],
+    ["POSIX 绝对路径", "/tmp/escape", /名称必须是单一文件名/],
+    ["Windows 绝对路径", "C:\\escape", /名称必须是单一文件名/],
+    ["POSIX 路径分隔符", "nested/escape", /名称必须是单一文件名/],
+    ["Windows 路径分隔符", "nested\\escape", /名称必须是单一文件名/],
+  ]
+
+  for (const [description, unsafeName, expected] of cases) {
+    await t.test(description, (t) => {
+      const fixture = createReleaseFixture(t)
+      const manifestFile = stageManifestFile(fixture.stageRoot, "macos-arm64")
+      const manifest = JSON.parse(readFileSync(manifestFile, "utf8"))
+      manifest.files[0].name = unsafeName
+      writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
+      assert.throws(() => prepareFixture(fixture), expected)
+    })
+  }
+})
+
+test("prepare 拒绝同一 stage manifest 内的重复 asset 名称", (t) => {
+  const fixture = createReleaseFixture(t)
+  const manifestFile = stageManifestFile(fixture.stageRoot, "macos-arm64")
+  const manifest = JSON.parse(readFileSync(manifestFile, "utf8"))
+  manifest.files[1].name = manifest.files[0].name
+  writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
+
+  assert.throws(() => prepareFixture(fixture), /stage manifest 内 asset 名称冲突/)
+})
+
+test("prepare 拒绝指向 stage assets 目录外的符号链接", (t) => {
+  const fixture = createReleaseFixture(t)
+  const manifestFile = stageManifestFile(fixture.stageRoot, "macos-arm64")
+  const manifest = JSON.parse(readFileSync(manifestFile, "utf8"))
+  const entry = manifest.files[0]
+  const assetFile = path.join(path.dirname(manifestFile), "assets", entry.name)
+  const outsideFile = writeArtifact(
+    path.join(fixture.root, "outside-stage"),
+    entry.name,
+    readFileSync(assetFile),
+  )
+  rmSync(assetFile)
+  try {
+    symlinkSync(outsideFile, assetFile, "file")
+  } catch (error) {
+    if (error?.code === "EPERM") {
+      t.skip("当前系统不允许创建文件符号链接")
+      return
+    }
+    throw error
+  }
+
+  assert.throws(() => prepareFixture(fixture), /越出 stage assets/)
 })
 
 class FakeReleaseClient {
