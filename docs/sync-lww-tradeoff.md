@@ -1,7 +1,7 @@
 # 跨端同步合并策略：LWW 取舍 + 删除传播（决策记录）
 
 > **状态：已落地。** 对应审计项 **Low-6**（跨端 LWW 取舍 + 删除不传播）。
-> 实现：`@protocol/sync`（纯合并/GC 逻辑 + 单测）、`src/files/stores/subscriptions-store.ts`（软删除/复活/读路径过滤/GC 落地）、`src/plugins/sync/lib/subscription-sync.ts`（编排）。
+> 实现：`@protocol/sync`（纯合并/GC 逻辑 + 单测）、`@protocol/storage-sync`（本地快照 CAS）、`src/files/stores/subscriptions-store.ts`（软删除/复活/读路径过滤/GC 落地）、`src/plugins/sync/lib/sync-domain-runner.ts`（关注/笔记共用编排）。
 
 ## 背景
 
@@ -57,24 +57,31 @@
   > **注（避坑）**：早期实现曾用「删除库内不在本批集合的所有 id」做 reconcile，会把同步 await 窗口内并发 `addSubscription` 的新关注
   > 误判为陈旧而物理删除（静默数据丢失）。修正为「只删确属过期墓碑的 id」。`expiredTombstoneIdsToDelete` 有纯逻辑单测守此。
 
+## 决策三：同步落地使用本地快照 CAS
+
+网络 409 只能保护远端 blob，不能保护 GET/解密期间发生的本地编辑。同步状态因此区分两份本地状态：
+
+- `localAll` 是同步开始时的不可变统计基线；
+- `localSnapshot` 是下一次本地提交的期望快照，每次成功落地后推进为 Storage 返回的实际规范化快照。
+
+`bulkPutSubscriptions` / `bulkPutNotes` 在同一个 IndexedDB readwrite 事务内 fresh 读取当前 kind，只有当前逻辑快照仍等于 `expectedLocal` 时才写入合并结果与 tombstone GC。当前状态已经等于目标时允许幂等成功；真实不一致则抛 `StorageSyncConflictError`，整批不写、也不发送远端 PUT，用户重试后会从新的本地快照重新合并。远端 PUT 返回 409 时，下一轮同时携带上次实际提交快照作为 `merged` 和本地 CAS 基线，不把调用方猜测的输入当作已提交状态。
+
+关注和笔记的 live↔tombstone 转换、GC 与本机 `trash_snapshots` 在同一跨 store 事务提交；新同步 id 使用 `add`，不会覆盖同主键的其它 Node kind。关注入站还要求规范 `type/key/id`、安全 tool URL 与严格 sort key，损坏数据 fail closed。
+
 ## 已知局限（接受 / 留待）
 
 1. **版本偏斜下的墓碑**：旧版客户端（不识别 `deletedAt`）会把墓碑当活跃项渲染并回传，削弱删除收敛。
    缓解：App 已启用自动更新（见 [docs/app.md](app.md)），版本偏斜窗口有限。`isValidRemoteSub` 已容忍墓碑字段。
 2. **90 天内频繁删/关注累积墓碑**：体积影响对「十～百」量级关注可忽略；不优化。
 3. **同毫秒并发改**：按决策一「本地优先」任选其一，接受。
-4. **同步往返窗口内的并发本地写**：`syncNow` 在网络往返前读一次本地快照、往返后落地。窗口内并发 `addSubscription` 的新关注
-   **不会丢**（落地只删确属过期的墓碑，见上「避坑」注；新关注本轮未上传，下轮自然带上）；但窗口内并发 `removeSubscription`
-   写的墓碑可能被快照里的活跃副本覆盖回活跃（删除本轮未生效，需再删一次）。这是 GET→PUT 窗口的经典丢失更新（仅针对**本地**写；
-   远端并发写已由 409 乐观重试兜住），属既有限制类，非本次新增；关注是低频手动操作，命中概率低，接受。
+4. **同步往返窗口内的并发本地写**：若本轮需要落地远端变化，本地快照 CAS 会拒绝覆盖并发 add/edit/move/remove，用户需重试同步；若合并结果无需写本地，窗口内的新本地变化不会丢失，但可能要到下一轮才上传。这是“安全失败 / 最终补传”的取舍，不自动吞冲突继续合并。
 
 ## 验证
 
-`src/protocol/sync.test.ts` 覆盖：删除收敛（墓碑胜活跃旧副本）、删后重关注复活、远端墓碑收敛本端、
-`isExpiredTombstone` 边界、`pruneExpiredTombstones` GC。`pnpm test` 全绿。
+`src/protocol/sync.test.ts` 覆盖删除收敛与 GC；`subscription-sync.test.ts` 覆盖真实远端推进后的 409、提交快照规范化、本地 CAS 冲突不 PUT 与重试上限；store 测试覆盖跨 kind 碰撞、事务回滚和 tombstone/恢复/GC 快照生命周期。
 
 ## 关联
 
 - 纯合并/GC 契约：`@protocol/sync`。同步编排：`src/plugins/sync/`。
-- 同步加解密：`src/lib/sync-crypto.ts`。乐观并发（409 重试）见 `subscription-sync.ts`。
+- 同步加解密：`src/lib/sync-crypto.ts`。本地 CAS 与远端 409 重试见 `sync-domain-runner.ts`。
 - 关注类型（含 `deletedAt`）：`@protocol/subscription`。

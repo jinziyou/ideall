@@ -326,7 +326,7 @@ Content-Security-Policy: frame-ancestors tauri://localhost https://tauri.localho
 - `src/plugins/embed/transport.ts`：`MessagePortTransport`（§4.2）。
 - `src/plugins/embed/tools.ts` / `grant.ts` / `scoped-host.ts` / `local-mcp-server.ts`：先按 Grant 得出有效权限并构造收窄的宿主句柄，再注册 tool/resource、启动本地 MCP server。
 - info / community 的现行入口通过 `ideall.connected` File Engine 渲染 `EmbedHost`；`src/workspace/registry.tsx` 中同名静态标签项仅保留旧快照兼容。
-- `src/plugins/embed/connections.ts` / `connected-apps.tsx`：登记活动连接，并在设置页提供运行期查看与一键断开。
+- `src/plugins/embed/connections.ts` / `connected-apps-view.tsx` 与设置页：登记活动连接，并提供运行期查看与一键断开。
 - `src-tauri/tauri.conf.json`：设 CSP（§4.2）。capabilities 已够用（`http:*`、`opener`）。
 
 ### 10.2 server 接线（要点）
@@ -455,7 +455,7 @@ class IdeallEmbed {
 - 写回主权：在嵌入应用内"订阅发布者"→ `hub://subscriptions` 出现该项 → home 中枢可见。
 - 双模式：同一 wonita 页独立打开（直连+自登录）与嵌入打开（分流+SSO）均工作。
 - 跨平台：桌面 + Android（iOS 待证书）下 iframe + postMessage + 主题/safe-area 正常。
-- 回归：`pnpm build`（app:export）/ lint / typecheck / test 绿。
+- 回归：`pnpm app:export` / lint / typecheck / test 绿。
 
 ---
 

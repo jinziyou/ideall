@@ -6,7 +6,7 @@ ideall 是**独立项目 / 独立仓库**（`git@github.com:jinziyou/ideall.git`
 整体定位见 [README.md](../README.md)；架构权威说明见 [architecture.md](architecture.md)；API 契约同步见下方“API codegen”。
 ideall 是后端数据服务的**外部消费方 / 客户端**：经 `ServerPort` 契约消费 wonita 服务的数据服务 API（wonita 服务是 `ServerPort` 的参考实现；第三方 / 嵌入式 / 局域网节点亦可实现 `ServerPort`）。信息采集 / NLP / 知识图谱 / 鉴权由该后端数据服务提供，ideall 经 `NEXT_PUBLIC_SERVER_ADDR` 连接，不在本仓库范围内；ideall 不被单一后端绑死。
 
-ideall **仅以 App 形态分发**（Tauri 跨平台静态导出，无 Node 运行时 / 无 SSR 生产部署）。
+ideall **仅以 App 形态分发**（Tauri 跨平台静态导出，无 Node 运行时 / 无 SSR 生产部署）。Windows / Linux / macOS 桌面包由 CI 自动构建并进入 GitHub Release；Android 目前只有 tag / 手动任务的 debug APK 工件，iOS 未纳入 CI。
 
 **分支模型（dev / main）**：`main` 稳定/发布（App 版本 tag 基于它），`dev` 集成/日常开发；改动先进 `dev`，CI 在 `main` / `dev` / PR 均运行，稳定后合并 `main` 发布。
 
@@ -16,7 +16,25 @@ ideall 是**开源、本地优先的个人信息终端**（独立项目）：从
 **设计思想**：一切皆文件、一切皆标签页——各类 Storage 经 FileSystem 挂载到统一命名空间，以 `FileRef` 寻址；打开任意文件即由 Engine 渲染为工作区标签页。`ideall.core` 的笔记、书签、资源、关注和对话收敛为 Node 库；音频、数据库、Agent 配置和第三方 App 等来源保留各自存储语义。
 **设计风格**：现代 · 面板 · 留白的标签工作区。
 
-**导航信息架构**：活动栏的一级分区固定为“我的 / 活动 / 浏览 / 应用 / 设置”，二级侧栏依次为“关注 / 书签 / 资源 / 文件”、“空间 / 任务 / 删除”、“新闻 / 社区 / 浏览器”、“搜索 / 本地应用”、“基本 / AI”。五个一级入口始终可见，本机数据、联网资源与 App 挂载继续经同一合成文件系统进入 Display。
+**导航信息架构**：活动栏的一级分区固定为“我的 / 活动 / 浏览 / 应用 / 设置”，二级侧栏依次为“关注 / 书签 / 资源 / 文件”、“空间 / 任务 / 删除”、“新闻 / 社区 / 浏览器”、“搜索 / 本地应用”、“基本 / AI”。五个一级入口始终可见，本机数据、联网资源与 App 挂载继续经同一合成文件系统进入 Display。有目录位置的运行态入口（活动栏、侧栏、移动底栏、命令面板、Home 卡片/动态与保存后的回流）统一发出 `OpenTarget { type: "path" }`，路径从 `ideall.navigation` 派生；尚无目录位置的能力直接发出 file/command target。Next `href` 只留给认证、错误页和外部深链等浏览器边界。
+
+**活动与设置也是文件**：`/activity/spaces`、`/activity/tasks` 分别链接到 `app.agent-config` 的 `config:workspaces`、`config:tasks`，由 `ideall.agent-spaces`/`ideall.agent-tasks` 渲染 `AgentSpaces`/`AgentTaskList`；`/settings/ai` 链接到 `config:settings`，由 `ideall.agent-settings` 渲染 `AiSettings`；`/settings/basic` 链接到 `app.settings:root`，由 `ideall.settings` 渲染 `SettingsPage`，根下有 appearance/device/connections/runtime-extensions 四个 section 快照。settings 与 agent provider 及其 Engine/Display 均通过随包 builtin runtime extension 原子安装。旧 panel、旧 static tab 和 `/home/settings`、`/ai` 只在打开、深链解析和 workspace 水合边界兼容；新入口只生成上述四条规范路径。上述 Display（含 AI 下的 MCP、Skills、Rules）的读取、写入与订阅均经 FileSystem registry：普通 JSON 状态使用带版本的乐观并发（CAS）文档，连接、运行时扩展、工作区、MCP 创建/探测和凭据等有专用语义的操作使用 specialized action。任务以版本 cursor 分页，每页最多 64 项，只批量读取当前页 metadata；任务索引与 thread node 共用 IndexedDB，并用跨 store 事务保证创建/保存/删除原子。索引 state 的 revision/count 是跨窗口校验真值，高频写使用主键点读；v16 `[kind,sortKey]` 索引支持统一尾键原语，folder/bookmark/file/feed/note/Thread 的默认追加都必须在包含 `nodes` 的 readwrite 事务内完成反向尾键读取和节点写入。该路径只读取 covering key，不克隆正文；文件 Blob、Task 关系与关注同步批次分别和节点写入共享事务。显式插入位置仍计算同级键，但快照与写入不得拆分。笔记、书签和收藏夹移动同样必须在单个 `nodes` 事务内完成父节点/循环校验、同级快照和写入；收藏夹删除必须把回收站快照、直属书签根级迁移和 tombstone 放入同一个跨 store 事务。非根父节点必须活跃且类型正确，恢复时父节点消失则降级到根级。失效事件先触发索引头探针，只有变化才重读任务集合。旧 localStorage 快照会在首次访问时幂等迁移；API key 只进入安全存储，公开文件正文和 action 结果均不返回 secret。全局 settings 凭据 UI 只读取 `configured`；Workspace 本机可信配置器可在内存中持有 secure-backed key 以编辑密码草稿，但公开 FileSystem 正文、导出与 action 结果始终不回显 secret。另有不含密钥内容的持久单调 credential revision 参与 settings 文件版本，每次成功 set/clear 都推进，因此已配置状态下的 A→B 换钥也会使旧确认冲突。
+
+**树写入纪律**：笔记/书签移动、笔记子树删除、书签/收藏夹删除，以及同时修改父节点与字段的笔记/书签 `fs.write`，必须把活跃源与目标校验、循环检查、同级排序快照、回收站快照和实际写入放进相应的单一 readwrite 事务。不得先读后跨事务写，也不得通过普通字段 patch 直接覆盖 `parentId/sortKey`；通知只能在事务完成后发布。提交点失败测试应断言 nodes 与 trash snapshot 同时回滚。
+
+**回收站写入纪律**：单项恢复、永久删除与整站清空都必须在覆盖 `nodes` / `blobs` / `trash_snapshots` 的一个事务内 fresh-read 并完成全部写入；文件删除也必须原子生成快照、写 tombstone 并移除 Blob。FileSystem 在列表后执行单项动作时必须传入 `{ kind, updatedAt, deletedAt }` revision；清空确认还必须同步冻结整个 `{ id, kind, updatedAt, deletedAt }[]`，用确定性序列化的 `trash-v2` SHA-256 作为集合版本，并把同一快照下沉到事务比较。`empty` 必须声明为 specialized action，由回收站 Display 在异步摘要前冻结点击时 items 并确认；通用动作菜单不能自行调用。计算期间的刷新不能混用数量与 token。Display 的异步读取必须同时绑定 root target generation 与递增 request generation；只有当前 target 的最后请求可更新 items/loading 或 toast，切换 target 立即隐藏旧列表，卸载使全部 lease 失效。同 root 读取失败保留 last-good，mutation 无论成功、冲突或其它失败都要触发一次重新读取。任一 CAS 不匹配都应返回 conflict，不得让旧界面的动作命中同 id 的新一代墓碑，也不得永久删除确认后才进入回收站的新项。笔记恢复以当前删除子树为单一事务单元，提交后发布一次 kind 级失效通知。
+
+**Node mutation CAS**：`edit` / `move` / `delete` / `restore` / `write-blob` 的预读基线必须以 `{ kind, updatedAt, deletedAt }` 下沉到各 kind Storage 的同一 write transaction 内比较，不能只在 FileSystem 外层检查 `expectedVersion`。`FileSystem.invoke` 的调用方版本通过独立 options 传递，不得混入 provider 自有 action input；确认界面必须传最初展示的版本，不能用执行前重读值替换。预读前已经不存在是 `not-found`；预读后被其它窗口修改、删除或替换 kind 是 `conflict`；空编辑返回当前 live Node 且不提升版本；delete 只有在 Storage 实际写入 tombstone 时才能报告成功。mutation 成功响应必须直接使用事务返回的 committed Node/ResourceRecord 或明确 receipt，不能提交后再 `stat/get` 并把另一笔写入误认为本次结果。
+
+**FileAction 版本纪律**：生成式 action 菜单、Node 文件专用工具栏与 `FileDocumentClient` specialized action 都必须固定用户看到的 `IdeallFile.version`，并经 `FileActionInvokeOptions` 第五参数传入 provider。provider 对 versioned 目标必须在同一 mutation 锁域内 fresh-read、校验后再触发副作用；插件 data port、旧兼容 UI 等旁路写入口也必须经 adapter 加入相同锁域。Database 的所有 mutation 与整库导入共享 `DATABASE_ROOT_REF`；Audio 的播放状态、曲目写入和整库导入共享 `AUDIO_LIBRARY_ROOT_REF`；Agent 整包导入按稳定全序获取六个 section FileRef；Git 挂载列表导入先固定根和当前 repo refs，repo action 与子文件写共享 repo ref。数据库表版本必须以确定性顺序覆盖完整 table 结构及全部 row 身份、归属、时间和字段值，不能只取最大时间或只信任导入时间戳；Git 根版本必须覆盖 Display 实际读取的 branch/upstream/status/log/remotes/diff，以及 heads、remote-tracking refs 与 tags，不能使用只反映目录 inode 的 guarded version。`undefined` 表示调用方没有提供前置条件，`null` 表示只接受无版本目标；根级创建、导入、集合追加与只读探测没有稳定单目标版本时不应伪造 CAS。冲突不得清草稿、关标签页、发成功/撤销提示或调用后端 mutation。
+
+Database table/rows 的聚合 token 固定使用 `database-v3:<sha256>`；确定性序列化必须覆盖完整 table 与全部 row，摘要统一调用 `src/lib/semantic-version.ts`，禁止重新引入 FNV32 等短哈希。根目录必须先按扁平 table/rows entry offset 应用 cursor/limit，再对当前页 table 去重并以固定正数有界并发读取 rows 和计算摘要；页外表不得因当前页读取而扫描 rows，跨 pair 的奇数 cursor 仍须保持全局 sortKey 与 nextCursor。
+
+Settings section 与 Agent config 的文件版本分别固定为 `settings-v2:<sha256>`、`agent-config-v2:<sha256>`，统一复用 `src/lib/semantic-version.ts`，不得退回 FNV32。Settings 摘要覆盖公开 section 的确定性 JSON；Shell 主题按钮、命令面板与兼容 Connected Apps 面板的用户写入统一经 `settings-write-adapter` 调用 FileSystem registry，并与 provider 共用规范 section FileRef 锁，UI 不得直接修改 theme/connection store。连接 register/deregister 是瞬时宿主生命周期，仍位于该用户 mutation 锁域之外；同 id 替换必须以 registration generation 隔离，旧 disposer/revoke 不得删除新实例。Agent 摘要还显式绑定 section、workspace 的 tasks 依赖，以及不含密钥内容的 credential configured/revision；默认 provider 在 settings 的首个 `stat/read/write/invoke` CAS 计算版本前必须等待安全存储水合，runtime 解析全局模型也必须先等待同一水合，摘要不得包含 key 或 key hash。已水合快路径不得再次访问 secure-store 或发布失效通知，避免 `watch -> read -> hydrate -> watch` 自激。SubtleCrypto 摘要使带版本的 Agent `watch` 成为异步事件：同一 watcher 必须按源顺序交付，dispose 或订阅建立回滚后丢弃 pending digest，跨窗口无版本失效必须推进 generation 并压掉更早的瞬时版本。Agent runtime task mutation 统一经 `agent-task-write-adapter` 获取 `config:tasks` 锁，并在锁内先重读耐久 revision 再调用 `*Raw` Storage 原语；通用 thread 写入和删除固定按 `tasks -> thread` 取锁，因此其事务内 task revision 推进也不能穿过旧 CAS。Workspace 的公开 state 与内部十进制 `_revision` 写入同一份 localStorage JSON，单次 `setItem` 后才发布内存快照；legacy 文档按 revision `0` 读取。即使公开正文损坏，只要 raw 对象仍携带合法 `_revision`，后续普通写入或强制修复也必须把它作为单调下限，写入 `max(memory, rawFloor)+1`，不能让其它窗口永久拒绝降序结果。revision 限制为 64 位；空间耗尽时，真实 mutation/rewrite 必须在任何 secure/public 写入前拒绝，但 identity update、当前 active、删除不存在项和同正文 replace 等 no-op 不请求下一 revision。Workspace secure entry 使用版本记录 `{version:2,target,apiKey,revision}`；其中 record revision 是本次 secure-first 写入预期提交的公开 envelope revision，清除凭据写入 `{target:null,apiKey:""}` 墓碑，不依赖删除。`target` 是仅允许 HTTP(S)、清除 userinfo/query/fragment 后的 canonical baseURL；只有 target 精确匹配且 record revision 不超前于 envelope 才恢复 key。record 超前表示公开提交中断，重载后也必须 fail closed，并在锁内以墓碑完成该 intended revision；旧 v1/bare 值只在锁内迁移。端点变化且未显式提供新 key 时同样写墓碑。secure 写入必须先 await 成功，再持久化公开快照并通知；公开 envelope 失败时尝试回滚，无法证明回滚成功则凭据缓存 fail closed，但仍不宣称 secure-store 与 localStorage 组成跨后端原子事务。runtime workspace mutation 统一经 `agent-workspace-write-adapter` 按 `tasks -> workspaces` 取锁，锁内刷新耐久快照后调用 `*Raw`；UI updater 必须基于该 fresh state 合并，不能用陈旧整对象覆盖其它窗口的字段。workspace revision 参与语义版本，公开正文相同的 ABA 或隐藏凭据变化也会使旧 CAS 失效；workspace 的 `stat/read/write` prepare 与快照均持有两把锁，tasks 自身仍只持 tasks。专用失效广播只携带 scope，远端窗口和页面恢复路径都须重读耐久 revision。provider/importer 已持规范锁时只能直接调用 Raw，禁止重入 adapter；整包 importer 继续按稳定全序正序获取六个 section FileRef 并逆序释放。
+
+**Agent Workspace 草稿纪律**：目录、instructions、baseURL、model、template、override 与 API key 文本使用同一类单尾串行 debounce 队列。未开始的输入可合并，已在途提交不得被后续输入越过；`keep` 失败的最新 generation 不自动自旋，只保留到下一次显式 flush/cleanup 重试，新输入会取代它。外部快照不得覆盖 dirty generation，提交返回的 Storage 实际值用于识别 canonical acknowledgement。收敛判断必须同时比较值和 workspace source revision，使更高 revision 的同值 ABA 也能结束等待并采用远端真值。跨 await 的“生成最终提示”必须捕获 `workspaceId + generation` operation token；工作区切换、卸载或随后编辑都会使旧生成失效，保存后采用结果也必须再次校验。模型 global/preset/custom 的直接选择必须先等待 baseURL、model、API key 三条草稿队列全部 settle，再以 selection generation 串行应用；快速连续选择以最后意图为准，旧 debounce 不能反向覆盖。API key 提交必须先 flush baseURL，并在 `tasks -> workspaces` 锁内校验捕获的 canonical target；target 已变化或无效时拒绝并要求重新输入。
+
+**Local Data 修复纪律**：有 owner durability 协议的 schema 不得由共享诊断层直接 `setItem`。`repairMutation` 必须把 fresh inspect → repair → apply → inspect 放进 owner 规范锁域，`applyRepair` 必须经专用 force Raw store 提交并推进 revision、发布失效；即使修复后的公开正文与内存相同，也要覆盖坏 revision/同 revision 异 token。仅注入 Storage 的隔离测试可使用默认直接 patch。
 
 **战略方向 D（已定）**：ideall **能独立成立**，命运不与 wonita 深度绑定。
 
@@ -26,8 +44,8 @@ ideall 是**开源、本地优先的个人信息终端**（独立项目）：从
 - **目标盘**：信息密集型专业人士，以及重视数据自持的高级用户 / 极客（非大众市场）。
 - **community / peer 发布降级为远期可选赌注**：Follow、腾讯 ima 已大规模占据，验证本地产品留存后再投。
 
-**home 是“我的”（本机数据区）；info / community / tool 是三个发现模块，其内容经关注汇入“我的”**：“我的”通过**关注**把“发现”里的来源（发布者 / 实体 / 工具 / 搜索 / 社区发布者 peer）加入 `/home/subscriptions` 关注流；关注偏好本地优先（IndexedDB），内容实时拉取。
-**跨端同步（端到端加密、无账号）**：同步码在浏览器派生 `storageId` 与 AES 密钥，只上传密文。
+**home 是“我的”（本机数据区）；info / community / tool 是三个发现模块，其内容经关注汇入“我的”**：“我的”通过**关注**把“发现”里的来源（发布者 / 实体 / 工具 / 搜索 / 社区发布者 peer）加入 `/home/following` 关注流（旧 `/home/subscriptions` 为兼容别名）；关注偏好本地优先（IndexedDB），内容实时拉取。
+**跨端同步（端到端加密、无账号）**：同步码在浏览器派生 `storageId` 与 AES 密钥，只上传密文。远端并发由 blob 版本 409 有界重试，本地落地由 `StorageSyncPort` 在同一 readwrite 事务内按完整逻辑快照 CAS；状态机保留不可变统计基线，并用 Storage 返回的实际规范化提交快照推进重试。CAS 冲突安全失败且不 PUT，不能用陈旧合并结果覆盖同步窗口内的本地写。
 **社区是用户 / peer 发布层（账号）**：登录后发布内容成为社区发布者，他人可关注其发布并汇入关注流。
 **账号（公开发布身份）与跨端同步的无账号同步码是两套独立身份**。
 
@@ -42,7 +60,7 @@ ideall 是**开源、本地优先的个人信息终端**（独立项目）：从
 | **app** | `@/app/*` | Next 路由层——仅打开目标或执行工作区命令的薄标记（`page.tsx` 几乎全是 re-export `@/workspace/open-workspace-tab`；唯一例外 `app/auth/page.tsx` 是独立登录页，渲染 `@/shell/auth-form`）+ 根 layout/error/loading/not-found + `globals.css` |
 | **shell** | `@/shell/*` | 终端外壳 —— 五分区导航 / 命令台 / header / bottom-tab-bar / 主题 / account / mobile-nav，以及唯一组合根 `boot`、启动闸 `boot-gate` 和可信扩展生命周期 `runtime-extensions` |
 | **workspace** | `@/workspace/*` | Display 编排 —— File + Engine 标签、三种工作区、目录树、标签生命周期、脏 Engine 休眠，以及仅位于深链解析/工作区水合边界的旧 Resource/Node 标签迁移 |
-| **filesystem** | `@/filesystem/*` | FileSystem registry、隐藏合成根、provider 挂载、批量读取与 watch 生命周期；`resource-file-system` 将 `resource-sources/` 下的 Node/连接数据 Resource source/provider 适配到 `ideall.core` |
+| **filesystem** | `@/filesystem/*` | FileSystem registry、隐藏合成根、`ideall.navigation` 路径链接、provider 挂载、`statMany/readMany` 批量读取与 watch 生命周期；`resource-file-system` 将 `resource-sources/` 下的 Node/连接数据 Resource source/provider 适配到 `ideall.core`，`app.settings` 提供基本设置根与四个 section 快照 |
 | **engines** | `@/engines/*` | Engine descriptor、匹配、默认选择以及按工作区隔离的偏好 |
 | **files** | `@/files/*` | 一切皆文件——统一 Node 数据层。`stores/`（各 kind store + `nodes-store` 跨 kind 协调层）；顶层 Node 原语：note-blocks / sort-key / notes-tree-util / note-write-queue / flowback / feed-node（关注↔feed 节点投影）/ `files-port`（经 FileSystem registry 的兼容外观）/ `storage-sync-port`（同步专用原子存储面）/ bookmark-import |
 | **modules** | `@/modules/*` | 功能模块——`home`（“我的”：本机笔记/书签/资源/关注/对话的功能 UI = overview/notes/bookmarks/resources/publications/subscriptions）/ `info` / `community` / `tool` / `apps`（本机已安装应用启动器，Tauri 桌面专属；由 `src-tauri/src/installed_apps.rs` + `src/lib/installed-apps.ts` 支撑） |
@@ -66,7 +84,7 @@ ESLint 强制五条边界：
 
 - **内容 feed**：“我的”关注流调用 `@protocol/content` 的 `resolveSubscription`；info/community 在各自 `manifest.ts` 注册 resolver（info 管 publisher/entity/search，community 管 peer）。
 - **本机文件数据**：`@/shared/feeders/pin-tool-button` 与 agent 插件经 `@protocol/files` 的 `getFilesPort()`
-  使用兼容领域 DTO；普通 CRUD 由该外观继续分派到 FileSystem registry，不直接依赖底层 Node 存储。只有 sync 经 `StorageSyncPort` 使用含墓碑快照与原子 bulk。
+  使用兼容领域 DTO；普通 CRUD 由该外观继续分派到 FileSystem registry，不直接依赖底层 Node 存储。只有 sync 经 `StorageSyncPort` 使用含墓碑全量、快照 CAS 与原子 bulk；bulk 返回 Storage 规范化后的实际提交快照。
 - **跨端同步**：“我的”同步面板调用 `@protocol/sync` 的 `getSyncPort()`；sync 插件 `manifest.ts` 注册 SyncPort。
 - **后端取数（wonita 服务数据服务）**：所有信息、发布和鉴权取数经 `@protocol/server-port` 的 `getServerPort()`（ServerPort = 后端数据服务契约 + 自有领域类型）。默认实现是 `@/lib/server` 的 HTTP 适配器，对接 wonita server（后端数据服务的一个实现），也是**唯一** import wire DTO 的位置。ServerPort 是同构端口，SSR 预渲染期（`pnpm dev` 与导出前预渲染）也会取数，因此 `getServerPort()` 默认回退该 HTTP 适配器；App、嵌入式、局域网节点和测试可经 `registerServerPort()` 覆盖。这是 ideall 作为外部消费方、不被单一后端绑死的支点。
 - 启动注册由 `@/shell/boot-gate.tsx`（客户端启动闸，挂在根 layout）调用 `boot.ts#registerAll()` 完成（组合根，import 各模块 manifest）。
@@ -78,7 +96,7 @@ ESLint 强制五条边界：
 ```bash
 pnpm install
 pnpm dev          # 浏览器开发服（SSR）http://localhost:5020
-pnpm build        # 静态导出 → out/（output: export；等同 pnpm app:export）
+pnpm build        # 仅执行 Next 静态导出 → out/（output: export）
 pnpm clean:next   # 清理 .next/，verify:base 会在 typecheck 前自动执行
 pnpm lint         # 含 protocol 纯度强制（no-restricted-imports）
 pnpm lint:deps    # 检查未使用、未声明与多余依赖
@@ -90,15 +108,15 @@ pnpm test:scripts # 维护脚本的 node:test 测试
 
 # App（Tauri 跨平台桌面/移动；工程在 src-tauri/，见 docs/app.md）
 pnpm app:dev      # 复用或启动 Next 开发服，再启动桌面开发壳
-pnpm app:export   # 静态导出 → out/（= pnpm build；数据层已同构客户端化）
+pnpm app:export   # build → 关键静态入口检查 → bundle 预算（生产导出统一入口）
 pnpm app:build    # 为当前宿主平台打包（跨平台矩阵由 CI 在各平台构建）
 
 # 本地基础门禁（对应 CI 基础检查；会先清理 .next 再 typecheck）
 pnpm verify:checks # 不含生产构建的质量门禁，包含 lint:deps
-pnpm verify:base   # verify:checks → build → verify:bundle
+pnpm verify:base   # verify:checks → app:export
 pnpm verify:bundle # 检查已有 out/ 的 JavaScript raw/gzip bundle 预算
 pnpm verify:static-export # 检查 out/ 静态导出关键入口与 _next chunks
-pnpm verify:smoke:static  # 生产形态浏览器冒烟：build → serve out/ → notes/files/plugins/trash
+pnpm verify:smoke:static  # 生产形态浏览器冒烟：app:export → serve out/ → notes/files/plugins/trash
 pnpm verify:full          # verify:base + 开发服冒烟（自动挑 5020-5023 可用端口）
 
 # API codegen（后端数据服务的 schema 变更后）——产物是 wire DTO，仅供 HTTP 适配器消费
@@ -114,7 +132,7 @@ SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
 
 ideall 仅以 App 形态分发（当前流程见 [app.md](app.md)，历史迁移见 [app-history.md](app-history.md)）：
 
-- **构建**：`output: export` 静态导出（默认且唯一生产构建），Tauri 2.0（`src-tauri/`）打包为 **Windows / Linux / macOS / iOS / Android**。无 Node 运行时 / 无 SSR 生产部署，数据层走**客户端直连后端**（`NEXT_PUBLIC_SERVER_ADDR`）；数据访问已同构客户端化。
+- **构建目标**：`output: export` 静态导出（默认且唯一生产构建），Tauri 2.0（`src-tauri/`）以 **Windows / Linux / macOS / Android / iOS** 为目标。当前自动发布只覆盖桌面；Android 仅有 CI debug APK，iOS 未入 CI。无 Node 运行时 / 无 SSR 生产部署，数据层走**客户端直连后端**（`NEXT_PUBLIC_SERVER_ADDR`）；数据访问已同构客户端化。
 - **开发**：`pnpm dev` 仍是本地 SSR 开发服（`pnpm app:dev` 会复用或启动它），不影响导出。
 - `lib/env.ts` 的 `SERVER_ADDR` 同构：App 客户端 / 浏览器直连 `NEXT_PUBLIC_SERVER_ADDR`；`pnpm dev` 的 SSR 渲染期服务端读取 `SERVER_ADDR`。客户端直连需后端放行 CORS（App 内 agent 经 `tauri-plugin-http` 绕过）。
 
@@ -128,4 +146,4 @@ ideall 仅以 App 形态分发（当前流程见 [app.md](app.md)，历史迁移
 - 用户可见文案与代码注释均使用简体中文
 - **新增功能模块 / 插件**：在 `src/modules/<name>` 或 `src/plugins/<name>` 建模块和 `manifest.ts`，在 `@/shell/boot.ts` 注册；跨模块交互一律经 `@protocol`（新增契约/端口加到 `src/protocol`）。
 - **边界**：protocol 不得 import UI/页面（`pnpm lint` 强制）；app 路由不可被反向 import，info/community/tool 互不 import。
-- `ideall.core` 的笔记、书签、资源、关注和对话使用统一 Node 对象仓 `STORE_NODES`；音频、数据库、Agent 配置等 provider 保留各自 Storage。个人数据默认不上传，仅在显式同步或发布时经配置的服务端口发送。
+- `ideall.core` 的笔记、书签、资源、关注和对话使用统一 Node 对象仓 `STORE_NODES`；音频、数据库、Agent 配置等 provider 保留各自 Storage。本地数据不自动整库上传；同步、发布、模型、外部 MCP 与 web 工具的接收方、数据范围和控制见[数据出站矩阵](../.github/SECURITY.md#数据出站矩阵)。

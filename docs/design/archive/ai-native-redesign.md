@@ -2,7 +2,7 @@
 
 > **状态**:设计稿(2026-06-24 起多轮对话 + 多代理对抗验证产出),**已全部落码**(P2→P5,统一 Node 库 / 一切皆标签 UI / `fs.*` AI 层 / 笔记块级合并)。本文是该重构的权威设计依据。
 > 代码已按终端分层重组(shell/workspace/files/modules/plugins/ui/shared/lib),文中 `文件:函数` 路径锚点为重组前位置,现行结构见 [architecture.md](../../architecture.md) §3.3。
-> **关系**:现行架构见 [architecture.md](../../architecture.md);本文是在其之上的下一代方向,**落地结果已回写** architecture.md §2(统一 Node)/§3.4(fs.* AI 层)/§6(不变量 8–10)。本文保留为完整推导与雷区清单。
+> **关系**:现行架构见 [architecture.md](../../architecture.md);本文是在其之上的下一代方向,**落地结果已回写** architecture.md §2(统一 Node)/§3.5(fs.* AI 层)/§6(不变量 8–10)。本文保留为完整推导与雷区清单。
 > 所有用户可见文案与代码注释用简体中文。文中 `文件:函数` 锚点指向现有代码的改动点。
 
 ---
@@ -259,6 +259,6 @@ entity 级标签全挂载会 OOM。三池:`fill`≤8 / iframe≤2 / `padded` 不
 
 ## 11. 文档关系
 
-- [architecture.md](../../architecture.md) — 架构权威说明(本设计的落地结果已回写其 §2/§3.4/§6)。
+- [architecture.md](../../architecture.md) — 架构权威说明(本设计的落地结果已回写其 §2/§3.5/§6)。
 - [sync-lww-tradeoff.md](../../sync-lww-tradeoff.md) — LWW 取舍记录(块级合并沿用同纪律)。
 - [local-data-provider.md](../../local-data-provider.md) — `FilesPort`/embed MCP/Grant(AI 层地基)。

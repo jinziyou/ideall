@@ -8,12 +8,14 @@
 | --- | --- | --- |
 | 日常开发 | `pnpm dev` / `pnpm app:dev` | Next 开发服与 Tauri 桌面开发壳 |
 | 质量门禁 | `pnpm verify:checks` | format、代码/工作流/依赖/文档 lint、版本一致性、typecheck、test、API drift |
-| 完整门禁 | `pnpm verify` / `pnpm verify:base` | `verify:checks` 后依次执行生产构建与 bundle 预算检查 |
+| 完整门禁 | `pnpm verify` / `pnpm verify:base` | `verify:checks` 后复用 `app:export` 检查构建、静态入口与 bundle 预算 |
 | 覆盖率门禁 | `pnpm test:coverage` | 为选定核心源码生成 c8 text/lcov 报告，并检查覆盖率基线 |
 | 生产冒烟 | `pnpm verify:smoke:static` | 静态导出后启动 `out/` 预览服并跑浏览器冒烟 |
 | 开发服冒烟 | `pnpm verify:full` / `pnpm verify:smoke` | 启动 Next dev server 后跑 notes/files/plugins/trash 冒烟 |
 | API 契约 | `pnpm gen:api` / `pnpm gen:api:check` / `pnpm sync:api` | OpenAPI schema 与生成类型维护 |
-| App 发布 | `pnpm app:export` / `pnpm app:build` / `pnpm bump` | 静态导出、当前宿主平台的 Tauri 打包与版本号同步；跨平台矩阵由 CI 执行 |
+| App 发布 | `pnpm app:export` / `pnpm app:build` / `pnpm bump` | 经验证的静态导出、当前宿主平台的 Tauri 打包与版本号同步；跨平台矩阵由 CI 执行 |
+| Git 维护 | `pnpm git:setup` / `pnpm git:pull` | 配置移动发布标签 refspec；执行仅快进的安全 pull |
+| 静态预览 | `pnpm verify:static-export` / `pnpm serve:out` | 检查已有 `out/`，或在本地启动无 Node 生产运行时的预览服 |
 
 常用维护脚本支持 `--help`，例如：
 
@@ -21,7 +23,10 @@
 node scripts/verify-static-smoke.mjs --help
 node scripts/verify-full.mjs --help
 node scripts/run-tests.mjs --help
+node scripts/run-script-tests.mjs --help
 node scripts/check-docs.mjs --help
+node scripts/git-setup.mjs --help
+node scripts/git-pull.mjs --help
 node scripts/check-version.mjs --help
 node scripts/bump-version.mjs --help
 node scripts/release-preflight.mjs --help
@@ -49,9 +54,10 @@ pnpm verify:base
 10. `pnpm test:scripts`
 11. `pnpm gen:api:check`
 12. `pnpm build`
-13. `pnpm verify:bundle`
+13. `pnpm verify:static-export`
+14. `pnpm verify:bundle`
 
-前 11 步也可单独运行 `pnpm verify:checks`，供 CI 质量 job 和发布 preflight 复用；其中 `lint:deps` 使用 Knip 检查未使用、多余和未声明依赖。`pnpm clean:next` 只删除 `.next/`，用于清掉 Next 生成类型与缓存，避免脏产物影响 `tsc --noEmit`。完整门禁随后构建静态导出，并用 `verify:bundle` 检查 `out/_next/static/chunks` 的 raw/gzip 总量与最大单 chunk 预算。
+前 11 步也可单独运行 `pnpm verify:checks`，供 CI 质量 job 和发布 preflight 复用；其中 `lint:deps` 使用 Knip 检查未使用、多余和未声明依赖。`pnpm clean:next` 只删除 `.next/`，用于清掉 Next 生成类型与缓存，避免脏产物影响 `tsc --noEmit`。后 3 步由 `pnpm app:export` 统一承载：先构建静态导出，再确认关键路由和 `_next` chunk 已生成，最后检查 JavaScript raw/gzip 总量与最大单 chunk 预算。Tauri 打包与 CI build job 都复用同一入口。
 
 已有生产构建时可单独运行：
 
@@ -66,7 +72,7 @@ pnpm verify:smoke:static
 node scripts/verify-static-smoke.mjs --no-build smoke:notes
 ```
 
-生产形态冒烟。默认先 `pnpm build`，再检查 `out/`，随后启动 `scripts/serve-out.mjs` 并运行 notes/files/plugins/trash 冒烟。已有 `out/` 时可加 `--no-build`，也可只传指定 smoke 脚本。
+生产形态冒烟。默认先运行 `pnpm app:export`，随后启动 `scripts/serve-out.mjs` 并运行 notes/files/plugins/trash 冒烟。已有且已自行检查的 `out/` 可加 `--no-build`；runner 仍会执行静态入口检查，也可只传指定 smoke 脚本。
 
 ```bash
 pnpm verify:full
@@ -87,7 +93,7 @@ pnpm test:coverage
 
 `pnpm test:coverage` 运行同一组业务测试，并为 protocol、filesystem、engines、shell 启动/运行时扩展、workspace store 和 plugins/shared 等选定核心路径生成 c8 text/lcov 报告。门禁要求 statements/lines ≥ 80%、branches ≥ 75%、functions ≥ 78%，并作为 `verify:checks` 的业务测试步骤；普通开发仍可用 `pnpm test [过滤串]` 快速运行聚焦测试。
 
-`pnpm test:scripts` 使用原生 `node:test` 验证维护脚本；它与业务测试分开，便于脚本保持纯 Node、跨平台且不依赖应用别名。
+`pnpm test:scripts` 自动发现 `scripts/*.test.mjs`，并使用隔离子进程运行原生 `node:test` 维护脚本测试；可像 `pnpm test:scripts -- release-artifacts` 一样用路径子串聚焦。它与业务测试分开，便于脚本保持纯 Node、跨平台且不依赖应用别名。runner 复用业务测试的超时、进程树回收和有限日志能力，并避免依赖 `node --test` CLI 的 glob 实现。
 
 浏览器冒烟脚本：
 
