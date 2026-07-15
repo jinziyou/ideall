@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop-updater",
-  "description": "桌面自动更新能力 (移动端走应用商店, 故平台限定桌面)",
+  "description": "桌面专属能力：自动更新与 OAuth 环回回调监听（移动端不启用）。",
   "platforms": ["macOS", "windows", "linux"],
   "windows": ["main"],
-  "permissions": ["updater:default"]
+  "permissions": ["updater:default", "allow-oauth-callback-start", "allow-oauth-callback-stop"]
 }

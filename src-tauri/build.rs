@@ -37,6 +37,9 @@ fn main() {
             "acp_which",
             "acp_script_path",
             "acp_run_once",
+            // 桌面 OAuth 环回回调监听；仅主窗口 capability 可启动或停止。
+            "oauth_callback_start",
+            "oauth_callback_stop",
             "list_installed_apps",
             "launch_installed_app",
             "read_app_icon_data_url",
