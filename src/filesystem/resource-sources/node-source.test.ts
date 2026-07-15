@@ -1,9 +1,15 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import type { Node, NodeKind, FsCreateInput, FsWritePatch } from "@protocol/node"
+import type { Node, NodeKind, NodeOfKind, FsCreateInput, FsWritePatch } from "@protocol/node"
 import type { NodeResourceRef, ResourceMeta } from "@protocol/resource"
 import { FILES_UPDATED } from "@protocol/flowback"
 import type { NodeSummary } from "@/files/stores/nodes-store"
+import {
+  NodeMutationConflictError,
+  assertNodeMutationExpectation,
+  type NodeMutationExpectation,
+} from "@/files/stores/node-mutation"
+import type { TrashMutationExpectation } from "@/files/stores/trash-store"
 import { createResourceFileSystem, resourceFileRef } from "@/filesystem/resource-file-system"
 import { FileSystemError } from "@/filesystem/types"
 import { createNodeResourceSource, type NodeResourceSourceDeps } from "./node-source"
@@ -40,6 +46,16 @@ function note(id: string, title = "Note", parentId: string | null = null): Node 
   }
 }
 
+function thread(id: string, title = "Thread"): Node {
+  return {
+    ...base,
+    id,
+    kind: "thread",
+    title,
+    content: { messages: [{ role: "user", content: "secret" }] },
+  }
+}
+
 function bookmark(id: string, title = "Bookmark", parentId: string | null = null): Node {
   return {
     ...base,
@@ -51,7 +67,17 @@ function bookmark(id: string, title = "Bookmark", parentId: string | null = null
   }
 }
 
-function fileNode(id: string, title = "File", parentId: string | null = null): Node {
+function feed(id: string, title = "Feed"): Node {
+  return {
+    ...base,
+    id,
+    kind: "feed",
+    title,
+    content: { type: "publisher", key: `${id}.example`, favicon: "" },
+  }
+}
+
+function fileNode(id: string, title = "File", parentId: string | null = null): NodeOfKind<"file"> {
   return {
     ...base,
     id,
@@ -100,32 +126,58 @@ function makeDeps(nodes: Node[]): {
   calls: {
     create: FsCreateInput[]
     createFile: File[]
-    update: Array<{ kind: NodeKind; id: string; patch: FsWritePatch }>
+    update: Array<{
+      kind: NodeKind
+      id: string
+      patch: FsWritePatch
+      expected?: NodeMutationExpectation
+    }>
     move: Array<{
       kind: NodeKind
       id: string
       parentId: string | null
       afterSortKey?: string | null
+      expected?: NodeMutationExpectation
     }>
-    delete: Array<{ kind: NodeKind; id: string }>
-    restore: string[]
-    writeBlob: Array<{ id: string; content: string; mime?: string }>
+    delete: Array<{ kind: NodeKind; id: string; expected?: NodeMutationExpectation }>
+    restore: Array<{ kind: NodeKind; id: string; expected?: TrashMutationExpectation }>
+    writeBlob: Array<{
+      id: string
+      content: string
+      mime?: string
+      expected?: NodeMutationExpectation
+    }>
   }
 } {
   const byId = new Map(nodes.map((node) => [node.id, node]))
   const calls = {
     create: [] as FsCreateInput[],
     createFile: [] as File[],
-    update: [] as Array<{ kind: NodeKind; id: string; patch: FsWritePatch }>,
+    update: [] as Array<{
+      kind: NodeKind
+      id: string
+      patch: FsWritePatch
+      expected?: NodeMutationExpectation
+    }>,
     move: [] as Array<{
       kind: NodeKind
       id: string
       parentId: string | null
       afterSortKey?: string | null
+      expected?: NodeMutationExpectation
     }>,
-    delete: [] as Array<{ kind: NodeKind; id: string }>,
-    restore: [] as string[],
-    writeBlob: [] as Array<{ id: string; content: string; mime?: string }>,
+    delete: [] as Array<{ kind: NodeKind; id: string; expected?: NodeMutationExpectation }>,
+    restore: [] as Array<{
+      kind: NodeKind
+      id: string
+      expected?: TrashMutationExpectation
+    }>,
+    writeBlob: [] as Array<{
+      id: string
+      content: string
+      mime?: string
+      expected?: NodeMutationExpectation
+    }>,
   }
   return {
     calls,
@@ -139,10 +191,17 @@ function makeDeps(nodes: Node[]): {
         }))
       },
       async getNodeRaw(id) {
+        const node = byId.get(id)
+        return node?.deletedAt == null ? node : undefined
+      },
+      async getNodeForMutation(id) {
         return byId.get(id)
       },
       async getNodesRaw(ids) {
-        return ids.map((id) => byId.get(id))
+        return ids.map((id) => {
+          const node = byId.get(id)
+          return node?.deletedAt == null ? node : undefined
+        })
       },
       async createNode(input: FsCreateInput) {
         calls.create.push(input)
@@ -154,40 +213,50 @@ function makeDeps(nodes: Node[]): {
         calls.createFile.push(file)
         const created = fileNode(`file-${calls.createFile.length}`, file.name)
         byId.set(created.id, created)
-        return {
-          id: created.id,
-          name: created.title,
-          type: file.type,
-          size: file.size,
-          createdAt: created.createdAt,
-          tags: [],
-        }
+        return created
       },
-      async updateNode(kind, id, patch) {
-        calls.update.push({ kind, id, patch })
+      async updateNode(kind, id, patch, expected) {
+        calls.update.push({ kind, id, patch, expected })
         const existing = byId.get(id)
-        if (!existing || existing.kind !== kind) return undefined
+        if (!existing || existing.kind !== kind || existing.deletedAt != null) return undefined
+        assertNodeMutationExpectation(existing, expected)
         const updated = { ...existing, ...patch, updatedAt: existing.updatedAt + 1 } as Node
         byId.set(id, updated)
         return updated
       },
-      async moveNode(kind, id, parentId, afterSortKey) {
-        calls.move.push({ kind, id, parentId, afterSortKey })
+      async moveNode(kind, id, parentId, afterSortKey, expected) {
+        calls.move.push({ kind, id, parentId, afterSortKey, expected })
         const existing = byId.get(id)
-        if (!existing || existing.kind !== kind) return undefined
+        if (!existing || existing.kind !== kind || existing.deletedAt != null) return undefined
+        assertNodeMutationExpectation(existing, expected)
         const updated = { ...existing, parentId, updatedAt: existing.updatedAt + 1 } as Node
         byId.set(id, updated)
         return updated
       },
-      async deleteNode(kind, id) {
-        calls.delete.push({ kind, id })
-      },
-      async restoreNode(_kind, id) {
-        calls.restore.push(id)
+      async deleteNode(kind, id, expected) {
+        calls.delete.push({ kind, id, expected })
         const existing = byId.get(id)
-        if (!existing) return
+        if (!existing || existing.kind !== kind || existing.deletedAt != null) return false
+        assertNodeMutationExpectation(existing, expected)
+        byId.set(id, { ...existing, deletedAt: 10, updatedAt: existing.updatedAt + 1 } as Node)
+        return true
+      },
+      async restoreNodeWithResult(kind, id, expected) {
+        calls.restore.push({ kind, id, expected })
+        const existing = byId.get(id)
+        if (!existing || existing.kind !== kind || existing.deletedAt == null) return undefined
+        if (
+          expected &&
+          (existing.kind !== expected.kind ||
+            existing.updatedAt !== expected.updatedAt ||
+            existing.deletedAt !== expected.deletedAt)
+        ) {
+          throw new NodeMutationConflictError(id)
+        }
         const { deletedAt: _deletedAt, ...restored } = existing
-        byId.set(id, { ...restored, updatedAt: existing.updatedAt + 1 } as Node)
+        const committed = { ...restored, updatedAt: existing.updatedAt + 1 } as Node
+        byId.set(id, committed)
+        return committed
       },
       async readBlob(id) {
         return byId.has(id) ? new Blob(["test"], { type: "text/plain" }) : undefined
@@ -195,11 +264,12 @@ function makeDeps(nodes: Node[]): {
       async readBlobBase64(id) {
         return byId.has(id) ? { mime: "text/plain", size: 4, base64: "dGVzdA==" } : undefined
       },
-      async updateFileContent(id, content, mime) {
-        calls.writeBlob.push({ id, content, mime })
+      async updateFileContent(id, content, mime, expected) {
+        calls.writeBlob.push({ id, content, mime, expected })
         const existing = byId.get(id)
-        if (!existing || existing.kind !== "file") return undefined
-        byId.set(id, {
+        assertNodeMutationExpectation(existing, expected)
+        if (!existing || existing.kind !== "file" || existing.deletedAt != null) return undefined
+        const committed = {
           ...existing,
           updatedAt: existing.updatedAt + 1,
           blobRef: {
@@ -207,8 +277,9 @@ function makeDeps(nodes: Node[]): {
             size: content.length,
             mime: mime || existing.blobRef.mime,
           },
-        })
-        return { id }
+        } as Node
+        byId.set(id, committed)
+        return committed
       },
     },
   }
@@ -255,6 +326,27 @@ test("node provider: create owns root and child note creation", async () => {
   )
   assert.equal(file?.meta.ref.kind, "file")
   assert.equal(calls.createFile[0], upload)
+})
+
+test("node provider: file create returns committed node without a post-create read", async () => {
+  const { deps } = makeDeps([])
+  deps.getNodeRaw = async () => {
+    throw new Error("file create must not perform a post-create read")
+  }
+  const provider = createNodeResourceSource(deps)
+  const upload = Object.assign(new Blob(["body"], { type: "text/plain" }), {
+    name: "committed.txt",
+    lastModified: 1,
+  }) as File
+
+  const created = await provider.create?.(
+    { kind: "file", file: upload, tags: ["local"] },
+    { actor: "ui", permissions: [], intent: "action" },
+  )
+
+  assert.equal(created?.meta.ref.kind, "file")
+  assert.equal(created?.meta.title, "committed.txt")
+  assert.equal((created?.content as Node).kind, "file")
 })
 
 test("node provider: list filters kind/parent/text and paginates metadata", async () => {
@@ -332,6 +424,49 @@ test("node provider: note content requires notes permission or active resource c
 
   const byUi = await provider.get(nodeRef, uiCtx)
   assert.deepEqual((byUi?.content as Node & { kind: "note" }).content, node.content)
+
+  const metadataByUi = await provider.get(nodeRef, { ...uiCtx, intent: "metadata" })
+  assert.deepEqual((metadataByUi?.content as Node & { kind: "note" }).content, [])
+})
+
+test("node provider: metadata batches never expose thread messages to UI", async () => {
+  const privateThread = thread("thread-batch", "Private thread")
+  const provider = createNodeResourceSource(makeDeps([privateThread]).deps)
+
+  const records = await provider.getMany!([ref("thread", privateThread.id)], {
+    ...uiCtx,
+    intent: "metadata",
+  })
+
+  assert.deepEqual((records[0]?.content as Extract<Node, { kind: "thread" }>).content.messages, [])
+})
+
+test("node provider: thread metadata batch uses the covering-index dependency", async () => {
+  const privateThread = thread("thread-index", "Indexed thread")
+  const { deps } = makeDeps([privateThread])
+  const batches: string[][] = []
+  deps.getThreadMetadataMany = async (ids) => {
+    batches.push([...ids])
+    return ids.map((id) =>
+      id === privateThread.id
+        ? ({ ...privateThread, content: { messages: [] } } as Node)
+        : undefined,
+    )
+  }
+  deps.getNodesRaw = async () => {
+    throw new Error("thread metadata must not read full node values")
+  }
+  const provider = createNodeResourceSource(deps)
+
+  const records = await provider.getMany!(
+    [ref("thread", privateThread.id), ref("thread", "missing")],
+    { ...uiCtx, intent: "metadata" },
+  )
+
+  assert.deepEqual(batches, [[privateThread.id, "missing"]])
+  assert.equal(records[0]?.meta.title, "Indexed thread")
+  assert.deepEqual((records[0]?.content as Extract<Node, { kind: "thread" }>).content.messages, [])
+  assert.equal(records[1], null)
 })
 
 test("node provider: getMany preserves order, unknowns, and per-node privacy guards", async () => {
@@ -403,6 +538,13 @@ test("node provider: read-blob requires blob permission and only supports files"
 
 test("node provider: write-blob persists text under the existing write guard", async () => {
   const { deps, calls } = makeDeps([fileNode("f1"), note("n1")])
+  const getNodeRaw = deps.getNodeRaw
+  let liveReads = 0
+  deps.getNodeRaw = async (id) => {
+    liveReads += 1
+    if (liveReads > 1) throw new Error("write-blob must not reread after commit")
+    return getNodeRaw(id)
+  }
   const provider = createNodeResourceSource(deps)
 
   await rejectCode(
@@ -413,13 +555,22 @@ test("node provider: write-blob persists text under the existing write guard", a
     provider.invoke(ref("note", "n1"), "write-blob", { content: "next" }, uiCtx),
     "unsupported",
   )
-  await provider.invoke(
+  const written = await provider.invoke(
     ref("file", "f1"),
     "write-blob",
     { content: "next", mime: "text/markdown" },
     { actor: "agent", permissions: ["fs:write"] },
   )
-  assert.deepEqual(calls.writeBlob, [{ id: "f1", content: "next", mime: "text/markdown" }])
+  assert.deepEqual(calls.writeBlob, [
+    {
+      id: "f1",
+      content: "next",
+      mime: "text/markdown",
+      expected: { kind: "file", updatedAt: 1, deletedAt: null },
+    },
+  ])
+  assert.equal(liveReads, 1)
+  assert.equal((written as { meta: ResourceMeta }).meta.updatedAt, 2)
 })
 
 test("node provider: navigate returns bookmark url", async () => {
@@ -436,7 +587,11 @@ test("node provider: navigate returns bookmark url", async () => {
 })
 
 test("node provider: edit/move/delete enforce kind-specific write grants", async () => {
-  const { deps, calls } = makeDeps([note("n1"), bookmark("b1"), fileNode("f1")])
+  const { deps, calls } = makeDeps([
+    note("n1", "Note", "parent-note"),
+    bookmark("b1"),
+    fileNode("f1"),
+  ])
   const provider = createNodeResourceSource(deps)
 
   await rejectCode(
@@ -448,7 +603,7 @@ test("node provider: edit/move/delete enforce kind-specific write grants", async
     ),
     "permission-denied",
   )
-  await provider.invoke(
+  const edited = await provider.invoke(
     ref("note", "n1"),
     "edit",
     { title: "New", tags: ["x"] },
@@ -458,9 +613,11 @@ test("node provider: edit/move/delete enforce kind-specific write grants", async
     kind: "note",
     id: "n1",
     patch: { title: "New", tags: ["x"] },
+    expected: { kind: "note", updatedAt: 1, deletedAt: null },
   })
+  assert.deepEqual((edited as { meta: ResourceMeta }).meta.parent, ref("note", "parent-note"))
 
-  await provider.invoke(
+  const moved = await provider.invoke(
     ref("bookmark", "b1"),
     "move",
     { parentId: "folder-1", afterSortKey: "a9" },
@@ -471,18 +628,96 @@ test("node provider: edit/move/delete enforce kind-specific write grants", async
     id: "b1",
     parentId: "folder-1",
     afterSortKey: "a9",
+    expected: { kind: "bookmark", updatedAt: 1, deletedAt: null },
   })
+  assert.deepEqual((moved as { meta: ResourceMeta }).meta.parent, ref("folder", "folder-1"))
 
   await provider.invoke(ref("file", "f1"), "delete", null, {
     actor: "agent",
     permissions: ["fs:write"],
   })
-  assert.deepEqual(calls.delete[0], { kind: "file", id: "f1" })
+  assert.deepEqual(calls.delete[0], {
+    kind: "file",
+    id: "f1",
+    expected: { kind: "file", updatedAt: 1, deletedAt: null },
+  })
+})
+
+test("node provider: stale expectedVersion and storage CAS conflicts stay conflict", async () => {
+  const deleted = { ...fileNode("restore-conflict"), deletedAt: 5 } as Node
+  const { deps, calls } = makeDeps([
+    note("edit-conflict"),
+    bookmark("move-conflict"),
+    fileNode("delete-conflict"),
+    fileNode("blob-conflict"),
+    deleted,
+  ])
+  const provider = createNodeResourceSource(deps)
+
+  await rejectCode(
+    provider.invoke(
+      ref("note", "edit-conflict"),
+      "edit",
+      { title: "stale" },
+      {
+        ...uiCtx,
+        expectedVersion: "0",
+      },
+    ),
+    "conflict",
+  )
+  assert.equal(calls.update.length, 0, "source preflight should reject a stale adapter version")
+
+  const conflict = async (): Promise<never> => {
+    throw new NodeMutationConflictError("injected")
+  }
+  deps.updateNode = conflict
+  deps.moveNode = conflict
+  deps.deleteNode = conflict
+  deps.restoreNodeWithResult = conflict
+  deps.updateFileContent = conflict
+
+  await rejectCode(
+    provider.invoke(ref("note", "edit-conflict"), "edit", { title: "race" }, uiCtx),
+    "conflict",
+  )
+  await rejectCode(
+    provider.invoke(ref("bookmark", "move-conflict"), "move", { parentId: null }, uiCtx),
+    "conflict",
+  )
+  await rejectCode(
+    provider.invoke(ref("file", "delete-conflict"), "delete", null, uiCtx),
+    "conflict",
+  )
+  await rejectCode(
+    provider.invoke(ref("file", "blob-conflict"), "write-blob", { content: "race" }, uiCtx),
+    "conflict",
+  )
+  await rejectCode(provider.invoke(ref("file", deleted.id), "restore", null, uiCtx), "conflict")
+})
+
+test("node provider: unsupported kinds cannot bypass mutation capabilities", async () => {
+  const { deps, calls } = makeDeps([fileNode("file-no-move"), feed("feed-no-edit")])
+  const provider = createNodeResourceSource(deps)
+
+  await rejectCode(
+    provider.invoke(ref("file", "file-no-move"), "move", { parentId: null }, uiCtx),
+    "unsupported",
+  )
+  await rejectCode(
+    provider.invoke(ref("feed", "feed-no-edit"), "edit", { title: "forged" }, uiCtx),
+    "unsupported",
+  )
+  assert.equal(calls.move.length, 0)
+  assert.equal(calls.update.length, 0)
 })
 
 test("node provider: restore revives a deleted file through the write boundary", async () => {
   const deleted = { ...fileNode("f1"), deletedAt: 5 } as Node
   const { deps, calls } = makeDeps([deleted])
+  deps.getNodeRaw = async () => {
+    throw new Error("restore must not reread after commit")
+  }
   const provider = createNodeResourceSource(deps)
 
   await rejectCode(
@@ -494,8 +729,44 @@ test("node provider: restore revives a deleted file through the write boundary",
     permissions: ["fs:write"],
   })
 
-  assert.deepEqual(calls.restore, ["f1"])
+  assert.deepEqual(calls.restore, [
+    {
+      kind: "file",
+      id: "f1",
+      expected: { kind: "file", updatedAt: 1, deletedAt: 5 },
+    },
+  ])
   assert.equal((restored as { meta: ResourceMeta }).meta.ref.id, "f1")
+})
+
+test("node provider: restore changed after preflight maps to conflict", async () => {
+  const deleted = { ...fileNode("stale-file"), deletedAt: 5 } as Node
+  const { deps } = makeDeps([deleted])
+  deps.restoreNodeWithResult = async () => undefined
+  const provider = createNodeResourceSource(deps)
+
+  await rejectCode(
+    provider.invoke(ref("file", deleted.id), "restore", null, {
+      actor: "agent",
+      permissions: ["fs:write"],
+    }),
+    "conflict",
+  )
+})
+
+test("node provider: delete changed after preflight maps to conflict", async () => {
+  const live = fileNode("stale-delete")
+  const { deps } = makeDeps([live])
+  deps.deleteNode = async () => false
+  const provider = createNodeResourceSource(deps)
+
+  await rejectCode(
+    provider.invoke(ref("file", live.id), "delete", null, {
+      actor: "agent",
+      permissions: ["fs:write"],
+    }),
+    "conflict",
+  )
 })
 
 test("node provider: tombstones are not found through FileSystem but remain restorable", async () => {
@@ -524,7 +795,13 @@ test("node provider: tombstones are not found through FileSystem but remain rest
       ...fileSystemUiCtx,
       intent: "action",
     })
-    assert.deepEqual(calls.restore, [deleted.id])
+    assert.deepEqual(calls.restore, [
+      {
+        kind: "file",
+        id: deleted.id,
+        expected: { kind: "file", updatedAt: 1, deletedAt: 5 },
+      },
+    ])
     assert.equal((await fileSystem.stat(fileRef, fileSystemUiCtx))?.ref.fileId, fileRef.fileId)
   } finally {
     unregister()
@@ -545,11 +822,11 @@ test("node provider: watch filters exact resources by kind and id", () => {
     const provider = createNodeResourceSource(makeDeps([note("n1")]).deps)
     let collectionCount = 0
     let exactCount = 0
-    const collectionHandle = provider.watch!(
-      { scheme: "node", kind: "note" },
-      uiCtx,
-      () => collectionCount++,
-    )
+    const changedIds: Array<string | undefined> = []
+    const collectionHandle = provider.watch!({ scheme: "node", kind: "note" }, uiCtx, (event) => {
+      collectionCount++
+      changedIds.push(event?.ref?.id)
+    })
     const exactHandle = provider.watch!(
       { scheme: "node", kind: "note", id: "n1" },
       uiCtx,
@@ -570,6 +847,7 @@ test("node provider: watch filters exact resources by kind and id", () => {
     assert.deepEqual([collectionCount, exactCount], [3, 2])
     target.dispatchEvent(new CustomEvent(FILES_UPDATED, { detail: {} }))
     assert.deepEqual([collectionCount, exactCount], [4, 3])
+    assert.deepEqual(changedIds, ["another-note", "n1", undefined, undefined])
 
     collectionHandle.dispose()
     exactHandle.dispose()

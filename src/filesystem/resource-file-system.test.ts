@@ -1,6 +1,7 @@
 import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
-import type { ResourceMeta } from "@protocol/resource"
+import type { ResourceMeta, ResourceRecord, ResourceRef } from "@protocol/resource"
+import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
 import {
   clearResourceSourcesForTest,
   registerResourceSource,
@@ -8,6 +9,7 @@ import {
 import type { ResourceSourceProvider } from "@/filesystem/resource-sources/types"
 import { ResourceSourceError } from "@/filesystem/resource-sources/types"
 import { FileSystemError } from "./types"
+import { withFileWriteLock } from "./write-lock"
 import {
   aiTasksPanelFileRef,
   corePlaceRef,
@@ -19,6 +21,14 @@ import {
 } from "./resource-file-system"
 
 const ctx = { actor: "ui", permissions: [], intent: "metadata" } as const
+
+function deferred(): { promise: Promise<void>; resolve(): void } {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 afterEach(() => clearResourceSourcesForTest())
 
@@ -236,6 +246,51 @@ test("resource filesystem: readMany delegates ordered node reads to one resource
   )
 })
 
+test("resource filesystem: statMany delegates ordered metadata to one resource source batch", async () => {
+  const metas: ResourceMeta[] = ["first", "second"].map((id) => ({
+    ref: { scheme: "node", kind: "thread", id },
+    title: id,
+    capabilities: ["open", "read-content"],
+  }))
+  const batches: string[][] = []
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: metas }
+    },
+    async get() {
+      throw new Error("batchable metadata must not fan out through get")
+    },
+    async getMany(refs, access) {
+      assert.equal(access.intent, "metadata")
+      batches.push(refs.map((ref) => ref.id))
+      return refs.map((ref) => {
+        const meta = metas.find((candidate) => candidate.ref.id === ref.id)
+        return meta ? { meta, content: null } : null
+      })
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      throw new Error("unsupported")
+    },
+  })
+  const fs = createResourceFileSystem()
+  const refs = [
+    resourceFileRef(metas[1]!.ref),
+    resourceFileRef({ scheme: "node", kind: "thread", id: "missing" }),
+    resourceFileRef(metas[0]!.ref),
+  ]
+  const values = await fs.statMany!(refs, ctx, { concurrency: 2 })
+
+  assert.deepEqual(batches, [["second", "missing", "first"]])
+  assert.deepEqual(
+    values.map((value) => value?.name ?? null),
+    ["second", null, "first"],
+  )
+})
+
 test("resource filesystem: system panels are files under a core directory", async () => {
   const fs = createResourceFileSystem()
   const page = await fs.readDirectory(corePlaceRef("system"), ctx)
@@ -252,6 +307,33 @@ test("resource filesystem: system panels are files under a core directory", asyn
       false,
       `${legacyId} should navigate through its mounted App FileSystem root`,
     )
+  }
+})
+
+test("resource filesystem: management navigation targets real place roots", async () => {
+  const fs = createResourceFileSystem()
+  for (const [place, legacyPanel] of [
+    ["subscriptions", "subscriptions"],
+    ["bookmarks", "bookmarks"],
+    ["files", "files"],
+  ] as const) {
+    const root = await fs.stat(corePlaceRef(place), ctx)
+    assert.equal(root?.kind, "directory")
+    assert.equal(root?.mediaType, "inode/directory")
+    assert.equal(root?.properties?.place, place)
+    assert.equal(root?.properties?.rootChild, true)
+
+    const panel = await fs.stat(panelFileRef(legacyPanel), ctx)
+    assert.equal(panel?.kind, "file")
+    assert.equal(panel?.properties?.navigationHidden, true)
+  }
+  for (const panelId of ["trash", "apps"]) {
+    const panel = await fs.stat(panelFileRef(panelId), ctx)
+    assert.equal(panel?.properties?.navigationHidden, true, panelId)
+  }
+  for (const panelId of ["spaces", "tasks", "settings", "ai-settings"]) {
+    const panel = await fs.stat(panelFileRef(panelId), ctx)
+    assert.equal(panel?.properties?.navigationHidden, true, panelId)
   }
 })
 
@@ -291,7 +373,7 @@ test("resource filesystem: AI threads are linked from Home while the legacy work
   assert.equal((await fs.stat(corePlaceRef("workspace"), ctx))?.kind, "directory")
 })
 
-test("resource filesystem: workspace exposes aggregate spaces and tasks panels", async () => {
+test("resource filesystem: legacy aggregate spaces and tasks panels stay readable but hidden", async () => {
   registerResourceSource({
     scheme: "node",
     async list() {
@@ -318,6 +400,8 @@ test("resource filesystem: workspace exposes aggregate spaces and tasks panels",
   assert.equal((await fs.stat(panelFileRef("tasks"), ctx))?.properties?.tabKind, "agent-task-list")
   assert.equal((await fs.stat(panelFileRef("spaces"), ctx))?.properties?.panelLayout, "padded")
   assert.equal((await fs.stat(panelFileRef("tasks"), ctx))?.properties?.panelLayout, "padded")
+  assert.equal(page.entries[0]?.properties?.navigationHidden, true)
+  assert.equal(page.entries[1]?.properties?.navigationHidden, true)
 })
 
 test("resource filesystem: dynamic AI task panels use canonical workspace FileRefs", async () => {
@@ -544,13 +628,14 @@ test("resource filesystem: directory entry ids survive provider reordering", asy
 })
 
 test("resource filesystem: range reads preserve version and expectedVersion rejects stale writes", async () => {
-  const meta: ResourceMeta = {
+  let meta: ResourceMeta = {
     ref: { scheme: "node", kind: "file", id: "bytes" },
     title: "bytes.bin",
     updatedAt: 7,
     capabilities: ["open", "read-blob", "edit"],
   }
   const actors: string[] = []
+  const mutationVersions: Array<string | null | undefined> = []
   let writes = 0
   registerResourceSource({
     scheme: "node",
@@ -582,7 +667,26 @@ test("resource filesystem: range reads preserve version and expectedVersion reje
       if (action === "read-blob") {
         return { mime: "application/octet-stream", size: 4, base64: "AQIDBA==" }
       }
-      if (action === "write-blob") writes++
+      if (action === "write-blob") {
+        writes++
+        mutationVersions.push(access.expectedVersion)
+        meta = { ...meta, updatedAt: (meta.updatedAt ?? 0) + 1 }
+        return {
+          meta,
+          content: {
+            id: "bytes",
+            kind: "file",
+            parentId: null,
+            sortKey: "a",
+            title: "bytes.bin",
+            tags: ["fixture"],
+            createdAt: 2,
+            updatedAt: meta.updatedAt,
+            blobRef: { mime: "application/octet-stream", size: 4 },
+            content: null,
+          },
+        }
+      }
       return null
     },
   })
@@ -610,13 +714,160 @@ test("resource filesystem: range reads preserve version and expectedVersion reje
   )
   assert.equal(writes, 0)
 
-  await fs.write(
+  const written = await fs.write(
     ref,
     { data: "next", expectedVersion: "7" },
     { actor: "system", permissions: ["fs:write"], intent: "write" },
   )
+  assert.equal(written.version, "8")
   assert.equal(writes, 1)
+  assert.deepEqual(mutationVersions, ["7"])
   assert.equal(actors.at(-1), "agent", "system is never promoted to the resource source ui actor")
+})
+
+test("resource filesystem: writes return the committed action record without a post-commit stat", async () => {
+  const metas = new Map<string, ResourceMeta>([
+    [
+      "file",
+      {
+        ref: { scheme: "node", kind: "file", id: "committed-file" },
+        title: "before.txt",
+        updatedAt: 1,
+        capabilities: ["open", "read-blob", "edit"],
+      },
+    ],
+    [
+      "note",
+      {
+        ref: { scheme: "node", kind: "note", id: "committed-note" },
+        title: "Before",
+        updatedAt: 1,
+        capabilities: ["open", "read-content", "edit"],
+      },
+    ],
+  ])
+  let gets = 0
+  const actions: string[] = []
+  const record = (ref: ResourceRef): ResourceRecord => {
+    const meta = metas.get(ref.kind)
+    assert.ok(meta)
+    return {
+      meta,
+      content:
+        ref.kind === "file"
+          ? {
+              id: ref.id,
+              kind: "file",
+              parentId: null,
+              sortKey: "a0",
+              title: meta.title,
+              tags: [],
+              createdAt: 1,
+              updatedAt: meta.updatedAt,
+              blobRef: { mime: "text/plain", size: 4 },
+              content: null,
+            }
+          : {
+              id: ref.id,
+              kind: "note",
+              parentId: null,
+              sortKey: "a1",
+              title: meta.title,
+              tags: [],
+              createdAt: 1,
+              updatedAt: meta.updatedAt,
+              content: [],
+            },
+    }
+  }
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [...metas.values()] }
+    },
+    async get(ref) {
+      gets++
+      return record(ref)
+    },
+    async actions() {
+      return []
+    },
+    async invoke(ref, action) {
+      actions.push(action)
+      const current = metas.get(ref.kind)
+      assert.ok(current)
+      metas.set(ref.kind, {
+        ...current,
+        title: ref.kind === "file" ? "after.txt" : "After",
+        updatedAt: (current.updatedAt ?? 0) + 1,
+      })
+      return record(ref)
+    },
+  })
+  const fs = createResourceFileSystem()
+  const writeCtx = { actor: "system", permissions: ["fs:write"], intent: "write" } as const
+
+  const file = await fs.write(
+    resourceFileRef(metas.get("file")!.ref),
+    { data: "next", expectedVersion: "1" },
+    writeCtx,
+  )
+  const note = await fs.write(
+    resourceFileRef(metas.get("note")!.ref),
+    { data: { title: "After" }, expectedVersion: "1" },
+    writeCtx,
+  )
+
+  assert.deepEqual(actions, ["write-blob", "edit"])
+  assert.equal(gets, 2, "each write performs only its preflight get")
+  assert.deepEqual(
+    [file.name, file.version, note.name, note.version],
+    ["after.txt", "2", "After", "2"],
+  )
+})
+
+test("resource filesystem: rejects malformed or wrong-target committed write records", async () => {
+  const meta: ResourceMeta = {
+    ref: { scheme: "node", kind: "note", id: "committed-contract" },
+    title: "Before",
+    updatedAt: 1,
+    capabilities: ["open", "read-content", "edit"],
+  }
+  let invocation = 0
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [meta] }
+    },
+    async get() {
+      return { meta, content: [] }
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      invocation++
+      if (invocation === 1) return { updated: true }
+      return {
+        meta: {
+          ...meta,
+          ref: { ...meta.ref, id: "different-target" },
+        },
+        content: [],
+      }
+    },
+  })
+  const fs = createResourceFileSystem()
+  const ref = resourceFileRef(meta.ref)
+  const writeCtx = { actor: "system", permissions: ["fs:write"], intent: "write" } as const
+
+  for (const expectedInvocation of [1, 2]) {
+    await assert.rejects(
+      fs.write(ref, { data: { title: "After" }, expectedVersion: "1" }, writeCtx),
+      (error) => error instanceof FileSystemError && error.code === "unsupported",
+    )
+    assert.equal(invocation, expectedInvocation)
+  }
 })
 
 test("resource filesystem: concurrent writes atomically enforce a shared expectedVersion", async () => {
@@ -658,7 +909,21 @@ test("resource filesystem: concurrent writes atomically enforce a shared expecte
       const next = input as { content: string }
       content = next.content
       meta = { ...meta, updatedAt: (meta.updatedAt ?? 0) + 1 }
-      return null
+      return {
+        meta,
+        content: {
+          id: "concurrent",
+          kind: "file",
+          parentId: null,
+          sortKey: "a",
+          title: meta.title,
+          tags: [],
+          createdAt: 1,
+          updatedAt: meta.updatedAt,
+          blobRef: { mime: "text/plain", size: content.length },
+          content: null,
+        },
+      }
     },
   })
   const fs = createResourceFileSystem()
@@ -683,6 +948,146 @@ test("resource filesystem: concurrent writes atomically enforce a shared expecte
   assert.equal(rejected[0].reason.code, "conflict")
   assert.equal(content, fulfilled[0].value)
   assert.equal(meta.updatedAt, 2)
+})
+
+test("resource filesystem: thread mutations wait for the Agent tasks lock before reaching the source", async () => {
+  const metas = new Map<string, ResourceMeta>(
+    ["write-thread", "delete-thread"].map((id) => [
+      id,
+      {
+        ref: { scheme: "node", kind: "thread", id },
+        title: id,
+        updatedAt: 1,
+        capabilities: ["open", "edit", "delete"],
+      },
+    ]),
+  )
+  const sourceCalls: string[] = []
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [...metas.values()] }
+    },
+    async get(ref) {
+      sourceCalls.push(`get:${ref.id}`)
+      const meta = metas.get(ref.id)
+      return meta ? { meta, content: null } : null
+    },
+    async actions() {
+      return []
+    },
+    async invoke(ref, action) {
+      sourceCalls.push(`invoke:${ref.id}:${action}`)
+      if (action !== "edit") return null
+      const current = metas.get(ref.id)
+      assert.ok(current)
+      const meta = { ...current, updatedAt: (current.updatedAt ?? 0) + 1 }
+      metas.set(ref.id, meta)
+      return { meta, content: null }
+    },
+  })
+  const fs = createResourceFileSystem()
+  const writeRef = resourceFileRef(metas.get("write-thread")!.ref)
+  const deleteRef = resourceFileRef(metas.get("delete-thread")!.ref)
+  const lockEntered = deferred()
+  const releaseLock = deferred()
+  const tasksLock = withFileWriteLock(AGENT_TASKS_FILE_REF, async () => {
+    lockEntered.resolve()
+    await releaseLock.promise
+  })
+  await lockEntered.promise
+
+  const write = fs.write(
+    writeRef,
+    { data: { title: "Updated" }, expectedVersion: "1" },
+    { actor: "ui", permissions: [], intent: "write" },
+  )
+  const remove = fs.invoke(
+    deleteRef,
+    "delete",
+    undefined,
+    { actor: "ui", permissions: [], intent: "action" },
+    { expectedVersion: "1" },
+  )
+  await Promise.resolve()
+  await Promise.resolve()
+  assert.deepEqual(sourceCalls, [], "queued thread mutations must not touch the source")
+
+  releaseLock.resolve()
+  await Promise.all([tasksLock, write, remove])
+  assert.deepEqual(sourceCalls, [
+    "get:write-thread",
+    "invoke:write-thread:edit",
+    "invoke:delete-thread:delete",
+  ])
+})
+
+test("resource filesystem: source mutation conflicts remain FileSystem conflicts", async () => {
+  const meta: ResourceMeta = {
+    ref: { scheme: "node", kind: "note", id: "cas-note" },
+    title: "CAS note",
+    updatedAt: 3,
+    capabilities: ["open", "edit", "delete"],
+  }
+  const mutations: Array<{ action: string; expectedVersion?: string | null }> = []
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [meta] }
+    },
+    async get() {
+      return {
+        meta,
+        content: {
+          id: meta.ref.id,
+          kind: "note",
+          title: meta.title,
+          parentId: null,
+          sortKey: "a0",
+          tags: [],
+          createdAt: 1,
+          updatedAt: meta.updatedAt,
+          content: [],
+        },
+      }
+    },
+    async actions() {
+      return []
+    },
+    async invoke(_ref, action, _input, access) {
+      mutations.push({ action, expectedVersion: access.expectedVersion })
+      throw new ResourceSourceError("conflict", "injected mutation race")
+    },
+  })
+  const fs = createResourceFileSystem()
+  const ref = resourceFileRef(meta.ref)
+
+  await assert.rejects(
+    fs.write(
+      ref,
+      { data: { title: "stale" } },
+      { actor: "system", permissions: ["fs:write"], intent: "write" },
+    ),
+    (error) => error instanceof FileSystemError && error.code === "conflict",
+  )
+  await assert.rejects(
+    fs.invoke(
+      ref,
+      "delete",
+      null,
+      {
+        actor: "system",
+        permissions: ["fs:write"],
+        intent: "action",
+      },
+      { expectedVersion: "3" },
+    ),
+    (error) => error instanceof FileSystemError && error.code === "conflict",
+  )
+  assert.deepEqual(mutations, [
+    { action: "edit", expectedVersion: "3" },
+    { action: "delete", expectedVersion: "3" },
+  ])
 })
 
 test("resource filesystem: engine access is scoped to its active file", async () => {
@@ -713,7 +1118,21 @@ test("resource filesystem: engine access is scoped to its active file", async ()
     },
     async invoke(_ref, _action, _input, access) {
       actors.push(access.actor)
-      return null
+      return {
+        meta,
+        content: {
+          id: "active",
+          kind: "file",
+          parentId: null,
+          sortKey: "a",
+          title: "active.txt",
+          tags: [],
+          createdAt: 1,
+          updatedAt: meta.updatedAt,
+          blobRef: { mime: "text/plain", size: 4 },
+          content: null,
+        },
+      }
     },
   })
   const fs = createResourceFileSystem()
@@ -797,4 +1216,47 @@ test("resource filesystem: watch is advertised only for watchable targets", asyn
   assert.equal(watchedId, "watched")
   notifySource?.()
   assert.equal(events, 1)
+})
+
+test("resource filesystem: place watch preserves the changed child ref", () => {
+  const changed: ResourceMeta = {
+    ref: { scheme: "node", kind: "thread", id: "changed-thread" },
+    title: "Changed thread",
+    capabilities: ["open", "read-content"],
+  }
+  let notifySource: ((event?: { ref?: ResourceMeta["ref"] }) => void) | undefined
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [changed] }
+    },
+    async get() {
+      return { meta: changed, content: { id: changed.ref.id } }
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      return null
+    },
+    watch(_query, _access, notify) {
+      notifySource = notify
+      return { dispose() {} }
+    },
+  })
+  const fs = createResourceFileSystem()
+  const homeRef = corePlaceRef("home")
+  const events: unknown[] = []
+  const handle = fs.watch?.(homeRef, { ...ctx, intent: "watch" }, (event) => events.push(event))
+  assert.ok(handle)
+
+  notifySource?.({ ref: changed.ref })
+
+  assert.deepEqual(events, [
+    {
+      type: "changed",
+      ref: homeRef,
+      changes: [{ type: "changed", ref: resourceFileRef(changed.ref) }],
+    },
+  ])
 })

@@ -4,6 +4,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import type { StoredFile } from "@protocol/files"
 import { invokeFileAction, statFile } from "@/filesystem/registry"
+import type { FileActionInvokeOptions } from "@/filesystem/types"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import {
   downloadStoredFile,
@@ -17,13 +18,17 @@ import { fileReference, parseFileTags } from "./file-action-utils"
 export { fileReference, parseFileTags } from "./file-action-utils"
 
 export type FileMetaPatch = Partial<Pick<StoredFile, "name" | "tags">>
-export type FileActionMetadata = Pick<StoredFile, "id" | "name">
+export type FileActionMetadata = Pick<StoredFile, "id" | "name"> & { version?: string }
 
 export type FileActionDeps = {
-  updateFileMeta: (id: string, patch: FileMetaPatch) => Promise<void>
+  updateFileMeta: (
+    id: string,
+    patch: FileMetaPatch,
+    options?: FileActionInvokeOptions,
+  ) => Promise<void>
   getFile: (id: string) => Promise<StoredFile | undefined>
   getFileMetadata: (id: string) => Promise<FileActionMetadata | undefined>
-  deleteFile: (id: string) => Promise<void>
+  deleteFile: (id: string, options?: FileActionInvokeOptions) => Promise<void>
   restoreFile: (id: string) => Promise<void>
   renameFileTab: (id: string, name: string) => void
   closeFileTab: (id: string, label: string) => void
@@ -47,14 +52,21 @@ export type RemoveFileInput = {
   id: string
   name?: string
   file?: StoredFile | null
+  expectedVersion?: string | null
   closeTab?: boolean
 }
 
 const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
 const UI_METADATA_CONTEXT = { actor: "ui", permissions: [], intent: "metadata" } as const
 
+function mutationOptions(
+  expectedVersion: string | null | undefined,
+): FileActionInvokeOptions | undefined {
+  return expectedVersion === undefined ? undefined : { expectedVersion }
+}
+
 const realFileActionDeps: FileActionDeps = {
-  updateFileMeta: async (id, patch) => {
+  updateFileMeta: async (id, patch, options) => {
     await invokeFileAction(
       storedNodeFileRef(id),
       "edit",
@@ -63,15 +75,16 @@ const realFileActionDeps: FileActionDeps = {
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
       },
       UI_ACTION_CONTEXT,
+      options,
     )
   },
   getFile: async (id) => (await readStoredNodeFile(id))?.file,
   getFileMetadata: async (id) => {
     const file = await statFile(storedNodeFileRef(id), UI_METADATA_CONTEXT)
-    return file ? { id, name: file.name } : undefined
+    return file ? { id, name: file.name, version: file.version } : undefined
   },
-  deleteFile: async (id) => {
-    await invokeFileAction(storedNodeFileRef(id), "delete", undefined, UI_ACTION_CONTEXT)
+  deleteFile: async (id, options) => {
+    await invokeFileAction(storedNodeFileRef(id), "delete", undefined, UI_ACTION_CONTEXT, options)
   },
   restoreFile: async (id) => {
     await invokeFileAction(storedNodeFileRef(id), "restore", undefined, UI_ACTION_CONTEXT)
@@ -99,11 +112,15 @@ export function createFileActionHandlers(
     if (refreshTree) deps.refreshTree()
   }
 
-  const rename = async (id: string, nextName: string): Promise<boolean> => {
+  const rename = async (
+    id: string,
+    nextName: string,
+    expectedVersion?: string | null,
+  ): Promise<boolean> => {
     const name = nextName.trim()
     if (!name) return false
     try {
-      await deps.updateFileMeta(id, { name })
+      await deps.updateFileMeta(id, { name }, mutationOptions(expectedVersion))
       deps.renameFileTab(id, name)
       refreshTreeIfNeeded()
       onRenamed?.(name)
@@ -115,10 +132,14 @@ export function createFileActionHandlers(
     }
   }
 
-  const updateTags = async (id: string, tagText: string): Promise<boolean> => {
+  const updateTags = async (
+    id: string,
+    tagText: string,
+    expectedVersion?: string | null,
+  ): Promise<boolean> => {
     const tags = parseFileTags(tagText)
     try {
-      await deps.updateFileMeta(id, { tags })
+      await deps.updateFileMeta(id, { tags }, mutationOptions(expectedVersion))
       refreshTreeIfNeeded()
       onTagsChanged?.(tags)
       deps.showSuccess("已更新标签")
@@ -163,6 +184,7 @@ export function createFileActionHandlers(
     id,
     name,
     file,
+    expectedVersion,
     closeTab: shouldCloseTab = true,
   }: RemoveFileInput): Promise<boolean> => {
     try {
@@ -172,7 +194,12 @@ export function createFileActionHandlers(
         return false
       }
       const label = name || captured.name || "无标题"
-      await deps.deleteFile(id)
+      const capturedVersion =
+        "version" in captured && typeof captured.version === "string" ? captured.version : undefined
+      await deps.deleteFile(
+        id,
+        mutationOptions(expectedVersion === undefined ? capturedVersion : expectedVersion),
+      )
       deps.clearFileDraft(id)
       if (shouldCloseTab) deps.closeFileTab(id, label)
       refreshTreeIfNeeded()

@@ -11,7 +11,6 @@ import type {
 } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
 import { FileSystemWatchEventHub } from "@/filesystem/watch-set"
-import { withFileWriteLock } from "@/filesystem/write-lock"
 import {
   AUDIO_FILE_SYSTEM_ID as BUILTIN_AUDIO_FILE_SYSTEM_ID,
   AUDIO_LIBRARY_ROOT_REF,
@@ -28,6 +27,10 @@ import {
   type AudioPlaybackState,
   type AudioTrack,
 } from "./audio-store"
+import {
+  subscribeAudioImportInvalidation,
+  withAudioLibraryRootMutationLock,
+} from "./audio-write-adapter"
 
 export const AUDIO_FILE_SYSTEM_ID = BUILTIN_AUDIO_FILE_SYSTEM_ID
 export const audioLibraryRootRef: FileRef = AUDIO_LIBRARY_ROOT_REF
@@ -220,7 +223,7 @@ export function createAudioFileSystem(
     },
     async write(ref, input: FileWriteInput, ctx): Promise<IdeallFile> {
       assertAccess(ref, ctx, "write", "fs:write")
-      return withFileWriteLock(ref, async () => {
+      return withAudioLibraryRootMutationLock(async () => {
         if (sameFileRef(ref, audioLibraryRootRef)) {
           if (!input.data || typeof input.data !== "object") {
             throw new FileSystemError(
@@ -313,7 +316,7 @@ export function createAudioFileSystem(
         },
       ]
     },
-    async invoke(ref, action, input, ctx) {
+    async invoke(ref, action, input, ctx, options) {
       const writeAction = action === "delete" || action === "add-track" || action === "import"
       assertAccess(ref, ctx, "action", writeAction ? "fs:write" : "fs:read", !writeAction)
       if (action === "open") return { ref }
@@ -321,43 +324,62 @@ export function createAudioFileSystem(
         if (!(input instanceof Blob) || typeof (input as Partial<File>).name !== "string") {
           throw new FileSystemError("invalid-input", "add-track requires an audio File", ref)
         }
-        const track = await deps.addTrack(input as File)
-        watchEvents.emit({
-          type: "created",
-          ref: audioTrackRef(track.id),
-          entryId: track.id,
-          newParent: audioLibraryRootRef,
-          version: String(track.updatedAt),
+        return withAudioLibraryRootMutationLock(async () => {
+          const track = await deps.addTrack(input as File)
+          watchEvents.emit({
+            type: "created",
+            ref: audioTrackRef(track.id),
+            entryId: track.id,
+            newParent: audioLibraryRootRef,
+            version: String(track.updatedAt),
+          })
+          return trackFile(track)
         })
-        return trackFile(track)
       }
       if (action === "import" && sameFileRef(ref, audioLibraryRootRef)) {
         if (typeof input !== "string") {
           throw new FileSystemError("invalid-input", "Audio import requires JSON text", ref)
         }
-        const result = await deps.importLibrary(input)
-        watchEvents.emit({ type: "changed", ref: audioLibraryRootRef })
-        return result
+        return withAudioLibraryRootMutationLock(async () => {
+          const result = await deps.importLibrary(input)
+          watchEvents.emit({ type: "changed", ref: audioLibraryRootRef })
+          return result
+        })
       }
       if (action === "export" && sameFileRef(ref, audioLibraryRootRef)) {
         return deps.exportLibrary()
       }
       if (action === "delete") {
-        const track = await requireTrack(ref, deps)
-        await deps.removeTrack(track.id)
-        watchEvents.emit({
-          type: "deleted",
-          ref,
-          entryId: track.id,
-          oldParent: audioLibraryRootRef,
+        return withAudioLibraryRootMutationLock(async () => {
+          const track = await requireTrack(ref, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, String(track.updatedAt))
+          await deps.removeTrack(track.id)
+          watchEvents.emit({
+            type: "deleted",
+            ref,
+            entryId: track.id,
+            oldParent: audioLibraryRootRef,
+          })
+          return { ref, deleted: true }
         })
-        return { ref, deleted: true }
       }
       throw new FileSystemError("unsupported", `Unsupported audio action: ${action}`, ref)
     },
     watch(ref, ctx, notify): FileSystemWatchHandle | null {
       assertAccess(ref, ctx, "watch", "fs:read")
-      return watchEvents.watch(ref, notify)
+      const localWatch = watchEvents.watch(ref, notify)
+      const disposeImportWatch = subscribeAudioImportInvalidation(() => {
+        notify({ type: "changed", ref })
+      })
+      let disposed = false
+      return {
+        dispose() {
+          if (disposed) return
+          disposed = true
+          localWatch.dispose()
+          disposeImportWatch()
+        },
+      }
     },
   }
 }

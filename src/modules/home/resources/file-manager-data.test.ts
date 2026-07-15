@@ -17,6 +17,7 @@ function file(id: string, createdAt: number): IdeallFile {
     capabilities: ["read"],
     source: { kind: "local", id: "test" },
     createdAt,
+    version: String(createdAt),
     size: createdAt,
     properties: { tags: [id] },
   }
@@ -69,6 +70,10 @@ test("file manager data: reads every page and reuses matching snapshots", async 
   )
   assert.deepEqual(cursors, [undefined, "next"])
   assert.equal(statCalls, 0)
+  assert.deepEqual(
+    files.map((item) => item.version),
+    ["2", "1"],
+  )
 })
 
 test("file manager data: mismatched or missing snapshots fall back to target stat", async () => {

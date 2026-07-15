@@ -60,10 +60,32 @@ const MAX_PANEL_PARAMETER_LENGTH = 256
 export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
   home: [{ id: "home", name: "我的", tabKind: "home-overview", module: "home" }],
   subscriptions: [
-    { id: "subscriptions", name: "关注流", tabKind: "subscriptions", module: "subscriptions" },
+    {
+      id: "subscriptions",
+      name: "关注流",
+      tabKind: "subscriptions",
+      module: "subscriptions",
+      properties: { navigationHidden: true },
+    },
   ],
-  bookmarks: [{ id: "bookmarks", name: "书签管理", tabKind: "home-bookmarks", module: "home" }],
-  files: [{ id: "files", name: "文件管理", tabKind: "home-resources", module: "home" }],
+  bookmarks: [
+    {
+      id: "bookmarks",
+      name: "书签管理",
+      tabKind: "home-bookmarks",
+      module: "home",
+      properties: { navigationHidden: true },
+    },
+  ],
+  files: [
+    {
+      id: "files",
+      name: "文件管理",
+      tabKind: "home-resources",
+      module: "home",
+      properties: { navigationHidden: true },
+    },
+  ],
   notes: [
     {
       id: "notes",
@@ -81,6 +103,7 @@ export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
       tabKind: "agent-spaces",
       module: "agent",
       layout: "padded",
+      properties: { navigationHidden: true },
     },
     {
       id: "tasks",
@@ -88,6 +111,7 @@ export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
       tabKind: "agent-task-list",
       module: "agent",
       layout: "padded",
+      properties: { navigationHidden: true },
     },
     {
       id: "ai-settings",
@@ -95,6 +119,7 @@ export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
       tabKind: "ai-settings",
       module: "agent",
       layout: "fill",
+      properties: { navigationHidden: true },
     },
     { id: "ai-mcp", name: "MCP", tabKind: "ai-mcp", module: "agent", layout: "fill" },
     {
@@ -106,7 +131,15 @@ export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
     },
     { id: "ai-rules", name: "规则", tabKind: "ai-rules", module: "agent", layout: "fill" },
   ],
-  apps: [{ id: "apps", name: "应用", tabKind: "apps", module: "apps" }],
+  apps: [
+    {
+      id: "apps",
+      name: "应用",
+      tabKind: "apps",
+      module: "apps",
+      properties: { navigationHidden: true },
+    },
+  ],
   info: [],
   community: [
     {
@@ -119,7 +152,13 @@ export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
   tool: [],
   browser: [],
   system: [
-    { id: "settings", name: "设置", tabKind: "home-settings", module: "home" },
+    {
+      id: "settings",
+      name: "设置",
+      tabKind: "home-settings",
+      module: "home",
+      properties: { navigationHidden: true },
+    },
     {
       id: "shell",
       name: "终端",
@@ -131,7 +170,13 @@ export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
     // Git / 数据库 / 音频由各自 App FileSystem root 直接进入 Display。旧 panel:* 身份
     // 只在 workspace 水合边界迁移，不再作为 ideall.core 下的新导航文件暴露。
     { id: "code", name: "Code", tabKind: "code", module: "code" },
-    { id: "trash", name: "回收站", tabKind: "trash", module: "trash" },
+    {
+      id: "trash",
+      name: "回收站",
+      tabKind: "trash",
+      module: "trash",
+      properties: { navigationHidden: true },
+    },
   ],
 }
 

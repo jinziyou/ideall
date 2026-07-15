@@ -12,7 +12,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { isFileRef, type FileRef } from "@protocol/file-system"
-import { invokeFileAction, readFile, watchFile } from "@/filesystem/registry"
+import { invokeFileAction, readFile, statFile, watchFile } from "@/filesystem/registry"
 import { cn } from "@/lib/utils"
 import { isTauri } from "@/lib/tauri"
 import { Button } from "@/ui/button"
@@ -22,6 +22,7 @@ import { Textarea } from "@/ui/textarea"
 import { GIT_ACTIONS, GIT_ROOT_REF } from "./git-file-system"
 
 type GitStatusFile = { status: string; path: string }
+type GitSnapshotRef = { refname: string; objectname: string }
 type GitSnapshot = {
   repoPath: string
   branch: string
@@ -29,6 +30,7 @@ type GitSnapshot = {
   files: GitStatusFile[]
   log: string[]
   remotes: string[]
+  refs: GitSnapshotRef[]
   diffStat: string
   statusRaw: string
 }
@@ -37,6 +39,7 @@ type GitResult = { command: string; stdout: string; stderr: string; code: number
 type RepoMount = { id: string; path: string; ref: FileRef }
 
 const CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
+const METADATA_CONTEXT = { actor: "ui", permissions: [], intent: "metadata" } as const
 const ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
 const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 
@@ -73,6 +76,13 @@ function gitSnapshot(data: unknown): GitSnapshot | null {
     : null
   const log = stringArray(data.log)
   const remotes = stringArray(data.remotes)
+  const refs = Array.isArray(data.refs)
+    ? data.refs.flatMap((ref) =>
+        isRecord(ref) && typeof ref.refname === "string" && typeof ref.objectname === "string"
+          ? [{ refname: ref.refname, objectname: ref.objectname }]
+          : [],
+      )
+    : null
   if (
     typeof data.repoPath !== "string" ||
     typeof data.branch !== "string" ||
@@ -81,7 +91,8 @@ function gitSnapshot(data: unknown): GitSnapshot | null {
     typeof data.statusRaw !== "string" ||
     !files ||
     !log ||
-    !remotes
+    !remotes ||
+    !refs
   ) {
     return null
   }
@@ -92,6 +103,7 @@ function gitSnapshot(data: unknown): GitSnapshot | null {
     files,
     log,
     remotes,
+    refs,
     diffStat: data.diffStat,
     statusRaw: data.statusRaw,
   }
@@ -117,6 +129,7 @@ export default function GitPage({
   const [repos, setRepos] = React.useState<RepoMount[]>([])
   const [repoPath, setRepoPath] = React.useState(initialRepoPath ?? "")
   const [snapshot, setSnapshot] = React.useState<GitSnapshot | null>(null)
+  const [snapshotVersion, setSnapshotVersion] = React.useState<string | null | undefined>(undefined)
   const [lastResult, setLastResult] = React.useState<GitResult | null>(null)
   const [branchName, setBranchName] = React.useState("")
   const [commitMessage, setCommitMessage] = React.useState("")
@@ -184,11 +197,18 @@ export default function GitPage({
     setBusy("delete")
     setError(null)
     try {
-      await invokeFileAction(repo.ref, GIT_ACTIONS.delete, undefined, ACTION_CONTEXT)
+      const expectedVersion =
+        repo.path === repoPath && snapshot
+          ? (snapshotVersion ?? null)
+          : ((await statFile(repo.ref, METADATA_CONTEXT))?.version ?? null)
+      await invokeFileAction(repo.ref, GIT_ACTIONS.delete, undefined, ACTION_CONTEXT, {
+        expectedVersion,
+      })
       const next = await reloadRepos()
       if (repoPath === repo.path) {
         setRepoPath(next[0]?.path ?? "")
         setSnapshot(null)
+        setSnapshotVersion(undefined)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "移除仓库失败")
@@ -202,6 +222,7 @@ export default function GitPage({
     const next = gitSnapshot(result.data)
     if (!next) throw new Error("Git 文件系统返回了无效状态")
     setSnapshot(next)
+    setSnapshotVersion(result.version ?? null)
     setRepoPath(repo.path)
     return next
   }, [])
@@ -233,7 +254,9 @@ export default function GitPage({
     try {
       const repo = repos.find((item) => item.path === repoPath)
       if (!repo) throw new Error("仓库尚未挂载")
-      const result = await invokeFileAction(repo.ref, action, undefined, ACTION_CONTEXT)
+      const result = await invokeFileAction(repo.ref, action, undefined, ACTION_CONTEXT, {
+        expectedVersion: snapshotVersion ?? null,
+      })
       const parsed = gitResult(result)
       if (!parsed) throw new Error("Git 文件系统返回了无效命令结果")
       setLastResult(parsed)
@@ -257,6 +280,7 @@ export default function GitPage({
         GIT_ACTIONS.createBranch,
         { name: branchName },
         ACTION_CONTEXT,
+        { expectedVersion: snapshotVersion ?? null },
       )
       const parsed = gitResult(result)
       if (!parsed) throw new Error("Git 文件系统返回了无效命令结果")
@@ -282,6 +306,7 @@ export default function GitPage({
         GIT_ACTIONS.commit,
         { message: commitMessage },
         ACTION_CONTEXT,
+        { expectedVersion: snapshotVersion ?? null },
       )
       const parsed = gitResult(result)
       if (!parsed) throw new Error("Git 文件系统返回了无效命令结果")

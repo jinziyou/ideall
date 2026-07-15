@@ -76,6 +76,11 @@ export type DirectoryEntry = {
   target: FileRef
   name: string
   kind: DirectoryEntryKind
+  /**
+   * 该目录投影中的稳定路径分量。它只属于目录项，不参与 target 的文件身份；未声明的
+   * 动态条目仍可被列出，但不能通过 ideall 的规范路径命名空间寻址。
+   */
+  pathName?: string
   sortKey?: string
   /**
    * provider 已在目录查询中取得的目标 metadata 快照。Display 可直接使用它，避免随后逐项 stat；

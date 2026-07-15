@@ -275,6 +275,7 @@ export async function exportAudioLibraryJson(): Promise<string> {
   return stringifyPluginDataPackage(payload)
 }
 
+/** Store 级整库替换原语；生产入口必须经 audio-write-adapter 获取音频库根锁。 */
 export async function importAudioLibraryJson(raw: string): Promise<{ tracks: number }> {
   const backup = parseAudioLibraryExport(raw)
   const tracks = backup.payload.tracks.map(audioTrackFromExport)

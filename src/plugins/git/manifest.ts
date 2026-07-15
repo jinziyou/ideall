@@ -9,9 +9,9 @@ import {
   GIT_DATA_SPEC,
   GIT_REPOS_STORAGE_KEY,
   exportGitReposJson,
-  importGitReposJson,
   inspectGitReposData,
 } from "./git-repos-store"
+import { importGitReposJsonWithWriteLocks } from "./git-write-adapter"
 import type { PluginDataPort } from "@/plugins/shared/plugin-data"
 import {
   jsonArrayIssues,
@@ -29,7 +29,7 @@ const gitDataPort: PluginDataPort = {
   importMode: "replace",
   importDescription: "导入会替换 Git 插件保存的仓库路径列表。",
   exportJson: exportGitReposJson,
-  importJson: importGitReposJson,
+  importJson: importGitReposJsonWithWriteLocks,
   inspect: async () => {
     const info = await inspectGitReposData()
     return {

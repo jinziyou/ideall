@@ -239,10 +239,12 @@ export default function AudioPage({ embedded = false }: { embedded?: boolean } =
     await refreshTracks()
   }
 
-  const handleRemove = async (id: string) => {
-    await invokeFileAction(audioTrackRef(id), "delete", undefined, UI_ACTION_CONTEXT)
-    if (currentId === id) {
-      clearSource(audioLibraryPlaybackKey(id))
+  const handleRemove = async (track: AudioTrack) => {
+    await invokeFileAction(audioTrackRef(track.id), "delete", undefined, UI_ACTION_CONTEXT, {
+      expectedVersion: String(track.updatedAt),
+    })
+    if (currentId === track.id) {
+      clearSource(audioLibraryPlaybackKey(track.id))
       setCurrentId(null)
       setCurrentTime(0)
       setDuration(0)
@@ -427,7 +429,7 @@ export default function AudioPage({ embedded = false }: { embedded?: boolean } =
                     active={track.id === currentId}
                     playing={track.id === currentId && isPlaying}
                     onPlay={() => playTrack(track.id)}
-                    onRemove={() => void handleRemove(track.id)}
+                    onRemove={() => void handleRemove(track)}
                   />
                 ))}
               </div>

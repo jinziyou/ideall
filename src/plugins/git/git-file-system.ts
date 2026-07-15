@@ -18,12 +18,14 @@ import type {
   FileWriteInput,
 } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
+import { withFileWriteLock } from "@/filesystem/write-lock"
 import {
   GIT_FILE_SYSTEM_ID as BUILTIN_GIT_FILE_SYSTEM_ID,
   GIT_ROOT_REF as BUILTIN_GIT_ROOT_REF,
 } from "@/filesystem/builtin-app-roots"
 import { base64ToBytes } from "@/lib/base64"
 import { fileTypeInfo } from "@/lib/file-type"
+import { bytesToHex } from "@/lib/hex"
 import { randomId } from "@/lib/id"
 import {
   guardedFsGrantInfo,
@@ -42,6 +44,7 @@ import {
   loadGitSnapshot,
   runGitAction,
   type GitAction,
+  type GitSnapshot,
 } from "./git-commands"
 import {
   addGitRepo,
@@ -51,6 +54,11 @@ import {
   type GitRepoMount,
   type GrantedGitRepoMount,
 } from "./git-repos-store"
+import {
+  gitRepoFileRef,
+  subscribeGitImportInvalidation,
+  withGitMountListWriteLock,
+} from "./git-write-adapter"
 
 export const GIT_FILE_SYSTEM_ID = BUILTIN_GIT_FILE_SYSTEM_ID
 export const GIT_ROOT_REF: FileRef = BUILTIN_GIT_ROOT_REF
@@ -72,9 +80,7 @@ type GitTarget = {
   repoRoot: boolean
 }
 
-function repoRef(mountId: string): FileRef {
-  return { fileSystemId: GIT_FILE_SYSTEM_ID, fileId: `repo:${encodeURIComponent(mountId)}` }
-}
+const repoRef = gitRepoFileRef
 
 function childRef(mountId: string, entryId: string): FileRef {
   return {
@@ -131,7 +137,28 @@ function inferredMediaType(name: string): string {
   return "application/octet-stream"
 }
 
-function repoFile(mount: GrantedGitRepoMount, entry?: GuardedFsEntry): IdeallFile {
+/**
+ * Repository roots are semantic Git documents rather than directory inode projections. Keep the
+ * version bound to every field returned by read(repo), while excluding the display-only repoPath.
+ */
+async function gitSnapshotVersion(snapshot: GitSnapshot): Promise<string> {
+  const semanticSnapshot = JSON.stringify([
+    snapshot.branch,
+    snapshot.upstream ?? null,
+    snapshot.files.map((file) => [file.status, file.path]),
+    snapshot.log,
+    snapshot.remotes,
+    snapshot.refs.map((ref) => [ref.refname, ref.objectname]),
+    snapshot.diffStat,
+    snapshot.statusRaw,
+  ])
+  const subtle = globalThis.crypto?.subtle
+  if (!subtle) throw new Error("SHA-256 is unavailable for Git snapshot versioning")
+  const digest = await subtle.digest("SHA-256", new TextEncoder().encode(semanticSnapshot))
+  return `git-snapshot:${bytesToHex(new Uint8Array(digest))}`
+}
+
+function repoFile(mount: GrantedGitRepoMount, entry: GuardedFsEntry, version: string): IdeallFile {
   return {
     ref: repoRef(mount.id),
     kind: "directory",
@@ -139,9 +166,9 @@ function repoFile(mount: GrantedGitRepoMount, entry?: GuardedFsEntry): IdeallFil
     mediaType: DIRECTORY_MEDIA_TYPE,
     capabilities: ["read-directory", "read", "delete", "actions", "watch"],
     source: { kind: "local", id: "git", label: "Git 仓库" },
-    size: entry?.size,
-    updatedAt: entry?.modifiedAt ?? undefined,
-    version: entry?.version,
+    size: entry.size,
+    updatedAt: entry.modifiedAt ?? undefined,
+    version,
     properties: { git: true, path: mount.path, mountId: mount.id, explicitGrant: true },
   }
 }
@@ -280,6 +307,24 @@ function assertExpectedVersion(
   )
 }
 
+async function resolveRepoActionMount(
+  ref: FileRef,
+  mount: GrantedGitRepoMount,
+  expectedVersion: string | null | undefined,
+  deps: GitFileSystemDeps,
+): Promise<GrantedGitRepoMount> {
+  try {
+    const resolved = await resolveGrantedMount(mount, deps)
+    if (expectedVersion !== undefined) {
+      const snapshot = await deps.loadSnapshot(resolved.path)
+      assertExpectedVersion(ref, expectedVersion, await gitSnapshotVersion(snapshot))
+    }
+    return resolved
+  } catch (error) {
+    rethrowGuardedError(error, ref)
+  }
+}
+
 function normalizeRange(ref: FileRef, range: FileReadOptions["range"]): FileReadOptions["range"] {
   if (!range) return undefined
   if (
@@ -390,7 +435,11 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
         const mount = await resolveGrantedMount(target.mount, deps)
         const entry = await deps.stat(mount.grantId, target.entryId ?? undefined)
         if (!entry) return null
-        return target.repoRoot ? repoFile(mount, entry) : childFile(mount, entry)
+        if (target.repoRoot) {
+          const snapshot = await deps.loadSnapshot(mount.path)
+          return repoFile(mount, entry, await gitSnapshotVersion(snapshot))
+        }
+        return childFile(mount, entry)
       } catch (error) {
         if (error instanceof FileSystemError && error.code === "not-found") return null
         const message = error instanceof Error ? error.message : String(error)
@@ -459,9 +508,11 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
       if (target.repoRoot) {
         assertAccess(ref, ctx, "content", "fs:read")
         const mount = await resolveGrantedMount(target.mount, deps)
+        const snapshot = await deps.loadSnapshot(mount.path)
         return {
-          data: await deps.loadSnapshot(mount.path),
+          data: snapshot,
           mediaType: "application/vnd.ideall.git+json",
+          version: await gitSnapshotVersion(snapshot),
         }
       }
       assertAccess(ref, ctx, "content", "fs.blobs:read")
@@ -498,30 +549,39 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
     },
     async write(ref, input: FileWriteInput, ctx) {
       assertAccess(ref, ctx, "write", "fs:write")
-      const target = requireTarget(ref, deps)
-      if (target.repoRoot || typeof input.data !== "string") {
+      const initialTarget = requireTarget(ref, deps)
+      if (initialTarget.repoRoot || typeof input.data !== "string") {
         throw new FileSystemError("unsupported", "Git file writes require text file content", ref)
       }
-      if (!target.entryId) throw new FileSystemError("not-found", "Git entry not found", ref)
-      try {
-        const mount = await resolveGrantedMount(target.mount, deps)
-        const current = await deps.stat(mount.grantId, target.entryId)
-        if (!current) throw new FileSystemError("not-found", "Git entry not found", ref)
-        if (current.kind !== "file" || !fileTypeInfo(current.name).editable) {
-          throw new FileSystemError("unsupported", "Git file is not text-editable", ref)
+      const content = input.data
+      if (!initialTarget.entryId) throw new FileSystemError("not-found", "Git entry not found", ref)
+      // 子文件写会改变 repo snapshot；与 fetch/pull/commit 等共享 repo-root 锁，避免
+      // action 在 fresh snapshot 校验后、实际命令前被应用内文本写夹入。
+      return withFileWriteLock(repoRef(initialTarget.mount.id), async () => {
+        try {
+          const target = requireTarget(ref, deps)
+          if (target.repoRoot || !target.entryId) {
+            throw new FileSystemError("not-found", "Git entry not found", ref)
+          }
+          const mount = await resolveGrantedMount(target.mount, deps)
+          const current = await deps.stat(mount.grantId, target.entryId)
+          if (!current) throw new FileSystemError("not-found", "Git entry not found", ref)
+          if (current.kind !== "file" || !fileTypeInfo(current.name).editable) {
+            throw new FileSystemError("unsupported", "Git file is not text-editable", ref)
+          }
+          assertExpectedVersion(ref, input.expectedVersion, current.version)
+          const updated = await deps.writeText(
+            mount.grantId,
+            target.entryId,
+            content,
+            input.expectedVersion ?? undefined,
+          )
+          emitMutation(ref, mount.id)
+          return childFile(mount, updated)
+        } catch (error) {
+          rethrowGuardedError(error, ref)
         }
-        assertExpectedVersion(ref, input.expectedVersion, current.version)
-        const updated = await deps.writeText(
-          mount.grantId,
-          target.entryId,
-          input.data,
-          input.expectedVersion ?? undefined,
-        )
-        emitMutation(ref, mount.id)
-        return childFile(mount, updated)
-      } catch (error) {
-        rethrowGuardedError(error, ref)
-      }
+      })
     },
     async actions(ref, ctx): Promise<FileAction[]> {
       assertAccess(ref, ctx, "action", "fs:read")
@@ -598,7 +658,7 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
           ]
         : [{ id: GIT_ACTIONS.open, label: "打开", kind: "display" }]
     },
-    async invoke(ref, action, input, ctx) {
+    async invoke(ref, action, input, ctx, options) {
       const mutation = isMutationAction(action)
       assertAccess(ref, ctx, "action", mutation ? "fs:write" : "fs:read", !mutation)
       if (action === GIT_ACTIONS.open) return { ref }
@@ -627,52 +687,82 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
           grantId: grant.grantId,
           path: grant.path,
         }
-        const currentRepos = deps.loadRepos()
-        const existing = currentRepos.find((repo) => repo.grantId === mount.grantId)
-        if (existing) {
-          const mountedRef = repoRef(existing.id)
-          return { ref: mountedRef, id: existing.id, path: mount.path, mounted: true }
-        }
-        const repos = deps.addRepo(currentRepos, mount)
-        if (!deps.saveRepos(repos)) {
-          await deps.revokeGrant(mount.grantId).catch(() => false)
-          throw new FileSystemError("unavailable", "Unable to persist Git repository mount", ref)
-        }
-        const mountedRef = repoRef(mount.id)
-        emitMutation(mountedRef, undefined, "created")
-        return { ref: mountedRef, id: mount.id, path: mount.path, mounted: true }
+        return withGitMountListWriteLock(async () => {
+          const currentRepos = deps.loadRepos()
+          const existing = currentRepos.find((repo) => repo.grantId === mount.grantId)
+          if (existing) {
+            const mountedRef = repoRef(existing.id)
+            return { ref: mountedRef, id: existing.id, path: mount.path, mounted: true }
+          }
+          const repos = deps.addRepo(currentRepos, mount)
+          if (!deps.saveRepos(repos)) {
+            await deps.revokeGrant(mount.grantId).catch(() => false)
+            throw new FileSystemError("unavailable", "Unable to persist Git repository mount", ref)
+          }
+          const mountedRef = repoRef(mount.id)
+          emitMutation(mountedRef, undefined, "created")
+          return { ref: mountedRef, id: mount.id, path: mount.path, mounted: true }
+        })
       }
 
       const target = requireTarget(ref, deps)
       if (!target.repoRoot) {
         throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
       }
-      if (action === GIT_ACTIONS.delete) {
-        await deps.revokeGrant(target.mount.grantId)
-        if (!deps.saveRepos(deps.removeRepo(deps.loadRepos(), target.mount.id))) {
-          throw new FileSystemError("unavailable", "Unable to remove Git repository mount", ref)
-        }
-        emitMutation(ref, target.mount.id, "deleted")
-        return { ref, deleted: true }
-      }
-      const mount = await resolveGrantedMount(target.mount, deps)
       const remoteAction = gitAction(action)
-      if (remoteAction) {
-        const result = await deps.runAction(mount.path, remoteAction)
-        emitMutation(ref, mount.id)
-        return result
+      if (
+        action !== GIT_ACTIONS.delete &&
+        !remoteAction &&
+        action !== GIT_ACTIONS.createBranch &&
+        action !== GIT_ACTIONS.commit
+      ) {
+        throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
       }
-      if (action === GIT_ACTIONS.createBranch) {
-        const result = await deps.createBranch(mount.path, stringInput(ref, input, "name"))
-        emitMutation(ref, mount.id)
-        return result
-      }
-      if (action === GIT_ACTIONS.commit) {
-        const result = await deps.commit(mount.path, stringInput(ref, input, "message"))
-        emitMutation(ref, mount.id)
-        return result
-      }
-      throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
+
+      const invokeRepoAction = () =>
+        withFileWriteLock(ref, async () => {
+          const lockedTarget = requireTarget(ref, deps)
+          if (!lockedTarget.repoRoot) {
+            throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
+          }
+          if (action === GIT_ACTIONS.delete) {
+            if (options?.expectedVersion !== undefined) {
+              await resolveRepoActionMount(ref, lockedTarget.mount, options.expectedVersion, deps)
+            }
+            await deps.revokeGrant(lockedTarget.mount.grantId)
+            if (!deps.saveRepos(deps.removeRepo(deps.loadRepos(), lockedTarget.mount.id))) {
+              throw new FileSystemError("unavailable", "Unable to remove Git repository mount", ref)
+            }
+            emitMutation(ref, lockedTarget.mount.id, "deleted")
+            return { ref, deleted: true }
+          }
+
+          const mount = await resolveRepoActionMount(
+            ref,
+            lockedTarget.mount,
+            options?.expectedVersion,
+            deps,
+          )
+          if (remoteAction) {
+            const result = await deps.runAction(mount.path, remoteAction)
+            emitMutation(ref, mount.id)
+            return result
+          }
+          if (action === GIT_ACTIONS.createBranch) {
+            const result = await deps.createBranch(mount.path, stringInput(ref, input, "name"))
+            emitMutation(ref, mount.id)
+            return result
+          }
+          if (action === GIT_ACTIONS.commit) {
+            const result = await deps.commit(mount.path, stringInput(ref, input, "message"))
+            emitMutation(ref, mount.id)
+            return result
+          }
+          throw new FileSystemError("unsupported", `Unsupported Git action: ${action}`, ref)
+        })
+      return action === GIT_ACTIONS.delete
+        ? withGitMountListWriteLock(invokeRepoAction)
+        : invokeRepoAction()
     },
     watch(ref, ctx, notify): FileSystemWatchHandle {
       assertAccess(ref, ctx, "watch", "fs:read")
@@ -681,10 +771,17 @@ export function createGitFileSystem(deps: GitFileSystemDeps = defaultDeps): File
       const listeners = watchers.get(key) ?? new Set<(event: FileSystemWatchEvent) => void>()
       listeners.add(notify)
       watchers.set(key, listeners)
+      const disposeImportWatch = subscribeGitImportInvalidation(() => {
+        notify({ type: "changed", ref })
+      })
+      let disposed = false
       return {
         dispose() {
+          if (disposed) return
+          disposed = true
           listeners.delete(notify)
           if (listeners.size === 0) watchers.delete(key)
+          disposeImportWatch()
         },
       }
     },

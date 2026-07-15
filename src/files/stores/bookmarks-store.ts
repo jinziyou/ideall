@@ -5,27 +5,75 @@
 //   - 删除走软删标记 (deletedAt, 与笔记/关注一致), 读路径过滤删除标记 —— 当前用于撤销跨刷新稳健, 并为后续同步就绪。
 // 本切片不开同步 (维持现状未同步); sortKey/updatedAt 已补齐, 删除标记 GC 随 bookmark-sync 落地 (与笔记同纪律)。
 import { Bookmark, BookmarkFolder } from "@protocol/files"
-import type { NodeKind, NodeOfKind } from "@protocol/node"
+import type { Node, NodeKind, NodeOfKind } from "@protocol/node"
 import { faviconForUrl } from "@/lib/favicon"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
-import { appendSortKeys, maxSortKey } from "@/files/sort-key"
-import { computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
+import { cmpSibling, computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
 import {
-  idbBulkPut,
-  idbGet,
   idbGetAllFromIndex,
-  idbPut,
   idbReadModifyWrite,
+  idbRunTransaction,
   INDEX_NODES_KIND,
   STORE_NODES,
+  STORE_TRASH_SNAPSHOTS,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
-import { captureTrashSnapshot } from "@/files/stores/trash-store"
+import type { TrashSnapshot } from "@/files/stores/trash-store"
+import { addNodeAtKindTail } from "@/files/stores/node-tail-transaction"
+import {
+  assertNodeMutationExpectation,
+  type NodeMutationExpectation,
+} from "@/files/stores/node-mutation"
 import { nextUpdatedAt } from "@/files/version"
 
 type BookmarkNode = NodeOfKind<"bookmark">
 type FolderNode = NodeOfKind<"folder">
+
+type BookmarkTreeSnapshot = {
+  bookmarks: BookmarkNode[]
+  folders: FolderNode[]
+}
+
+function readBookmarkTreeSnapshot(
+  store: IDBObjectStore,
+  complete: (snapshot: BookmarkTreeSnapshot) => void,
+  abort: (error: unknown) => void,
+): void {
+  const index = store.index(INDEX_NODES_KIND)
+  const bookmarkRequest = index.getAll("bookmark")
+  const folderRequest = index.getAll("folder")
+  let bookmarks: BookmarkNode[] | undefined
+  let folders: FolderNode[] | undefined
+  let failed = false
+  const fail = (error: unknown) => {
+    if (failed) return
+    failed = true
+    abort(error)
+  }
+  const finish = () => {
+    if (failed || !bookmarks || !folders) return
+    try {
+      complete({ bookmarks, folders })
+    } catch (error) {
+      fail(error)
+    }
+  }
+  bookmarkRequest.onerror = () => fail(bookmarkRequest.error ?? new Error("读取书签树快照失败"))
+  bookmarkRequest.onsuccess = () => {
+    bookmarks = (bookmarkRequest.result as Node[]).filter(
+      (node): node is BookmarkNode => node.kind === "bookmark",
+    )
+    finish()
+  }
+  folderRequest.onerror = () => fail(folderRequest.error ?? new Error("读取收藏夹树快照失败"))
+  folderRequest.onsuccess = () => {
+    folders = (folderRequest.result as Node[]).filter(
+      (node): node is FolderNode => node.kind === "folder",
+    )
+    finish()
+  }
+}
 
 // ---- 节点 ↔ 域类型映射 ----
 
@@ -87,57 +135,138 @@ export async function listFolders(): Promise<BookmarkFolder[]> {
   return folders.sort((a, b) => a.createdAt - b.createdAt)
 }
 
-export async function addFolder(name: string): Promise<BookmarkFolder> {
-  const existing = await allFolderNodes()
+/** 新建收藏夹并返回同一写事务实际提交的统一 Node。 */
+export async function addFolderWithNode(name: string): Promise<FolderNode> {
   const now = Date.now()
-  const node: FolderNode = {
-    id: genId("fld"),
-    kind: "folder",
-    title: name.trim() || "未命名收藏夹",
-    parentId: null,
-    sortKey: appendSortKeys(maxSortKey(existing), 1)[0],
-    tags: [],
-    createdAt: now,
-    updatedAt: now,
-    content: null,
-  }
-  await idbPut(STORE_NODES, node)
+  const id = genId("fld")
+  const node = await idbRunTransaction<FolderNode>(
+    [STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      addNodeAtKindTail(
+        transaction.objectStore(STORE_NODES),
+        { kind: "folder", parentId: null },
+        (sortKey) => ({
+          id,
+          kind: "folder",
+          title: name.trim() || "未命名收藏夹",
+          parentId: null,
+          sortKey,
+          tags: [],
+          createdAt: now,
+          updatedAt: now,
+          content: null,
+        }),
+        setResult,
+        abort,
+      )
+    },
+  )
   notifyFilesUpdated({ kind: "folder", id: node.id })
-  return nodeToFolder(node)
+  return node
 }
 
-export async function renameFolder(id: string, name: string): Promise<void> {
-  const updated = await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "folder"
+/** 兼容既有 FilesPort DTO；创建真相由 addFolderWithNode 返回。 */
+export async function addFolder(name: string): Promise<BookmarkFolder> {
+  return nodeToFolder(await addFolderWithNode(name))
+}
+
+export async function renameFolder(
+  id: string,
+  name: string,
+  expected?: NodeMutationExpectation,
+): Promise<FolderNode | undefined> {
+  const updated = await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) => {
+    assertNodeMutationExpectation(current, expected)
+    return current && current.kind === "folder" && isLive(current)
       ? {
           ...current,
           title: name.trim() || current.title,
           updatedAt: nextUpdatedAt(current.updatedAt),
         }
-      : undefined,
-  )
+      : undefined
+  })
   if (updated) notifyFilesUpdated({ kind: "folder", id })
+  return updated
 }
 
 /** 删除收藏夹 (软删标记); 夹内活跃书签移动到未分组 (parentId = null)。 */
-export async function deleteFolder(id: string): Promise<void> {
+export async function deleteFolder(
+  id: string,
+  expected?: NodeMutationExpectation,
+): Promise<boolean> {
   const now = Date.now()
-  const folder = await idbGet<FolderNode>(STORE_NODES, id)
-  if (folder && folder.kind === "folder" && isLive(folder)) await captureTrashSnapshot(folder)
-  const orphans = (await allBookmarkNodes())
-    .filter(isLive)
-    .filter((n) => n.parentId === id)
-    .map((n) => ({ ...n, parentId: null, updatedAt: nextUpdatedAt(n.updatedAt, now) }))
-  if (orphans.length) await idbBulkPut(STORE_NODES, orphans)
-  const deleted = await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "folder"
-      ? { ...current, deletedAt: now, updatedAt: nextUpdatedAt(current.updatedAt, now) }
-      : undefined,
+  const outcome = await idbRunTransaction<{ deleted: boolean; moved: BookmarkNode[] }>(
+    [STORE_NODES, STORE_TRASH_SNAPSHOTS],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const store = transaction.objectStore(STORE_NODES)
+      const trashStore = transaction.objectStore(STORE_TRASH_SNAPSHOTS)
+      const request = store.get(id)
+      request.onerror = () => abort(request.error ?? new Error("读取待删除收藏夹失败"))
+      request.onsuccess = () => {
+        try {
+          const current = request.result as Node | undefined
+          assertNodeMutationExpectation(current, expected)
+          if (!current || current.kind !== "folder" || !isLive(current)) {
+            setResult({ deleted: false, moved: [] })
+            return
+          }
+          readBookmarkTreeSnapshot(
+            store,
+            ({ bookmarks, folders }) => {
+              const orphans = bookmarks
+                .filter(isLive)
+                .filter((bookmark) => bookmark.parentId === id)
+                .sort(cmpSibling)
+              const orphanIds = new Set(orphans.map((bookmark) => bookmark.id))
+              // 删除后的根快照不含目标 folder 和待迁移 children；逐项追加可保持 child 相对顺序，
+              // 同时避免把原 folder 内的局部 sortKey 原样带到跨 kind 根目录。
+              const tree = bookmarkTreeItems({
+                bookmarks: bookmarks.filter((bookmark) => !orphanIds.has(bookmark.id)),
+                folders: folders.filter((candidate) => candidate.id !== id),
+              })
+              const moved = orphans.map((bookmark) => {
+                const next: BookmarkNode = {
+                  ...bookmark,
+                  parentId: null,
+                  sortKey: computeSiblingSortKey(tree, null, undefined, bookmark.id),
+                  updatedAt: nextUpdatedAt(bookmark.updatedAt, now),
+                }
+                tree.push({
+                  id: next.id,
+                  parentId: null,
+                  sortKey: next.sortKey,
+                  title: next.title,
+                })
+                store.put(next)
+                return next
+              })
+              trashStore.put({
+                id: current.id,
+                node: current,
+                capturedAt: now,
+              } satisfies TrashSnapshot)
+              store.put({
+                ...current,
+                deletedAt: now,
+                updatedAt: nextUpdatedAt(current.updatedAt, now),
+              } satisfies FolderNode)
+              setResult({ deleted: true, moved })
+            },
+            abort,
+          )
+        } catch (error) {
+          abort(error)
+        }
+      }
+    },
   )
-  for (const orphan of orphans) {
-    notifyFilesUpdated({ kind: "bookmark", id: orphan.id })
+  for (const bookmark of outcome.moved) {
+    notifyFilesUpdated({ kind: "bookmark", id: bookmark.id })
   }
-  if (deleted) notifyFilesUpdated({ kind: "folder", id })
+  if (outcome.deleted) notifyFilesUpdated({ kind: "folder", id })
+  return outcome.deleted
 }
 
 // ---- 书签 ----
@@ -156,36 +285,79 @@ export type NewBookmark = {
   tags?: string[]
 }
 
-export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
-  const existing = await allBookmarkNodes()
+/** 新建书签并返回同一写事务实际提交的统一 Node。 */
+export async function addBookmarkWithNode(input: NewBookmark): Promise<BookmarkNode> {
   const now = Date.now()
-  const node: BookmarkNode = {
-    id: genId("bm"),
-    kind: "bookmark",
-    title: input.title.trim() || input.url,
-    parentId: input.folderId ?? null,
-    sortKey: appendSortKeys(maxSortKey(existing), 1)[0],
-    tags: input.tags ?? [],
-    createdAt: now,
-    updatedAt: now,
-    content: {
-      url: input.url.trim(),
-      description: input.description?.trim() ?? "",
-      favicon: input.favicon || faviconForUrl(input.url),
+  const id = genId("bm")
+  const parentId = input.folderId ?? null
+  const node = await idbRunTransaction<BookmarkNode>(
+    [STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const store = transaction.objectStore(STORE_NODES)
+      const append = () =>
+        addNodeAtKindTail(
+          store,
+          { kind: "bookmark", parentId },
+          (sortKey) => ({
+            id,
+            kind: "bookmark",
+            title: input.title.trim() || input.url,
+            parentId,
+            sortKey,
+            tags: input.tags ?? [],
+            createdAt: now,
+            updatedAt: now,
+            content: {
+              url: input.url.trim(),
+              description: input.description?.trim() ?? "",
+              favicon: input.favicon || faviconForUrl(input.url),
+            },
+          }),
+          setResult,
+          abort,
+        )
+      if (parentId === null) append()
+      else {
+        const folderRequest = store.get(parentId)
+        folderRequest.onerror = () => abort(folderRequest.error ?? new Error("读取目标收藏夹失败"))
+        folderRequest.onsuccess = () => {
+          try {
+            const folder = folderRequest.result as Node | undefined
+            if (!folder || folder.kind !== "folder" || !isLive(folder)) {
+              throw new Error("目标收藏夹不存在")
+            }
+            append()
+          } catch (error) {
+            abort(error)
+          }
+        }
+      }
     },
-  }
-  await idbPut(STORE_NODES, node)
+  )
   notifyFilesUpdated({ kind: "bookmark", id: node.id })
-  return nodeToBookmark(node)
+  return node
+}
+
+/** 兼容既有 FilesPort DTO；创建真相由 addBookmarkWithNode 返回。 */
+export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
+  return nodeToBookmark(await addBookmarkWithNode(input))
 }
 
 export async function updateBookmark(
   id: string,
   patch: Partial<Omit<Bookmark, "id" | "createdAt">>,
-): Promise<void> {
-  // 单事务读-改-写 + 按主键单取; kind 守卫防误改其它 kind 节点。
-  await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) => {
-    if (!current || current.kind !== "bookmark") return undefined
+  expected?: NodeMutationExpectation,
+): Promise<BookmarkNode | undefined> {
+  const hasFields =
+    patch.url !== undefined ||
+    patch.description !== undefined ||
+    patch.favicon !== undefined ||
+    patch.title !== undefined ||
+    patch.tags !== undefined
+  if (!hasFields && patch.folderId === undefined) return undefined
+  let changed = hasFields
+  const applyFields = (current: BookmarkNode): BookmarkNode => {
     const content = { ...current.content }
     if (patch.url !== undefined) content.url = patch.url
     if (patch.description !== undefined) content.description = patch.description
@@ -197,43 +369,132 @@ export async function updateBookmark(
     }
     if (patch.title !== undefined) next.title = patch.title
     if (patch.tags !== undefined) next.tags = patch.tags
-    if (patch.folderId !== undefined) next.parentId = patch.folderId
     return next
-  })
+  }
+  const updated =
+    patch.folderId === undefined
+      ? await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) => {
+          assertNodeMutationExpectation(current, expected)
+          if (!current || current.kind !== "bookmark" || !isLive(current)) return undefined
+          return applyFields(current)
+        })
+      : await idbRunTransaction<BookmarkNode | undefined>(
+          [STORE_NODES],
+          "readwrite",
+          (transaction, setResult, abort) => {
+            const store = transaction.objectStore(STORE_NODES)
+            const request = store.get(id)
+            request.onerror = () => abort(request.error ?? new Error("读取待更新书签失败"))
+            request.onsuccess = () => {
+              try {
+                const current = request.result as Node | undefined
+                assertNodeMutationExpectation(current, expected)
+                if (!current || current.kind !== "bookmark" || !isLive(current)) {
+                  setResult(undefined)
+                  return
+                }
+                readBookmarkTreeSnapshot(
+                  store,
+                  (snapshot) => {
+                    const parentId = patch.folderId as string | null
+                    if (
+                      parentId !== null &&
+                      !snapshot.folders.some((folder) => folder.id === parentId && isLive(folder))
+                    ) {
+                      throw new Error("目标收藏夹不存在")
+                    }
+                    const parentChanged = current.parentId !== parentId
+                    if (!parentChanged && !hasFields) {
+                      setResult(current)
+                      return
+                    }
+                    changed = true
+                    const next: BookmarkNode = {
+                      ...applyFields(current),
+                      parentId,
+                      sortKey: parentChanged
+                        ? computeSiblingSortKey(
+                            bookmarkTreeItems(snapshot),
+                            parentId,
+                            undefined,
+                            id,
+                          )
+                        : current.sortKey,
+                    }
+                    const putRequest = store.put(next)
+                    putRequest.onerror = () =>
+                      abort(putRequest.error ?? new Error("更新书签字段与位置失败"))
+                    putRequest.onsuccess = () => setResult(next)
+                  },
+                  abort,
+                )
+              } catch (error) {
+                abort(error)
+              }
+            }
+          },
+        )
   // 与 add/bulkAdd/delete 一致: 通知「我的」更新, 否则 keep-alive 的概览时间线在改名后会陈旧。
-  notifyFilesUpdated({ kind: "bookmark", id })
+  if (updated && changed) notifyFilesUpdated({ kind: "bookmark", id })
+  return updated
 }
 
 /** 删除书签 (软删标记; 撤销靠 restoreBookmark 恢复)。 */
-export async function deleteBookmark(id: string): Promise<void> {
-  const now = Date.now()
-  const bookmark = await idbGet<BookmarkNode>(STORE_NODES, id)
-  if (bookmark && bookmark.kind === "bookmark" && isLive(bookmark)) {
-    await captureTrashSnapshot(bookmark)
-  }
-  await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "bookmark"
-      ? { ...current, deletedAt: now, updatedAt: nextUpdatedAt(current.updatedAt, now) }
-      : undefined,
+export async function deleteBookmark(
+  id: string,
+  expected?: NodeMutationExpectation,
+): Promise<boolean> {
+  const deleted = await idbRunTransaction<boolean>(
+    [STORE_NODES, STORE_TRASH_SNAPSHOTS],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const nodeStore = transaction.objectStore(STORE_NODES)
+      const trashStore = transaction.objectStore(STORE_TRASH_SNAPSHOTS)
+      const request = nodeStore.get(id)
+      request.onerror = () => abort(request.error ?? new Error("读取待删除书签失败"))
+      request.onsuccess = () => {
+        try {
+          const current = request.result as Node | undefined
+          assertNodeMutationExpectation(current, expected)
+          if (!current || current.kind !== "bookmark" || !isLive(current)) {
+            setResult(false)
+            return
+          }
+          const now = Date.now()
+          trashStore.put({
+            id: current.id,
+            node: current,
+            capturedAt: now,
+          } satisfies TrashSnapshot)
+          nodeStore.put({
+            ...current,
+            deletedAt: now,
+            updatedAt: nextUpdatedAt(current.updatedAt, now),
+          } satisfies BookmarkNode)
+          setResult(true)
+        } catch (error) {
+          abort(error)
+        }
+      }
+    },
   )
-  notifyFilesUpdated({ kind: "bookmark", id })
+  if (deleted) notifyFilesUpdated({ kind: "bookmark", id })
+  return deleted
 }
 
 export type { InsertPos as BookmarkInsertPos }
 
 type BookmarkTreeItem = { id: string; parentId: string | null; sortKey: string; title: string }
 
-async function liveBookmarkTreeItems(): Promise<BookmarkTreeItem[]> {
-  const bookmarks = (await allBookmarkNodes()).filter(isLive)
-  const folders = (await allFolderNodes()).filter(isLive)
+function bookmarkTreeItems({ bookmarks, folders }: BookmarkTreeSnapshot): BookmarkTreeItem[] {
   return [
-    ...bookmarks.map((n) => ({
+    ...bookmarks.filter(isLive).map((n) => ({
       id: n.id,
       parentId: n.parentId,
       sortKey: n.sortKey,
       title: n.title,
     })),
-    ...folders.map((n) => ({
+    ...folders.filter(isLive).map((n) => ({
       id: n.id,
       parentId: n.parentId,
       sortKey: n.sortKey,
@@ -247,65 +508,161 @@ export async function moveBookmark(
   id: string,
   newParentId: string | null,
   pos?: InsertPos,
-): Promise<void> {
-  if (newParentId !== null) {
-    const folder = await idbGet<FolderNode>(STORE_NODES, newParentId)
-    if (!folder || folder.kind !== "folder" || !isLive(folder)) throw new Error("目标收藏夹不存在")
-  }
-  const live = await liveBookmarkTreeItems()
-  if (!live.some((n) => n.id === id)) return
-  const sortKey = computeSiblingSortKey(live, newParentId, pos, id)
-  await idbReadModifyWrite<BookmarkNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "bookmark"
-      ? {
-          ...current,
-          parentId: newParentId,
-          sortKey,
-          updatedAt: nextUpdatedAt(current.updatedAt),
+  expected?: NodeMutationExpectation,
+): Promise<BookmarkNode | undefined> {
+  const moved = await idbRunTransaction<BookmarkNode | undefined>(
+    [STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const store = transaction.objectStore(STORE_NODES)
+      const request = store.get(id)
+      request.onerror = () => abort(request.error ?? new Error("读取待移动书签失败"))
+      request.onsuccess = () => {
+        try {
+          const current = request.result as Node | undefined
+          assertNodeMutationExpectation(current, expected)
+          if (!current || current.kind !== "bookmark" || !isLive(current)) {
+            setResult(undefined)
+            return
+          }
+          readBookmarkTreeSnapshot(
+            store,
+            (snapshot) => {
+              if (
+                newParentId !== null &&
+                !snapshot.folders.some((folder) => folder.id === newParentId && isLive(folder))
+              ) {
+                throw new Error("目标收藏夹不存在")
+              }
+              const next: BookmarkNode = {
+                ...current,
+                parentId: newParentId,
+                sortKey: computeSiblingSortKey(bookmarkTreeItems(snapshot), newParentId, pos, id),
+                updatedAt: nextUpdatedAt(current.updatedAt),
+              }
+              const putRequest = store.put(next)
+              putRequest.onerror = () => abort(putRequest.error ?? new Error("移动书签失败"))
+              putRequest.onsuccess = () => setResult(next)
+            },
+            abort,
+          )
+        } catch (error) {
+          abort(error)
         }
-      : undefined,
+      }
+    },
   )
-  notifyFilesUpdated({ kind: "bookmark", id })
+  if (moved) notifyFilesUpdated({ kind: "bookmark", id })
+  return moved
 }
 
 /** 收藏夹同级重排 (parentId 恒为 null)。 */
-export async function moveFolder(id: string, pos?: InsertPos): Promise<void> {
-  const live = await liveBookmarkTreeItems()
-  if (!live.some((n) => n.id === id)) return
-  const sortKey = computeSiblingSortKey(live, null, pos, id)
-  await idbReadModifyWrite<FolderNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "folder"
-      ? {
-          ...current,
-          parentId: null,
-          sortKey,
-          updatedAt: nextUpdatedAt(current.updatedAt),
+export async function moveFolder(
+  id: string,
+  pos?: InsertPos,
+  expected?: NodeMutationExpectation,
+): Promise<FolderNode | undefined> {
+  const moved = await idbRunTransaction<FolderNode | undefined>(
+    [STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const store = transaction.objectStore(STORE_NODES)
+      const request = store.get(id)
+      request.onerror = () => abort(request.error ?? new Error("读取待移动收藏夹失败"))
+      request.onsuccess = () => {
+        try {
+          const current = request.result as Node | undefined
+          assertNodeMutationExpectation(current, expected)
+          if (!current || current.kind !== "folder" || !isLive(current)) {
+            setResult(undefined)
+            return
+          }
+          readBookmarkTreeSnapshot(
+            store,
+            (snapshot) => {
+              const next: FolderNode = {
+                ...current,
+                parentId: null,
+                sortKey: computeSiblingSortKey(bookmarkTreeItems(snapshot), null, pos, id),
+                updatedAt: nextUpdatedAt(current.updatedAt),
+              }
+              const putRequest = store.put(next)
+              putRequest.onerror = () => abort(putRequest.error ?? new Error("移动收藏夹失败"))
+              putRequest.onsuccess = () => setResult(next)
+            },
+            abort,
+          )
+        } catch (error) {
+          abort(error)
         }
-      : undefined,
+      }
+    },
   )
-  notifyFilesUpdated({ kind: "folder", id })
+  if (moved) notifyFilesUpdated({ kind: "folder", id })
+  return moved
 }
 
 /** 撤销删除: 把刚删除的书签恢复 (清删除标记 + bump updatedAt, 保留 id/createdAt/分组)。 */
 export async function restoreBookmark(bookmark: Bookmark): Promise<void> {
   const now = Date.now()
-  const existing = await allBookmarkNodes()
-  const fallbackKey = appendSortKeys(maxSortKey(existing), 1)[0]
-  await idbReadModifyWrite<BookmarkNode>(STORE_NODES, bookmark.id, (current) => {
-    // 软删后删除标记节点仍在 → 复用其 sortKey 恢复; 极端兜底 (节点不存在) 用追加键重建。
-    const base =
-      current && current.kind === "bookmark" ? current : bookmarkToNode(bookmark, fallbackKey, now)
-    const revived: BookmarkNode = {
-      ...base,
-      title: bookmark.title,
-      parentId: bookmark.folderId,
-      tags: bookmark.tags,
-      content: { url: bookmark.url, description: bookmark.description, favicon: bookmark.favicon },
-      updatedAt:
-        current && current.kind === "bookmark" ? nextUpdatedAt(current.updatedAt, now) : now,
+  await idbRunTransaction<void>([STORE_NODES], "readwrite", (transaction, setResult, abort) => {
+    const store = transaction.objectStore(STORE_NODES)
+    const request = store.get(bookmark.id)
+    request.onerror = () => abort(request.error ?? new Error("读取待恢复书签失败"))
+    request.onsuccess = () => {
+      try {
+        const current = request.result as Node | undefined
+        if (current && current.kind !== "bookmark") {
+          throw new Error("待恢复书签 id 已被其它节点占用")
+        }
+        const restore = (parentId: string | null) => {
+          const revive = (base: BookmarkNode, existed: boolean): BookmarkNode => {
+            const revived: BookmarkNode = {
+              ...base,
+              title: bookmark.title,
+              parentId,
+              tags: bookmark.tags,
+              content: {
+                url: bookmark.url,
+                description: bookmark.description,
+                favicon: bookmark.favicon,
+              },
+              updatedAt: existed ? nextUpdatedAt(base.updatedAt, now) : now,
+            }
+            delete revived.deletedAt
+            return revived
+          }
+          if (current) {
+            store.put(revive(current, true))
+            setResult(undefined)
+            return
+          }
+          addNodeAtKindTail(
+            store,
+            { kind: "bookmark", parentId },
+            (sortKey) => revive(bookmarkToNode(bookmark, sortKey, now), false),
+            () => setResult(undefined),
+            abort,
+          )
+        }
+        if (bookmark.folderId === null) restore(null)
+        else {
+          const folderRequest = store.get(bookmark.folderId)
+          folderRequest.onerror = () =>
+            abort(folderRequest.error ?? new Error("读取恢复目标收藏夹失败"))
+          folderRequest.onsuccess = () => {
+            try {
+              const folder = folderRequest.result as Node | undefined
+              restore(folder?.kind === "folder" && isLive(folder) ? folder.id : null)
+            } catch (error) {
+              abort(error)
+            }
+          }
+        }
+      } catch (error) {
+        abort(error)
+      }
     }
-    delete revived.deletedAt
-    return revived
   })
   notifyFilesUpdated({ kind: "bookmark", id: bookmark.id })
 }

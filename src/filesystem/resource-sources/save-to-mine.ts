@@ -16,13 +16,13 @@ export type SaveToMineResult =
       kind: "subscription"
       subscription: Subscription
       existed: boolean
-      href: "/home/subscriptions"
+      navigationPath: "/home/following"
     }
   | {
       kind: "bookmark"
       bookmark: Bookmark
       existed: boolean
-      href: "/home/bookmarks"
+      navigationPath: "/home/bookmarks"
     }
 
 export type SaveToMineDeps = {
@@ -174,14 +174,19 @@ export async function saveResourceToMine(
   if (projection.kind === "subscription") {
     const existed = await deps.isSubscribed(projection.input.type, projection.input.key)
     const subscription = await deps.addSubscription(projection.input)
-    return { kind: "subscription", subscription, existed, href: "/home/subscriptions" }
+    return { kind: "subscription", subscription, existed, navigationPath: "/home/following" }
   }
 
   const url = projection.input.url.trim()
   const existing = (await deps.listBookmarks()).find((bookmark) => bookmark.url === url)
   if (existing) {
-    return { kind: "bookmark", bookmark: existing, existed: true, href: "/home/bookmarks" }
+    return {
+      kind: "bookmark",
+      bookmark: existing,
+      existed: true,
+      navigationPath: "/home/bookmarks",
+    }
   }
   const bookmark = await deps.addBookmark({ ...projection.input, url })
-  return { kind: "bookmark", bookmark, existed: false, href: "/home/bookmarks" }
+  return { kind: "bookmark", bookmark, existed: false, navigationPath: "/home/bookmarks" }
 }

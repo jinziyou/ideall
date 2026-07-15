@@ -1,4 +1,5 @@
 import type { Node } from "@protocol/node"
+import { resourceKey } from "@protocol/resource"
 import {
   DIRECTORY_MEDIA_TYPE,
   fileRefKey,
@@ -10,6 +11,7 @@ import {
 } from "@protocol/file-system"
 import type { ResourceRecord, ResourceRef } from "@protocol/resource"
 import { countTrashItems } from "@/files/stores/trash-store"
+import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
 import {
   createResource,
   getResources,
@@ -71,9 +73,64 @@ import {
   type PlaceResourceQuery,
 } from "./policy"
 
-function sourceContext(ctx: FileSystemAccessContext, target: FileRef | null, intent = ctx.intent) {
+function sourceContext(
+  ctx: FileSystemAccessContext,
+  target: FileRef | null,
+  intent = ctx.intent,
+  expectedVersion?: string | null,
+) {
   const activeResource = ctx.activeFile ? resourceRefForFile(ctx.activeFile) : null
-  return toResourceSourceContext(ctx, target, activeResource, intent)
+  return {
+    ...toResourceSourceContext(ctx, target, activeResource, intent),
+    ...(expectedVersion !== undefined ? { expectedVersion } : {}),
+  }
+}
+
+function isNodeThreadResource(resource: ResourceRef): boolean {
+  return resource.scheme === "node" && resource.kind === "thread"
+}
+
+/**
+ * Thread writes can advance the durable Agent task index as part of the same Storage mutation.
+ * Keep the global dependency order tasks -> thread so task-only runtime mutations, Agent config
+ * writes/imports, and generic thread mutations cannot observe or publish crossed revisions.
+ */
+function withThreadMutationWriteLocks<T>(
+  ref: FileRef,
+  operation: () => T | Promise<T>,
+): Promise<T> {
+  return withFileWriteLock(AGENT_TASKS_FILE_REF, () => withFileWriteLock(ref, operation))
+}
+
+/**
+ * write 所调用的 mutation 必须返回本次事务实际提交的 ResourceRecord。直接消费该结果，
+ * 避免提交后再次 stat 读到另一笔并发写入，或把已成功的提交误报为 not-found。
+ */
+function committedResourceRecord(
+  expectedRef: ResourceRef,
+  value: unknown,
+  action: "edit" | "write-blob",
+): ResourceRecord {
+  try {
+    if (
+      value != null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      "meta" in value &&
+      value.meta != null &&
+      typeof value.meta === "object" &&
+      "ref" in value.meta
+    ) {
+      const record = value as ResourceRecord
+      if (resourceKey(record.meta.ref) === resourceKey(expectedRef)) return record
+    }
+  } catch {
+    // 统一在下方报告 source 契约错误，避免泄漏畸形返回值的内部异常。
+  }
+  throw new ResourceSourceError(
+    "unsupported",
+    `Resource action ${action} did not return its committed record: ${resourceKey(expectedRef)}`,
+  )
 }
 
 function entry(parent: FileRef, file: IdeallFile, index: number): DirectoryEntry {
@@ -287,6 +344,47 @@ export function createResourceFileSystem(): FileSystemProvider {
         rethrowFileSystemError(error, ref)
       }
     },
+    async statMany(refs, ctx, options = {}) {
+      if (refs.length === 0) return []
+      const concurrency = options.concurrency ?? 4
+      if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 32) {
+        throw new FileSystemError(
+          "invalid-input",
+          "Stat concurrency must be an integer between 1 and 32",
+        )
+      }
+
+      const results = new Array<IdeallFile | null>(refs.length).fill(null)
+      const resources: Array<{ ref: FileRef; resource: ResourceRef; index: number }> = []
+      const scalarStats: Array<{ ref: FileRef; index: number }> = []
+
+      refs.forEach((ref, index) => {
+        const resource = resourceRefForFile(ref)
+        // Engine 对 activeFile 的隐式 metadata 授权依赖逐项 target，不能扩大为批量授权。
+        if (resource && ctx.actor !== "engine") resources.push({ ref, resource, index })
+        else scalarStats.push({ ref, index })
+      })
+
+      if (resources.length > 0) {
+        try {
+          const records = await getResources(
+            resources.map((item) => item.resource),
+            sourceContext(ctx, null, "metadata"),
+            concurrency,
+          )
+          resources.forEach((item, index) => {
+            const record = records[index]
+            results[item.index] = record ? fileFromResource(record.meta, record) : null
+          })
+        } catch (error) {
+          rethrowFileSystemError(error, resources[0]?.ref ?? refs[0]!)
+        }
+      }
+
+      // root/place/panel 等虚拟文件很少；Engine ref 也在此保留原有逐项授权语义。
+      for (const item of scalarStats) results[item.index] = await this.stat(item.ref, ctx)
+      return results
+    },
     async readDirectory(ref, ctx, options = {}) {
       let files: IdeallFile[]
       if (sameFileRef(ref, descriptor.root)) {
@@ -398,12 +496,14 @@ export function createResourceFileSystem(): FileSystemProvider {
       if (!resource) throw new FileSystemError("unsupported", "System panel is not writable", ref)
       try {
         assertCanWrite(ref, ctx)
-        return await withFileWriteLock(ref, async () => {
+        const write = async () => {
           const current = await getResource(resource, sourceContext(ctx, ref, "metadata"))
           if (!current) {
             throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
           }
-          assertExpectedVersion(ref, input.expectedVersion, versionForResource(current.meta))
+          const currentVersion = versionForResource(current.meta)
+          assertExpectedVersion(ref, input.expectedVersion, currentVersion)
+          const mutationContext = sourceContext(ctx, ref, "write", currentVersion ?? null)
           if (resource.scheme === "node" && resource.kind === "file") {
             if (typeof input.data !== "string") {
               throw new FileSystemError(
@@ -412,32 +512,29 @@ export function createResourceFileSystem(): FileSystemProvider {
                 ref,
               )
             }
-            await invokeResourceAction(
+            const result = await invokeResourceAction(
               resource,
               "write-blob",
               { content: input.data, mime: input.mediaType },
-              sourceContext(ctx, ref, "write"),
+              mutationContext,
             )
-            const next = await this.stat(ref, ctx)
-            if (!next) {
-              throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
-            }
-            return next
+            const record = committedResourceRecord(resource, result, "write-blob")
+            return fileFromResource(record.meta, record)
           }
-          await invokeResourceAction(
+          const result = await invokeResourceAction(
             resource,
             "edit",
             typeof input.data === "object" && input.data !== null
               ? input.data
               : { content: input.data },
-            sourceContext(ctx, ref, "write"),
+            mutationContext,
           )
-          const next = await this.stat(ref, ctx)
-          if (!next) {
-            throw new FileSystemError("not-found", `File not found: ${fileRefKey(ref)}`, ref)
-          }
-          return next
-        })
+          const record = committedResourceRecord(resource, result, "edit")
+          return fileFromResource(record.meta, record)
+        }
+        return await (isNodeThreadResource(resource)
+          ? withThreadMutationWriteLocks(ref, write)
+          : withFileWriteLock(ref, write))
       } catch (error) {
         rethrowFileSystemError(error, ref)
       }
@@ -496,7 +593,7 @@ export function createResourceFileSystem(): FileSystemProvider {
         rethrowFileSystemError(error, ref)
       }
     },
-    async invoke(ref, action, input, ctx) {
+    async invoke(ref, action, input, ctx, options) {
       const panel = panelForFile(ref)
       if (panel && action === "open") {
         assertCanInvoke(ref, action, ctx)
@@ -539,26 +636,31 @@ export function createResourceFileSystem(): FileSystemProvider {
       if (!resource) throw new FileSystemError("unsupported", `Unsupported action: ${action}`, ref)
       try {
         assertCanInvoke(ref, action, ctx)
-        if (
-          action === "create" &&
-          resource.scheme === "node" &&
-          (resource.kind === "note" || resource.kind === "folder")
-        ) {
-          const created = (await invokeResourceAction(
+        const invoke = async () => {
+          if (
+            action === "create" &&
+            resource.scheme === "node" &&
+            (resource.kind === "note" || resource.kind === "folder")
+          ) {
+            const created = (await invokeResourceAction(
+              resource,
+              "create",
+              input,
+              sourceContext(ctx, ref, "action", options?.expectedVersion),
+            )) as ResourceRecord
+            const file = fileFromResource(created.meta, created)
+            return { ref: file.ref, file }
+          }
+          return invokeResourceAction(
             resource,
-            "create",
+            action as never,
             input,
-            sourceContext(ctx, ref, "action"),
-          )) as ResourceRecord
-          const file = fileFromResource(created.meta, created)
-          return { ref: file.ref, file }
+            sourceContext(ctx, ref, "action", options?.expectedVersion),
+          )
         }
-        return await invokeResourceAction(
-          resource,
-          action as never,
-          input,
-          sourceContext(ctx, ref, "action"),
-        )
+        return await (isNodeThreadResource(resource) && action !== "open"
+          ? withThreadMutationWriteLocks(ref, invoke)
+          : invoke())
       } catch (error) {
         rethrowFileSystemError(error, ref)
       }
@@ -577,8 +679,16 @@ export function createResourceFileSystem(): FileSystemProvider {
           const handle = watchResources(
             { scheme: query.scheme, id: query.id, kinds: query.kinds },
             sourceContext(ctx, ref, "watch"),
-            () => {
-              const event: FileSystemWatchEvent = { type: "changed", ref }
+            (change) => {
+              const changedRef = change?.ref ? resourceFileRef(change.ref) : null
+              const event: FileSystemWatchEvent =
+                place && changedRef
+                  ? {
+                      type: "changed",
+                      ref,
+                      changes: [{ type: "changed", ref: changedRef }],
+                    }
+                  : { type: "changed", ref: changedRef ?? ref }
               notify(event)
             },
           )

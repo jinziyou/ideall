@@ -122,7 +122,10 @@ test("save-to-mine projector: writes bookmarks idempotently", async () => {
   const result = await saveResourceToMine(ref, { title: "Example" }, uiCtx, state.deps)
 
   assert.equal(result.kind, "bookmark")
-  if (result.kind === "bookmark") assert.equal(result.existed, true)
+  if (result.kind === "bookmark") {
+    assert.equal(result.existed, true)
+    assert.equal(result.navigationPath, "/home/bookmarks")
+  }
   assert.equal(state.addedBookmarks.length, 0)
 })
 
@@ -143,6 +146,9 @@ test("save-to-mine projector: enforces write permission outside ui actor", async
   )
 
   assert.equal(result.kind, "subscription")
+  if (result.kind === "subscription") {
+    assert.equal(result.navigationPath, "/home/following")
+  }
   assert.deepEqual(state.addedSubs[0], {
     type: "publisher",
     key: "example.com",

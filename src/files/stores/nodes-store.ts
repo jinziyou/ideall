@@ -7,26 +7,32 @@ import { bytesToBase64 } from "@/lib/base64"
 import { safeHref } from "@/lib/safe-url"
 import { idbGet, idbGetAllFromIndex, idbGetMany, INDEX_NODES_KIND, STORE_NODES } from "@/lib/idb"
 import { buildParentOf, effectiveParentId, type TreeItem } from "@/files/notes-tree-util"
-import { addNote, updateNote, moveNote, deleteNote } from "@/files/stores/notes-store"
+import { addNoteWithNode, updateNote, moveNote, deleteNote } from "@/files/stores/notes-store"
 import {
-  addBookmark,
+  addBookmarkWithNode,
   updateBookmark,
   deleteBookmark,
-  addFolder,
+  addFolderWithNode,
   renameFolder,
   deleteFolder,
   moveBookmark,
   moveFolder,
 } from "@/files/stores/bookmarks-store"
 import { updateFileMeta, deleteFile, getFile } from "@/files/stores/files-store"
+import { addSubscriptionWithNode, removeSubscription } from "@/files/stores/subscriptions-store"
+import { createThreadWithNode, deleteThread, updateThread } from "@/files/stores/threads-store"
 import {
-  addSubscription,
-  removeSubscription,
-  getSubscription,
-} from "@/files/stores/subscriptions-store"
-import { createThread, deleteThread, renameThread, saveThread } from "@/files/stores/threads-store"
-import { feedNodeId } from "@/files/feed-node"
-import { restoreTrashItem } from "@/files/stores/trash-store"
+  restoreNoteTrashSubtreeWithRoot,
+  restoreTrashItemWithNode,
+  type TrashMutationExpectation,
+} from "@/files/stores/trash-store"
+import {
+  assertNodeMutationExpectation,
+  nodeMutationExpectation,
+  type NodeMutationExpectation,
+} from "@/files/stores/node-mutation"
+
+export { getThreadMetadataMany, listThreadMetadata } from "./thread-metadata-store"
 
 /** 跨 kind 节点摘要 (侧栏文件树用): TreeItem + kind + 是否有活跃子节点。 */
 export interface NodeSummary extends TreeItem {
@@ -93,40 +99,41 @@ export async function getNodeRaw(id: string): Promise<Node | undefined> {
   return n
 }
 
+/** mutation CAS/restore 专用：返回原始节点，包含 tombstone。 */
+export async function getNodeForMutation(id: string): Promise<Node | undefined> {
+  return idbGet<Node>(STORE_NODES, id)
+}
+
 /** 按 id 输入顺序在同一 IndexedDB 事务读取活跃节点；未知或已删除节点保留为 undefined。 */
 export async function getNodesRaw(ids: readonly string[]): Promise<Array<Node | undefined>> {
   const nodes = await idbGetMany<Node>(STORE_NODES, ids)
   return nodes.map((node) => (node?.deletedAt == null ? node : undefined))
 }
 
-// ---- AI fs.* 写 (§6.1): 跨 kind 写按 kind 分派到各 kind 专属 store, 回读为 Node。 ----
+// ---- AI fs.* 写 (§6.1): 跨 kind 写按 kind 分派到各 kind 专属 store。 ----
 // content 用各 kind 的 Node content 形态 (note=Plate Value 数组; bookmark={url,description,favicon};
 // feed={type,key,...})。thread 只供 FilesPort→FileSystem 的新会话动作内部创建，公开 fs.create
-// 仍在兼容外观拒绝 thread/file。写后用 getNodeRaw 回读统一 Node。
+// 仍在兼容外观拒绝 thread/file。创建直接返回 Storage 事务实际提交的 Node。
 
-/** fs.create: 按 kind 新建节点, 回读为 Node。file 不可经此创建 (需二进制上传)。 */
+/** fs.create: 按 kind 新建并返回 committed Node。file 不可经此创建 (需二进制上传)。 */
 export async function createNode(input: FsCreateInput): Promise<Node> {
-  let id: string
   switch (input.kind) {
     case "note": {
-      const n = await addNote({
+      return addNoteWithNode({
         title: input.title,
         content: Array.isArray(input.content) ? (input.content as unknown[]) : undefined,
         parentId: input.parentId ?? null,
         tags: input.tags,
       })
-      id = n.id
-      break
     }
     case "folder": {
-      id = (await addFolder(input.title ?? "")).id
-      break
+      return addFolderWithNode(input.title ?? "")
     }
     case "bookmark": {
       const c = (input.content ?? {}) as { url?: string; description?: string; favicon?: string }
       if (typeof c.url !== "string" || !safeHref(c.url))
         throw new Error("bookmark 需合法 http(s) url")
-      const b = await addBookmark({
+      return addBookmarkWithNode({
         url: c.url,
         title: input.title || c.url,
         description: c.description,
@@ -134,8 +141,6 @@ export async function createNode(input: FsCreateInput): Promise<Node> {
         folderId: input.parentId ?? null,
         tags: input.tags,
       })
-      id = b.id
-      break
     }
     case "feed": {
       const c = (input.content ?? {}) as {
@@ -148,7 +153,7 @@ export async function createNode(input: FsCreateInput): Promise<Node> {
         searchDomain?: string
       }
       if (!c.type || typeof c.key !== "string" || !c.key) throw new Error("feed 需 type + key")
-      await addSubscription({
+      return addSubscriptionWithNode({
         type: c.type,
         key: c.key,
         title: input.title || c.key,
@@ -158,83 +163,98 @@ export async function createNode(input: FsCreateInput): Promise<Node> {
         searchKeyword: c.searchKeyword,
         searchDomain: c.searchDomain,
       })
-      id = feedNodeId(c.type, c.key.trim())
-      break
     }
     case "thread":
-      id = (await createThread()).id
-      break
+      return createThreadWithNode()
     case "file":
       throw new Error("file 不可经 fs.create 创建 (需二进制上传)")
     default:
       throw new Error(`未知 kind: ${input.kind}`)
   }
-  const n = await getNodeRaw(id)
-  if (!n) throw new Error("创建后回读失败")
-  return n
 }
 
-/** fs.write: 按 kind 改节点 (只改给定字段), 回读为 Node; 不存在 → undefined。 */
+async function currentLiveMutationNode(
+  kind: NodeKind,
+  id: string,
+  expected?: NodeMutationExpectation,
+): Promise<Node | undefined> {
+  const current = await getNodeForMutation(id)
+  assertNodeMutationExpectation(current, expected)
+  return current?.kind === kind && current.deletedAt == null ? current : undefined
+}
+
+/** fs.write: 按 kind 改节点，直接返回 Storage 事务实际提交的 Node。 */
 export async function updateNode(
   kind: NodeKind,
   id: string,
   patch: FsWritePatch,
+  expected?: NodeMutationExpectation,
 ): Promise<Node | undefined> {
   switch (kind) {
-    case "note":
-      await updateNote(id, {
+    case "note": {
+      const notePatch = {
         ...(patch.title !== undefined ? { title: patch.title } : {}),
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         ...(Array.isArray(patch.content) ? { content: patch.content as unknown[] } : {}),
         ...(patch.parentId !== undefined ? { parentId: patch.parentId } : {}),
-      })
-      break
+      }
+      if (Object.keys(notePatch).length === 0) {
+        return currentLiveMutationNode(kind, id, expected)
+      }
+      const updated = await updateNote(id, notePatch, expected)
+      return updated ? ({ ...updated, kind: "note" } as Node) : undefined
+    }
     case "bookmark": {
       const c = (patch.content ?? {}) as { url?: string; description?: string; favicon?: string }
-      await updateBookmark(id, {
+      const bookmarkPatch = {
         ...(patch.title !== undefined ? { title: patch.title } : {}),
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         ...(typeof c.url === "string" ? { url: c.url } : {}),
         ...(typeof c.description === "string" ? { description: c.description } : {}),
         ...(typeof c.favicon === "string" ? { favicon: c.favicon } : {}),
         ...(patch.parentId !== undefined ? { folderId: patch.parentId } : {}),
-      })
-      break
+      }
+      if (Object.keys(bookmarkPatch).length === 0) {
+        return currentLiveMutationNode(kind, id, expected)
+      }
+      return updateBookmark(id, bookmarkPatch, expected)
     }
-    case "folder":
-      if (patch.title !== undefined) await renameFolder(id, patch.title)
-      break
-    case "file":
-      await updateFileMeta(id, {
+    case "folder": {
+      if (patch.parentId !== undefined && patch.parentId !== null) {
+        throw new Error("收藏夹不能嵌套")
+      }
+      return patch.title !== undefined
+        ? renameFolder(id, patch.title, expected)
+        : currentLiveMutationNode(kind, id, expected)
+    }
+    case "file": {
+      const filePatch = {
         ...(patch.title !== undefined ? { name: patch.title } : {}),
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
-      })
-      break
+      }
+      return Object.keys(filePatch).length > 0
+        ? updateFileMeta(id, filePatch, expected)
+        : currentLiveMutationNode(kind, id, expected)
+    }
     case "thread": {
-      const current = await getNodeRaw(id)
-      if (!current || current.kind !== "thread") return undefined
       const rawContent = patch.content as { messages?: unknown } | undefined
       const messages = rawContent?.messages
       if (messages !== undefined && !Array.isArray(messages)) {
         throw new Error("thread content.messages 必须是数组")
       }
-      if (Array.isArray(messages)) {
-        await saveThread({
-          id: current.id,
-          title: patch.title ?? current.title,
-          messages,
-          createdAt: current.createdAt,
-          updatedAt: current.updatedAt,
-        })
-      } else if (patch.title !== undefined) {
-        await renameThread(id, patch.title)
-      }
-      break
+      const title = patch.title?.trim()
+      return updateThread(
+        id,
+        {
+          ...(title ? { title } : {}),
+          ...(Array.isArray(messages) ? { messages } : {}),
+        },
+        expected,
+      )
     }
     default:
       return undefined // feed 无字段级更新 (关注由 add/remove 管理)
   }
-  return getNodeRaw(id)
 }
 
 /** fs.move: 改父 + 同级位置 (仅 note 树 / bookmark 归夹有意义; 余无操作)。 */
@@ -243,70 +263,83 @@ export async function moveNode(
   id: string,
   parentId: string | null,
   afterSortKey?: string | null,
+  expected?: NodeMutationExpectation,
 ): Promise<Node | undefined> {
   if (kind === "note") {
-    await moveNote(id, parentId, afterSortKey === undefined ? undefined : { afterSortKey })
+    const moved = await moveNote(
+      id,
+      parentId,
+      afterSortKey === undefined ? undefined : { afterSortKey },
+      expected,
+    )
+    return moved ? ({ ...moved, kind: "note" } as Node) : undefined
   } else if (kind === "bookmark") {
-    await moveBookmark(id, parentId, afterSortKey === undefined ? undefined : { afterSortKey })
+    const moved = await moveBookmark(
+      id,
+      parentId,
+      afterSortKey === undefined ? undefined : { afterSortKey },
+      expected,
+    )
+    return moved
   } else if (kind === "folder") {
-    await moveFolder(id, afterSortKey === undefined ? undefined : { afterSortKey })
+    if (parentId !== null) throw new Error("收藏夹不能嵌套")
+    return moveFolder(id, afterSortKey === undefined ? undefined : { afterSortKey }, expected)
   }
-  return getNodeRaw(id)
+  return undefined
 }
 
 /** fs.delete: 按 kind 删 (note/bookmark/folder/file/thread 软删标记; feed 取消关注写删除标记)。 */
-export async function deleteNode(kind: NodeKind, id: string): Promise<void> {
+export async function deleteNode(
+  kind: NodeKind,
+  id: string,
+  expected?: NodeMutationExpectation,
+): Promise<boolean> {
   switch (kind) {
     case "note":
-      await deleteNote(id)
-      break
+      return (await deleteNote(id, expected)).length > 0
     case "bookmark":
-      await deleteBookmark(id)
-      break
+      return deleteBookmark(id, expected)
     case "folder":
-      await deleteFolder(id)
-      break
+      return deleteFolder(id, expected)
     case "file":
-      await deleteFile(id)
-      break
+      return deleteFile(id, expected)
     case "thread":
-      await deleteThread(id)
-      break
+      return deleteThread(id, expected)
     case "feed": {
-      const sub = await getSubscription(id)
-      if (sub) await removeSubscription(sub.type, sub.key)
-      break
+      const current = await getNodeForMutation(id)
+      assertNodeMutationExpectation(current, expected)
+      if (!current || current.kind !== "feed" || current.deletedAt != null) return false
+      return removeSubscription(current.content.type, current.content.key, expected)
     }
   }
 }
 
 /** 恢复节点；笔记删除是级联的，因此恢复同一棵仍处于回收站的子树。 */
-export async function restoreNode(kind: NodeKind, id: string): Promise<void> {
-  if (kind !== "note") {
-    await restoreTrashItem(id)
-    return
+export async function restoreNodeWithResult(
+  kind: NodeKind,
+  id: string,
+  expected?: TrashMutationExpectation,
+): Promise<Node | undefined> {
+  let mutation = expected
+  if (!mutation) {
+    const current = await getNodeForMutation(id)
+    if (!current || current.kind !== kind || current.deletedAt == null) return undefined
+    const base = nodeMutationExpectation(current)
+    mutation = { kind: base.kind, updatedAt: base.updatedAt, deletedAt: current.deletedAt }
   }
-  const notes = await nodesByKinds<Node>(["note"])
-  const deleted = notes.filter(
-    (node): node is Extract<Node, { kind: "note" }> =>
-      node.kind === "note" && node.deletedAt != null,
-  )
-  const children = new Map<string, string[]>()
-  for (const note of deleted) {
-    if (!note.parentId) continue
-    const values = children.get(note.parentId) ?? []
-    values.push(note.id)
-    children.set(note.parentId, values)
-  }
-  const queue = [id]
-  const seen = new Set<string>()
-  while (queue.length > 0) {
-    const current = queue.shift() as string
-    if (seen.has(current)) continue
-    seen.add(current)
-    queue.push(...(children.get(current) ?? []))
-    await restoreTrashItem(current)
-  }
+  if (mutation.kind !== kind) return undefined
+  return kind === "note"
+    ? restoreNoteTrashSubtreeWithRoot(id, mutation)
+    : restoreTrashItemWithNode(id, mutation)
+}
+
+/** boolean 兼容包装；实际 committed root 由 restoreNodeWithResult 提供。 */
+export async function restoreNode(
+  kind: NodeKind,
+  id: string,
+  expected?: TrashMutationExpectation,
+): Promise<boolean> {
+  return Boolean(await restoreNodeWithResult(kind, id, expected))
 }
 
 /** fs.readBlob: 读文件二进制为 base64 (含 mime/size)。大文件拒读防 token 爆炸。 */

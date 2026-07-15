@@ -1,21 +1,19 @@
-import {
-  DIRECTORY_MEDIA_TYPE,
-  fileRefKey,
-  sameFileRef,
-  type FileRef,
-  type IdeallFile,
-} from "@protocol/file-system"
+import { fileRefKey, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import { onFilesUpdated } from "@protocol/flowback"
 import {
   emptyTrash,
   listTrashItems,
   purgeTrashItem,
+  type TrashCollectionExpectation,
+  type TrashMutationExpectation,
   type TrashItem,
 } from "@/files/stores/trash-store"
 import { restoreNode } from "@/files/stores/nodes-store"
+import { sha256SemanticVersion } from "@/lib/semantic-version"
 import type {
   DirectoryPage,
   FileAction,
+  FileActionInvokeOptions,
   FileReadResult,
   FileSystemAccessContext,
   FileSystemProvider,
@@ -27,14 +25,20 @@ import { FileSystemError } from "./types"
 export type TrashFileItem = TrashItem
 
 export type TrashFileSystemDeps = {
-  empty: typeof emptyTrash
+  collectionVersion: typeof trashCollectionVersion
+  empty: (expected: readonly TrashCollectionExpectation[]) => Promise<number | null>
   list: typeof listTrashItems
-  purge: typeof purgeTrashItem
-  restore: typeof restoreNode
+  purge: (id: string, expected: TrashMutationExpectation) => Promise<boolean>
+  restore: (
+    kind: TrashItem["kind"],
+    id: string,
+    expected: TrashMutationExpectation,
+  ) => Promise<boolean>
   onUpdated: typeof onFilesUpdated
 }
 
 const defaultDeps: TrashFileSystemDeps = {
+  collectionVersion: trashCollectionVersion,
   empty: emptyTrash,
   list: listTrashItems,
   purge: purgeTrashItem,
@@ -43,6 +47,7 @@ const defaultDeps: TrashFileSystemDeps = {
 }
 
 export const TRASH_FILE_SYSTEM_ID = "ideall.trash"
+export const TRASH_ROOT_MEDIA_TYPE = "application/vnd.ideall.trash+json"
 export const trashRootRef: FileRef = { fileSystemId: TRASH_FILE_SYSTEM_ID, fileId: "root" }
 
 export function trashItemRef(id: string): FileRef {
@@ -86,6 +91,58 @@ function itemFile(item: TrashItem): IdeallFile {
     version: String(item.updatedAt),
     properties: { ...item },
   }
+}
+
+function mutationExpectation(item: TrashItem): TrashMutationExpectation {
+  return { kind: item.kind, updatedAt: item.updatedAt, deletedAt: item.deletedAt }
+}
+
+function collectionExpectation(items: readonly TrashItem[]): readonly TrashCollectionExpectation[] {
+  return Object.freeze(
+    items.map(({ id, kind, updatedAt, deletedAt }) =>
+      Object.freeze({ id, kind, updatedAt, deletedAt }),
+    ),
+  )
+}
+
+export function trashCollectionVersion(
+  items: readonly Pick<TrashItem, "id" | "kind" | "updatedAt" | "deletedAt">[],
+): Promise<string> {
+  const snapshot = items
+    .map(({ id, kind, updatedAt, deletedAt }) => JSON.stringify([id, kind, updatedAt, deletedAt]))
+    .sort()
+  return sha256SemanticVersion("trash-v2", JSON.stringify(snapshot))
+}
+
+async function assertExpectedCollectionVersion(
+  ref: FileRef,
+  items: readonly Pick<TrashItem, "id" | "kind" | "updatedAt" | "deletedAt">[],
+  expectedVersion: FileActionInvokeOptions["expectedVersion"],
+  version: TrashFileSystemDeps["collectionVersion"],
+): Promise<void> {
+  if (expectedVersion === undefined) return
+  const currentVersion = await version(items)
+  if (expectedVersion === currentVersion) return
+  throw new FileSystemError(
+    "conflict",
+    `Trash collection changed (expected ${expectedVersion ?? "no version"}, current ${currentVersion})`,
+    ref,
+  )
+}
+
+function assertExpectedVersion(
+  ref: FileRef,
+  item: TrashItem,
+  expectedVersion: FileActionInvokeOptions["expectedVersion"],
+): void {
+  if (expectedVersion === undefined) return
+  const currentVersion = String(item.updatedAt)
+  if (expectedVersion === currentVersion) return
+  throw new FileSystemError(
+    "conflict",
+    `Trash item version changed (expected ${expectedVersion ?? "no version"}, current ${currentVersion})`,
+    ref,
+  )
 }
 
 async function findItem(ref: FileRef, deps: TrashFileSystemDeps): Promise<TrashItem | undefined> {
@@ -142,9 +199,10 @@ export function createTrashFileSystem(
           ref,
           kind: "directory",
           name: "回收站",
-          mediaType: DIRECTORY_MEDIA_TYPE,
+          mediaType: TRASH_ROOT_MEDIA_TYPE,
           capabilities: ["read-directory", "read", "delete", "actions", "watch"],
           source: this.descriptor.source,
+          properties: { trashRoot: true },
         }
       }
       const item = await findItem(ref, deps)
@@ -160,8 +218,12 @@ export function createTrashFileSystem(
     async read(ref, ctx): Promise<FileReadResult> {
       assertAccess(ref, ctx, "content", "fs:read")
       if (sameFileRef(ref, trashRootRef)) {
-        const items = await deps.list()
-        return { data: { count: items.length }, mediaType: "application/vnd.ideall.trash+json" }
+        const items = collectionExpectation(await deps.list())
+        return {
+          data: { count: items.length },
+          mediaType: TRASH_ROOT_MEDIA_TYPE,
+          version: await deps.collectionVersion(items),
+        }
       }
       const item = await requireItem(ref, deps)
       return {
@@ -182,7 +244,8 @@ export function createTrashFileSystem(
           {
             id: "empty",
             label: "清空回收站",
-            kind: "invoke",
+            kind: "specialized",
+            reason: "需要在回收站界面冻结当前集合版本并确认后执行。",
             risk: "destructive",
             idempotent: true,
             requires: ["delete"],
@@ -206,20 +269,41 @@ export function createTrashFileSystem(
         },
       ]
     },
-    async invoke(ref, action, _input, ctx) {
+    async invoke(ref, action, _input, ctx, options) {
       const mutation = action === "restore" || action === "purge" || action === "empty"
       assertAccess(ref, ctx, "action", mutation ? "fs:write" : "fs:read")
       if (action === "open") return { ref }
-      if (action === "empty" && sameFileRef(ref, trashRootRef)) return { count: await deps.empty() }
+      if (action === "empty" && sameFileRef(ref, trashRootRef)) {
+        const items = collectionExpectation(await deps.list())
+        await assertExpectedCollectionVersion(
+          ref,
+          items,
+          options?.expectedVersion,
+          deps.collectionVersion,
+        )
+        const count = await deps.empty(items)
+        if (count === null) {
+          throw new FileSystemError("conflict", "Trash collection changed before empty", ref)
+        }
+        return { count }
+      }
       const item = await requireItem(ref, deps)
       if (action === "restore") {
+        assertExpectedVersion(ref, item, options?.expectedVersion)
         if (!item.restorable)
           throw new FileSystemError("unsupported", "Trash item cannot be restored", ref)
-        await deps.restore(item.kind, item.id)
+        const restored = await deps.restore(item.kind, item.id, mutationExpectation(item))
+        if (!restored) {
+          throw new FileSystemError("conflict", "Trash item changed before restore", ref)
+        }
         return { ref, restored: true }
       }
       if (action === "purge") {
-        await deps.purge(item.id)
+        assertExpectedVersion(ref, item, options?.expectedVersion)
+        const deleted = await deps.purge(item.id, mutationExpectation(item))
+        if (!deleted) {
+          throw new FileSystemError("conflict", "Trash item changed before purge", ref)
+        }
         return { ref, deleted: true }
       }
       throw new FileSystemError("unsupported", `Unsupported trash action: ${action}`, ref)

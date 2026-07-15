@@ -9,9 +9,9 @@ import {
   AUDIO_DB_NAME,
   AUDIO_DB_VERSION,
   exportAudioLibraryJson,
-  importAudioLibraryJson,
   inspectAudioLibraryData,
 } from "./audio-store"
+import { importAudioLibraryJsonWithRootLock } from "./audio-write-adapter"
 import type { PluginDataPort } from "@/plugins/shared/plugin-data"
 import type { LocalDataSchema } from "@/plugins/shared/local-data-schema"
 
@@ -23,7 +23,7 @@ const audioDataPort: PluginDataPort = {
   importMode: "replace",
   importDescription: "导入会替换当前音频播放列表和播放状态。",
   exportJson: exportAudioLibraryJson,
-  importJson: importAudioLibraryJson,
+  importJson: importAudioLibraryJsonWithRootLock,
   inspect: async () => {
     const info = await inspectAudioLibraryData()
     return {

@@ -86,7 +86,7 @@ export const notesSyncConfig: DomainSyncConfig<Note> = {
   listLocal: () => getStorageSyncPort().listAllNotes(),
   merge: mergeNotes,
   gc: gcNotes,
-  bulkPut: (items) => getStorageSyncPort().bulkPutNotes(items),
+  bulkPut: (items, expectedLocal) => getStorageSyncPort().bulkPutNotes(items, expectedLocal),
   isValidRemote: isValidRemoteNote,
 }
 

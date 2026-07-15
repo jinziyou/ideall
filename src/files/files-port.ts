@@ -13,6 +13,7 @@ import type {
   NoteMeta,
   StoredFile,
   Thread,
+  ThreadTaskStoragePort,
 } from "@protocol/files"
 import {
   NODE_KINDS,
@@ -51,6 +52,8 @@ export type FileSystemFilesPortOptions = {
   directoryPageSize?: number
   /** provider 没有原生 batch 时的读取并发上限。 */
   readConcurrency?: number
+  /** Storage 层提供的 thread/task 跨记录原子事务；由组合根显式注入。 */
+  threadTasks?: ThreadTaskStoragePort
 }
 
 const DEFAULT_DIRECTORY_PAGE_SIZE = 64
@@ -183,6 +186,14 @@ export function createFileSystemFilesPort(
     DEFAULT_READ_CONCURRENCY,
     MAX_READ_CONCURRENCY,
   )
+  const threadTasks = options.threadTasks
+
+  function requireThreadTasks(): NonNullable<FileSystemFilesPortOptions["threadTasks"]> {
+    if (!threadTasks) {
+      throw new FileSystemError("unavailable", "Thread task Storage capability is not registered")
+    }
+    return threadTasks
+  }
 
   async function* directoryPages(
     ref: FileRef,
@@ -504,6 +515,32 @@ export function createFileSystemFilesPort(
     async renameThread(id, title) {
       await updateNode("thread", id, { title })
     },
+    // 跨文件原子写属于底层 Storage 事务能力：普通单文件 CRUD 继续走 FileSystem，
+    // task/thread 的同生同灭则经这个窄端口进入同一 IndexedDB readwrite 事务。
+    async readThreadTaskIndexHead() {
+      return requireThreadTasks().readThreadTaskIndexHead()
+    },
+    async listThreadTasks() {
+      return requireThreadTasks().listThreadTasks()
+    },
+    async migrateLegacyThreadTasks(tasks) {
+      return requireThreadTasks().migrateLegacyThreadTasks(tasks)
+    },
+    async createTaskThread(workspaceId) {
+      return requireThreadTasks().createTaskThread(workspaceId)
+    },
+    async attachThreadTask(workspaceId, threadId) {
+      return requireThreadTasks().attachThreadTask(workspaceId, threadId)
+    },
+    async updateThreadTask(id, patch) {
+      return requireThreadTasks().updateThreadTask(id, patch)
+    },
+    async deleteTaskThread(id) {
+      return requireThreadTasks().deleteTaskThread(id)
+    },
+    async replaceThreadTasks(tasks, expectedRevision) {
+      return requireThreadTasks().replaceThreadTasks(tasks, expectedRevision)
+    },
     fsListNodes: listNodes,
     fsGetNode: findNode,
     async fsCreateNode(input) {
@@ -551,5 +588,3 @@ export function createFileSystemFilesPort(
     },
   }
 }
-
-export const filesPort: FilesPort = createFileSystemFilesPort()

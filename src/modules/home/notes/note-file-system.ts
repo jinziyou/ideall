@@ -1,4 +1,4 @@
-import { isFileRef, type DirectoryEntry, type IdeallFile } from "@protocol/file-system"
+import { isFileRef, sameFileRef, type DirectoryEntry, type IdeallFile } from "@protocol/file-system"
 import type { NoteMeta } from "@protocol/files"
 import type { NodeOfKind } from "@protocol/node"
 import { invokeFileAction, readFile } from "@/filesystem/registry"
@@ -13,6 +13,8 @@ import { noteText } from "@/files/note-text"
 const DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
 const CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
 const ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+
+export type FileNote = NoteMeta & { version: string | null }
 
 function noteEntry(entry: DirectoryEntry): boolean {
   const resource = resourceRefForFile(entry.target)
@@ -34,14 +36,17 @@ async function allNoteEntries(): Promise<DirectoryEntry[]> {
 }
 
 /** 通过目录投影枚举笔记；搜索视图按需读取正文，侧栏只读元数据。 */
-export async function listNoteFiles(includeText = false): Promise<NoteMeta[]> {
+export async function listNoteFiles(includeText = false): Promise<FileNote[]> {
   const entries = await allNoteEntries()
   return Promise.all(
     entries.map(async (entry) => {
       const properties = entry.properties
       let text = ""
+      let version =
+        entry.file && sameFileRef(entry.file.ref, entry.target) ? entry.file.version : undefined
       if (includeText) {
         const read = await readFile(entry.target, CONTENT_CONTEXT, { encoding: "json" })
+        version = read.version ?? version
         const node = read.data as Partial<NodeOfKind<"note">> | null
         if (node?.kind === "note" && Array.isArray(node.content)) text = noteText(node.content)
       }
@@ -56,6 +61,7 @@ export async function listNoteFiles(includeText = false): Promise<NoteMeta[]> {
         excerpt: text.slice(0, 160),
         search: text,
         hasChildren: properties?.hasChildren === true,
+        version: version ?? null,
       }
     }),
   )
@@ -80,24 +86,26 @@ export async function createNoteFile(parentId: string | null): Promise<IdeallFil
 }
 
 export function moveNoteFile(
-  id: string,
+  note: Pick<FileNote, "id" | "version">,
   parentId: string | null,
   afterSortKey?: string | null,
 ): Promise<unknown> {
   return invokeFileAction(
-    resourceFileRef({ scheme: "node", kind: "note", id }),
+    resourceFileRef({ scheme: "node", kind: "note", id: note.id }),
     "move",
     { parentId, ...(afterSortKey === undefined ? {} : { afterSortKey }) },
     ACTION_CONTEXT,
+    { expectedVersion: note.version },
   )
 }
 
-export function deleteNoteFile(id: string): Promise<unknown> {
+export function deleteNoteFile(note: Pick<FileNote, "id" | "version">): Promise<unknown> {
   return invokeFileAction(
-    resourceFileRef({ scheme: "node", kind: "note", id }),
+    resourceFileRef({ scheme: "node", kind: "note", id: note.id }),
     "delete",
     undefined,
     ACTION_CONTEXT,
+    { expectedVersion: note.version },
   )
 }
 

@@ -12,64 +12,27 @@ import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
-import type { FileRef } from "@protocol/file-system"
-import type { NodeOfKind } from "@protocol/node"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
-import { invokeFileAction, readFile, watchFile } from "@/filesystem/registry"
-import { readCompleteDirectory } from "@/filesystem/directory-walk"
-import { corePlaceRef } from "@/filesystem/resource-file-system"
+import { watchFile } from "@/filesystem/registry"
 import { undoableToast } from "@/lib/undo-toast"
 import { EmptyState } from "@/ui/empty-state"
+import {
+  SUBSCRIPTIONS_ROOT,
+  deleteSubscriptionFile,
+  readSubscriptions,
+  restoreSubscriptionFile,
+  type FileSubscription,
+} from "./subscription-file-system"
 
 /** 每个关注来源在关注流里展示的最新条数。 */
 const PER_SOURCE = 5
 /** 搜索关注本地过滤前先拉取的窗口大小 (服务端无关键词搜索, 故客户端在此窗口内按标题过滤)。 */
 const SEARCH_WINDOW = 200
 
-const SUBSCRIPTIONS_ROOT = corePlaceRef("subscriptions")
-const DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
-const CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
-const ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
 const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 
-type FileSubscription = Subscription & { fileRef: FileRef }
 type SourceFeed = { sub: FileSubscription; items: FeedItem[]; error: boolean }
 type Loaded = { tools: FileSubscription[]; feeds: SourceFeed[] }
-
-function subscriptionFromNode(node: NodeOfKind<"feed">, fileRef: FileRef): FileSubscription {
-  const content = node.content
-  return {
-    id: `${content.type}:${content.key}`,
-    type: content.type,
-    key: content.key,
-    title: node.title,
-    favicon: content.favicon,
-    createdAt: node.createdAt,
-    updatedAt: node.updatedAt,
-    ...(content.entityLabel === undefined ? {} : { entityLabel: content.entityLabel }),
-    ...(content.entityName === undefined ? {} : { entityName: content.entityName }),
-    ...(content.searchKeyword === undefined ? {} : { searchKeyword: content.searchKeyword }),
-    ...(content.searchDomain === undefined ? {} : { searchDomain: content.searchDomain }),
-    ...(node.deletedAt === undefined ? {} : { deletedAt: node.deletedAt }),
-    fileRef,
-  }
-}
-
-async function readSubscriptions(): Promise<FileSubscription[]> {
-  const entries = await readCompleteDirectory(SUBSCRIPTIONS_ROOT, DIRECTORY_CONTEXT)
-
-  const subscriptions = await Promise.all(
-    entries.map(async (entry): Promise<FileSubscription | null> => {
-      const result = await readFile(entry.target, CONTENT_CONTEXT, { encoding: "json" })
-      const node = result.data as NodeOfKind<"feed"> | null
-      if (node?.kind !== "feed") return null
-      return subscriptionFromNode(node, entry.target)
-    }),
-  )
-  return subscriptions
-    .filter((subscription): subscription is FileSubscription => subscription !== null)
-    .sort((left, right) => right.createdAt - left.createdAt)
-}
 
 /** 关注来源对应的内链。 */
 function sourceHref(sub: Subscription): string {
@@ -143,7 +106,7 @@ export default function SubscriptionFeed({
     if (pending.has(sub.id)) return // 防重: 同一项取消关注进行中不再触发
     setPending((p) => new Set(p).add(sub.id))
     try {
-      await invokeFileAction(sub.fileRef, "delete", undefined, ACTION_CONTEXT)
+      await deleteSubscriptionFile(sub)
       setState((prev) =>
         prev
           ? {
@@ -154,7 +117,7 @@ export default function SubscriptionFeed({
       )
       // 关注是长期积累的资产，误点可一键撤销；restore 清除软删标记并保留原创建时间。
       undoableToast(`已取消关注 ${sub.title}`, async () => {
-        await invokeFileAction(sub.fileRef, "restore", undefined, ACTION_CONTEXT)
+        await restoreSubscriptionFile(sub)
         await load()
       })
     } catch {

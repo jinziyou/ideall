@@ -62,6 +62,9 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
   const [renameOpen, setRenameOpen] = React.useState(false)
   const [tagsOpen, setTagsOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [renameVersion, setRenameVersion] = React.useState<string | null>()
+  const [tagsVersion, setTagsVersion] = React.useState<string | null>()
+  const [deleteVersion, setDeleteVersion] = React.useState<string | null>()
   const [draftSavedAt, setDraftSavedAt] = React.useState<number | null>(null)
   const restoredDraftRef = React.useRef<string | null>(null)
   const draftRef = React.useRef("")
@@ -84,6 +87,9 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     restoredDraftRef.current = null
     setMetaOverride({})
     setDraftSavedAt(null)
+    setRenameVersion(undefined)
+    setTagsVersion(undefined)
+    setDeleteVersion(undefined)
   }, [nodeId])
 
   React.useEffect(() => {
@@ -216,22 +222,23 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true })
   }, [active, editable, handleSave])
 
-  async function handleRename(nextName: string) {
+  async function handleRename(nextName: string, expectedVersion: string | null | undefined) {
     if (!file || nextName === displayName) return
-    await fileActions.rename(file.id, nextName)
+    await fileActions.rename(file.id, nextName, expectedVersion)
   }
 
-  async function handleTags(nextTagsText: string) {
+  async function handleTags(nextTagsText: string, expectedVersion: string | null | undefined) {
     if (!file) return
-    await fileActions.updateTags(file.id, nextTagsText)
+    await fileActions.updateTags(file.id, nextTagsText, expectedVersion)
   }
 
-  async function handleDelete() {
+  async function handleDelete(expectedVersion: string | null | undefined) {
     if (!file) return
     await fileActions.remove({
       id: file.id,
       name: displayName,
       file: displayFile ?? file,
+      expectedVersion,
       closeTab: true,
     })
   }
@@ -265,15 +272,24 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
         onModeChange={handleModeChange}
         onSave={() => void handleSave()}
         onDownload={(target) => void fileActions.download(target)}
-        onRename={() => setRenameOpen(true)}
-        onEditTags={() => setTagsOpen(true)}
-        onClearTags={() => void handleTags("")}
+        onRename={() => {
+          setRenameVersion(preview.version ?? null)
+          setRenameOpen(true)
+        }}
+        onEditTags={() => {
+          setTagsVersion(preview.version ?? null)
+          setTagsOpen(true)
+        }}
+        onClearTags={() => void handleTags("", preview.version ?? null)}
         onCopyName={() => void fileActions.copyName(displayName)}
         onCopyRef={() => {
           if (file) void fileActions.copyRef(file.id)
         }}
         onDiscardDraft={discardDraft}
-        onDelete={() => setDeleteOpen(true)}
+        onDelete={() => {
+          setDeleteVersion(preview.version ?? null)
+          setDeleteOpen(true)
+        }}
       />
 
       <div className="min-h-0 flex-1">
@@ -327,7 +343,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
             title="重命名文件"
             label="名称"
             defaultValue={displayName}
-            onSubmit={(value) => void handleRename(value)}
+            onSubmit={(value) => void handleRename(value, renameVersion)}
           />
           <TextPromptDialog
             open={tagsOpen}
@@ -337,7 +353,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
             defaultValue={displayTags.join(", ")}
             placeholder="用逗号分隔多个标签"
             confirmLabel="保存"
-            onSubmit={(value) => void handleTags(value)}
+            onSubmit={(value) => void handleTags(value, tagsVersion)}
           />
           <ConfirmDialog
             open={deleteOpen}
@@ -348,7 +364,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
             }
             confirmLabel="删除"
             destructive
-            onConfirm={() => void handleDelete()}
+            onConfirm={() => void handleDelete(deleteVersion)}
           />
         </>
       )}

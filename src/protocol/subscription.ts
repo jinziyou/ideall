@@ -1,7 +1,38 @@
 // 关注接口约定 —— 跨 app/core/plugin 的「发现来源关注」类型与去重键约定。
 // app 产生关注 (NewSubscription)，core 落地存储，plugin/core 读取。
 
-export type SubscriptionType = "publisher" | "entity" | "tool" | "search" | "peer"
+export const SUBSCRIPTION_TYPES = ["publisher", "entity", "tool", "search", "peer"] as const
+
+export type SubscriptionType = (typeof SUBSCRIPTION_TYPES)[number]
+
+export function isSubscriptionType(value: unknown): value is SubscriptionType {
+  return typeof value === "string" && (SUBSCRIPTION_TYPES as readonly string[]).includes(value)
+}
+
+/** 同步 wire 主键必须与 type/key 一一对应，避免同一关注被伪造 id 分裂成多条记录。 */
+export function hasCanonicalSubscriptionIdentity(value: {
+  id: string
+  type: SubscriptionType
+  key: string
+}): boolean {
+  return (
+    value.key.length > 0 &&
+    value.key.trim() === value.key &&
+    value.id === `${value.type}:${value.key}`
+  )
+}
+
+/** 可选元数据在解密/存储边界也需保持 wire 类型，避免脏值进入统一节点。 */
+export function hasValidSubscriptionMetadata(value: {
+  entityLabel?: unknown
+  entityName?: unknown
+  searchKeyword?: unknown
+  searchDomain?: unknown
+}): boolean {
+  return [value.entityLabel, value.entityName, value.searchKeyword, value.searchDomain].every(
+    (field) => field === undefined || typeof field === "string",
+  )
+}
 
 /**
  * 「发现」关注 —— home「我的」从 info / community / tool 关注的来源。

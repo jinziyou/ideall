@@ -1,5 +1,10 @@
 import type { FileRef, IdeallFile } from "@protocol/file-system"
-import type { FileAction, FileActionInputSchema, FileActionRisk } from "@/filesystem/types"
+import type {
+  FileAction,
+  FileActionInputSchema,
+  FileActionInvokeOptions,
+  FileActionRisk,
+} from "@/filesystem/types"
 
 export const ROOT_ACTION_INPUT = "$value"
 
@@ -188,6 +193,33 @@ export function capturePendingFileAction(
   input?: unknown,
 ): PendingFileAction {
   return { action, ref: file.ref, version: file.version, input }
+}
+
+export function fileActionInvokeOptions(version: IdeallFile["version"]): FileActionInvokeOptions {
+  return { expectedVersion: version ?? null }
+}
+
+export function isCommittedFileActionVersionSuperseded(
+  currentVersion: IdeallFile["version"],
+  committedVersion: string | undefined,
+  baseVersion: IdeallFile["version"],
+): boolean {
+  if (committedVersion === undefined) return currentVersion !== baseVersion
+  if (currentVersion === undefined || currentVersion === committedVersion) return false
+  const currentNumber = Number(currentVersion)
+  const committedNumber = Number(committedVersion)
+  if (Number.isFinite(currentNumber) && Number.isFinite(committedNumber)) {
+    return currentNumber > committedNumber
+  }
+  // Node 版本当前是十进制 updatedAt；若 provider 改成 opaque token，则只在仍停留于
+  // 本次 action 的基线时合并，避免用无法排序的迟到响应覆盖 watch 新状态。
+  return currentVersion !== baseVersion
+}
+
+export function pendingFileActionInvokeOptions(
+  pending: Pick<PendingFileAction, "version">,
+): FileActionInvokeOptions | undefined {
+  return fileActionInvokeOptions(pending.version)
 }
 
 export function isPendingFileActionCurrent(

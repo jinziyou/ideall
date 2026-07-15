@@ -38,6 +38,11 @@ function validateOrderKey(key: string): void {
   if (f.slice(-1) === ZERO) throw new Error("非法排序键 (小数部分以 0 结尾): " + key)
 }
 
+/** 在持久化边界校验已有排序键；损坏数据应显式失败，不能静默回退并制造重复键。 */
+export function assertValidSortKey(key: string): void {
+  validateOrderKey(key)
+}
+
 /** 小数部分的严格中点: 返回 m 使 a < m < b (b 为 null 表示无上界)。要求 a < b 且均不以 0 结尾。 */
 function midpoint(a: string, b: string | null): string {
   if (b !== null && a >= b) throw new Error(a + " >= " + b)

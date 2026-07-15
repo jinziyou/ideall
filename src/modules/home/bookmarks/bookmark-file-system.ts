@@ -1,13 +1,13 @@
 import type { Bookmark, BookmarkFolder, NewBookmark } from "@protocol/files"
 import type { NodeOfKind } from "@protocol/node"
-import { isFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
+import { isFileRef, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import { corePlaceRef } from "@/filesystem/resource-file-system"
 import { walkFileDirectory } from "@/filesystem/directory-walk"
 import { invokeFileAction, readFile } from "@/filesystem/registry"
 import type { FileSystemAccessContext } from "@/filesystem/types"
 
-export type FileBookmark = Bookmark & { ref: FileRef }
-export type FileBookmarkFolder = BookmarkFolder & { ref: FileRef }
+export type FileBookmark = Bookmark & { ref: FileRef; version: string | null }
+export type FileBookmarkFolder = BookmarkFolder & { ref: FileRef; version: string | null }
 
 const BOOKMARKS_ROOT = corePlaceRef("bookmarks")
 const READ_CONTEXT = {
@@ -79,14 +79,20 @@ export async function listBookmarkFiles(): Promise<{
   const loaded = await Promise.all(
     entries
       .filter((entry) => ["folder", "bookmark"].includes(String(entry.properties?.resourceKind)))
-      .map(async (entry) => ({
-        entry,
-        data: (await readFile(entry.target, READ_CONTEXT, { encoding: "json" })).data,
-      })),
+      .map(async (entry) => {
+        const result = await readFile(entry.target, READ_CONTEXT, { encoding: "json" })
+        const snapshotVersion =
+          entry.file && sameFileRef(entry.file.ref, entry.target) ? entry.file.version : undefined
+        return {
+          entry,
+          data: result.data,
+          version: result.version ?? snapshotVersion ?? null,
+        }
+      }),
   )
   const folders: FileBookmarkFolder[] = []
   const bookmarks: FileBookmark[] = []
-  for (const { entry, data } of loaded) {
+  for (const { entry, data, version } of loaded) {
     const folder = folderNode(data)
     if (folder) {
       folders.push({
@@ -94,6 +100,7 @@ export async function listBookmarkFiles(): Promise<{
         name: folder.title,
         createdAt: folder.createdAt,
         ref: entry.target,
+        version,
       })
       continue
     }
@@ -109,6 +116,7 @@ export async function listBookmarkFiles(): Promise<{
       tags: bookmark.tags,
       createdAt: bookmark.createdAt,
       ref: entry.target,
+      version,
     })
   }
   folders.sort((left, right) => left.createdAt - right.createdAt)
@@ -125,20 +133,31 @@ export async function createBookmarkFolder(name: string): Promise<FileBookmarkFo
       ACTION_CONTEXT,
     ),
   )
-  const data = folderNode((await readFile(file.ref, READ_CONTEXT, { encoding: "json" })).data)
+  const result = await readFile(file.ref, READ_CONTEXT, { encoding: "json" })
+  const data = folderNode(result.data)
   if (!data) throw new Error("文件系统返回了无效的收藏夹")
-  return { id: data.id, name: data.title, createdAt: data.createdAt, ref: file.ref }
+  return {
+    id: data.id,
+    name: data.title,
+    createdAt: data.createdAt,
+    ref: file.ref,
+    version: result.version ?? file.version ?? null,
+  }
 }
 
 export async function renameBookmarkFolder(
   folder: FileBookmarkFolder,
   name: string,
 ): Promise<void> {
-  await invokeFileAction(folder.ref, "edit", { title: name }, ACTION_CONTEXT)
+  await invokeFileAction(folder.ref, "edit", { title: name }, ACTION_CONTEXT, {
+    expectedVersion: folder.version,
+  })
 }
 
 export async function deleteBookmarkFolder(folder: FileBookmarkFolder): Promise<void> {
-  await invokeFileAction(folder.ref, "delete", undefined, ACTION_CONTEXT)
+  await invokeFileAction(folder.ref, "delete", undefined, ACTION_CONTEXT, {
+    expectedVersion: folder.version,
+  })
 }
 
 export async function createBookmarkFile(
@@ -167,13 +186,13 @@ export async function updateBookmarkFile(
   patch: Omit<NewBookmark, "folderId"> & { folder: FileBookmarkFolder | null },
 ): Promise<void> {
   const parentId = patch.folder?.id ?? null
-  if (bookmark.folderId !== parentId) {
-    await invokeFileAction(bookmark.ref, "move", { parentId }, ACTION_CONTEXT)
-  }
+  // Resource Node 的 edit 可在同一 Storage 事务内同时更新 parent 与字段；避免
+  // move 已提交、后续 edit 冲突时留下半完成的用户操作。
   await invokeFileAction(
     bookmark.ref,
     "edit",
     {
+      ...(bookmark.folderId === parentId ? {} : { parentId }),
       title: patch.title,
       tags: patch.tags ?? [],
       content: {
@@ -183,6 +202,7 @@ export async function updateBookmarkFile(
       },
     },
     ACTION_CONTEXT,
+    { expectedVersion: bookmark.version },
   )
 }
 
@@ -190,11 +210,15 @@ export async function moveBookmarkFile(
   bookmark: FileBookmark,
   folder: FileBookmarkFolder | null,
 ): Promise<void> {
-  await invokeFileAction(bookmark.ref, "move", { parentId: folder?.id ?? null }, ACTION_CONTEXT)
+  await invokeFileAction(bookmark.ref, "move", { parentId: folder?.id ?? null }, ACTION_CONTEXT, {
+    expectedVersion: bookmark.version,
+  })
 }
 
 export async function deleteBookmarkFile(bookmark: FileBookmark): Promise<void> {
-  await invokeFileAction(bookmark.ref, "delete", undefined, ACTION_CONTEXT)
+  await invokeFileAction(bookmark.ref, "delete", undefined, ACTION_CONTEXT, {
+    expectedVersion: bookmark.version,
+  })
 }
 
 export async function restoreBookmarkFile(bookmark: FileBookmark): Promise<void> {

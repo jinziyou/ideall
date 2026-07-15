@@ -3,10 +3,13 @@ import { test } from "node:test"
 import type { FileAction } from "@/filesystem/types"
 import {
   capturePendingFileAction,
+  fileActionInvokeOptions,
   fileActionRisk,
   initialFileActionDraft,
+  isCommittedFileActionVersionSuperseded,
   isPendingFileActionCurrent,
   parseFileActionInput,
+  pendingFileActionInvokeOptions,
 } from "./file-action-form"
 
 test("file action form: coerces and validates a declared object schema", () => {
@@ -63,6 +66,26 @@ test("file action form: pending target includes ref and version", () => {
     version: "1",
   }
   const pending = capturePendingFileAction(action, first)
+  assert.deepEqual(pendingFileActionInvokeOptions(pending), { expectedVersion: "1" })
+  assert.deepEqual(fileActionInvokeOptions("2"), { expectedVersion: "2" })
+  assert.deepEqual(fileActionInvokeOptions(undefined), { expectedVersion: null })
+  assert.equal(isCommittedFileActionVersionSuperseded("3", "2", "1"), true)
+  assert.equal(isCommittedFileActionVersionSuperseded("2", "2", "1"), false)
+  assert.equal(
+    isCommittedFileActionVersionSuperseded("opaque-next", "opaque-commit", "opaque-base"),
+    true,
+  )
+  assert.equal(
+    isCommittedFileActionVersionSuperseded("opaque-base", "opaque-commit", "opaque-base"),
+    false,
+  )
+  assert.deepEqual(
+    pendingFileActionInvokeOptions({
+      ...pending,
+      version: undefined,
+    }),
+    { expectedVersion: null },
+  )
   assert.equal(isPendingFileActionCurrent(pending, first), true)
   assert.equal(
     isPendingFileActionCurrent(pending, {

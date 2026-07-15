@@ -53,9 +53,18 @@ export type ResourceSourceAccessContext = {
   permissions: readonly string[]
   activeRef?: ResourceRef
   intent?: "metadata" | "content" | "blob" | "action"
+  /** mutation 的乐观并发基线；null 表示仅接受无版本资源。 */
+  expectedVersion?: string | null
 }
 
 export type WatchHandle = { dispose: () => void }
+
+/**
+ * source 可得时携带实际变化资源；省略 ref 表示旧事件或批量变更，只能保守使查询失效。
+ */
+export type ResourceWatchEvent = {
+  ref?: ResourceRef
+}
 
 export type ResourceSourceProvider = {
   scheme: ResourceScheme
@@ -77,7 +86,7 @@ export type ResourceSourceProvider = {
   watch?(
     query: ResourceQuery,
     ctx: ResourceSourceAccessContext,
-    notify: () => void,
+    notify: (event?: ResourceWatchEvent) => void,
   ): WatchHandle | null
 }
 
@@ -87,6 +96,7 @@ export type ResourceSourceErrorCode =
   | "consent-required"
   | "offline"
   | "unsupported"
+  | "conflict"
 
 export class ResourceSourceError extends Error {
   code: ResourceSourceErrorCode

@@ -8,6 +8,7 @@ import type {
   ResourceRecord,
   ResourceSourceAccessContext,
   ResourceSourceProvider,
+  ResourceWatchEvent,
   WatchHandle,
 } from "./types"
 import { ResourceSourceError } from "./types"
@@ -160,7 +161,7 @@ export async function invokeResourceAction(
 export function watchResources(
   query: ResourceQuery,
   ctx: ResourceSourceAccessContext,
-  notify: () => void,
+  notify: (event?: ResourceWatchEvent) => void,
 ): WatchHandle | null {
   return providerForScheme(query.scheme).watch?.(query, ctx, notify) ?? null
 }

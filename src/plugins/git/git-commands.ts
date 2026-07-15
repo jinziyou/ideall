@@ -5,6 +5,11 @@ export type GitStatusFile = {
   path: string
 }
 
+export type GitSnapshotRef = {
+  refname: string
+  objectname: string
+}
+
 export type GitSnapshot = {
   repoPath: string
   branch: string
@@ -12,6 +17,7 @@ export type GitSnapshot = {
   files: GitStatusFile[]
   log: string[]
   remotes: string[]
+  refs: GitSnapshotRef[]
   diffStat: string
   statusRaw: string
 }
@@ -75,6 +81,30 @@ export function parseGitStatus(raw: string): Pick<GitSnapshot, "branch" | "upstr
   }
 }
 
+/** Parse and canonicalize the refs that Git mutations may change. */
+export function parseGitSnapshotRefs(raw: string): GitSnapshotRef[] {
+  const refs = raw
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      const separator = line.indexOf("\t")
+      const refname = separator === -1 ? "" : line.slice(0, separator)
+      const objectname = separator === -1 ? "" : line.slice(separator + 1)
+      if (
+        !/^(?:refs\/heads|refs\/remotes|refs\/tags)\//.test(refname) ||
+        !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(objectname)
+      ) {
+        throw new Error("git refs output is malformed")
+      }
+      return { refname, objectname }
+    })
+  return refs.sort((left, right) => {
+    if (left.refname !== right.refname) return left.refname < right.refname ? -1 : 1
+    if (left.objectname === right.objectname) return 0
+    return left.objectname < right.objectname ? -1 : 1
+  })
+}
+
 export function ensureGitRepoPath(repoPath: string): string {
   const next = repoPath.trim()
   if (!next) throw new Error("需要仓库路径")
@@ -96,17 +126,29 @@ export async function loadGitSnapshot(repoPath: string): Promise<GitSnapshot> {
   if (status.code !== 0) {
     throw new Error(status.stderr || status.stdout || "git status failed")
   }
-  const [log, remotes, diff] = await Promise.all([
+  const [log, remotes, refs, diff] = await Promise.all([
     runGit(path, ["log", "--oneline", "--decorate", "-n", "12"]),
     runGit(path, ["remote", "-v"]),
+    runGit(path, [
+      "for-each-ref",
+      "--sort=refname",
+      "--format=%(refname)%09%(objectname)",
+      "refs/heads",
+      "refs/remotes",
+      "refs/tags",
+    ]),
     runGit(path, ["diff", "--stat"]),
   ])
+  if (refs.code !== 0) {
+    throw new Error(refs.stderr || refs.stdout || "git refs failed")
+  }
   const parsed = parseGitStatus(status.stdout)
   return {
     repoPath: path,
     ...parsed,
     log: (log.stdout || log.stderr).split(/\r?\n/).filter(Boolean),
     remotes: (remotes.stdout || remotes.stderr).split(/\r?\n/).filter(Boolean),
+    refs: parseGitSnapshotRefs(refs.stdout),
     diffStat: diff.stdout || diff.stderr,
     statusRaw: status.stdout,
   }

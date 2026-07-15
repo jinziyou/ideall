@@ -54,6 +54,11 @@ export type FileReadManyOptions = FileReadOptions & {
   concurrency?: number
 }
 
+export type FileStatManyOptions = {
+  /** fallback 与需要逐项访问的 provider 的最大并发数；必须是有限正整数。 */
+  concurrency?: number
+}
+
 export type FileReadResult<T = unknown> = {
   data: T
   mediaType: string
@@ -67,6 +72,11 @@ export type FileWriteInput<T = unknown> = {
   /** 缺省表示不做并发前置条件；null 表示仅当目标尚无版本时写入。 */
   expectedVersion?: string | null
 }
+
+export type FileActionInvokeOptions = Readonly<{
+  /** 缺省表示不做并发前置条件；null 表示仅当目标尚无版本时执行。 */
+  expectedVersion?: string | null
+}>
 
 export type FileActionRisk = "safe" | "caution" | "destructive"
 
@@ -199,6 +209,15 @@ export type FileSystemDescriptor = {
 export type FileSystemProvider = {
   descriptor: FileSystemDescriptor
   stat(ref: FileRef, ctx: FileSystemAccessContext): Promise<IdeallFile | null>
+  /**
+   * 可选批量 metadata。结果必须与 refs 一一对应、保持输入顺序且非 null 项的 ref 必须
+   * 等于对应输入；只有目标不存在用 null 表示，其余错误继续抛出。
+   */
+  statMany?(
+    refs: readonly FileRef[],
+    ctx: FileSystemAccessContext,
+    options?: FileStatManyOptions,
+  ): Promise<Array<IdeallFile | null>>
   readDirectory(
     ref: FileRef,
     ctx: FileSystemAccessContext,
@@ -225,6 +244,7 @@ export type FileSystemProvider = {
     action: string,
     input: unknown,
     ctx: FileSystemAccessContext,
+    options?: FileActionInvokeOptions,
   ): Promise<unknown>
   watch?(
     ref: FileRef,

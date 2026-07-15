@@ -6,7 +6,7 @@ import { corePlaceRef, resourceRefForFile } from "@/filesystem/resource-file-sys
 import { FileSystemError } from "@/filesystem/types"
 import { mapConcurrentOrdered } from "@/lib/map-concurrent-ordered"
 
-export type ManagedFile = FileMeta & { ref: FileRef }
+export type ManagedFile = FileMeta & { ref: FileRef; version: string | null }
 
 export type ManagedFilesGateway = Pick<FileSystemRegistry, "readDirectory" | "stat">
 
@@ -48,6 +48,7 @@ function managedFile(ref: FileRef, file: IdeallFile): ManagedFile | null {
     size: file.size ?? 0,
     createdAt: file.createdAt ?? 0,
     tags: Array.isArray(tags) && tags.every((tag) => typeof tag === "string") ? [...tags] : [],
+    version: file.version ?? null,
   }
 }
 

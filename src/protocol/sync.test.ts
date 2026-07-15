@@ -63,6 +63,29 @@ test("recordsEqual: 顺序无关相等 / 字段变 / 长度变", () => {
   assert.equal(recordsEqual(a, [sub("1", "X", 1)]), false)
 })
 
+test("recordsEqual: 对象字段插入顺序不影响结构等价，数组顺序仍参与比较", () => {
+  const left = [
+    {
+      id: "nested",
+      createdAt: 1,
+      updatedAt: 2,
+      payload: { z: 1, a: { second: true, first: false } },
+      items: ["a", "b"],
+    },
+  ]
+  const reordered = [
+    {
+      items: ["a", "b"],
+      payload: { a: { first: false, second: true }, z: 1 },
+      updatedAt: 2,
+      createdAt: 1,
+      id: "nested",
+    },
+  ]
+  assert.equal(recordsEqual(left, reordered), true)
+  assert.equal(recordsEqual(left, [{ ...reordered[0], items: ["b", "a"] }]), false)
+})
+
 // ── 删除标记 (tombstone) 删除传播 / 恢复 (Low-6) ────────────────────────────────────────
 
 test("unionMerge: 删除较新 → 删除标记胜 (删除跨端收敛, 不被对端活跃副本恢复)", () => {

@@ -20,7 +20,7 @@ import { pluginDataFilename } from "@/plugins/shared/plugin-data"
 import { Button } from "@/ui/button"
 import { EmptyState } from "@/ui/empty-state"
 import { Input } from "@/ui/input"
-import { DATABASE_ACTIONS, DATABASE_ROOT_REF } from "./database-file-system"
+import { DATABASE_ACTIONS, DATABASE_ROOT_REF, databaseRowRef } from "./database-file-system"
 
 type DataTable = {
   ref: FileRef
@@ -29,6 +29,7 @@ type DataTable = {
   columns: string[]
   createdAt: number
   updatedAt: number
+  version: string | null
 }
 
 type DataRow = {
@@ -60,6 +61,7 @@ function tableFromEntry(entry: DirectoryEntry): DataTable | null {
     columns,
     createdAt: typeof properties?.createdAt === "number" ? properties.createdAt : 0,
     updatedAt: typeof properties?.updatedAt === "number" ? properties.updatedAt : 0,
+    version: entry.file?.version ?? null,
   }
 }
 
@@ -148,7 +150,14 @@ export default function DatabasePage({
     const table = tables.find((item) => item.id === activeId)
     if (!table) return
     readFile(table.ref, CONTENT_CONTEXT).then((result) => {
-      if (alive) setRows(rowsFromReadData(result.data))
+      if (!alive) return
+      setRows(rowsFromReadData(result.data))
+      const version = result.version ?? null
+      setTables((current) => {
+        const latest = current.find((item) => item.id === table.id)
+        if (!latest || latest.version === version) return current
+        return current.map((item) => (item.id === table.id ? { ...item, version } : item))
+      })
     })
     return () => {
       alive = false
@@ -180,6 +189,11 @@ export default function DatabasePage({
     if (!activeTable) return
     const result = await readFile(activeTable.ref, CONTENT_CONTEXT)
     setRows(rowsFromReadData(result.data))
+    setTables((current) =>
+      current.map((table) =>
+        table.id === activeTable.id ? { ...table, version: result.version ?? null } : table,
+      ),
+    )
   }
 
   const handleCreateTable = async () => {
@@ -212,6 +226,7 @@ export default function DatabasePage({
         DATABASE_ACTIONS.deleteTable,
         undefined,
         ACTION_CONTEXT,
+        { expectedVersion: activeTable.version },
       )
       setRows([])
       await reloadTables(null)
@@ -242,10 +257,16 @@ export default function DatabasePage({
     }
   }
 
-  const handleDeleteRow = async (id: string) => {
+  const handleDeleteRow = async (row: DataRow) => {
     if (!activeTable) return
     try {
-      await invokeFileAction(activeTable.ref, DATABASE_ACTIONS.deleteRow, { id }, ACTION_CONTEXT)
+      await invokeFileAction(
+        databaseRowRef(activeTable.id, row.id),
+        DATABASE_ACTIONS.deleteRow,
+        undefined,
+        ACTION_CONTEXT,
+        { expectedVersion: String(row.updatedAt) },
+      )
       await reloadRows()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "删除失败")
@@ -516,7 +537,7 @@ export default function DatabasePage({
                               <button
                                 type="button"
                                 aria-label="删除行"
-                                onClick={() => void handleDeleteRow(row.id)}
+                                onClick={() => void handleDeleteRow(row)}
                               >
                                 <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                               </button>

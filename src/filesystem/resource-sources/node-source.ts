@@ -11,18 +11,26 @@ import { onFilesUpdated } from "@protocol/flowback"
 import {
   createNode,
   deleteNode,
+  getNodeForMutation,
   getNodeRaw,
   getNodesRaw,
+  getThreadMetadataMany,
   listNodeSummaries,
   moveNode,
   readBlob,
   readBlobBase64,
-  restoreNode,
+  restoreNodeWithResult,
   updateNode,
   ALL_NODE_KINDS,
   type NodeSummary,
 } from "@/files/stores/nodes-store"
-import { addFile, updateFileContent } from "@/files/stores/files-store"
+import {
+  NodeMutationConflictError,
+  nodeMutationExpectation,
+  type NodeMutationExpectation,
+} from "@/files/stores/node-mutation"
+import type { TrashMutationExpectation } from "@/files/stores/trash-store"
+import { addFileWithNode, updateFileContent } from "@/files/stores/files-store"
 import type {
   ResourceAction,
   ResourceActionId,
@@ -37,35 +45,56 @@ import { matchesResourceText, paginateResourceMeta } from "./query-utils"
 export type NodeResourceSourceDeps = {
   listNodeSummaries: (kinds: NodeKind[]) => Promise<NodeSummary[]>
   getNodeRaw: (id: string) => Promise<Node | undefined>
+  /** mutation 专用 fresh read，包含 tombstone。 */
+  getNodeForMutation: (id: string) => Promise<Node | undefined>
   getNodesRaw: (ids: readonly string[]) => Promise<Array<Node | undefined>>
+  /** metadata intent 的 thread 快速路径；不得读取/克隆 messages。 */
+  getThreadMetadataMany?: (ids: readonly string[]) => Promise<Array<Node | undefined>>
   createNode: (input: FsCreateInput) => Promise<Node>
-  createFile: typeof addFile
-  updateNode: (kind: NodeKind, id: string, patch: FsWritePatch) => Promise<Node | undefined>
+  createFile: typeof addFileWithNode
+  updateNode: (
+    kind: NodeKind,
+    id: string,
+    patch: FsWritePatch,
+    expected?: NodeMutationExpectation,
+  ) => Promise<Node | undefined>
   moveNode: (
     kind: NodeKind,
     id: string,
     parentId: string | null,
     afterSortKey?: string | null,
+    expected?: NodeMutationExpectation,
   ) => Promise<Node | undefined>
-  deleteNode: (kind: NodeKind, id: string) => Promise<void>
-  restoreNode: (kind: NodeKind, id: string) => Promise<void>
+  deleteNode: (kind: NodeKind, id: string, expected?: NodeMutationExpectation) => Promise<boolean>
+  restoreNodeWithResult: (
+    kind: NodeKind,
+    id: string,
+    expected?: TrashMutationExpectation,
+  ) => Promise<Node | undefined>
   readBlob: (id: string) => Promise<Blob | undefined>
   readBlobBase64: (
     id: string,
   ) => Promise<{ mime: string; size: number; base64: string } | undefined>
-  updateFileContent: (id: string, content: string, mime?: string) => Promise<unknown | undefined>
+  updateFileContent: (
+    id: string,
+    content: string,
+    mime?: string,
+    expected?: NodeMutationExpectation,
+  ) => Promise<Node | undefined>
 }
 
 const defaultDeps: NodeResourceSourceDeps = {
   listNodeSummaries,
   getNodeRaw,
+  getNodeForMutation,
   getNodesRaw,
+  getThreadMetadataMany,
   createNode,
-  createFile: addFile,
+  createFile: addFileWithNode,
   updateNode,
   moveNode,
   deleteNode,
-  restoreNode,
+  restoreNodeWithResult,
   readBlob,
   readBlobBase64,
   updateFileContent,
@@ -170,9 +199,18 @@ function summaryMeta(summary: NodeSummary, byId: Map<string, NodeSummary>): Reso
 
 function nodeMeta(node: Node): ResourceMeta {
   const ref = nodeRef(node.kind, node.id)
+  const parent =
+    node.parentId == null
+      ? undefined
+      : node.kind === "note"
+        ? nodeRef("note", node.parentId)
+        : node.kind === "bookmark"
+          ? nodeRef("folder", node.parentId)
+          : undefined
   return {
     ref,
     title: node.title || "Untitled",
+    ...(parent ? { parent } : {}),
     sortKey: node.sortKey,
     updatedAt: node.updatedAt,
     iconHint: node.kind === "file" ? node.blobRef.mime : node.kind,
@@ -258,14 +296,41 @@ async function requireNode(deps: NodeResourceSourceDeps, ref: NodeResourceRef): 
   return node
 }
 
+function mutationExpectation(
+  node: Node,
+  expectedVersion: ResourceSourceAccessContext["expectedVersion"],
+): NodeMutationExpectation {
+  const expected = nodeMutationExpectation(node)
+  if (expectedVersion !== undefined && expectedVersion !== String(expected.updatedAt)) {
+    throw new ResourceSourceError(
+      "conflict",
+      `Node version changed (expected ${expectedVersion ?? "no version"}, current ${expected.updatedAt})`,
+    )
+  }
+  return expected
+}
+
+async function runNodeMutation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    if (error instanceof NodeMutationConflictError) {
+      throw new ResourceSourceError("conflict", error.message)
+    }
+    throw error
+  }
+}
+
 function readableNodeRecord(
   node: Node,
   ref: NodeResourceRef,
   ctx: ResourceSourceAccessContext,
 ): ResourceRecord {
   const meta = nodeMeta(node)
+  // metadata 永远只返回净化后的 Node；即使 UI 拥有正文权限，stat/statMany 也不能把
+  // note 内容或 thread messages 带入 metadata batch 的中间结果。
+  if (ctx.intent === "metadata") return { meta, content: stripNode(node) }
   if (isPrivateKind(node.kind) && !canReadPrivateContent(ref, ctx)) {
-    if (ctx.intent === "metadata") return { meta, content: stripNode(node) }
     throw new ResourceSourceError(
       "consent-required",
       "Reading note/thread content requires consent",
@@ -336,11 +401,10 @@ export function createNodeResourceSource(
         ) {
           throw new ResourceSourceError("unsupported", "file tags must be strings")
         }
-        const created = await deps.createFile(
+        const node = await deps.createFile(
           raw.file as File,
           (raw.tags as string[] | undefined) ?? [],
         )
-        const node = await requireNode(deps, nodeRef("file", created.id))
         return { meta: nodeMeta(node), content: stripNode(node) }
       }
       const value = createInput(input)
@@ -362,13 +426,50 @@ export function createNodeResourceSource(
     async get(ref, ctx): Promise<ResourceRecord | null> {
       const nodeRefValue = asNodeRef(ref)
       assertCanReadMetadata(ctx)
-      const node = await requireNode(deps, nodeRefValue)
+      const useThreadMetadata =
+        ctx.intent === "metadata" &&
+        nodeRefValue.kind === "thread" &&
+        deps.getThreadMetadataMany != null
+      const node = useThreadMetadata
+        ? (await deps.getThreadMetadataMany!([nodeRefValue.id]))[0]
+        : await requireNode(deps, nodeRefValue)
+      if (!node) {
+        throw new ResourceSourceError("not-found", `Node not found: ${resourceKey(nodeRefValue)}`)
+      }
+      if (node.kind !== nodeRefValue.kind || node.deletedAt != null) {
+        throw new ResourceSourceError("not-found", `Node not found: ${resourceKey(nodeRefValue)}`)
+      }
       return readableNodeRecord(node, nodeRefValue, ctx)
     },
     async getMany(refs, ctx): Promise<Array<ResourceRecord | null>> {
       assertCanReadMetadata(ctx)
       const nodeRefs = refs.map(asNodeRef)
-      const nodes = await deps.getNodesRaw(nodeRefs.map((ref) => ref.id))
+      let nodes: Array<Node | undefined>
+      if (ctx.intent === "metadata" && deps.getThreadMetadataMany) {
+        nodes = new Array<Node | undefined>(nodeRefs.length)
+        const threadIndexes: number[] = []
+        const otherIndexes: number[] = []
+        nodeRefs.forEach((ref, index) => {
+          if (ref.kind === "thread") threadIndexes.push(index)
+          else otherIndexes.push(index)
+        })
+        const [threadNodes, otherNodes] = await Promise.all([
+          threadIndexes.length
+            ? deps.getThreadMetadataMany(threadIndexes.map((index) => nodeRefs[index]!.id))
+            : Promise.resolve([]),
+          otherIndexes.length
+            ? deps.getNodesRaw(otherIndexes.map((index) => nodeRefs[index]!.id))
+            : Promise.resolve([]),
+        ])
+        threadIndexes.forEach((targetIndex, index) => {
+          nodes[targetIndex] = threadNodes[index]
+        })
+        otherIndexes.forEach((targetIndex, index) => {
+          nodes[targetIndex] = otherNodes[index]
+        })
+      } else {
+        nodes = await deps.getNodesRaw(nodeRefs.map((ref) => ref.id))
+      }
       if (nodes.length !== nodeRefs.length) {
         throw new ResourceSourceError(
           "unsupported",
@@ -454,71 +555,115 @@ export function createNodeResourceSource(
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new ResourceSourceError("permission-denied", "Missing write permission")
           }
-          await requireNode(deps, nodeRefValue)
+          const current = await requireNode(deps, nodeRefValue)
+          const expected = mutationExpectation(current, ctx.expectedVersion)
           const inputValue = blobWriteInput(input)
-          const updated = await deps.updateFileContent(
-            nodeRefValue.id,
-            inputValue.content,
-            inputValue.mime,
+          const updated = await runNodeMutation(() =>
+            deps.updateFileContent(nodeRefValue.id, inputValue.content, inputValue.mime, expected),
           )
           if (!updated) {
             throw new ResourceSourceError(
-              "not-found",
-              `Node not found: ${resourceKey(nodeRefValue)}`,
+              "conflict",
+              `Node changed before blob write: ${resourceKey(nodeRefValue)}`,
             )
           }
-          const node = await requireNode(deps, nodeRefValue)
-          return { meta: nodeMeta(node), content: stripNode(node) }
+          return { meta: nodeMeta(updated), content: stripNode(updated) }
         }
         case "edit": {
+          if (nodeRefValue.kind === "feed") {
+            throw new ResourceSourceError("unsupported", "Feed nodes are managed by follow actions")
+          }
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new ResourceSourceError("permission-denied", "Missing write permission")
           }
-          await requireNode(deps, nodeRefValue)
-          const updated = await deps.updateNode(
-            nodeRefValue.kind,
-            nodeRefValue.id,
-            writePatch(input),
+          const current = await requireNode(deps, nodeRefValue)
+          const expected = mutationExpectation(current, ctx.expectedVersion)
+          const updated = await runNodeMutation(() =>
+            deps.updateNode(nodeRefValue.kind, nodeRefValue.id, writePatch(input), expected),
           )
           if (!updated)
             throw new ResourceSourceError(
-              "not-found",
-              `Node not found: ${resourceKey(nodeRefValue)}`,
+              "conflict",
+              `Node changed before edit: ${resourceKey(nodeRefValue)}`,
             )
           return { meta: nodeMeta(updated), content: updated }
         }
         case "move": {
+          if (
+            nodeRefValue.kind !== "note" &&
+            nodeRefValue.kind !== "bookmark" &&
+            nodeRefValue.kind !== "folder"
+          ) {
+            throw new ResourceSourceError(
+              "unsupported",
+              `Node kind cannot be moved: ${nodeRefValue.kind}`,
+            )
+          }
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new ResourceSourceError("permission-denied", "Missing write permission")
           }
-          await requireNode(deps, nodeRefValue)
+          const current = await requireNode(deps, nodeRefValue)
+          const expected = mutationExpectation(current, ctx.expectedVersion)
           const move = moveInput(input)
-          const updated = await deps.moveNode(
-            nodeRefValue.kind,
-            nodeRefValue.id,
-            move.parentId,
-            move.afterSortKey,
+          const updated = await runNodeMutation(() =>
+            deps.moveNode(
+              nodeRefValue.kind,
+              nodeRefValue.id,
+              move.parentId,
+              move.afterSortKey,
+              expected,
+            ),
           )
           if (!updated)
             throw new ResourceSourceError(
-              "not-found",
-              `Node not found: ${resourceKey(nodeRefValue)}`,
+              "conflict",
+              `Node changed before move: ${resourceKey(nodeRefValue)}`,
             )
           return { meta: nodeMeta(updated), content: updated }
         }
-        case "delete":
+        case "delete": {
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new ResourceSourceError("permission-denied", "Missing write permission")
           }
-          await requireNode(deps, nodeRefValue)
-          await deps.deleteNode(nodeRefValue.kind, nodeRefValue.id)
+          const current = await requireNode(deps, nodeRefValue)
+          const expected = mutationExpectation(current, ctx.expectedVersion)
+          const deleted = await runNodeMutation(() =>
+            deps.deleteNode(nodeRefValue.kind, nodeRefValue.id, expected),
+          )
+          if (!deleted) {
+            throw new ResourceSourceError(
+              "conflict",
+              `Node changed before delete: ${resourceKey(nodeRefValue)}`,
+            )
+          }
           return { ref: nodeRefValue, deleted: true }
+        }
         case "restore": {
           if (!canWriteKind(nodeRefValue.kind, ctx)) {
             throw new ResourceSourceError("permission-denied", "Missing write permission")
           }
-          await deps.restoreNode(nodeRefValue.kind, nodeRefValue.id)
-          const restored = await requireNode(deps, nodeRefValue)
+          const current = await deps.getNodeForMutation(nodeRefValue.id)
+          if (!current || current.kind !== nodeRefValue.kind || current.deletedAt == null) {
+            throw new ResourceSourceError(
+              "not-found",
+              `Deleted node not found: ${resourceKey(nodeRefValue)}`,
+            )
+          }
+          const expectedNode = mutationExpectation(current, ctx.expectedVersion)
+          const expected: TrashMutationExpectation = {
+            kind: expectedNode.kind,
+            updatedAt: expectedNode.updatedAt,
+            deletedAt: current.deletedAt,
+          }
+          const restored = await runNodeMutation(() =>
+            deps.restoreNodeWithResult(nodeRefValue.kind, nodeRefValue.id, expected),
+          )
+          if (!restored) {
+            throw new ResourceSourceError(
+              "conflict",
+              `Deleted node changed before restore: ${resourceKey(nodeRefValue)}`,
+            )
+          }
           return { meta: nodeMeta(restored), content: restored }
         }
         case "save-to-mine":
@@ -540,7 +685,7 @@ export function createNodeResourceSource(
         }
         if (!isNodeKind(detail.kind) || !kinds.includes(detail.kind)) return
         if (watchedId && detail.id && detail.id !== watchedId) return
-        notify()
+        notify(detail.id ? { ref: nodeRef(detail.kind, detail.id) } : undefined)
       })
       return { dispose }
     },

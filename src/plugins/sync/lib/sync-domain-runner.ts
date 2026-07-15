@@ -14,7 +14,8 @@ export type DomainSyncConfig<T extends SyncRecord> = {
   listLocal: () => Promise<T[]>
   merge: (accumulated: T[], remote: T[]) => T[]
   gc: (merged: T[], now: number) => T[]
-  bulkPut: (items: T[]) => Promise<void>
+  /** CAS 落地并返回 Storage 规范化后的实际提交快照。 */
+  bulkPut: (items: T[], expectedLocal: T[]) => Promise<T[]>
   isValidRemote: (item: unknown, now: number) => item is T
 }
 
@@ -23,19 +24,22 @@ export type DomainSyncContext<T extends SyncRecord> = {
   storageId: string
   key: CryptoKey
   now: number
+  /** 同步开始时的统计基线；重试期间保持不变。 */
   localAll: T[]
+  /** Storage 当前应有的快照；每次成功 bulkPut 后推进，供下一次 CAS。 */
+  localSnapshot: T[]
   merged: T[]
   attempt: number
 }
 
 export type PrepareResult<T extends SyncRecord> = Pick<
   DomainSyncContext<T>,
-  "storageId" | "key" | "now" | "localAll" | "merged"
+  "storageId" | "key" | "now" | "localAll" | "localSnapshot" | "merged"
 >
 
 export type AttemptOutcome<T extends SyncRecord = SyncRecord> =
   | { type: "complete"; result: SyncResult }
-  | { type: "retry"; merged: T[] }
+  | { type: "retry"; merged: T[]; localSnapshot: T[] }
   | { type: "fail"; message: string }
 
 /** 校验同步码并派生密钥、读本地全集 (含删除标记)。 */
@@ -47,7 +51,7 @@ export async function prepareDomainSync<T extends SyncRecord>(
   const { storageId, key } = await deriveKeys(code, config.keyScope)
   const now = Date.now()
   const localAll = await config.listLocal()
-  return { storageId, key, now, localAll, merged: localAll }
+  return { storageId, key, now, localAll, localSnapshot: localAll, merged: localAll }
 }
 
 function countSyncResult<T extends SyncRecord>(localAll: T[], kept: T[]): SyncResult {
@@ -61,7 +65,7 @@ function countSyncResult<T extends SyncRecord>(localAll: T[], kept: T[]): SyncRe
 export async function runDomainSyncAttempt<T extends SyncRecord>(
   ctx: DomainSyncContext<T>,
   config: DomainSyncConfig<T>,
-): Promise<AttemptOutcome> {
+): Promise<AttemptOutcome<T>> {
   const got = await getSyncBlob(ctx.storageId)
   if (!got.ok) return { type: "fail", message: got.message }
 
@@ -84,25 +88,26 @@ export async function runDomainSyncAttempt<T extends SyncRecord>(
 
   const merged = config.merge(ctx.merged, remote)
   const kept = config.gc(merged, Date.now())
-  if (!recordsEqual(kept, ctx.localAll)) {
-    await config.bulkPut(kept)
+  let localSnapshot = ctx.localSnapshot
+  if (!recordsEqual(kept, localSnapshot)) {
+    localSnapshot = await config.bulkPut(kept, localSnapshot)
   }
 
-  if (!remoteDirty && recordsEqual(kept, remote)) {
-    return { type: "complete", result: countSyncResult(ctx.localAll, kept) }
+  if (!remoteDirty && recordsEqual(localSnapshot, remote)) {
+    return { type: "complete", result: countSyncResult(ctx.localAll, localSnapshot) }
   }
 
-  const enc = await encryptJson(ctx.key, kept)
+  const enc = await encryptJson(ctx.key, localSnapshot)
   const put = await putSyncBlob(
     ctx.storageId,
     { iv: enc.iv, ciphertext: enc.ciphertext, updated_at: Date.now() },
     base,
   )
   if (put.ok) {
-    return { type: "complete", result: countSyncResult(ctx.localAll, kept) }
+    return { type: "complete", result: countSyncResult(ctx.localAll, localSnapshot) }
   }
   if (put.status === 409 && ctx.attempt < SYNC_MAX_ATTEMPTS) {
-    return { type: "retry", merged }
+    return { type: "retry", merged: localSnapshot, localSnapshot }
   }
   if (put.status === 409) {
     return { type: "fail", message: "同步冲突: 多端同时修改, 请稍后重试" }

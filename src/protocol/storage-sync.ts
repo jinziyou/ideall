@@ -5,15 +5,33 @@
 import type { Note } from "./files"
 import type { Subscription } from "./subscription"
 
+/** 同步读取快照后本地又发生写入；调用方必须重新读取、合并，不能覆盖新状态。 */
+export class StorageSyncConflictError extends Error {
+  override readonly name = "StorageSyncConflictError"
+
+  constructor(domain: "关注" | "笔记") {
+    super(`${domain}在同步期间发生了本地变化，请重试同步`)
+  }
+}
+
 export interface StorageSyncPort {
   /** 含删除标记的关注全量快照，仅供跨端合并。 */
   listAllSubscriptions(): Promise<Subscription[]>
-  /** 原子落地合并后的关注快照，并清理已 GC 的删除标记。 */
-  bulkPutSubscriptions(subscriptions: Subscription[]): Promise<void>
+  /**
+   * 仅当本地仍等于 expectedLocal 时原子落地关注快照，并清理已 GC 的删除标记。
+   * 当前状态已等于目标时允许幂等成功；返回 Storage 规范化后的实际提交逻辑快照。
+   */
+  bulkPutSubscriptions(
+    subscriptions: Subscription[],
+    expectedLocal: Subscription[],
+  ): Promise<Subscription[]>
   /** 含删除标记与完整正文的笔记全量快照，仅供跨端合并。 */
   listAllNotes(): Promise<Note[]>
-  /** 原子落地合并后的笔记快照，并清理已 GC 的删除标记。 */
-  bulkPutNotes(notes: Note[]): Promise<void>
+  /**
+   * 仅当本地仍等于 expectedLocal 时原子落地笔记快照，并清理已 GC 的删除标记。
+   * 当前状态已等于目标时允许幂等成功；返回 Storage 规范化后的实际提交逻辑快照。
+   */
+  bulkPutNotes(notes: Note[], expectedLocal: Note[]): Promise<Note[]>
 }
 
 let port: StorageSyncPort | null = null

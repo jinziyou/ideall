@@ -195,8 +195,10 @@ export default function FileManager() {
 
   async function handleDelete(file: ManagedFile) {
     try {
-      await invokeFileAction(file.ref, "delete", undefined, UI_ACTION_CONTEXT)
-      setFiles((prev) => prev.filter((f) => f.id !== file.id))
+      await invokeFileAction(file.ref, "delete", undefined, UI_ACTION_CONTEXT, {
+        expectedVersion: file.version,
+      })
+      await refresh()
       undoableDeleteToast(file.name, async () => {
         await invokeFileAction(file.ref, "restore", undefined, UI_ACTION_CONTEXT)
         await refresh()
@@ -209,8 +211,10 @@ export default function FileManager() {
   async function handleRename(file: ManagedFile, name: string) {
     if (name === file.name) return
     try {
-      await invokeFileAction(file.ref, "edit", { title: name }, UI_ACTION_CONTEXT)
-      setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name } : f)))
+      await invokeFileAction(file.ref, "edit", { title: name }, UI_ACTION_CONTEXT, {
+        expectedVersion: file.version,
+      })
+      await refresh()
     } catch (e) {
       toast.error("重命名失败", { description: String(e) })
     }

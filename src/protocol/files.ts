@@ -117,6 +117,87 @@ export interface Thread {
   updatedAt: number
 }
 
+/**
+ * 线程上的本机任务关系。正文仍属于 thread 文件；这里是独立的轻量索引行，和 thread
+ * 位于同一个 IndexedDB 中，因此创建/删除可由 Storage 层放进同一事务。
+ */
+export type ThreadTaskStatus = "active" | "running" | "done" | "failed"
+
+export interface ThreadTask {
+  /** 与对应 thread id 相同（1:1）。 */
+  id: string
+  workspaceId: string
+  status: ThreadTaskStatus
+  starred: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export const MAX_THREAD_TASK_ITEMS = 5_000
+
+/** task 集合的耐久索引头；revision 是跨窗口恢复与 CAS 共用的单调变更序号。 */
+export interface ThreadTaskIndexHead {
+  revision: number
+  count: number
+}
+
+export interface ThreadTaskSnapshot {
+  revision: number
+  tasks: ThreadTask[]
+}
+
+export interface ThreadTaskMutation {
+  revision: number
+  task?: ThreadTask
+}
+
+export interface ThreadTaskMigration extends ThreadTaskSnapshot {
+  /** 本次调用是否执行了旧 localStorage 快照迁移；false 表示其它窗口已完成。 */
+  migrated: boolean
+  imported: number
+  skipped: number
+}
+
+export type ThreadTaskPatch = {
+  status?: ThreadTaskStatus
+  starred?: boolean
+  /** 刷新任务排序时间；由 Storage 层生成严格递增时间戳。 */
+  touch?: boolean
+}
+
+/** task 索引 revision 已变化；上层应重新读取 FileDocument 后再提交。 */
+export class ThreadTaskConflictError extends Error {
+  constructor() {
+    super("Agent task index changed concurrently")
+    this.name = "ThreadTaskConflictError"
+  }
+}
+
+/**
+ * thread/task 跨记录原子能力。实现属于 Storage 组合边界，FileSystem 外观只负责转发，
+ * 插件和 Display 不得直接依赖具体 IndexedDB store。
+ */
+export interface ThreadTaskStoragePort {
+  /** O(1) 读取持久化 revision/count；旧 state 行会由 Storage 层惰性修复。 */
+  readThreadTaskIndexHead(): Promise<ThreadTaskIndexHead>
+  listThreadTasks(): Promise<ThreadTaskSnapshot>
+  migrateLegacyThreadTasks(tasks: readonly ThreadTask[]): Promise<ThreadTaskMigration>
+  createTaskThread(workspaceId: string): Promise<{
+    thread: Thread
+    task: ThreadTask
+    revision: number
+  }>
+  attachThreadTask(workspaceId: string, threadId: string): Promise<ThreadTaskMutation>
+  updateThreadTask(id: string, patch: ThreadTaskPatch): Promise<ThreadTaskMutation>
+  /** 无论是否有关联 task，都幂等软删除 thread；有关联时在同一事务移除索引。 */
+  deleteTaskThread(id: string): Promise<ThreadTaskMutation>
+  /** 原子替换轻量索引；引用不存在/已删除的 thread 时拒绝整次写入。 */
+  replaceThreadTasks(
+    tasks: readonly ThreadTask[],
+    expectedRevision?: number,
+  ): Promise<ThreadTaskSnapshot>
+}
+
 /** 新建笔记入参 (id/时间戳/sortKey 由实现补全; 均可选, content 缺省为空文档)。 */
 export type NewNote = {
   title?: string
@@ -133,7 +214,7 @@ export type NewNote = {
  * 分派到实际存储。agent/embed 可暂时沿用领域 DTO，而不绕过统一文件访问通路。
  * tombstone 全量读与原子 bulk 写不属于本端口，独立收口在 StorageSyncPort。
  */
-export interface FilesPort {
+export interface FilesPort extends ThreadTaskStoragePort {
   // 关注
   /** 列出活跃关注 (过滤软删除标记)。UI / 插件读路径。 */
   listSubscriptions(): Promise<Subscription[]>
@@ -167,6 +248,8 @@ export interface FilesPort {
   /** 本机软删除 (线程默认不同步, 但仍进入统一回收站)。 */
   deleteThread(id: string): Promise<void>
   renameThread(id: string, title: string): Promise<void>
+  // 线程任务关系（本机独占）由 ThreadTaskStoragePort 提供；多实体写必须由底层
+  // Storage 在同一 IDB 事务内完成。
   // 统一 Node 文件面 (AI fs.* §6): 跨 kind 寻址读 (原始节点, 调用方按 kind gate / stripNode 净化)。
   /** 列出指定 kind 的活跃完整节点 (fs.list 后端)。 */
   fsListNodes(kinds: NodeKind[]): Promise<Node[]>

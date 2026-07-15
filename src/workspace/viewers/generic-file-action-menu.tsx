@@ -4,7 +4,7 @@ import * as React from "react"
 import { Loader2, MoreHorizontal } from "lucide-react"
 import { toast } from "sonner"
 import type { IdeallFile } from "@protocol/file-system"
-import { fileActions, invokeFileAction, statFile } from "@/filesystem/registry"
+import { fileActions, invokeFileAction } from "@/filesystem/registry"
 import type { FileAction, FileActionFieldUiHint, FileActionInputSchema } from "@/filesystem/types"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
 import { Button } from "@/ui/button"
@@ -35,12 +35,12 @@ import {
   initialFileActionDraft,
   isPendingFileActionCurrent,
   parseFileActionInput,
+  pendingFileActionInvokeOptions,
   type FileActionDraft,
   type PendingFileAction,
 } from "./file-action-form"
 
 const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
-const UI_METADATA_CONTEXT = { actor: "ui", permissions: [], intent: "metadata" } as const
 
 export type GenericFileActionSupport = Readonly<{
   canInvoke: boolean
@@ -369,11 +369,13 @@ export default function GenericFileActionMenu({ file }: { file: IdeallFile }) {
     runningKeyRef.current = runningKey
     setRunningId(request.action.id)
     try {
-      const latest = await statFile(request.ref, UI_METADATA_CONTEXT)
-      if (!latest || (request.version != null && latest.version !== request.version)) {
-        throw new Error("文件版本已经变化，请重新确认")
-      }
-      await invokeFileAction(request.ref, request.action.id, request.input, UI_ACTION_CONTEXT)
+      await invokeFileAction(
+        request.ref,
+        request.action.id,
+        request.input,
+        UI_ACTION_CONTEXT,
+        pendingFileActionInvokeOptions(request),
+      )
       toast.success(`${request.action.label}已完成`)
       setRefreshRevision((value) => value + 1)
     } catch (reason) {

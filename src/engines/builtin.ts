@@ -43,6 +43,58 @@ export const BUILTIN_ENGINES = [
     iconHint: "thread",
   },
   {
+    engineId: "ideall.subscriptions",
+    label: "关注管理",
+    match: {
+      kinds: ["directory"],
+      properties: { place: "subscriptions", rootChild: true },
+    },
+    priority: 930,
+    layout: "padded",
+    access: "read-write",
+    supportsStandaloneWindow: false,
+    iconHint: "feed",
+  },
+  {
+    engineId: "ideall.bookmarks",
+    label: "书签管理",
+    match: {
+      kinds: ["directory"],
+      properties: { place: "bookmarks", rootChild: true },
+    },
+    priority: 930,
+    layout: "padded",
+    access: "read-write",
+    supportsStandaloneWindow: false,
+    iconHint: "bookmark",
+  },
+  {
+    engineId: "ideall.resources",
+    label: "资源管理",
+    match: {
+      kinds: ["directory"],
+      properties: { place: "files", rootChild: true },
+    },
+    priority: 930,
+    layout: "padded",
+    access: "read-write",
+    supportsStandaloneWindow: false,
+    iconHint: "folder",
+  },
+  {
+    engineId: "ideall.trash",
+    label: "回收站",
+    match: {
+      kinds: ["directory"],
+      mediaTypes: ["application/vnd.ideall.trash+json"],
+    },
+    priority: 930,
+    layout: "padded",
+    access: "read-write",
+    supportsStandaloneWindow: false,
+    iconHint: "trash",
+  },
+  {
     engineId: "ideall.audio",
     label: "音频",
     match: {

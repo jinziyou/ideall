@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFile as readSource } from "node:fs/promises"
 import { test } from "node:test"
 import type { FileRef, IdeallFile } from "@protocol/file-system"
+import type { ThreadTaskStoragePort } from "@protocol/files"
 import type { Node, NodeKind } from "@protocol/node"
 import { feedNodeId } from "@/files/feed-node"
 import {
@@ -208,6 +209,22 @@ test("filesystem FilesPort: reads nested domain data exclusively through the gat
     source,
     /files\/stores\//,
     "FilesPort compatibility facade must not import stores",
+  )
+})
+
+test("filesystem FilesPort: delegates the durable task index head only through injection", async () => {
+  const { gateway } = fixture()
+  const threadTasks = {
+    async readThreadTaskIndexHead() {
+      return { revision: 12, count: 3 }
+    },
+  } as ThreadTaskStoragePort
+  const port = createFileSystemFilesPort(gateway, { threadTasks })
+
+  assert.deepEqual(await port.readThreadTaskIndexHead(), { revision: 12, count: 3 })
+  await assert.rejects(
+    () => createFileSystemFilesPort(gateway).readThreadTaskIndexHead(),
+    (error) => error instanceof FileSystemError && error.code === "unavailable",
   )
 })
 

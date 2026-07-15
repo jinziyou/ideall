@@ -6,6 +6,7 @@ export {
   corePlaceRef,
   panelFileRef,
   panelForFile,
+  placeForFile,
   resourceFileRef,
   resourceRefForFile,
   type CorePlaceId,

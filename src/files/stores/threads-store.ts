@@ -6,18 +6,21 @@ import type { Thread } from "@protocol/files"
 import type { NodeKind, NodeOfKind } from "@protocol/node"
 import { isLive } from "@protocol/sync"
 import { genId } from "@/lib/id"
-import { appendSortKey, maxSortKey } from "@/files/sort-key"
 import {
   idbGet,
   idbGetAllFromIndex,
-  idbPut,
-  idbReadModifyWrite,
+  idbRunTransaction,
   INDEX_NODES_KIND,
   STORE_NODES,
 } from "@/lib/idb"
+import { addThreadNodeAtTail } from "@/files/stores/thread-node-transaction"
+import {
+  deleteTaskThread,
+  saveThreadAndTouchTaskAtomic,
+  updateThreadNodeAndTouchTaskAtomic,
+} from "@/files/stores/thread-tasks-store"
+import type { NodeMutationExpectation } from "@/files/stores/node-mutation"
 import { notifyFilesUpdated } from "@protocol/flowback"
-import { captureTrashSnapshot } from "@/files/stores/trash-store"
-import { nextUpdatedAt } from "@/files/version"
 
 type ThreadNode = NodeOfKind<"thread">
 
@@ -30,20 +33,6 @@ function nodeToThread(n: ThreadNode): Thread {
     messages: n.content.messages,
     createdAt: n.createdAt,
     updatedAt: n.updatedAt,
-  }
-}
-
-function threadToNode(t: Thread, sortKey: string): ThreadNode {
-  return {
-    id: t.id,
-    kind: "thread",
-    title: t.title,
-    parentId: null,
-    sortKey,
-    tags: [],
-    createdAt: t.createdAt,
-    updatedAt: t.updatedAt,
-    content: { messages: t.messages },
   }
 }
 
@@ -77,7 +66,7 @@ export async function getThread(id: string): Promise<Thread | undefined> {
 // ---- 写 ----
 
 /** 新建空线程并落库。 */
-export async function createThread(): Promise<Thread> {
+export async function createThreadWithNode(): Promise<ThreadNode> {
   const now = Date.now()
   const thread: Thread = {
     id: genId("thread"),
@@ -86,45 +75,48 @@ export async function createThread(): Promise<Thread> {
     createdAt: now,
     updatedAt: now,
   }
-  const sortKey = appendSortKey(maxSortKey(await allThreadNodes()))
-  await idbPut(STORE_NODES, threadToNode(thread, sortKey))
-  notifyFilesUpdated({ kind: "thread", id: thread.id })
-  return thread
-}
-
-/** 整体写回线程 (消息内联); 刷新 updatedAt, 保留/追加 sortKey。 */
-export async function saveThread(thread: Thread): Promise<void> {
-  const all = await allThreadNodes()
-  const cur = all.find((n) => n.id === thread.id)
-  const sortKey = cur?.sortKey || appendSortKey(maxSortKey(all))
-  const updatedAt = cur ? nextUpdatedAt(cur.updatedAt) : Date.now()
-  await idbPut(STORE_NODES, threadToNode({ ...thread, updatedAt }, sortKey))
-  notifyFilesUpdated({ kind: "thread", id: thread.id })
-}
-
-/** 软删除线程: 写 deletedAt 进入统一回收站; kind 守卫确保只改 thread 节点。 */
-export async function deleteThread(id: string): Promise<void> {
-  const n = await idbGet<ThreadNode>(STORE_NODES, id)
-  if (!n || n.kind !== "thread" || !isLive(n)) return
-  const now = Date.now()
-  await captureTrashSnapshot(n)
-  await idbPut(STORE_NODES, {
-    ...n,
-    deletedAt: now,
-    updatedAt: nextUpdatedAt(n.updatedAt, now),
-  })
-  notifyFilesUpdated({ kind: "thread", id })
-}
-
-export async function renameThread(id: string, title: string): Promise<void> {
-  const next = await idbReadModifyWrite<ThreadNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "thread"
-      ? {
-          ...current,
-          title: title.trim() || current.title,
-          updatedAt: nextUpdatedAt(current.updatedAt),
-        }
-      : undefined,
+  const node = await idbRunTransaction<ThreadNode>(
+    [STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      addThreadNodeAtTail(transaction.objectStore(STORE_NODES), thread, setResult, abort)
+    },
   )
-  if (next) notifyFilesUpdated({ kind: "thread", id })
+  notifyFilesUpdated({ kind: "thread", id: thread.id })
+  return node
+}
+
+/** 兼容既有 FilesPort DTO；创建真相由 createThreadWithNode 返回。 */
+export async function createThread(): Promise<Thread> {
+  return nodeToThread(await createThreadWithNode())
+}
+
+/** 整体写回线程 (消息内联)，并在同一事务内刷新可能存在的 task 排序时间。 */
+export async function saveThread(thread: Thread): Promise<void> {
+  await saveThreadAndTouchTaskAtomic(thread)
+}
+
+/** 软删除线程；回收站快照、删除标记及可能存在的 task 关系在同一事务提交。 */
+export async function deleteThread(
+  id: string,
+  expected?: NodeMutationExpectation,
+): Promise<boolean> {
+  return (await deleteTaskThread(id, expected)).deleted
+}
+
+export async function updateThread(
+  id: string,
+  patch: { title?: string; messages?: unknown[] },
+  expected?: NodeMutationExpectation,
+): Promise<ThreadNode | undefined> {
+  return updateThreadNodeAndTouchTaskAtomic(id, patch, expected)
+}
+
+export async function renameThread(
+  id: string,
+  title: string,
+  expected?: NodeMutationExpectation,
+): Promise<ThreadNode | undefined> {
+  const trimmed = title.trim()
+  return updateThread(id, trimmed ? { title: trimmed } : {}, expected)
 }

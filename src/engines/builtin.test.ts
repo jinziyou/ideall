@@ -45,6 +45,29 @@ test("builtin engines: app FileSystem roots resolve to their semantic engines", 
   }
 })
 
+test("builtin engines: core place and trash roots resolve to management displays", () => {
+  registerBuiltInEngines()
+  for (const [place, engineId] of [
+    ["subscriptions", "ideall.subscriptions"],
+    ["bookmarks", "ideall.bookmarks"],
+    ["files", "ideall.resources"],
+  ] as const) {
+    const root = file("inode/directory", "directory", { place, rootChild: true })
+    assert.equal(engineRegistry.resolve(root)?.descriptor.engineId, engineId)
+    assert.deepEqual(
+      engineRegistry.matching(root).map(({ descriptor }) => descriptor.engineId),
+      [engineId, "ideall.directory", "ideall.preview"],
+    )
+  }
+
+  const trash = file("application/vnd.ideall.trash+json", "directory", { trashRoot: true })
+  assert.equal(engineRegistry.resolve(trash)?.descriptor.engineId, "ideall.trash")
+  assert.deepEqual(
+    engineRegistry.matching(trash).map(({ descriptor }) => descriptor.engineId),
+    ["ideall.trash", "ideall.directory", "ideall.preview"],
+  )
+})
+
 test("builtin engines: note pages keep their editor while also acting as directories", () => {
   registerBuiltInEngines()
   const note = file("application/vnd.ideall.note+json", "directory")
@@ -127,6 +150,10 @@ test("builtin engines: privileged main-window viewers cannot be opened standalon
     "ideall.shell",
     "ideall.connected",
     "ideall.installed-app",
+    "ideall.subscriptions",
+    "ideall.bookmarks",
+    "ideall.resources",
+    "ideall.trash",
     "ideall.panel",
     "ideall.panel-fill",
   ]) {

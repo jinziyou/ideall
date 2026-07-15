@@ -173,9 +173,8 @@ export default function BookmarkManager() {
       setBookmarks((prev) => prev.filter((x) => x.id !== b.id))
       undoableDeleteToast(b.title, async () => {
         await restoreBookmarkFile(b)
-        setBookmarks((prev) =>
-          [b, ...prev.filter((x) => x.id !== b.id)].sort((a, c) => c.createdAt - a.createdAt),
-        )
+        // restore 会提交新的 tombstone generation/version；重新读取，不能把删除前快照放回状态。
+        await refresh()
       })
     } catch (e) {
       toast.error("删除失败", { description: String(e) })
@@ -189,7 +188,8 @@ export default function BookmarkManager() {
         folderId === null ? null : (folders.find((item) => item.id === folderId) ?? null)
       if (folderId !== null && !folder) throw new Error("目标收藏夹不存在")
       await moveBookmarkFile(b, folder)
-      setBookmarks((prev) => prev.map((x) => (x.id === b.id ? { ...x, folderId } : x)))
+      // move 推进版本；用 committed 后的目录快照替换旧 DTO，避免下一次动作携带旧版本。
+      await refresh()
     } catch (e) {
       toast.error("移动失败", { description: String(e) })
     }

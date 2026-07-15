@@ -142,10 +142,15 @@ export async function exportGitReposJson(): Promise<string> {
   return stringifyPluginDataPackage(createGitReposExport(loadGitRepos()))
 }
 
-export async function importGitReposJson(raw: string): Promise<{ repos: number }> {
+export async function importGitReposJson(
+  raw: string,
+  storage: RepoStorage | undefined = browserStorage(),
+): Promise<{ repos: number }> {
   const pack = parseGitReposExport(raw)
   const repos = normalizeGitRepos(pack.payload.repos)
-  saveGitRepos(repos)
+  if (!saveGitRepos(repos, storage)) {
+    throw new Error("Unable to persist imported Git repositories")
+  }
   return { repos: repos.length }
 }
 

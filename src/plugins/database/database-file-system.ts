@@ -8,6 +8,7 @@ import {
 import type {
   DirectoryPage,
   FileAction,
+  FileActionInvokeOptions,
   FileReadOptions,
   FileReadResult,
   FileSystemAccessContext,
@@ -22,6 +23,12 @@ import {
   DATABASE_FILE_SYSTEM_ID as BUILTIN_DATABASE_FILE_SYSTEM_ID,
   DATABASE_ROOT_REF as BUILTIN_DATABASE_ROOT_REF,
 } from "@/filesystem/builtin-app-roots"
+import { mapConcurrentOrdered } from "@/lib/map-concurrent-ordered"
+import { sha256SemanticVersion } from "@/lib/semantic-version"
+import {
+  subscribeDatabaseImportInvalidation,
+  withDatabaseRootMutationLock,
+} from "./database-write-adapter"
 import {
   addRow,
   createTable,
@@ -42,6 +49,8 @@ import {
 
 export const DATABASE_FILE_SYSTEM_ID = BUILTIN_DATABASE_FILE_SYSTEM_ID
 export const DATABASE_ROOT_REF: FileRef = BUILTIN_DATABASE_ROOT_REF
+
+const DATABASE_ROOT_SNAPSHOT_CONCURRENCY = 4
 
 export const DATABASE_ACTIONS = {
   addRow: "add-row",
@@ -101,7 +110,30 @@ function rowIdentity(ref: FileRef): { tableId: string; rowId: string } | null {
   }
 }
 
-function tableFile(table: DataTable): IdeallFile {
+function compareSnapshotKey(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+export function databaseTableSnapshotVersion(
+  table: DataTable,
+  rows: readonly DataRow[],
+): Promise<string> {
+  const value = JSON.stringify([
+    [table.id, table.name, table.columns, table.createdAt, table.updatedAt],
+    [...rows]
+      .sort((left, right) => compareSnapshotKey(left.id, right.id))
+      .map((row) => [
+        row.id,
+        row.tableId,
+        Object.entries(row.values).sort(([left], [right]) => compareSnapshotKey(left, right)),
+        row.createdAt,
+        row.updatedAt,
+      ]),
+  ])
+  return sha256SemanticVersion("database-v3", value)
+}
+
+function tableFile(table: DataTable, version: string): IdeallFile {
   return {
     ref: databaseTableRef(table.id),
     kind: "file",
@@ -111,7 +143,7 @@ function tableFile(table: DataTable): IdeallFile {
     source: { kind: "app", id: "database", label: "数据库" },
     createdAt: table.createdAt,
     updatedAt: table.updatedAt,
-    version: String(table.updatedAt),
+    version,
     properties: {
       tableId: table.id,
       columns: table.columns,
@@ -121,7 +153,7 @@ function tableFile(table: DataTable): IdeallFile {
   }
 }
 
-function rowsDirectoryFile(table: DataTable): IdeallFile {
+function rowsDirectoryFile(table: DataTable, version: string): IdeallFile {
   return {
     ref: databaseRowsDirectoryRef(table.id),
     kind: "directory",
@@ -131,7 +163,7 @@ function rowsDirectoryFile(table: DataTable): IdeallFile {
     source: { kind: "app", id: "database", label: "数据库" },
     createdAt: table.createdAt,
     updatedAt: table.updatedAt,
-    version: String(table.updatedAt),
+    version,
     properties: {
       tableId: table.id,
       tableRef: databaseTableRef(table.id),
@@ -270,6 +302,20 @@ function assertAccess(
   throw new FileSystemError(
     "permission-denied",
     `The ${ctx.actor} actor requires ${permission} permission and ${intent} intent`,
+    ref,
+  )
+}
+
+function assertExpectedVersion(
+  ref: FileRef,
+  expectedVersion: FileActionInvokeOptions["expectedVersion"],
+  currentVersion: string | undefined,
+): void {
+  if (expectedVersion === undefined) return
+  if (expectedVersion === (currentVersion ?? null)) return
+  throw new FileSystemError(
+    "conflict",
+    `Database file version changed (expected ${expectedVersion ?? "no version"}, current ${currentVersion ?? "no version"})`,
     ref,
   )
 }
@@ -421,46 +467,68 @@ export function createDatabaseFileSystem(
         }
       }
       const table = await findTable(ref, deps)
-      if (table) return tableFile(table)
+      if (table) {
+        const rows = await deps.listRows(table.id)
+        return tableFile(table, await databaseTableSnapshotVersion(table, rows))
+      }
       const rowsTable = await findTableById(rowsDirectoryTableId(ref), deps)
-      if (rowsTable) return rowsDirectoryFile(rowsTable)
+      if (rowsTable) {
+        const rows = await deps.listRows(rowsTable.id)
+        return rowsDirectoryFile(rowsTable, await databaseTableSnapshotVersion(rowsTable, rows))
+      }
       const row = await findRow(ref, deps)
       return row ? rowFile(row.row, row.table) : null
     },
     async readDirectory(ref, ctx, options = {}): Promise<DirectoryPage> {
       assertAccess(ref, ctx, "directory", "fs:read")
       if (sameFileRef(ref, DATABASE_ROOT_REF)) {
+        // 在访问 Storage 前沿用共享 paginator 校验 cursor/limit；真实总数随后再分页。
+        paginateDirectoryItems(ref, [], options)
         const tables = await deps.listTables()
-        const rootEntries = tables.flatMap((table, index) => {
-          const tableSnapshot = tableFile(table)
-          const rowsSnapshot = rowsDirectoryFile(table)
-          return [
-            {
-              entryId: `table:${table.id}`,
-              parent: DATABASE_ROOT_REF,
-              target: tableSnapshot.ref,
-              name: tableSnapshot.name,
-              kind: "child" as const,
-              sortKey: String(index * 2).padStart(6, "0"),
-              file: tableSnapshot,
-              properties: tableSnapshot.properties,
+        const rootEntryPlans = tables.flatMap((table, tableIndex) => [
+          { table, tableIndex, entryKind: "table" as const, entryIndex: tableIndex * 2 },
+          { table, tableIndex, entryKind: "rows" as const, entryIndex: tableIndex * 2 + 1 },
+        ])
+        const page = paginateDirectoryItems(ref, rootEntryPlans, options)
+        const pageTables = [
+          ...new Map(
+            page.items.map(
+              (item) =>
+                [item.tableIndex, { tableIndex: item.tableIndex, table: item.table }] as const,
+            ),
+          ).values(),
+        ]
+        const versions = new Map(
+          await mapConcurrentOrdered(
+            pageTables,
+            DATABASE_ROOT_SNAPSHOT_CONCURRENCY,
+            async ({ tableIndex, table }) => {
+              const rows = await deps.listRows(table.id)
+              return [tableIndex, await databaseTableSnapshotVersion(table, rows)] as const
             },
-            {
-              entryId: `rows:${table.id}`,
-              parent: DATABASE_ROOT_REF,
-              target: rowsSnapshot.ref,
-              name: rowsSnapshot.name,
-              kind: "child" as const,
-              sortKey: String(index * 2 + 1).padStart(6, "0"),
-              file: rowsSnapshot,
-              properties: rowsSnapshot.properties,
-            },
-          ]
+          ),
+        )
+        const rootEntries = page.items.map(({ table, tableIndex, entryKind, entryIndex }) => {
+          const version = versions.get(tableIndex)
+          if (version === undefined) {
+            throw new FileSystemError("unavailable", "Database table snapshot is unavailable", ref)
+          }
+          const snapshot =
+            entryKind === "table" ? tableFile(table, version) : rowsDirectoryFile(table, version)
+          return {
+            entryId: `${entryKind}:${table.id}`,
+            parent: DATABASE_ROOT_REF,
+            target: snapshot.ref,
+            name: snapshot.name,
+            kind: "child" as const,
+            sortKey: String(entryIndex).padStart(6, "0"),
+            file: snapshot,
+            properties: snapshot.properties,
+          }
         })
-        const result = paginateDirectoryItems(ref, rootEntries, options)
         return {
-          entries: result.items,
-          nextCursor: result.nextCursor,
+          entries: rootEntries,
+          nextCursor: page.nextCursor,
         }
       }
       const table = await requireRowsDirectory(ref, deps)
@@ -505,7 +573,7 @@ export function createDatabaseFileSystem(
           data: ranged.data,
           mediaType: DIRECTORY_MEDIA_TYPE,
           size: ranged.size,
-          version: String(Math.max(rowsTable.updatedAt, ...rows.map((row) => row.updatedAt))),
+          version: await databaseTableSnapshotVersion(rowsTable, rows),
         }
       }
       const rowValue = await findRow(ref, deps)
@@ -525,7 +593,7 @@ export function createDatabaseFileSystem(
         data: ranged.data,
         mediaType: "application/vnd.ideall.database+json",
         size: ranged.size,
-        version: String(Math.max(table.updatedAt, ...rows.map((row) => row.updatedAt))),
+        version: await databaseTableSnapshotVersion(table, rows),
       }
     },
     async write(ref, _input, ctx) {
@@ -678,29 +746,38 @@ export function createDatabaseFileSystem(
         },
       ]
     },
-    async invoke(ref, action, input, ctx) {
+    async invoke(ref, action, input, ctx, options) {
       const mutation = isMutationAction(action)
       assertAccess(ref, ctx, "action", mutation ? "fs:write" : "fs:read", !mutation)
       if (action === DATABASE_ACTIONS.open) return { ref }
       if (sameFileRef(ref, DATABASE_ROOT_REF)) {
+        // 根级 create/import 是集合替换或新增，不把聚合读版本伪装成单实体 CAS。
         if (action === DATABASE_ACTIONS.createTable) {
           const raw = objectInput(ref, input)
-          const table = await deps.createTable(
-            stringInput(ref, raw, "name"),
-            columnsInput(ref, raw, deps),
-          )
-          const createdRef = databaseTableRef(table.id)
-          watchEvents.batch(() => {
-            emitOne(createdRef, "created", String(table.updatedAt))
-            emitOne(databaseRowsDirectoryRef(table.id), "created", String(table.updatedAt))
+          return withDatabaseRootMutationLock(async () => {
+            const table = await deps.createTable(
+              stringInput(ref, raw, "name"),
+              columnsInput(ref, raw, deps),
+            )
+            const createdRef = databaseTableRef(table.id)
+            const committedVersion = await databaseTableSnapshotVersion(
+              table,
+              await deps.listRows(table.id),
+            )
+            watchEvents.batch(() => {
+              emitOne(createdRef, "created", committedVersion)
+              emitOne(databaseRowsDirectoryRef(table.id), "created", committedVersion)
+            })
+            return { ref: createdRef, table }
           })
-          return { ref: createdRef, table }
         }
         if (action === DATABASE_ACTIONS.import) {
           const raw = objectInput(ref, input)
-          const result = await deps.importDatabaseJson(stringInput(ref, raw, "content"))
-          emitMutation(DATABASE_ROOT_REF)
-          return result
+          return withDatabaseRootMutationLock(async () => {
+            const result = await deps.importDatabaseJson(stringInput(ref, raw, "content"))
+            emitMutation(DATABASE_ROOT_REF)
+            return result
+          })
         }
         if (action === DATABASE_ACTIONS.export) return deps.exportDatabaseJson()
         throw new FileSystemError("unsupported", `Unsupported database action: ${action}`, ref)
@@ -708,19 +785,23 @@ export function createDatabaseFileSystem(
 
       const rowsTable = await findTableById(rowsDirectoryTableId(ref), deps)
       if (rowsTable) {
+        // add-row 是集合新增；目录 version 不代表“仅当集合完全未变化”才允许追加。
         if (action === DATABASE_ACTIONS.addRow) {
           const raw = objectInput(ref, input)
-          const row = await deps.addRow(
-            rowsTable.id,
-            deps.rowValuesForColumns(rowsTable.columns, valuesInput(ref, raw)),
-          )
-          const createdRef = databaseRowRef(rowsTable.id, row.id)
-          emitTableMutation(rowsTable, {
-            ref: createdRef,
-            type: "created",
-            version: String(row.updatedAt),
+          return withDatabaseRootMutationLock(async () => {
+            const currentTable = await requireRowsDirectory(ref, deps)
+            const row = await deps.addRow(
+              currentTable.id,
+              deps.rowValuesForColumns(currentTable.columns, valuesInput(ref, raw)),
+            )
+            const createdRef = databaseRowRef(currentTable.id, row.id)
+            emitTableMutation(currentTable, {
+              ref: createdRef,
+              type: "created",
+              version: String(row.updatedAt),
+            })
+            return { ref: createdRef, row }
           })
-          return { ref: createdRef, row }
         }
         if (action === DATABASE_ACTIONS.export) {
           return JSON.stringify(
@@ -736,22 +817,30 @@ export function createDatabaseFileSystem(
       if (rowValue) {
         if (action === DATABASE_ACTIONS.updateRow) {
           const raw = objectInput(ref, input)
-          const row = await deps.updateRow(
-            rowValue.row.id,
-            rowValue.table.id,
-            deps.rowValuesForColumns(rowValue.table.columns, valuesInput(ref, raw)),
-          )
-          emitTableMutation(rowValue.table, {
-            ref,
-            type: "changed",
-            version: String(row.updatedAt),
+          return withDatabaseRootMutationLock(async () => {
+            const current = await requireRowFile(ref, deps)
+            assertExpectedVersion(ref, options?.expectedVersion, String(current.row.updatedAt))
+            const row = await deps.updateRow(
+              current.row.id,
+              current.table.id,
+              deps.rowValuesForColumns(current.table.columns, valuesInput(ref, raw)),
+            )
+            emitTableMutation(current.table, {
+              ref,
+              type: "changed",
+              version: String(row.updatedAt),
+            })
+            return { ref, row }
           })
-          return { ref, row }
         }
         if (action === DATABASE_ACTIONS.deleteRow) {
-          await deps.deleteRow(rowValue.row.id)
-          emitTableMutation(rowValue.table, { ref, type: "deleted" })
-          return { ref, deleted: true }
+          return withDatabaseRootMutationLock(async () => {
+            const current = await requireRowFile(ref, deps)
+            assertExpectedVersion(ref, options?.expectedVersion, String(current.row.updatedAt))
+            await deps.deleteRow(current.row.id)
+            emitTableMutation(current.table, { ref, type: "deleted" })
+            return { ref, deleted: true }
+          })
         }
         if (action === DATABASE_ACTIONS.export) return JSON.stringify(rowValue.row, null, 2)
         throw new FileSystemError("unsupported", `Unsupported database action: ${action}`, ref)
@@ -759,64 +848,106 @@ export function createDatabaseFileSystem(
 
       const table = await requireTable(ref, deps)
       if (action === DATABASE_ACTIONS.addRow) {
+        // 与 rows directory 相同：追加行不使用 table version 作为集合 CAS。
         const raw = objectInput(ref, input)
-        const row = await deps.addRow(
-          table.id,
-          deps.rowValuesForColumns(table.columns, valuesInput(ref, raw)),
-        )
-        const createdRef = databaseRowRef(table.id, row.id)
-        emitTableMutation(table, {
-          ref: createdRef,
-          type: "created",
-          version: String(row.updatedAt),
+        return withDatabaseRootMutationLock(async () => {
+          const currentTable = await requireTable(ref, deps)
+          const row = await deps.addRow(
+            currentTable.id,
+            deps.rowValuesForColumns(currentTable.columns, valuesInput(ref, raw)),
+          )
+          const createdRef = databaseRowRef(currentTable.id, row.id)
+          emitTableMutation(currentTable, {
+            ref: createdRef,
+            type: "created",
+            version: String(row.updatedAt),
+          })
+          return { ref: createdRef, row }
         })
-        return { ref: createdRef, row }
       }
       if (action === DATABASE_ACTIONS.updateRow) {
         const raw = objectInput(ref, input)
         const id = stringInput(ref, raw, "id")
-        await requireRow(ref, table, id, deps)
-        const row = await deps.updateRow(
-          id,
-          table.id,
-          deps.rowValuesForColumns(table.columns, valuesInput(ref, raw)),
-        )
-        emitTableMutation(table, {
-          ref: databaseRowRef(table.id, row.id),
-          type: "changed",
-          version: String(row.updatedAt),
+        return withDatabaseRootMutationLock(async () => {
+          await requireRow(ref, table, id, deps)
+          const currentTable = await requireTable(ref, deps)
+          const currentRows = await deps.listRows(currentTable.id)
+          assertExpectedVersion(
+            ref,
+            options?.expectedVersion,
+            await databaseTableSnapshotVersion(currentTable, currentRows),
+          )
+          const row = await deps.updateRow(
+            id,
+            currentTable.id,
+            deps.rowValuesForColumns(currentTable.columns, valuesInput(ref, raw)),
+          )
+          emitTableMutation(currentTable, {
+            ref: databaseRowRef(currentTable.id, row.id),
+            type: "changed",
+            version: String(row.updatedAt),
+          })
+          return { ref: databaseRowRef(currentTable.id, row.id), row }
         })
-        return { ref: databaseRowRef(table.id, row.id), row }
       }
       if (action === DATABASE_ACTIONS.deleteRow) {
         const raw = objectInput(ref, input)
         const id = stringInput(ref, raw, "id")
-        await requireRow(ref, table, id, deps)
-        await deps.deleteRow(id)
-        const deletedRef = databaseRowRef(table.id, id)
-        emitTableMutation(table, { ref: deletedRef, type: "deleted" })
-        return { ref: deletedRef, rowId: id, deleted: true }
+        return withDatabaseRootMutationLock(async () => {
+          await requireRow(ref, table, id, deps)
+          const currentTable = await requireTable(ref, deps)
+          const currentRows = await deps.listRows(currentTable.id)
+          assertExpectedVersion(
+            ref,
+            options?.expectedVersion,
+            await databaseTableSnapshotVersion(currentTable, currentRows),
+          )
+          await deps.deleteRow(id)
+          const deletedRef = databaseRowRef(currentTable.id, id)
+          emitTableMutation(currentTable, { ref: deletedRef, type: "deleted" })
+          return { ref: deletedRef, rowId: id, deleted: true }
+        })
       }
       if (action === DATABASE_ACTIONS.export) {
         return JSON.stringify({ table, rows: await deps.listRows(table.id) }, null, 2)
       }
       if (action === DATABASE_ACTIONS.deleteTable) {
-        // 删除表会级联删除行；先取稳定行身份，让已打开的行文件收到 deleted，
-        // 而不是只让目录消失后永远停留在旧 metadata。
-        const rows = await deps.listRows(table.id)
-        await deps.deleteTable(table.id)
-        watchEvents.batch(() => {
-          for (const row of rows) emitOne(databaseRowRef(table.id, row.id), "deleted")
-          emitOne(ref, "deleted")
-          emitOne(databaseRowsDirectoryRef(table.id), "deleted")
+        return withDatabaseRootMutationLock(async () => {
+          // 删除表会级联删除行；先取稳定行身份，让已打开的行文件收到 deleted，
+          // 而不是只让目录消失后永远停留在旧 metadata。
+          const rows = await deps.listRows(table.id)
+          const currentTable = await requireTable(ref, deps)
+          assertExpectedVersion(
+            ref,
+            options?.expectedVersion,
+            await databaseTableSnapshotVersion(currentTable, rows),
+          )
+          await deps.deleteTable(currentTable.id)
+          watchEvents.batch(() => {
+            for (const row of rows) emitOne(databaseRowRef(currentTable.id, row.id), "deleted")
+            emitOne(ref, "deleted")
+            emitOne(databaseRowsDirectoryRef(currentTable.id), "deleted")
+          })
+          return { ref, deleted: true }
         })
-        return { ref, deleted: true }
       }
       throw new FileSystemError("unsupported", `Unsupported database action: ${action}`, ref)
     },
     watch(ref, ctx, notify): FileSystemWatchHandle {
       assertAccess(ref, ctx, "watch", "fs:read")
-      return watchEvents.watch(ref, notify)
+      const localWatch = watchEvents.watch(ref, notify)
+      const disposeImportWatch = subscribeDatabaseImportInvalidation(() => {
+        notify({ type: "changed", ref })
+      })
+      let disposed = false
+      return {
+        dispose() {
+          if (disposed) return
+          disposed = true
+          localWatch.dispose()
+          disposeImportWatch()
+        },
+      }
     },
   }
 }

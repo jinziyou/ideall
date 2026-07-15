@@ -270,3 +270,32 @@ test("audio filesystem: deleting requires write permission and never trusts acti
   assert.equal(removed, true)
   assert.equal(fs.descriptor.capabilities?.includes("watch"), true)
 })
+
+test("audio filesystem: delete actions enforce the fresh track expectedVersion", async () => {
+  const current = track("versioned")
+  const removed: string[] = []
+  const fs = createAudioFileSystem({
+    async listTracks() {
+      return [current]
+    },
+    async removeTrack(id) {
+      removed.push(id)
+    },
+  })
+  const ref = audioTrackRef(current.id)
+  const actionCtx = { actor: "ui", permissions: [], intent: "action" } as const
+
+  await assert.rejects(
+    fs.invoke(ref, "delete", undefined, actionCtx, { expectedVersion: "9" }),
+    (error) => error instanceof FileSystemError && error.code === "conflict",
+  )
+  await assert.rejects(
+    fs.invoke(ref, "delete", undefined, actionCtx, { expectedVersion: null }),
+    (error) => error instanceof FileSystemError && error.code === "conflict",
+  )
+  assert.deepEqual(removed, [])
+
+  await fs.invoke(ref, "delete", undefined, actionCtx, { expectedVersion: "10" })
+  await fs.invoke(ref, "delete", undefined, actionCtx)
+  assert.deepEqual(removed, [current.id, current.id])
+})

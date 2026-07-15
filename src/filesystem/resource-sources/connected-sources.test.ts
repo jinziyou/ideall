@@ -158,7 +158,7 @@ test("connected providers: invoke save-to-mine through injected projector", asyn
           updatedAt: 1,
         },
         existed: false,
-        href: "/home/subscriptions",
+        navigationPath: "/home/following",
       }
     },
   })

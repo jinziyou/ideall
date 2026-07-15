@@ -4,9 +4,13 @@
 import { test, afterEach } from "node:test"
 import assert from "node:assert/strict"
 import type { Note } from "@protocol/files"
-import { registerStorageSyncPort, type StorageSyncPort } from "@protocol/storage-sync"
-import type { SyncBlob } from "@protocol/sync"
-import { deriveKeys, encryptJson } from "@/lib/sync-crypto"
+import {
+  registerStorageSyncPort,
+  StorageSyncConflictError,
+  type StorageSyncPort,
+} from "@protocol/storage-sync"
+import { recordsEqual, type SyncBlob } from "@protocol/sync"
+import { decryptJson, deriveKeys, encryptJson } from "@/lib/sync-crypto"
 import { mergeTwoNotes, mergeNotes, isValidRemoteNote, syncNotes } from "./notes-sync"
 
 const blk = (id: string, text: string) => ({ id, type: "p", children: [{ text }] })
@@ -191,20 +195,38 @@ function makeServer(initial: SyncBlob | null = null) {
   return state
 }
 
-/** 内存 StorageSyncPort (syncNotes 仅用笔记同步原始面)。 */
+/** 内存 StorageSyncPort (syncNotes 仅用笔记同步原始面)，实现真实快照 CAS。 */
 function makeNotesHub(initial: Note[]) {
-  const store: Note[] = initial.map((n) => ({ ...n }))
-  const port = {
-    async listAllNotes() {
-      return store.map((n) => ({ ...n }))
+  const normalizeNote = (value: Note): Note => {
+    const { kind: _kind, ...logical } = value as Note & { kind?: unknown }
+    return structuredClone(logical)
+  }
+  const store = structuredClone(initial.map(normalizeNote))
+  const bulkCalls: { items: Note[]; expectedLocal: Note[] }[] = []
+  const port: StorageSyncPort = {
+    async listAllSubscriptions() {
+      throw new Error("notes test hub does not implement subscriptions")
     },
-    async bulkPutNotes(ns: Note[]) {
+    async bulkPutSubscriptions() {
+      throw new Error("notes test hub does not implement subscriptions")
+    },
+    async listAllNotes() {
+      return structuredClone(store)
+    },
+    async bulkPutNotes(ns: Note[], expectedLocal: Note[]) {
+      bulkCalls.push({ items: structuredClone(ns), expectedLocal: structuredClone(expectedLocal) })
+      const desired = ns.map(normalizeNote)
+      if (recordsEqual(store, desired)) return structuredClone(store)
+      if (!recordsEqual(store, expectedLocal)) {
+        throw new StorageSyncConflictError("笔记")
+      }
       store.length = 0
-      store.push(...ns.map((n) => ({ ...n })))
+      store.push(...structuredClone(desired))
+      return structuredClone(store)
     },
   }
-  registerStorageSyncPort(port as unknown as StorageSyncPort)
-  return { store }
+  registerStorageSyncPort(port)
+  return { store, bulkCalls }
 }
 
 test("syncNotes: 合并结果与远端等价 → 跳过重新加密上传", async () => {
@@ -226,4 +248,37 @@ test("syncNotes: 本地有远端没有的笔记 → 照常上传", async () => {
   assert.equal(server.putCount, 1, "有增量 → 应 PUT 一次")
   assert.ok(server.blob, "服务端应已写入密文")
   assert.equal(res.total, 1)
+})
+
+test("syncNotes: 拉取远端增量时以初始快照执行本地 CAS", async () => {
+  const { key } = await deriveKeys(CODE, "notes")
+  const remoteNotes = [
+    {
+      ...note({ id: "remote", createdAt: 2000, updatedAt: 2000 }),
+      kind: "note",
+    } as Note,
+  ]
+  const encrypted = await encryptJson(key, remoteNotes)
+  const server = makeServer({ iv: encrypted.iv, ciphertext: encrypted.ciphertext, updated_at: 123 })
+  const hub = makeNotesHub([note({ id: "local", createdAt: 1000, updatedAt: 1000 })])
+
+  const res = await syncNotes(CODE)
+
+  assert.equal(hub.bulkCalls.length, 1)
+  assert.deepEqual(
+    hub.bulkCalls[0].expectedLocal.map((n) => n.id),
+    ["local"],
+  )
+  assert.deepEqual(hub.bulkCalls[0].items.map((n) => n.id).sort(), ["local", "remote"])
+  assert.deepEqual(hub.store.map((n) => n.id).sort(), ["local", "remote"])
+  assert.equal(
+    hub.store.some((item) => "kind" in item),
+    false,
+  )
+  const decoded = await decryptJson<Note[]>(key, server.blob!.iv, server.blob!.ciphertext)
+  assert.equal(
+    decoded.some((item) => "kind" in item),
+    false,
+  )
+  assert.deepEqual(res, { total: 2, added: 1 })
 })

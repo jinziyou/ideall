@@ -136,11 +136,24 @@ export function expiredTombstoneIdsToDelete(
     .map((s) => s.id)
 }
 
-/** 两记录集合是否等价 (按 id 排序后逐项比较), 用于决定是否写回本地。 */
+function canonicalJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue)
+  if (!value || typeof value !== "object") return value
+  const source = value as Record<string, unknown>
+  const canonical: Record<string, unknown> = {}
+  for (const key of Object.keys(source).sort()) {
+    if (source[key] !== undefined) canonical[key] = canonicalJsonValue(source[key])
+  }
+  return canonical
+}
+
+/** 两记录集合是否结构等价 (记录按 id、对象字段按键规范化；数组顺序保留)。 */
 export function recordsEqual<T extends SyncRecord>(a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false
   const norm = (xs: T[]) =>
-    [...xs].sort((x, y) => x.id.localeCompare(y.id)).map((s) => JSON.stringify(s))
+    [...xs]
+      .sort((x, y) => x.id.localeCompare(y.id))
+      .map((record) => JSON.stringify(canonicalJsonValue(record)))
   const na = norm(a)
   const nb = norm(b)
   return na.every((v, i) => v === nb[i])

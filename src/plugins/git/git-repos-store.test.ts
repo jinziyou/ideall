@@ -7,6 +7,7 @@ import {
   GIT_REPOS_STORAGE_KEY,
   addGitRepo,
   createGitReposExport,
+  importGitReposJson,
   loadGitRepos,
   normalizeGitRepos,
   parseGitReposExport,
@@ -99,4 +100,25 @@ test("Git repo export strips grant capabilities and imports as unauthorized lega
   const parsed = parseGitReposExport(JSON.stringify(pack))
   assert.deepEqual(parsed.payload.repos, ["/repo/a", "/repo/b"])
   assert.ok(normalizeGitRepos(parsed.payload.repos).every((repo) => repo.grantId === null))
+})
+
+test("Git repo import reports persistence failure instead of publishing a false commit", async () => {
+  const raw = JSON.stringify(createGitReposExport([REPO_A], "now"))
+  const storage = memoryStorage()
+
+  assert.deepEqual(await importGitReposJson(raw, storage), { repos: 1 })
+  assert.deepEqual(
+    loadGitRepos(storage).map((repo) => repo.path),
+    [REPO_A.path],
+  )
+
+  await assert.rejects(
+    importGitReposJson(raw, {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("blocked")
+      },
+    }),
+    /Unable to persist imported Git/,
+  )
 })

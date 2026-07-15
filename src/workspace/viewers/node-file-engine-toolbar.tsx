@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import type { IdeallFile } from "@protocol/file-system"
+import { sameFileRef, type IdeallFile } from "@protocol/file-system"
 import { invokeFileAction, readFile } from "@/filesystem/registry"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
 import { downloadBlob } from "@/lib/browser-download"
@@ -12,14 +12,15 @@ import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { fileMetaActionInput, fileReference, parseFileTags } from "../file-action-utils"
 import { fileReadResultToBlob } from "@/filesystem/read-result"
 import { fileTags } from "../file-engine-data"
-import { closeNodeTabs, renameNodeTab } from "../store"
+import { closeNodeTabs } from "../store"
 import { clearFileDraft } from "./file-draft"
+import { fileActionInvokeOptions, isCommittedFileActionVersionSuperseded } from "./file-action-form"
 import FileViewerToolbar, { type FileToolbarFile } from "./file-viewer-toolbar"
 
 type Props = {
   file: IdeallFile
   enginePicker: React.ReactNode
-  onFileChanged: (file: IdeallFile) => void
+  onFileChanged: React.Dispatch<React.SetStateAction<IdeallFile | null>>
   readOnly?: boolean
 }
 
@@ -28,6 +29,24 @@ const UI_CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } a
 
 function errorDescription(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
+}
+
+function committedVersion(result: unknown): string | undefined {
+  if (
+    result == null ||
+    typeof result !== "object" ||
+    Array.isArray(result) ||
+    !("meta" in result)
+  ) {
+    return undefined
+  }
+  const meta = result.meta
+  if (meta == null || typeof meta !== "object" || Array.isArray(meta) || !("updatedAt" in meta)) {
+    return undefined
+  }
+  return typeof meta.updatedAt === "number" && Number.isFinite(meta.updatedAt)
+    ? String(meta.updatedAt)
+    : undefined
 }
 
 /** File-engine path for local Node files; all persisted data and actions go through FileSystem. */
@@ -42,6 +61,9 @@ export default function NodeFileEngineToolbar({
   const [renameOpen, setRenameOpen] = React.useState(false)
   const [tagsOpen, setTagsOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [renameVersion, setRenameVersion] = React.useState<IdeallFile["version"]>()
+  const [tagsVersion, setTagsVersion] = React.useState<IdeallFile["version"]>()
+  const [deleteVersion, setDeleteVersion] = React.useState<IdeallFile["version"]>()
 
   if (!fileId) return null
 
@@ -55,24 +77,59 @@ export default function NodeFileEngineToolbar({
     size: file.size ?? 0,
   }
 
-  const rename = async (nextName: string) => {
+  const rename = async (nextName: string, expectedVersion: IdeallFile["version"]) => {
     const name = nextName.trim()
     if (!name || name === displayName) return
     try {
-      await invokeFileAction(file.ref, "edit", fileMetaActionInput({ name }), UI_ACTION_CONTEXT)
-      renameNodeTab({ kind: "file", id: fileId }, name)
-      onFileChanged({ ...file, name })
+      const result = await invokeFileAction(
+        file.ref,
+        "edit",
+        fileMetaActionInput({ name }),
+        UI_ACTION_CONTEXT,
+        fileActionInvokeOptions(expectedVersion),
+      )
+      const version = committedVersion(result)
+      onFileChanged((current) => {
+        if (
+          !current ||
+          !sameFileRef(current.ref, file.ref) ||
+          isCommittedFileActionVersionSuperseded(current.version, version, expectedVersion)
+        ) {
+          return current
+        }
+        return { ...current, name, version: version ?? current.version }
+      })
       toast.success("已重命名")
     } catch (reason) {
       toast.error("重命名失败", { description: errorDescription(reason) })
     }
   }
 
-  const updateTags = async (input: string) => {
+  const updateTags = async (input: string, expectedVersion: IdeallFile["version"]) => {
     const tags = parseFileTags(input)
     try {
-      await invokeFileAction(file.ref, "edit", fileMetaActionInput({ tags }), UI_ACTION_CONTEXT)
-      onFileChanged({ ...file, properties: { ...file.properties, tags } })
+      const result = await invokeFileAction(
+        file.ref,
+        "edit",
+        fileMetaActionInput({ tags }),
+        UI_ACTION_CONTEXT,
+        fileActionInvokeOptions(expectedVersion),
+      )
+      const version = committedVersion(result)
+      onFileChanged((current) => {
+        if (
+          !current ||
+          !sameFileRef(current.ref, file.ref) ||
+          isCommittedFileActionVersionSuperseded(current.version, version, expectedVersion)
+        ) {
+          return current
+        }
+        return {
+          ...current,
+          version: version ?? current.version,
+          properties: { ...current.properties, tags },
+        }
+      })
       toast.success("已更新标签")
     } catch (reason) {
       toast.error("更新标签失败", { description: errorDescription(reason) })
@@ -97,9 +154,15 @@ export default function NodeFileEngineToolbar({
     }
   }
 
-  const remove = async () => {
+  const remove = async (expectedVersion: IdeallFile["version"]) => {
     try {
-      await invokeFileAction(file.ref, "delete", undefined, UI_ACTION_CONTEXT)
+      await invokeFileAction(
+        file.ref,
+        "delete",
+        undefined,
+        UI_ACTION_CONTEXT,
+        fileActionInvokeOptions(expectedVersion),
+      )
       clearFileDraft(fileId)
       closeNodeTabs({ kind: "file", id: fileId })
       undoableDeleteToast(displayName, async () => {
@@ -126,13 +189,22 @@ export default function NodeFileEngineToolbar({
         onModeChange={() => {}}
         onSave={() => {}}
         onDownload={() => void download()}
-        onRename={() => setRenameOpen(true)}
-        onEditTags={() => setTagsOpen(true)}
-        onClearTags={() => void updateTags("")}
+        onRename={() => {
+          setRenameVersion(file.version)
+          setRenameOpen(true)
+        }}
+        onEditTags={() => {
+          setTagsVersion(file.version)
+          setTagsOpen(true)
+        }}
+        onClearTags={() => void updateTags("", file.version)}
         onCopyName={() => void copyText("文件名", displayName || "无标题")}
         onCopyRef={() => void copyText("文件引用", fileReference(fileId))}
         onDiscardDraft={() => {}}
-        onDelete={() => setDeleteOpen(true)}
+        onDelete={() => {
+          setDeleteVersion(file.version)
+          setDeleteOpen(true)
+        }}
         extraActions={enginePicker}
         allowMetadataEdit={!readOnly && file.capabilities.includes("write")}
         allowDelete={!readOnly && file.capabilities.includes("delete")}
@@ -143,7 +215,7 @@ export default function NodeFileEngineToolbar({
         title="重命名文件"
         label="名称"
         defaultValue={displayName}
-        onSubmit={(name) => void rename(name)}
+        onSubmit={(name) => void rename(name, renameVersion)}
       />
       <TextPromptDialog
         open={tagsOpen}
@@ -153,7 +225,7 @@ export default function NodeFileEngineToolbar({
         defaultValue={displayTags.join(", ")}
         placeholder="用逗号分隔多个标签"
         confirmLabel="保存"
-        onSubmit={(tags) => void updateTags(tags)}
+        onSubmit={(tags) => void updateTags(tags, tagsVersion)}
       />
       <ConfirmDialog
         open={deleteOpen}
@@ -162,7 +234,7 @@ export default function NodeFileEngineToolbar({
         description="删除后可从提示中撤销。"
         confirmLabel="删除"
         destructive
-        onConfirm={() => void remove()}
+        onConfirm={() => void remove(deleteVersion)}
       />
     </>
   )

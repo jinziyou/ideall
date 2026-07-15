@@ -25,6 +25,7 @@ import { FileSystemError } from "./types"
 
 export type CompositeRootEntry = {
   entryId: string
+  pathName?: string
   name: string
   target: FileRef
   sortKey?: string
@@ -179,6 +180,7 @@ export class CompositeRootFileSystem implements FileSystemProvider {
   listEntries(): DirectoryEntry[] {
     return [...this.entries.values()].sort(compareEntries).map((entry) => ({
       entryId: entry.entryId,
+      ...(entry.pathName ? { pathName: entry.pathName } : {}),
       parent: this.descriptor.root,
       target: entry.target,
       name: entry.name,

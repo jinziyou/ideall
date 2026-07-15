@@ -19,9 +19,27 @@ import { EmptyState } from "@/ui/empty-state"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
 import { formatBytes, formatTimestamp } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
+import { fileRefKey, type FileRef } from "@protocol/file-system"
 import { trashItemRef, trashRootRef, type TrashFileItem } from "@/filesystem/trash-file-system"
 import { invokeFileAction, watchFile } from "@/filesystem/registry"
 import { readCompleteDirectory } from "@/filesystem/directory-walk"
+import {
+  createTrashEmptyConfirmationRequestGate,
+  prepareTrashEmptyConfirmation,
+  type TrashEmptyConfirmation,
+} from "./trash-empty-confirmation"
+import {
+  canStartTrashMutation,
+  completeTrashRefresh,
+  createTrashRefreshCoordinator,
+  failTrashRefresh,
+  runTrashRefreshRequest,
+  settleTrashMutationWithRefresh,
+  startTrashRefresh,
+  visibleTrashRefreshView,
+  type TrashRefreshTarget,
+  type TrashRefreshViewState,
+} from "./trash-refresh-coordinator"
 
 const DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
 const ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
@@ -84,78 +102,268 @@ function KindIcon({ item }: { item: TrashFileItem }) {
   return <Icon className="h-4 w-4 text-muted-foreground" />
 }
 
-export default function TrashPage() {
-  const [items, setItems] = React.useState<TrashFileItem[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [busyId, setBusyId] = React.useState<string | null>(null)
-  const [emptying, setEmptying] = React.useState(false)
-  const [confirming, setConfirming] = React.useState<
-    { kind: "purge"; item: TrashFileItem } | { kind: "empty" } | null
-  >(null)
+export default function TrashPage({ rootRef = trashRootRef }: { rootRef?: FileRef } = {}) {
+  const rootFileSystemId = rootRef.fileSystemId
+  const rootFileId = rootRef.fileId
+  const stableRootRef = React.useMemo<FileRef>(
+    () => ({ fileSystemId: rootFileSystemId, fileId: rootFileId }),
+    [rootFileId, rootFileSystemId],
+  )
+  const rootKey = fileRefKey(stableRootRef)
+  const rootViewTarget = React.useMemo(() => Object.freeze({ targetKey: rootKey }), [rootKey])
+  const refreshCoordinator = React.useRef(createTrashRefreshCoordinator())
+  const refreshTarget = React.useRef<TrashRefreshTarget | null>(null)
+  const [refreshState, setRefreshState] = React.useState<TrashRefreshViewState<TrashFileItem>>({
+    target: rootViewTarget,
+    items: [],
+    loading: true,
+  })
+  const { items, loading } = visibleTrashRefreshView(refreshState, rootViewTarget)
+  const mutationRequests = React.useRef(0)
+  const [mutationState, setMutationState] = React.useState<{
+    target: TrashRefreshTarget
+    request: number
+    busyId: string | null
+    emptying: boolean
+  } | null>(null)
+  const currentMutation =
+    mutationState?.target.targetKey === rootKey &&
+    refreshCoordinator.current.isTargetActive(mutationState.target)
+      ? mutationState
+      : null
+  const busyId = currentMutation?.busyId ?? null
+  const emptying = currentMutation?.emptying ?? false
+  const emptyConfirmationRequests = React.useRef(createTrashEmptyConfirmationRequestGate())
+  const [emptyPreparation, setEmptyPreparation] = React.useState<{
+    rootKey: string
+    request: number
+  } | null>(null)
+  type Confirmation = { kind: "purge"; item: TrashFileItem } | TrashEmptyConfirmation
+  const [confirmationState, setConfirmationState] = React.useState<{
+    rootKey: string
+    request: number
+    value: Confirmation
+  } | null>(null)
+  const preparingEmpty =
+    emptyPreparation?.rootKey === rootKey &&
+    emptyConfirmationRequests.current.isCurrent(emptyPreparation.request)
+  const confirming =
+    confirmationState?.rootKey === rootKey &&
+    emptyConfirmationRequests.current.isCurrent(confirmationState.request)
+      ? confirmationState.value
+      : null
 
-  const refresh = React.useCallback(async () => {
-    setLoading(true)
-    try {
-      const entries = await readCompleteDirectory(trashRootRef, DIRECTORY_CONTEXT)
-      setItems(entries.flatMap((entry) => parseTrashItem(entry.properties)))
-    } catch (error) {
-      setItems([])
-      toast.error("读取回收站失败", { description: String(error) })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const refresh = React.useCallback(
+    async (target: TrashRefreshTarget) => {
+      const coordinator = refreshCoordinator.current
+      await runTrashRefreshRequest(
+        coordinator,
+        target,
+        async () => {
+          const entries = await readCompleteDirectory(stableRootRef, DIRECTORY_CONTEXT)
+          return entries.flatMap((entry) => parseTrashItem(entry.properties))
+        },
+        {
+          onStart(request) {
+            setRefreshState((current) =>
+              coordinator.isCurrent(request) ? startTrashRefresh(current, rootViewTarget) : current,
+            )
+          },
+          onSuccess(nextItems, request) {
+            setRefreshState((current) =>
+              coordinator.isCurrent(request)
+                ? completeTrashRefresh(rootViewTarget, nextItems)
+                : current,
+            )
+          },
+          onError(error, request) {
+            setRefreshState((current) =>
+              coordinator.isCurrent(request) ? failTrashRefresh(current, rootViewTarget) : current,
+            )
+            toast.error("读取回收站失败", { description: String(error) })
+          },
+        },
+      )
+    },
+    [rootViewTarget, stableRootRef],
+  )
 
   React.useEffect(() => {
-    void refresh()
-    const handle = watchFile(trashRootRef, WATCH_CONTEXT, () => void refresh())
-    return () => handle?.dispose()
-  }, [refresh])
+    const confirmationRequests = emptyConfirmationRequests.current
+    const coordinator = refreshCoordinator.current
+    const target = coordinator.activate(rootKey)
+    refreshTarget.current = target
+    void refresh(target)
+    const handle = watchFile(stableRootRef, WATCH_CONTEXT, () => void refresh(target))
+    return () => {
+      if (refreshTarget.current?.generation === target.generation) refreshTarget.current = null
+      coordinator.deactivate(target)
+      confirmationRequests.cancel()
+      handle?.dispose()
+    }
+  }, [refresh, rootKey, stableRootRef])
+
+  function cancelEmptyConfirmationPreparation() {
+    emptyConfirmationRequests.current.cancel()
+    setEmptyPreparation(null)
+  }
+
+  function activeRefreshTarget(): TrashRefreshTarget | null {
+    const target = refreshTarget.current
+    return target && refreshCoordinator.current.isTargetActive(target) ? target : null
+  }
 
   async function restore(item: TrashFileItem) {
-    setBusyId(item.id)
-    try {
-      await invokeFileAction(trashItemRef(item.id), "restore", undefined, ACTION_CONTEXT)
-      toast.success(`已恢复「${item.title}」`)
-      await refresh()
-    } catch (error) {
-      toast.error("恢复失败", {
-        description: error instanceof Error ? error.message : String(error),
+    const target = activeRefreshTarget()
+    if (
+      !target ||
+      !canStartTrashMutation("restore", {
+        loading,
+        mutationBusy: busyId !== null || emptying,
       })
+    )
+      return
+    cancelEmptyConfirmationPreparation()
+    const mutationRequest = ++mutationRequests.current
+    setMutationState({ target, request: mutationRequest, busyId: item.id, emptying: false })
+    try {
+      await invokeFileAction(trashItemRef(item.id), "restore", undefined, ACTION_CONTEXT, {
+        expectedVersion: String(item.updatedAt),
+      })
+      if (refreshCoordinator.current.isTargetActive(target)) {
+        toast.success(`已恢复「${item.title}」`)
+      }
+    } catch (error) {
+      if (refreshCoordinator.current.isTargetActive(target)) {
+        toast.error("恢复失败", {
+          description: error instanceof Error ? error.message : String(error),
+        })
+      }
     } finally {
-      setBusyId(null)
+      await settleTrashMutationWithRefresh(
+        () => refresh(target),
+        () => {
+          if (refreshCoordinator.current.isTargetActive(target)) {
+            setMutationState((current) =>
+              current?.request === mutationRequest &&
+              current.target.generation === target.generation
+                ? null
+                : current,
+            )
+          }
+        },
+      )
     }
   }
 
   async function purge(item: TrashFileItem) {
-    setBusyId(item.id)
+    const target = activeRefreshTarget()
+    if (
+      !target ||
+      !canStartTrashMutation("purge", {
+        loading,
+        mutationBusy: busyId !== null || emptying,
+      })
+    )
+      return
+    const mutationRequest = ++mutationRequests.current
+    setMutationState({ target, request: mutationRequest, busyId: item.id, emptying: false })
     try {
-      await invokeFileAction(trashItemRef(item.id), "purge", undefined, ACTION_CONTEXT)
-      toast.success("已永久删除")
-      await refresh()
+      await invokeFileAction(trashItemRef(item.id), "purge", undefined, ACTION_CONTEXT, {
+        expectedVersion: String(item.updatedAt),
+      })
+      if (refreshCoordinator.current.isTargetActive(target)) toast.success("已永久删除")
     } catch (error) {
-      toast.error("永久删除失败", { description: String(error) })
+      if (refreshCoordinator.current.isTargetActive(target)) {
+        toast.error("永久删除失败", { description: String(error) })
+      }
     } finally {
-      setBusyId(null)
+      await settleTrashMutationWithRefresh(
+        () => refresh(target),
+        () => {
+          if (refreshCoordinator.current.isTargetActive(target)) {
+            setMutationState((current) =>
+              current?.request === mutationRequest &&
+              current.target.generation === target.generation
+                ? null
+                : current,
+            )
+          }
+        },
+      )
     }
   }
 
-  async function clearAll() {
-    if (items.length === 0) return
-    setEmptying(true)
+  async function clearAll(expectedVersion: string) {
+    const target = activeRefreshTarget()
+    if (
+      !target ||
+      !canStartTrashMutation("empty", {
+        loading,
+        mutationBusy: busyId !== null || emptying,
+      })
+    )
+      return
+    const mutationRequest = ++mutationRequests.current
+    setMutationState({ target, request: mutationRequest, busyId: null, emptying: true })
     try {
-      const result = await invokeFileAction(trashRootRef, "empty", undefined, ACTION_CONTEXT)
+      const result = await invokeFileAction(stableRootRef, "empty", undefined, ACTION_CONTEXT, {
+        expectedVersion,
+      })
       const count =
         result != null && typeof result === "object" && "count" in result
           ? Number(result.count) || 0
           : 0
-      toast.success(`已清空 ${count} 项`)
-      await refresh()
+      if (refreshCoordinator.current.isTargetActive(target)) {
+        toast.success(`已清空 ${count} 项`)
+      }
     } catch (error) {
-      toast.error("清空失败", { description: String(error) })
+      if (refreshCoordinator.current.isTargetActive(target)) {
+        toast.error("清空失败", { description: String(error) })
+      }
     } finally {
-      setEmptying(false)
+      await settleTrashMutationWithRefresh(
+        () => refresh(target),
+        () => {
+          if (refreshCoordinator.current.isTargetActive(target)) {
+            setMutationState((current) =>
+              current?.request === mutationRequest &&
+              current.target.generation === target.generation
+                ? null
+                : current,
+            )
+          }
+        },
+      )
     }
+  }
+
+  async function openEmptyConfirmation() {
+    const target = activeRefreshTarget()
+    if (!target || loading || items.length === 0 || busyId !== null || emptying || confirming)
+      return
+    const request = emptyConfirmationRequests.current.begin()
+    const requestRootKey = target.targetKey
+    setEmptyPreparation({ rootKey: requestRootKey, request })
+    try {
+      const confirmation = await prepareTrashEmptyConfirmation(items)
+      if (emptyConfirmationRequests.current.isCurrent(request)) {
+        setConfirmationState({ rootKey: requestRootKey, request, value: confirmation })
+      }
+    } catch (error) {
+      if (emptyConfirmationRequests.current.isCurrent(request)) {
+        toast.error("准备清空失败", { description: String(error) })
+      }
+    } finally {
+      if (emptyConfirmationRequests.current.isCurrent(request)) setEmptyPreparation(null)
+    }
+  }
+
+  function openPurgeConfirmation(item: TrashFileItem) {
+    cancelEmptyConfirmationPreparation()
+    if (!activeRefreshTarget() || loading || busyId !== null || emptying) return
+    const request = emptyConfirmationRequests.current.begin()
+    setConfirmationState({ rootKey, request, value: { kind: "purge", item } })
   }
 
   return (
@@ -163,7 +371,10 @@ export default function TrashPage() {
       <ConfirmDialog
         open={!!confirming}
         onOpenChange={(open) => {
-          if (!open) setConfirming(null)
+          if (!open) {
+            cancelEmptyConfirmationPreparation()
+            setConfirmationState(null)
+          }
         }}
         title={
           confirming?.kind === "purge" ? `永久删除「${confirming.item.title}」？` : "清空回收站？"
@@ -171,15 +382,16 @@ export default function TrashPage() {
         description={
           confirming?.kind === "purge"
             ? "此操作不可恢复，文件内容快照也会被移除。"
-            : `将永久删除回收站中的 ${items.length} 项，此操作不可恢复。`
+            : `将永久删除回收站中的 ${confirming?.count ?? 0} 项，此操作不可恢复。`
         }
         confirmLabel={confirming?.kind === "purge" ? "永久删除" : "清空回收站"}
         destructive
         onConfirm={() => {
           const next = confirming
-          setConfirming(null)
+          cancelEmptyConfirmationPreparation()
+          setConfirmationState(null)
           if (next?.kind === "purge") void purge(next.item)
-          else if (next?.kind === "empty") void clearAll()
+          else if (next?.kind === "empty") void clearAll(next.expectedVersion)
         }}
       />
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -190,7 +402,16 @@ export default function TrashPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={refresh} disabled={loading}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const target = activeRefreshTarget()
+              if (target) void refresh(target)
+            }}
+            disabled={loading}
+          >
             <RefreshCw className="mr-1.5 h-4 w-4" />
             刷新
           </Button>
@@ -198,10 +419,12 @@ export default function TrashPage() {
             type="button"
             variant="destructive"
             size="sm"
-            onClick={() => setConfirming({ kind: "empty" })}
-            disabled={items.length === 0 || emptying}
+            onClick={() => void openEmptyConfirmation()}
+            disabled={
+              loading || items.length === 0 || preparingEmpty || emptying || busyId !== null
+            }
           >
-            {emptying ? (
+            {preparingEmpty || emptying ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
             ) : (
               <Trash2 className="mr-1.5 h-4 w-4" />
@@ -220,6 +443,7 @@ export default function TrashPage() {
           <div className="divide-y">
             {items.map((item) => {
               const busy = busyId === item.id
+              const mutationBusy = loading || busyId !== null || emptying
               return (
                 <div
                   key={item.id}
@@ -257,7 +481,7 @@ export default function TrashPage() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={!item.restorable || busy}
+                      disabled={!item.restorable || mutationBusy || preparingEmpty}
                       data-testid={`trash-restore-${item.id}`}
                       onClick={() => void restore(item)}
                     >
@@ -273,9 +497,9 @@ export default function TrashPage() {
                       size="sm"
                       variant="outline"
                       className="text-destructive hover:text-destructive"
-                      disabled={busy}
+                      disabled={mutationBusy || preparingEmpty}
                       data-testid={`trash-purge-${item.id}`}
-                      onClick={() => setConfirming({ kind: "purge", item })}
+                      onClick={() => openPurgeConfirmation(item)}
                     >
                       <Trash2 className="mr-1.5 h-4 w-4" />
                       永久删除

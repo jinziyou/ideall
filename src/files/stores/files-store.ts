@@ -5,22 +5,26 @@
 //     撤销 = 节点恢复 + 从快照重放 Blob (restoreFile 入参 StoredFile 含 blob)。
 // 本切片不开同步; sortKey/updatedAt 已补齐。Blob 大文件 E2E 同步属远期独立通道。
 import { FileMeta, StoredFile } from "@protocol/files"
-import type { NodeKind, NodeOfKind } from "@protocol/node"
+import type { Node, NodeKind, NodeOfKind } from "@protocol/node"
 import { genId } from "@/lib/id"
 import { isLive } from "@protocol/sync"
-import { appendSortKey, maxSortKey } from "@/files/sort-key"
 import {
-  idbDelete,
   idbGet,
   idbGetAllFromIndex,
-  idbPutAcrossStores,
   idbReadModifyWrite,
+  idbRunTransaction,
   INDEX_NODES_KIND,
   STORE_BLOBS,
   STORE_NODES,
+  STORE_TRASH_SNAPSHOTS,
 } from "@/lib/idb"
 import { notifyFilesUpdated } from "@protocol/flowback"
-import { captureTrashSnapshot } from "@/files/stores/trash-store"
+import type { TrashSnapshot } from "@/files/stores/trash-store"
+import { addNodeAtKindTail } from "@/files/stores/node-tail-transaction"
+import {
+  assertNodeMutationExpectation,
+  type NodeMutationExpectation,
+} from "@/files/stores/node-mutation"
 import { nextUpdatedAt } from "@/files/version"
 
 type FileNode = NodeOfKind<"file">
@@ -77,47 +81,67 @@ export async function getFile(id: string): Promise<StoredFile | undefined> {
 
 // ---- 写 ----
 
-/** 保存一个浏览器 File 对象, 返回元数据 */
-export async function addFile(file: File, tags: string[] = []): Promise<FileMeta> {
-  const existing = await allFileNodes()
+/** 保存浏览器 File，并返回 Blob + Node 同一写事务实际提交的统一 Node。 */
+export async function addFileWithNode(file: File, tags: string[] = []): Promise<FileNode> {
   const now = Date.now()
   const id = genId("f")
-  const node: FileNode = {
-    id,
-    kind: "file",
-    title: file.name,
-    parentId: null,
-    sortKey: appendSortKey(maxSortKey(existing)),
-    tags,
-    createdAt: now,
-    updatedAt: now,
-    blobRef: { store: "blobs", key: id, size: file.size, mime: file.type },
-    content: null,
-  }
-  // Blob 与节点同一事务原子写: 避免「Blob 已落、节点写入中断」留下无引用孤儿 Blob (无 GC 路径)。
-  await idbPutAcrossStores([
-    { store: STORE_BLOBS, value: { key: id, blob: file } satisfies BlobRecord },
-    { store: STORE_NODES, value: node },
-  ])
+  // 尾键读取、Blob 与节点写入同一事务：既防并发排序键碰撞，也不留下无引用 Blob。
+  const node = await idbRunTransaction<FileNode>(
+    [STORE_BLOBS, STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const blobStore = transaction.objectStore(STORE_BLOBS)
+      addNodeAtKindTail(
+        transaction.objectStore(STORE_NODES),
+        { kind: "file", parentId: null },
+        (sortKey) => ({
+          id,
+          kind: "file",
+          title: file.name,
+          parentId: null,
+          sortKey,
+          tags,
+          createdAt: now,
+          updatedAt: now,
+          blobRef: { store: "blobs", key: id, size: file.size, mime: file.type },
+          content: null,
+        }),
+        (created) => {
+          blobStore.put({ key: id, blob: file } satisfies BlobRecord)
+          setResult(created)
+        },
+        abort,
+      )
+    },
+  )
   notifyFilesUpdated({ kind: "file", id })
-  return nodeToMeta(node)
+  return node
+}
+
+/** 兼容既有 FilesPort DTO；创建真相由 addFileWithNode 返回。 */
+export async function addFile(file: File, tags: string[] = []): Promise<FileMeta> {
+  return nodeToMeta(await addFileWithNode(file, tags))
 }
 
 /** 更新文件元数据 (重命名 / 改标签); 不改动 Blob */
 export async function updateFileMeta(
   id: string,
   patch: Partial<Pick<StoredFile, "name" | "tags">>,
-): Promise<void> {
+  expected?: NodeMutationExpectation,
+): Promise<FileNode | undefined> {
+  if (patch.name === undefined && patch.tags === undefined) return undefined
   // 单事务读-改-写; kind 守卫防误改其它 kind 节点。name→title 映射。
-  await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) => {
-    if (!current || current.kind !== "file") return undefined
+  const updated = await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) => {
+    assertNodeMutationExpectation(current, expected)
+    if (!current || current.kind !== "file" || !isLive(current)) return undefined
     const next: FileNode = { ...current, updatedAt: nextUpdatedAt(current.updatedAt) }
     if (patch.name !== undefined) next.title = patch.name
     if (patch.tags !== undefined) next.tags = patch.tags
     return next
   })
   // 与 add/delete 一致: 通知「我的」更新, 否则 keep-alive 的概览时间线在改名后会陈旧。
-  notifyFilesUpdated({ kind: "file", id })
+  if (updated) notifyFilesUpdated({ kind: "file", id })
+  return updated
 }
 
 /** 更新文本/代码类文件内容: Blob 与文件节点元数据同事务写回。 */
@@ -125,76 +149,164 @@ export async function updateFileContent(
   id: string,
   content: string,
   mime?: string,
-): Promise<StoredFile | undefined> {
-  const current = await idbGet<FileNode>(STORE_NODES, id)
-  if (!current || current.kind !== "file" || !isLive(current)) return undefined
-  const blob = new Blob([content], { type: mime || current.blobRef.mime || "text/plain" })
-  const now = nextUpdatedAt(current.updatedAt)
-  const next: FileNode = {
-    ...current,
-    updatedAt: now,
-    blobRef: {
-      ...current.blobRef,
-      size: blob.size,
-      mime: blob.type || current.blobRef.mime,
+  expected?: NodeMutationExpectation,
+): Promise<FileNode | undefined> {
+  const updated = await idbRunTransaction<FileNode | undefined>(
+    [STORE_BLOBS, STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const blobStore = transaction.objectStore(STORE_BLOBS)
+      const nodeStore = transaction.objectStore(STORE_NODES)
+      const request = nodeStore.get(id)
+      request.onerror = () => abort(request.error ?? new Error("读取待更新文件失败"))
+      request.onsuccess = () => {
+        try {
+          const current = request.result as Node | undefined
+          assertNodeMutationExpectation(current, expected)
+          if (!current || current.kind !== "file" || !isLive(current)) {
+            setResult(undefined)
+            return
+          }
+          const blob = new Blob([content], {
+            type: mime || current.blobRef.mime || "text/plain",
+          })
+          const next: FileNode = {
+            ...current,
+            updatedAt: nextUpdatedAt(current.updatedAt),
+            blobRef: {
+              ...current.blobRef,
+              size: blob.size,
+              mime: blob.type || current.blobRef.mime,
+            },
+          }
+          blobStore.put({ key: current.blobRef.key, blob } satisfies BlobRecord)
+          nodeStore.put(next)
+          setResult(next)
+        } catch (error) {
+          abort(error)
+        }
+      }
     },
-  }
-  await idbPutAcrossStores([
-    { store: STORE_BLOBS, value: { key: current.blobRef.key, blob } satisfies BlobRecord },
-    { store: STORE_NODES, value: next },
-  ])
+  )
+  if (!updated) return undefined
   notifyFilesUpdated({ kind: "file", id })
-  return {
-    id: next.id,
-    name: next.title,
-    type: next.blobRef.mime,
-    size: next.blobRef.size,
-    blob,
-    createdAt: next.createdAt,
-    tags: next.tags,
-  }
+  return updated
 }
 
 /** 删除文件 (软删标记 + 物理删 Blob; 撤销靠 restoreFile 从快照重放)。 */
-export async function deleteFile(id: string): Promise<void> {
-  const now = Date.now()
-  const current = await idbGet<FileNode>(STORE_NODES, id)
-  if (current && current.kind === "file" && isLive(current)) {
-    const rec = await idbGet<BlobRecord>(STORE_BLOBS, current.blobRef.key)
-    if (rec) await captureTrashSnapshot(current, rec.blob)
-  }
-  // 先给节点打删除标记 (隐藏该文件), 再删大 Blob (删除标记只留轻量节点)。
-  const tomb = await idbReadModifyWrite<FileNode>(STORE_NODES, id, (current) =>
-    current && current.kind === "file"
-      ? { ...current, deletedAt: now, updatedAt: nextUpdatedAt(current.updatedAt, now) }
-      : undefined,
+export async function deleteFile(id: string, expected?: NodeMutationExpectation): Promise<boolean> {
+  const deleted = await idbRunTransaction<boolean>(
+    [STORE_BLOBS, STORE_NODES, STORE_TRASH_SNAPSHOTS],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const blobStore = transaction.objectStore(STORE_BLOBS)
+      const nodeStore = transaction.objectStore(STORE_NODES)
+      const trashStore = transaction.objectStore(STORE_TRASH_SNAPSHOTS)
+      const nodeRequest = nodeStore.get(id)
+      nodeRequest.onerror = () => abort(nodeRequest.error ?? new Error("读取待删除文件失败"))
+      nodeRequest.onsuccess = () => {
+        try {
+          const current = nodeRequest.result as Node | undefined
+          assertNodeMutationExpectation(current, expected)
+          if (!current || current.kind !== "file" || !isLive(current)) {
+            setResult(false)
+            return
+          }
+          const blobRequest = blobStore.get(current.blobRef.key)
+          blobRequest.onerror = () =>
+            abort(blobRequest.error ?? new Error("读取待删除文件内容失败"))
+          blobRequest.onsuccess = () => {
+            try {
+              const record = blobRequest.result as BlobRecord | undefined
+              const now = Date.now()
+              if (record) {
+                trashStore.put({
+                  id: current.id,
+                  node: current,
+                  blob: record.blob,
+                  capturedAt: now,
+                } satisfies TrashSnapshot)
+              } else {
+                // Blob 已缺失时不能沿用旧一代快照，否则回收站会错误显示为可恢复。
+                trashStore.delete(current.id)
+              }
+              nodeStore.put({
+                ...current,
+                deletedAt: now,
+                updatedAt: nextUpdatedAt(current.updatedAt, now),
+              } satisfies FileNode)
+              blobStore.delete(current.blobRef.key)
+              setResult(true)
+            } catch (error) {
+              abort(error)
+            }
+          }
+        } catch (error) {
+          abort(error)
+        }
+      }
+    },
   )
-  if (tomb) await idbDelete(STORE_BLOBS, tomb.blobRef.key)
-  notifyFilesUpdated({ kind: "file", id })
+  if (deleted) notifyFilesUpdated({ kind: "file", id })
+  return deleted
 }
 
 /** 撤销删除: 把刚删除的文件 (含 Blob) 恢复 (重放 Blob + 节点清删除标记, 保留 id/createdAt)。 */
 export async function restoreFile(file: StoredFile): Promise<void> {
   const now = Date.now()
-  const existing = await allFileNodes()
-  // 软删后删除标记节点仍在 → 复用其 sortKey/parentId 恢复; 极端兜底 (节点不存在) 用追加键重建。
-  const tomb = existing.find((n) => n.id === file.id)
-  const revived: FileNode = {
-    id: file.id,
-    kind: "file",
-    title: file.name,
-    parentId: tomb?.parentId ?? null,
-    sortKey: tomb?.sortKey || appendSortKey(maxSortKey(existing)),
-    tags: file.tags,
-    createdAt: file.createdAt,
-    updatedAt: tomb ? nextUpdatedAt(tomb.updatedAt, now) : now,
-    blobRef: { store: "blobs", key: file.id, size: file.size, mime: file.type },
-    content: null,
-  }
-  // Blob 与节点同一事务原子写 (撤销=同生): 与 addFile 一致, 不留孤儿 Blob; 原 restoreFile 本就是直接 put 非 RMW。
-  await idbPutAcrossStores([
-    { store: STORE_BLOBS, value: { key: file.id, blob: file.blob } satisfies BlobRecord },
-    { store: STORE_NODES, value: revived },
-  ])
+  await idbRunTransaction<void>(
+    [STORE_BLOBS, STORE_NODES],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const blobStore = transaction.objectStore(STORE_BLOBS)
+      const nodeStore = transaction.objectStore(STORE_NODES)
+      const request = nodeStore.get(file.id)
+      request.onerror = () => abort(request.error ?? new Error("读取待恢复文件失败"))
+      request.onsuccess = () => {
+        try {
+          const current = request.result as Node | undefined
+          if (current && current.kind !== "file") {
+            throw new Error("待恢复文件 id 已被其它节点占用")
+          }
+          const revive = (
+            parentId: string | null,
+            sortKey: string,
+            updatedAt: number,
+          ): FileNode => ({
+            id: file.id,
+            kind: "file",
+            title: file.name,
+            parentId,
+            sortKey,
+            tags: file.tags,
+            createdAt: file.createdAt,
+            updatedAt,
+            blobRef: { store: "blobs", key: file.id, size: file.size, mime: file.type },
+            content: null,
+          })
+          const writeBlob = () => {
+            blobStore.put({ key: file.id, blob: file.blob } satisfies BlobRecord)
+            setResult(undefined)
+          }
+          if (current) {
+            nodeStore.put(
+              revive(current.parentId, current.sortKey, nextUpdatedAt(current.updatedAt, now)),
+            )
+            writeBlob()
+            return
+          }
+          addNodeAtKindTail(
+            nodeStore,
+            { kind: "file", parentId: null },
+            (sortKey) => revive(null, sortKey, now),
+            writeBlob,
+            abort,
+          )
+        } catch (error) {
+          abort(error)
+        }
+      }
+    },
+  )
   notifyFilesUpdated({ kind: "file", id: file.id })
 }

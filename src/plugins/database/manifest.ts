@@ -10,9 +10,9 @@ import {
   DATABASE_DB_NAME,
   DATABASE_DB_VERSION,
   exportDatabaseJson,
-  importDatabaseJson,
   inspectDatabaseData,
 } from "./database-store"
+import { importDatabaseJsonWithRootLock } from "./database-write-adapter"
 import type { PluginDataPort } from "@/plugins/shared/plugin-data"
 import type { LocalDataSchema } from "@/plugins/shared/local-data-schema"
 
@@ -26,7 +26,7 @@ const databaseDataPort: PluginDataPort = {
   importMode: "replace",
   importDescription: "导入会替换当前数据库插件的表和行。",
   exportJson: exportDatabaseJson,
-  importJson: importDatabaseJson,
+  importJson: importDatabaseJsonWithRootLock,
   inspect: async () => {
     const info = await inspectDatabaseData()
     return {
