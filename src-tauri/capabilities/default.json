@@ -39,6 +39,10 @@
     {
       "identifier": "allow-secure-store-delete",
       "comment": "桌面安全存储删除: 仅可信主窗口用于撤销本机敏感配置。"
+    },
+    {
+      "identifier": "allow-secure-store-self-test",
+      "comment": "桌面安全存储验收: 写入、读回并删除一次性随机值，不接收或返回用户凭据。"
     }
   ]
 }

@@ -367,7 +367,11 @@ function SecretsDialog({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 shrink-0"
-                  onClick={() => deleteSecret(s.id)}
+                  onClick={() => {
+                    void deleteSecret(s.id).catch((error) =>
+                      toast.error(error instanceof Error ? error.message : "删除密钥失败"),
+                    )
+                  }}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -393,9 +397,14 @@ function SecretsDialog({
               size="sm"
               disabled={!isValidSecretName(name)}
               onClick={() => {
-                setSecret(name, value)
-                setName("")
-                setValue("")
+                void setSecret(name, value)
+                  .then(() => {
+                    setName("")
+                    setValue("")
+                  })
+                  .catch((error) =>
+                    toast.error(error instanceof Error ? error.message : "保存密钥失败"),
+                  )
               }}
             >
               存

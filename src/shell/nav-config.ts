@@ -1,10 +1,6 @@
 import { Bot } from "lucide-react"
 import type { ComponentType } from "react"
-import {
-  NAVIGATION_SECTIONS as FILE_SYSTEM_NAVIGATION_SECTIONS,
-  type NavigationSectionId,
-} from "@/filesystem/navigation-file-system"
-import { joinIdeallPath } from "@/filesystem/path"
+import { navigationPath, type NavigationSectionId } from "@/filesystem/navigation-file-system"
 import { panelFileRef } from "@/filesystem/resource-file-system"
 import type { OpenTarget } from "@/workspace/open-target"
 import { MODULE_META } from "@/workspace/module-meta"
@@ -20,18 +16,10 @@ export type ShellNavigationTarget = PathTarget | FileTarget | CommandTarget
  * 一张 href 路由表。Next URL 仅留给深链与认证/错误等浏览器边界。
  */
 function navigationTarget(sectionId: NavigationSectionId, itemId?: string): PathTarget {
-  const section = FILE_SYSTEM_NAVIGATION_SECTIONS.find((candidate) => candidate.id === sectionId)
-  if (!section) throw new Error(`Unknown navigation section: ${sectionId}`)
-  const sectionPath = joinIdeallPath("/", section.pathName)
-  if (!itemId) {
-    return { type: "path", path: sectionPath, rootId: section.id, transient: true }
-  }
-  const item = section.items.find((candidate) => candidate.id === itemId)
-  if (!item) throw new Error(`Unknown navigation item: ${sectionId}/${itemId}`)
   return {
     type: "path",
-    path: joinIdeallPath(sectionPath, item.pathName),
-    rootId: section.id,
+    path: navigationPath(sectionId, itemId),
+    rootId: sectionId,
     transient: true,
   }
 }

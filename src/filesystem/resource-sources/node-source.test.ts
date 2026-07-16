@@ -389,6 +389,50 @@ test("node provider: list filters kind/parent/text and paginates metadata", asyn
   assert.equal(text.items[0]?.iconHint, "text/plain")
 })
 
+test("node provider: bounded list delegates cursor paging before materializing all summaries", async () => {
+  const { deps } = makeDeps([])
+  let fullReads = 0
+  const pageCalls: unknown[] = []
+  deps.listNodeSummaries = async () => {
+    fullReads += 1
+    return []
+  }
+  deps.listNodeSummaryPage = async (kinds, options) => {
+    pageCalls.push({ kinds, options })
+    return {
+      items: [
+        {
+          id: "n1",
+          kind: "note",
+          title: "Paged",
+          parentId: null,
+          sortKey: "a1",
+          hasChildren: false,
+        },
+      ],
+      nextCursor: "opaque-next",
+    }
+  }
+  const provider = createNodeResourceSource(deps)
+  const page = await provider.list(
+    { scheme: "node", kinds: ["note"], rootOnly: true, limit: 20, cursor: "opaque-current" },
+    agentReadCtx,
+  )
+
+  assert.equal(fullReads, 0)
+  assert.deepEqual(pageCalls, [
+    {
+      kinds: ["note"],
+      options: { limit: 20, cursor: "opaque-current", parentId: null },
+    },
+  ])
+  assert.deepEqual(
+    page.items.map((item) => item.ref.id),
+    ["n1"],
+  )
+  assert.equal(page.nextCursor, "opaque-next")
+})
+
 test("node provider: list metadata includes tree parent and hasChildren when parent is in query", async () => {
   const root = folder("root")
   const nested = bookmark("b1", "Nested", root.id)

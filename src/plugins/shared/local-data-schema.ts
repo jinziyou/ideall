@@ -2,6 +2,7 @@ import { AUTH_TOKEN_SECURE_KEY } from "@/lib/auth/auth-store"
 import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { STARTUP_TARGET_STORAGE_KEY, WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 import { ENGINE_PREFERENCES_STORAGE_KEY, enginePreferencesStorageKey } from "@/engines/preferences"
+import { FILE_TREE_EXPANDED_STORAGE_KEY, THEME_KEY } from "@/lib/public-config"
 
 export type LocalDataStorageKind = "localStorage" | "sessionStorage" | "indexedDB"
 export type LocalDataSchemaStatus = "ok" | "missing" | "warning" | "error" | "unknown"
@@ -99,6 +100,39 @@ export function repairJsonArray(value: unknown): LocalDataSchemaRepairPatch {
 }
 
 const coreSchemas: readonly LocalDataSchema[] = [
+  {
+    id: "appearance.theme",
+    label: "主题选择",
+    owner: "appearance",
+    storage: "localStorage",
+    key: THEME_KEY,
+    currentVersion: 1,
+    portable: true,
+    parseAs: "text",
+    validate: (value) =>
+      value === "light" || value === "dark" || value === "system" ? [] : ["主题值无效"],
+    repair: () => ({ action: "write", value: "system", detail: "已恢复跟随系统主题" }),
+  },
+  {
+    id: "navigation.file-tree-expanded",
+    label: "文件树展开状态",
+    owner: "navigation",
+    storage: "localStorage",
+    key: FILE_TREE_EXPANDED_STORAGE_KEY,
+    currentVersion: 1,
+    parseAs: "json",
+    validate: (value) =>
+      Array.isArray(value) && value.every((item) => typeof item === "string")
+        ? []
+        : ["应为字符串数组"],
+    repair: (value) => ({
+      action: "write",
+      value: Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [],
+      detail: "已移除无效的文件树展开项",
+    }),
+  },
   {
     id: "workspace.session",
     label: "工作区会话快照",

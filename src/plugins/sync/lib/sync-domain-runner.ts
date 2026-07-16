@@ -1,16 +1,28 @@
-// 单域加密 blob 同步编排 (关注 / 笔记共用) —— GET→解密→合并→GC→写本地→PUT, 409 有界重试。
+// 单域加密 blob 同步编排 (关注 / 笔记 / 书签共用) —— GET→解密→合并→GC→写本地→PUT。
 // 由 sync-domain-machine (XState) 驱动; 本文件保持纯函数、可单测, 不依赖 xstate。
-import type { SyncRecord, SyncResult } from "@protocol/sync"
+import type { SyncBlockBudget, SyncRecord, SyncResult } from "@protocol/sync"
 import { recordsEqual, isLive } from "@protocol/sync"
-import { decryptJson, deriveKeys, encryptJson, isValidSyncCode } from "@/lib/sync-crypto"
+import {
+  decryptJson,
+  deriveKeys,
+  encryptJson,
+  assertSyncJsonBudget,
+  isValidSyncCode,
+  SyncBlockLimitError,
+  type SyncPartition,
+  type SyncScope,
+} from "@/lib/sync-crypto"
 import { getSyncBlob, putSyncBlob } from "./sync-api"
 
 /** 同步推送的最大尝试次数: 每次 409 后重新 GET→合并→PUT。 */
 export const SYNC_MAX_ATTEMPTS = 4
 
 export type DomainSyncConfig<T extends SyncRecord> = {
-  /** deriveKeys 的 scope (笔记域传 "notes")。 */
-  keyScope?: "notes"
+  /** deriveKeys 的独立加密域；省略时保持历史关注域。 */
+  keyScope?: SyncScope
+  /** 0 保持历史 storageId；为未来服务端兼容分片预留稳定派生边界。 */
+  partition?: SyncPartition
+  budget: SyncBlockBudget
   listLocal: () => Promise<T[]>
   merge: (accumulated: T[], remote: T[]) => T[]
   gc: (merged: T[], now: number) => T[]
@@ -48,9 +60,15 @@ export async function prepareDomainSync<T extends SyncRecord>(
   config: DomainSyncConfig<T>,
 ): Promise<PrepareResult<T>> {
   if (!isValidSyncCode(code)) throw new Error("同步码格式不正确")
-  const { storageId, key } = await deriveKeys(code, config.keyScope)
+  const { storageId, key } = await deriveKeys(code, config.keyScope, config.partition)
   const now = Date.now()
   const localAll = await config.listLocal()
+  if (localAll.length > config.budget.maxRecords) {
+    throw new SyncBlockLimitError(
+      `本地同步记录超过单块上限（${localAll.length} 条，最大 ${config.budget.maxRecords} 条）`,
+    )
+  }
+  assertSyncJsonBudget(localAll, config.budget)
   return { storageId, key, now, localAll, localSnapshot: localAll, merged: localAll }
 }
 
@@ -74,20 +92,48 @@ export async function runDomainSyncAttempt<T extends SyncRecord>(
   let remoteDirty = false
   if (got.data) {
     try {
-      const decoded = await decryptJson<unknown[]>(ctx.key, got.data.iv, got.data.ciphertext)
+      const decoded = await decryptJson<unknown[]>(
+        ctx.key,
+        got.data.iv,
+        got.data.ciphertext,
+        config.budget,
+      )
       if (Array.isArray(decoded)) {
+        if (decoded.length > config.budget.maxRecords) {
+          return {
+            type: "fail",
+            message: `远端同步记录超过单块上限（${decoded.length} 条，最大 ${config.budget.maxRecords} 条）`,
+          }
+        }
         remote = decoded.filter((x) => config.isValidRemote(x, ctx.now))
         remoteDirty = remote.length !== decoded.length
       } else {
         remoteDirty = true
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof SyncBlockLimitError) {
+        return { type: "fail", message: error.message }
+      }
       return { type: "fail", message: "解密失败：同步码可能不一致" }
     }
   }
 
   const merged = config.merge(ctx.merged, remote)
   const kept = config.gc(merged, Date.now())
+  if (kept.length > config.budget.maxRecords) {
+    return {
+      type: "fail",
+      message: `合并后同步记录超过单块上限（${kept.length} 条，最大 ${config.budget.maxRecords} 条）`,
+    }
+  }
+  try {
+    assertSyncJsonBudget(kept, config.budget)
+  } catch (error) {
+    return {
+      type: "fail",
+      message: error instanceof Error ? error.message : "同步数据超过单块上限",
+    }
+  }
   let localSnapshot = ctx.localSnapshot
   if (!recordsEqual(kept, localSnapshot)) {
     localSnapshot = await config.bulkPut(kept, localSnapshot)
@@ -97,7 +143,18 @@ export async function runDomainSyncAttempt<T extends SyncRecord>(
     return { type: "complete", result: countSyncResult(ctx.localAll, localSnapshot) }
   }
 
-  const enc = await encryptJson(ctx.key, localSnapshot)
+  let enc: Awaited<ReturnType<typeof encryptJson>>
+  try {
+    if (localSnapshot.length > config.budget.maxRecords) {
+      throw new SyncBlockLimitError("存储规范化后的同步记录超过单块上限")
+    }
+    enc = await encryptJson(ctx.key, localSnapshot, config.budget)
+  } catch (error) {
+    return {
+      type: "fail",
+      message: error instanceof Error ? error.message : "同步数据超过单块上限",
+    }
+  }
   const put = await putSyncBlob(
     ctx.storageId,
     { iv: enc.iv, ciphertext: enc.ciphertext, updated_at: Date.now() },

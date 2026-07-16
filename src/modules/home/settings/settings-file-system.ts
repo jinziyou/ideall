@@ -1,5 +1,10 @@
 import { fileRefKey, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import { getSession, subscribeSession } from "@protocol/auth"
+import { getSyncTelemetrySnapshot, subscribeSyncTelemetry } from "@protocol/sync"
+import {
+  WORKSPACE_ARCHIVE_LIMITS,
+  WORKSPACE_ARCHIVE_MAX_PASSPHRASE_LENGTH,
+} from "@protocol/workspace-archive"
 import { paginateDirectoryItems } from "@/filesystem/provider-input"
 import type {
   DirectoryPage,
@@ -28,6 +33,12 @@ import {
 } from "@/shell/runtime-extensions"
 import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
+  SETTINGS_DATA_EXPORT_ACTION,
+  SETTINGS_DATA_IMPORT_ACTION,
+  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
+  SETTINGS_DATA_PERSIST_ACTION,
+  SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+  SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
   SETTINGS_FILE_SYSTEM_ID,
   SETTINGS_READ_PERMISSION,
   SETTINGS_ROOT_MEDIA_TYPE,
@@ -40,6 +51,12 @@ import {
   SETTINGS_SECTION_MEDIA_TYPE,
   SETTINGS_WRITE_PERMISSION,
   settingsSectionFileRef,
+  type SettingsDataExportResult,
+  type SettingsDataImportPreview,
+  type SettingsDataImportResult,
+  type SettingsDataPersistenceResult,
+  type SettingsDataSecureStoreMigrationResult,
+  type SettingsDataSecureStoreSelfTestResult,
   type SettingsRuntimeAction,
   type SettingsSectionId,
   type SettingsThemeChoice,
@@ -48,6 +65,12 @@ import { withSettingsSectionMutationLock } from "./settings-write-adapter"
 
 export {
   SETTINGS_CONNECTION_REVOKE_ACTION,
+  SETTINGS_DATA_EXPORT_ACTION,
+  SETTINGS_DATA_IMPORT_ACTION,
+  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
+  SETTINGS_DATA_PERSIST_ACTION,
+  SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+  SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
   SETTINGS_FILE_SYSTEM_ID,
   SETTINGS_READ_PERMISSION,
   SETTINGS_ROOT_MEDIA_TYPE,
@@ -72,6 +95,7 @@ type SettingsSectionDefinition = Readonly<{
 const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
   { id: "appearance", fileName: "appearance.json", label: "外观", writable: true },
   { id: "device", fileName: "device.json", label: "本机状态", writable: false },
+  { id: "data", fileName: "data.json", label: "本地数据", writable: false },
   {
     id: "connections",
     fileName: "connections.json",
@@ -105,6 +129,20 @@ type MaybePromise<T> = T | Promise<T>
 export type SettingsFileSystemDeps = Readonly<{
   read(section: SettingsSectionId): MaybePromise<unknown>
   writeAppearance(choice: SettingsThemeChoice): MaybePromise<void>
+  exportWorkspaceArchive(passphrase?: string): MaybePromise<SettingsDataExportResult>
+  previewWorkspaceArchive(
+    content: string,
+    filename?: string,
+    passphrase?: string,
+  ): MaybePromise<SettingsDataImportPreview>
+  importWorkspaceArchive(
+    content: string,
+    filename?: string,
+    passphrase?: string,
+  ): MaybePromise<SettingsDataImportResult>
+  requestPersistentStorage(): MaybePromise<SettingsDataPersistenceResult>
+  selfTestSecureStore(): MaybePromise<SettingsDataSecureStoreSelfTestResult>
+  migrateSecureStore(): MaybePromise<SettingsDataSecureStoreMigrationResult>
   revokeConnection(id: string): MaybePromise<boolean>
   manageRuntimeExtension(action: SettingsRuntimeAction, id: string): MaybePromise<boolean>
   subscribe(section: SettingsSectionId, listener: () => void): () => void
@@ -115,7 +153,7 @@ const MAX_DIAGNOSTIC_LENGTH = 1024
 const MAX_DIAGNOSTIC_DEPTH = 5
 const MAX_DIAGNOSTIC_ENTRIES = 32
 const SENSITIVE_DIAGNOSTIC_KEY =
-  /(token|secret|api[-_]?key|authorization|auth|cookie|password|session|jwt|bearer|credential|refresh|sync[:_-]?code)/i
+  /(token|secret|api[-_]?key|authorization|auth|cookie|password|passphrase|session|jwt|bearer|credential|refresh|sync[:_-]?code)/i
 const COMMAND_DIAGNOSTIC_KEY = /^(args?|argv|command|cmd|headers?)$/i
 
 function redactDiagnosticString(value: string): string {
@@ -292,7 +330,22 @@ const defaultDeps: SettingsFileSystemDeps = {
       case "device": {
         const session = getSession()
         return {
-          sync: { enabled: Boolean(getSyncCode()) },
+          sync: {
+            enabled: Boolean(getSyncCode()),
+            lastRun: (() => {
+              const telemetry = getSyncTelemetrySnapshot()
+              return telemetry
+                ? {
+                    status: telemetry.status,
+                    finishedAt: telemetry.finishedAt,
+                    durationMs: telemetry.durationMs,
+                    total: telemetry.total,
+                    added: telemetry.added,
+                    failureCode: telemetry.failureCode,
+                  }
+                : null
+            })(),
+          },
           storage: await storageEstimate(),
           publishingIdentity: session
             ? {
@@ -305,6 +358,80 @@ const defaultDeps: SettingsFileSystemDeps = {
                 },
               }
             : { signedIn: false, user: null },
+        }
+      }
+      case "data": {
+        const [{ secureStoreSecuritySnapshot, secureStoreStatus }, archive, database] =
+          await Promise.all([
+            import("@/lib/secure-store"),
+            import("@/plugins/shared/workspace-archive"),
+            import("@/lib/idb"),
+          ])
+        const [status, security, persisted] = await Promise.all([
+          secureStoreStatus(),
+          Promise.resolve(secureStoreSecuritySnapshot()),
+          typeof navigator !== "undefined" && typeof navigator.storage?.persisted === "function"
+            ? navigator.storage.persisted().catch(() => null)
+            : Promise.resolve(null),
+        ])
+        let databaseHealth: {
+          status: "healthy" | "unavailable"
+          counts: {
+            nodes: number
+            blobs: number
+            trashSnapshots: number
+            agentTasks: number
+          } | null
+          error: string | null
+        }
+        try {
+          const counts = await database.idbCountStores([
+            database.STORE_NODES,
+            database.STORE_BLOBS,
+            database.STORE_TRASH_SNAPSHOTS,
+            database.STORE_AGENT_TASKS,
+          ])
+          databaseHealth = {
+            status: "healthy",
+            counts: {
+              nodes: counts[database.STORE_NODES] ?? 0,
+              blobs: counts[database.STORE_BLOBS] ?? 0,
+              trashSnapshots: counts[database.STORE_TRASH_SNAPSHOTS] ?? 0,
+              agentTasks: counts[database.STORE_AGENT_TASKS] ?? 0,
+            },
+            error: null,
+          }
+        } catch (error) {
+          databaseHealth = {
+            status: "unavailable",
+            counts: null,
+            error: settingsDiagnosticMessage(error),
+          }
+        }
+        return {
+          archive: {
+            kind: archive.WORKSPACE_ARCHIVE_PACKAGE_KIND,
+            version: archive.WORKSPACE_ARCHIVE_PACKAGE_VERSION,
+            includesSecrets: false,
+            importMode: "replace",
+          },
+          secureStore: {
+            backend: status.backend,
+            native: status.native,
+            fallbackValueCount: security.fallbackValueCount,
+            legacyValueCount: security.legacyValueCount,
+            error: status.error ? settingsDiagnosticMessage(status.error) : null,
+          },
+          database: {
+            name: database.IDB_DATABASE_NAME,
+            version: database.IDB_DATABASE_VERSION,
+            ...databaseHealth,
+          },
+          storage: {
+            persistenceAvailable:
+              typeof navigator !== "undefined" && typeof navigator.storage?.persist === "function",
+            persisted,
+          },
         }
       }
       case "connections":
@@ -321,6 +448,76 @@ const defaultDeps: SettingsFileSystemDeps = {
     }
   },
   writeAppearance: setThemeChoice,
+  async exportWorkspaceArchive(passphrase) {
+    const [
+      { pluginDataFilename },
+      { exportWorkspaceArchiveEncrypted, exportWorkspaceArchiveJson },
+    ] = await Promise.all([
+      import("@/plugins/shared/plugin-data"),
+      import("@/plugins/shared/workspace-archive"),
+    ])
+    const encrypted = Boolean(passphrase)
+    return {
+      filename: pluginDataFilename(
+        encrypted ? "ideall-workspace-archive-encrypted" : "ideall-workspace-archive",
+      ),
+      content: encrypted
+        ? await exportWorkspaceArchiveEncrypted(passphrase ?? "")
+        : await exportWorkspaceArchiveJson(),
+      encrypted,
+    }
+  },
+  async previewWorkspaceArchive(content, filename, passphrase) {
+    const { previewWorkspaceArchiveImport } = await import("@/plugins/shared/workspace-archive")
+    const preview = await previewWorkspaceArchiveImport(content, filename, undefined, passphrase)
+    return {
+      ok: preview.ok,
+      encrypted: preview.encrypted ?? false,
+      requiresPassphrase: preview.requiresPassphrase ?? false,
+      filename: preview.filename ?? filename ?? null,
+      error: preview.error ? settingsDiagnosticMessage(preview.error) : null,
+      package: preview.package
+        ? {
+            kind: preview.package.dataKind,
+            version: preview.package.dataVersion,
+            exportedAt: preview.package.exportedAt,
+          }
+        : null,
+      archive: preview.archive ?? null,
+    }
+  },
+  async importWorkspaceArchive(content, filename, passphrase) {
+    const { importWorkspaceArchiveJson } = await import("@/plugins/shared/workspace-archive")
+    const execution = await importWorkspaceArchiveJson(content, filename, passphrase)
+    const count = (key: string): number => {
+      const value = execution.result[key]
+      return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0
+    }
+    return {
+      changed: true,
+      reloadRequired: true,
+      imported: {
+        nodes: count("nodes"),
+        blobs: count("blobs"),
+        trash: count("trash"),
+        plugins: count("plugins"),
+      },
+    }
+  },
+  async requestPersistentStorage() {
+    if (typeof navigator === "undefined" || typeof navigator.storage?.persist !== "function") {
+      return { available: false, granted: false }
+    }
+    return { available: true, granted: await navigator.storage.persist() }
+  },
+  async selfTestSecureStore() {
+    const { runSecureStoreSelfTest } = await import("@/lib/secure-store")
+    return runSecureStoreSelfTest()
+  },
+  async migrateSecureStore() {
+    const { migrateLegacySecureValues } = await import("@/lib/secure-store")
+    return migrateLegacySecureValues()
+  },
   revokeConnection(id) {
     const connected = getConnectionsSnapshot().some((connection) => connection.id === id)
     if (connected) revokeConnection(id)
@@ -341,7 +538,13 @@ const defaultDeps: SettingsFileSystemDeps = {
       case "appearance":
         return subscribeAppearance(listener)
       case "device":
-        return combineSubscriptions(subscribeSyncCode, subscribeSession)(listener)
+        return combineSubscriptions(
+          subscribeSyncCode,
+          subscribeSession,
+          subscribeSyncTelemetry,
+        )(listener)
+      case "data":
+        return () => {}
       case "connections":
         return subscribeConnections(listener)
       case "runtime-extensions":
@@ -562,6 +765,126 @@ const RUNTIME_EXTENSION_SETTINGS_ACTIONS: readonly FileAction[] = [
   },
 ]
 
+const DATA_SETTINGS_ACTIONS: readonly FileAction[] = [
+  OPEN_SETTINGS_ACTION,
+  {
+    id: SETTINGS_DATA_EXPORT_ACTION,
+    label: "导出完整工作区归档",
+    kind: "specialized",
+    reason: "导出内容需要由设置页直接保存为本地文件。",
+    risk: "safe",
+    requires: [SETTINGS_READ_PERMISSION],
+  },
+  {
+    id: SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+    label: "预检工作区归档",
+    kind: "specialized",
+    reason: "导入前需要读取用户选择的本地归档文件并展示替换范围。",
+    risk: "safe",
+    requires: [SETTINGS_READ_PERMISSION],
+  },
+  {
+    id: SETTINGS_DATA_IMPORT_ACTION,
+    label: "导入并替换工作区",
+    kind: "specialized",
+    reason: "导入会替换核心节点、文件、回收站、标签布局和插件数据。",
+    risk: "destructive",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_DATA_PERSIST_ACTION,
+    label: "请求持久存储",
+    kind: "specialized",
+    reason: "需要由用户手势触发浏览器或 WebView 的持久存储授权。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
+    label: "运行系统凭据库自检",
+    kind: "specialized",
+    reason: "在真实系统凭据库中写入、读回并删除一次性随机值。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
+    label: "迁移遗留明文凭据",
+    kind: "specialized",
+    reason: "写入系统凭据库并读回验证后，清理旧 fallback 与公开凭据副本。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+]
+
+function settingsArchiveActionInput(
+  ref: FileRef,
+  input: unknown,
+): { content: string; filename?: string; passphrase?: string } {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Workspace archive input must be an object", ref)
+  }
+  let keys: string[]
+  let content: unknown
+  let filename: unknown
+  let passphrase: unknown
+  try {
+    keys = Object.keys(input)
+    content = (input as { content?: unknown }).content
+    filename = (input as { filename?: unknown }).filename
+    passphrase = (input as { passphrase?: unknown }).passphrase
+  } catch {
+    throw new FileSystemError("invalid-input", "Workspace archive input is unavailable", ref)
+  }
+  if (
+    keys.some((key) => key !== "content" && key !== "filename" && key !== "passphrase") ||
+    typeof content !== "string" ||
+    content.length === 0 ||
+    content.length > WORKSPACE_ARCHIVE_LIMITS.maxEnvelopeBytes ||
+    (filename !== undefined &&
+      (typeof filename !== "string" ||
+        filename.length === 0 ||
+        filename.length > 512 ||
+        /[\u0000-\u001f\u007f]/.test(filename))) ||
+    (passphrase !== undefined &&
+      (typeof passphrase !== "string" ||
+        passphrase.length === 0 ||
+        passphrase.length > WORKSPACE_ARCHIVE_MAX_PASSPHRASE_LENGTH))
+  ) {
+    throw new FileSystemError("invalid-input", "Workspace archive input is invalid", ref)
+  }
+  return {
+    content,
+    ...(typeof filename === "string" ? { filename } : {}),
+    ...(typeof passphrase === "string" ? { passphrase } : {}),
+  }
+}
+
+function settingsArchiveExportInput(ref: FileRef, input: unknown): string | undefined {
+  if (input === undefined) return undefined
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Workspace archive export input is invalid", ref)
+  }
+  let keys: string[]
+  let passphrase: unknown
+  try {
+    keys = Object.keys(input)
+    passphrase = (input as { passphrase?: unknown }).passphrase
+  } catch {
+    throw new FileSystemError("invalid-input", "Workspace archive export input is unavailable", ref)
+  }
+  if (
+    keys.length !== 1 ||
+    keys[0] !== "passphrase" ||
+    typeof passphrase !== "string" ||
+    passphrase.length === 0 ||
+    passphrase.length > WORKSPACE_ARCHIVE_MAX_PASSPHRASE_LENGTH
+  ) {
+    throw new FileSystemError("invalid-input", "Workspace archive export input is invalid", ref)
+  }
+  return passphrase
+}
+
 function assertExpectedVersion(
   ref: FileRef,
   expectedVersion: string | null | undefined,
@@ -767,6 +1090,7 @@ export function createSettingsFileSystem(
       if (!section) throw new FileSystemError("not-found", "Settings section not found", ref)
       if (section === "connections") return [...CONNECTION_SETTINGS_ACTIONS]
       if (section === "runtime-extensions") return [...RUNTIME_EXTENSION_SETTINGS_ACTIONS]
+      if (section === "data") return [...DATA_SETTINGS_ACTIONS]
       return [OPEN_SETTINGS_ACTION]
     },
     async invoke(ref, action, input, ctx, options): Promise<unknown> {
@@ -775,6 +1099,128 @@ export function createSettingsFileSystem(
       if (action === "open") {
         assertAccess(ref, ctx, "action", "fs:read")
         return { ref }
+      }
+
+      if (section === "data" && action === SETTINGS_DATA_EXPORT_ACTION) {
+        assertAccess(ref, ctx, "action", SETTINGS_READ_PERMISSION)
+        const passphrase = settingsArchiveExportInput(ref, input)
+        try {
+          return await deps.exportWorkspaceArchive(passphrase)
+        } catch (error) {
+          if (error instanceof FileSystemError) throw error
+          throw new FileSystemError(
+            "unavailable",
+            `Workspace archive export failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+            ref,
+          )
+        }
+      }
+
+      if (section === "data" && action === SETTINGS_DATA_PREVIEW_IMPORT_ACTION) {
+        assertAccess(ref, ctx, "action", SETTINGS_READ_PERMISSION)
+        const archive = settingsArchiveActionInput(ref, input)
+        try {
+          return await deps.previewWorkspaceArchive(
+            archive.content,
+            archive.filename,
+            archive.passphrase,
+          )
+        } catch (error) {
+          if (error instanceof FileSystemError) throw error
+          throw new FileSystemError(
+            "unavailable",
+            `Workspace archive preview failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+            ref,
+          )
+        }
+      }
+
+      if (section === "data" && action === SETTINGS_DATA_IMPORT_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        const archive = settingsArchiveActionInput(ref, input)
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.importWorkspaceArchive(
+              archive.content,
+              archive.filename,
+              archive.passphrase,
+            )
+            for (const changedSection of SETTINGS_SECTION_IDS) scheduleNotification(changedSection)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Workspace archive import failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "data" && action === SETTINGS_DATA_PERSIST_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        if (input !== undefined) {
+          throw new FileSystemError(
+            "invalid-input",
+            "Persistent storage request takes no input",
+            ref,
+          )
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.requestPersistentStorage()
+            scheduleNotification(section)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Persistent storage request failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "data" && action === SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        if (input !== undefined) {
+          throw new FileSystemError("invalid-input", "Secure store self-test takes no input", ref)
+        }
+        try {
+          return await deps.selfTestSecureStore()
+        } catch (error) {
+          if (error instanceof FileSystemError) throw error
+          throw new FileSystemError(
+            "unavailable",
+            `Secure store self-test failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+            ref,
+          )
+        }
+      }
+
+      if (section === "data" && action === SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        if (input !== undefined) {
+          throw new FileSystemError("invalid-input", "Secure store migration takes no input", ref)
+        }
+        try {
+          const result = await deps.migrateSecureStore()
+          scheduleNotification(section)
+          return result
+        } catch (error) {
+          if (error instanceof FileSystemError) throw error
+          throw new FileSystemError(
+            "unavailable",
+            `Secure store migration failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+            ref,
+          )
+        }
       }
 
       assertSettingsMutationAccess(ref, ctx)

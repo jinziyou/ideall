@@ -16,6 +16,7 @@ import {
   getNodesRaw,
   getThreadMetadataMany,
   listNodeSummaries,
+  listNodeSummaryPage,
   moveNode,
   readBlob,
   readBlobBase64,
@@ -23,6 +24,8 @@ import {
   updateNode,
   ALL_NODE_KINDS,
   type NodeSummary,
+  type NodeSummaryPage,
+  type NodeSummaryPageOptions,
 } from "@/files/stores/nodes-store"
 import {
   NodeMutationConflictError,
@@ -44,6 +47,10 @@ import { matchesResourceText, paginateResourceMeta } from "./query-utils"
 
 export type NodeResourceSourceDeps = {
   listNodeSummaries: (kinds: NodeKind[]) => Promise<NodeSummary[]>
+  listNodeSummaryPage?: (
+    kinds: NodeKind[],
+    options: NodeSummaryPageOptions,
+  ) => Promise<NodeSummaryPage>
   getNodeRaw: (id: string) => Promise<Node | undefined>
   /** mutation 专用 fresh read，包含 tombstone。 */
   getNodeForMutation: (id: string) => Promise<Node | undefined>
@@ -85,6 +92,7 @@ export type NodeResourceSourceDeps = {
 
 const defaultDeps: NodeResourceSourceDeps = {
   listNodeSummaries,
+  listNodeSummaryPage,
   getNodeRaw,
   getNodeForMutation,
   getNodesRaw,
@@ -195,6 +203,13 @@ function summaryMeta(summary: NodeSummary, byId: Map<string, NodeSummary>): Reso
     iconHint: summary.mime || summary.kind,
     capabilities: capabilitiesForKind(summary.kind),
   }
+}
+
+function pagedSummaryMeta(summary: NodeSummary): ResourceMeta {
+  const meta = summaryMeta(summary, new Map())
+  if (!summary.parentId) return meta
+  const parentKind = summary.kind === "bookmark" ? "folder" : summary.kind
+  return { ...meta, parent: nodeRef(parentKind, summary.parentId) }
 }
 
 function nodeMeta(node: Node): ResourceMeta {
@@ -374,10 +389,36 @@ export function createNodeResourceSource(
     async list(query, ctx) {
       assertCanReadMetadata(ctx)
       const kinds = nodeKindsFromQuery(query)
+      if (deps.listNodeSummaryPage && query.limit !== undefined && !query.text) {
+        if (query.parent && query.rootOnly) {
+          throw new ResourceSourceError(
+            "unsupported",
+            "Node query cannot combine parent and rootOnly",
+          )
+        }
+        const parentId = query.rootOnly
+          ? null
+          : query.parent?.scheme === "node"
+            ? query.parent.id
+            : undefined
+        const page = await deps.listNodeSummaryPage(kinds, {
+          limit: query.limit,
+          ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+          ...(parentId === undefined ? {} : { parentId }),
+        })
+        return {
+          items: page.items.map(pagedSummaryMeta),
+          ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+        }
+      }
       const summaries = await deps.listNodeSummaries(kinds)
       const byId = new Map(summaries.map((summary) => [summary.id, summary]))
       const metas = summaries
-        .filter((summary) => matchesSummaryParent(summary, query.parent))
+        .filter(
+          (summary) =>
+            matchesSummaryParent(summary, query.parent) &&
+            (!query.rootOnly || summary.parentId === null),
+        )
         .map((summary) => summaryMeta(summary, byId))
         .filter((meta) => matchesResourceText(meta, query.text))
         .sort((a, b) => {

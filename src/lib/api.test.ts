@@ -85,6 +85,13 @@ test("apiFetch: 空响应体 (204) → ok:true + data:null", async () => {
   if (r.ok) assert.equal(r.data, null)
 })
 
+test("apiFetch: 在 JSON.parse 前拒绝超过调用方预算的响应", async () => {
+  setFetch(() => resp(200, JSON.stringify({ data: "too large" })))
+  const result = await apiFetch("/x", { maxResponseBytes: 8 })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.match(result.message, /超过客户端限制/)
+})
+
 test("apiFetch: json 选项 → 设 Content-Type 并序列化 body", async () => {
   let seen: RequestInit = {}
   setFetch((_input, init) => {

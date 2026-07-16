@@ -8,6 +8,7 @@
 | --- | --- |
 | [architecture.md](architecture.md) | 架构总览、领域模型、模块边界、数据流与关键不变量 |
 | [file-system-engine-architecture.md](file-system-engine-architecture.md) | Storage → FileSystem → IdeallFile → Engine → Display 五层契约 |
+| [app-data-navigation.md](app-data-navigation.md) | App 数据落点、活动栏与二级侧栏到真实 FileRef/Storage 的映射 |
 | [extensions.md](extensions.md) | 扩展概念模型、信任边界与当前落地范围 |
 | [development.md](development.md) | 目录结构、依赖边界、开发命令与贡献约定 |
 | [design/ui-style.md](design/ui-style.md) | UI 视觉和组件规范 |
@@ -18,6 +19,7 @@
 | 文档 | 用途 |
 | --- | --- |
 | [app.md](app.md) | Tauri 开发、构建、平台矩阵、签名与发布 |
+| [app-data-safety-acceptance.md](app-data-safety-acceptance.md) | 真实 Tauri/keychain、加密归档与重启恢复验收 |
 | [scripts.md](scripts.md) | 验证、冒烟、API codegen 与维护脚本 |
 | [ideall-embed-bridge.md](ideall-embed-bridge.md) | iframe + MCP 嵌入桥协议及宿主安全边界 |
 

@@ -598,7 +598,7 @@ test("public config data port: malformed sections and duplicate ids are atomical
 })
 
 test("agent config import: validates every public section before committing any store", async () => {
-  setAgentSettings({
+  await setAgentSettings({
     baseURL: "https://before.example/v1",
     model: "before-model",
     apiKey: "before-secret",

@@ -27,14 +27,13 @@ import {
 } from "@/filesystem/directory-metadata"
 import type { IdeallPath } from "@/filesystem/path"
 import { resourceRefForFile } from "@/filesystem/resource-file-system"
-import { useIncrementalList } from "@/lib/use-incremental-list"
 import { openTarget } from "../store"
 import { onTreeArrowNav, focusTreeSibling } from "./tree-keynav"
-import { readAllDirectoryEntries } from "./directory-pagination"
 import { fileCanExpand } from "./file-tree-expansion"
 import { navigationEntryPath } from "./navigation-tree-path"
 
 type LoadedEntry = DirectoryEntryMetadata
+const SIDEBAR_DIRECTORY_PAGE_SIZE = 80
 
 function fileIcon(file: IdeallFile | null) {
   if (!file) return File
@@ -50,6 +49,34 @@ function fileIcon(file: IdeallFile | null) {
   if (file.mediaType.startsWith("audio/")) return FileAudio
   if (file.mediaType.startsWith("text/") || file.mediaType.includes("json")) return FileCode
   return File
+}
+
+async function loadTreeDirectoryPage(
+  directory: FileRef,
+  cursor: string | undefined,
+  onProgress: (items: LoadedEntry[]) => void,
+): Promise<{ items: LoadedEntry[]; nextCursor?: string }> {
+  const page = await readFileDirectory(
+    directory,
+    { actor: "ui", permissions: [], intent: "directory" },
+    {
+      limit: SIDEBAR_DIRECTORY_PAGE_SIZE,
+      ...(cursor === undefined ? {} : { cursor }),
+    },
+  )
+  if (cursor !== undefined && page.nextCursor === cursor) {
+    throw new Error(`Directory pagination cursor loop detected at ${JSON.stringify(cursor)}`)
+  }
+  const projected = projectDirectoryEntryMetadata(
+    page.entries.filter((entry) => entry.properties?.navigationHidden !== true),
+  )
+  onProgress(projected)
+  const loaded = await resolveDirectoryEntryMetadata(
+    projected,
+    { actor: "ui", permissions: [], intent: "metadata" },
+    (next) => onProgress([...next]),
+  )
+  return { items: loaded, nextCursor: page.nextCursor }
 }
 
 export function FileSystemTreeChildren({
@@ -76,38 +103,28 @@ export function FileSystemTreeChildren({
   const [items, setItems] = React.useState<LoadedEntry[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState(false)
+  const [nextCursor, setNextCursor] = React.useState<string | undefined>()
+  const [loadingMore, setLoadingMore] = React.useState(false)
   const [revision, setRevision] = React.useState(0)
+  const generationRef = React.useRef(0)
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null)
   const { fileSystemId, fileId } = directory
 
   React.useEffect(() => {
     let alive = true
+    const generation = ++generationRef.current
     setLoading(true)
     setError(false)
+    setItems([])
+    setNextCursor(undefined)
     const directoryRef = { fileSystemId, fileId }
-    void readAllDirectoryEntries((options) =>
-      readFileDirectory(
-        directoryRef,
-        { actor: "ui", permissions: [], intent: "directory" },
-        options,
-      ),
-    )
-      .then(async (directoryEntries) => {
-        const visibleEntries = directoryEntries.filter(
-          (entry) => entry.properties?.navigationHidden !== true,
-        )
-        const projected = projectDirectoryEntryMetadata(visibleEntries)
-        if (alive) {
-          setItems(projected)
-          setLoading(false)
-        }
-        const loaded = await resolveDirectoryEntryMetadata(
-          projected,
-          { actor: "ui", permissions: [], intent: "metadata" },
-          (next) => {
-            if (alive) setItems([...next])
-          },
-        )
-        if (alive) setItems(loaded)
+    void loadTreeDirectoryPage(directoryRef, undefined, (next) => {
+      if (alive && generationRef.current === generation) setItems(next)
+    })
+      .then((page) => {
+        if (!alive || generationRef.current !== generation) return
+        setItems(page.items)
+        setNextCursor(page.nextCursor)
       })
       .catch(() => {
         if (alive) setError(true)
@@ -117,6 +134,7 @@ export function FileSystemTreeChildren({
       })
     return () => {
       alive = false
+      if (generationRef.current === generation) generationRef.current += 1
     }
   }, [fileId, fileSystemId, refreshKey, revision])
 
@@ -132,10 +150,40 @@ export function FileSystemTreeChildren({
     }
   }, [fileId, fileSystemId])
 
-  const { visible, hasMore, sentinelRef, total } = useIncrementalList(items, {
-    pageSize: 80,
-    resetKey: `${fileSystemId}\u0000${fileId}\u0000${revision}`,
-  })
+  const loadMore = React.useCallback(async () => {
+    const cursor = nextCursor
+    if (cursor === undefined || loadingMore) return
+    const generation = generationRef.current
+    const prefixLength = items.length
+    setLoadingMore(true)
+    try {
+      const page = await loadTreeDirectoryPage({ fileSystemId, fileId }, cursor, (next) => {
+        if (generationRef.current !== generation) return
+        setItems((current) => [...current.slice(0, prefixLength), ...next])
+      })
+      if (generationRef.current !== generation) return
+      setItems((current) => [...current.slice(0, prefixLength), ...page.items])
+      setNextCursor(page.nextCursor)
+    } catch {
+      if (generationRef.current === generation) setError(true)
+    } finally {
+      if (generationRef.current === generation) setLoadingMore(false)
+    }
+  }, [fileId, fileSystemId, items.length, loadingMore, nextCursor])
+
+  React.useEffect(() => {
+    if (nextCursor === undefined || loadingMore) return
+    const element = sentinelRef.current
+    if (!element || typeof IntersectionObserver === "undefined") return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadMore()
+      },
+      { rootMargin: "600px" },
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [loadMore, loadingMore, nextCursor])
 
   if (loading) return <div className="mx-2 my-1 h-7 animate-pulse rounded bg-muted/50" />
   if (error) return <p className="px-3 py-2 text-xs text-muted-foreground">文件系统暂不可用</p>
@@ -143,7 +191,7 @@ export function FileSystemTreeChildren({
 
   return (
     <>
-      {visible.map(({ entry, file }) => (
+      {items.map(({ entry, file }) => (
         <FileTreeRow
           key={entry.entryId}
           entry={entry}
@@ -156,10 +204,21 @@ export function FileSystemTreeChildren({
           refreshKey={`${refreshKey}:${revision}`}
           navigationBasePath={navigationBasePath}
           onOpen={onOpen}
-          deferOffscreen={total > 80}
+          deferOffscreen={items.length > SIDEBAR_DIRECTORY_PAGE_SIZE}
         />
       ))}
-      {hasMore ? <div ref={sentinelRef} className="h-px" aria-hidden /> : null}
+      {nextCursor !== undefined ? (
+        <div ref={sentinelRef} className="px-3 py-1 text-center">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+          >
+            {loadingMore ? "正在加载…" : "加载更多"}
+          </button>
+        </div>
+      ) : null}
     </>
   )
 }

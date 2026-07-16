@@ -54,6 +54,7 @@ fn main() {
             "secure_store_get",
             "secure_store_set",
             "secure_store_delete",
+            "secure_store_self_test",
             "window_minimize",
             "window_close",
             "window_toggle_maximize",

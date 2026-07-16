@@ -19,13 +19,21 @@ export type ApiResult<T> =
 export interface ApiFetchOptions extends RequestInit {
   defaultErrorMessage?: string
   json?: unknown
+  /** 在 JSON.parse 前限制响应体 UTF-8 字节数；大响应优先流式计数。 */
+  maxResponseBytes?: number
 }
 
 export async function apiFetch<T = unknown>(
   input: string,
   options: ApiFetchOptions = {},
 ): Promise<ApiResult<T>> {
-  const { defaultErrorMessage = "请求失败, 请稍后重试", json, headers, ...rest } = options
+  const {
+    defaultErrorMessage = "请求失败, 请稍后重试",
+    json,
+    maxResponseBytes,
+    headers,
+    ...rest
+  } = options
 
   const init: RequestInit = {
     ...rest,
@@ -51,11 +59,15 @@ export async function apiFetch<T = unknown>(
 
   let rawText: string
   try {
-    rawText = await response.text()
+    rawText = await readResponseText(response, maxResponseBytes)
   } catch (e) {
     // body 流中断 / abort / 解码错误: 也要返回可展示错误, 不让 reject 逃逸成 unhandled rejection。
     console.error("[apiFetch] 读取响应体失败:", input, e)
-    return { ok: false, status: response.status, message: defaultErrorMessage }
+    return {
+      ok: false,
+      status: response.status,
+      message: e instanceof ResponseTooLargeError ? e.message : defaultErrorMessage,
+    }
   }
   const parsed = parseJsonSafe(rawText)
 
@@ -69,6 +81,43 @@ export async function apiFetch<T = unknown>(
   }
 
   return { ok: true, data: parsed as T }
+}
+
+class ResponseTooLargeError extends Error {
+  override name = "ResponseTooLargeError"
+}
+
+async function readResponseText(response: Response, maximum?: number): Promise<string> {
+  if (maximum === undefined) return response.text()
+  if (!Number.isSafeInteger(maximum) || maximum < 0) {
+    throw new TypeError("maxResponseBytes must be a non-negative safe integer")
+  }
+  const declared = Number(response.headers?.get("content-length"))
+  if (Number.isFinite(declared) && declared > maximum) {
+    throw new ResponseTooLargeError(`响应数据超过客户端限制（最大 ${maximum} 字节）`)
+  }
+  const reader = response.body?.getReader()
+  if (!reader) {
+    const text = await response.text()
+    if (new TextEncoder().encode(text).byteLength > maximum) {
+      throw new ResponseTooLargeError(`响应数据超过客户端限制（最大 ${maximum} 字节）`)
+    }
+    return text
+  }
+  const decoder = new TextDecoder()
+  let bytes = 0
+  let text = ""
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    bytes += value.byteLength
+    if (bytes > maximum) {
+      await reader.cancel().catch(() => {})
+      throw new ResponseTooLargeError(`响应数据超过客户端限制（最大 ${maximum} 字节）`)
+    }
+    text += decoder.decode(value, { stream: true })
+  }
+  return text + decoder.decode()
 }
 
 const __PARSE_FAILED = Symbol("parse-failed")

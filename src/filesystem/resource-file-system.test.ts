@@ -62,6 +62,55 @@ test("resource filesystem: directory pagination uses strict canonical inputs", a
   }
 })
 
+test("resource filesystem: node place pagination forwards opaque source cursors", async () => {
+  const calls: Array<{ limit?: number; cursor?: string; rootOnly?: boolean }> = []
+  const metas = ["first", "second"].map(
+    (id): ResourceMeta => ({
+      ref: { scheme: "node", kind: "note", id },
+      title: id,
+      capabilities: ["open", "read-content"],
+    }),
+  )
+  registerResourceSource({
+    scheme: "node",
+    async list(query) {
+      calls.push({ limit: query.limit, cursor: query.cursor, rootOnly: query.rootOnly })
+      return query.cursor
+        ? { items: [metas[1]!], nextCursor: undefined }
+        : { items: [metas[0]!], nextCursor: "source-next" }
+    },
+    async get(ref) {
+      const meta = metas.find((item) => item.ref.id === ref.id)
+      return meta ? { meta, content: null } : null
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      throw new Error("unsupported")
+    },
+  })
+  const fs = createResourceFileSystem()
+  const directoryCtx = { actor: "ui", permissions: [], intent: "directory" } as const
+  const first = await fs.readDirectory(corePlaceRef("notes"), directoryCtx, { limit: 2 })
+  assert.equal(first.entries.length, 2, "hidden management panel and first node share page budget")
+  assert.match(first.nextCursor ?? "", /^node:/)
+
+  const second = await fs.readDirectory(corePlaceRef("notes"), directoryCtx, {
+    limit: 2,
+    cursor: first.nextCursor,
+  })
+  assert.deepEqual(
+    second.entries.map((entry) => entry.name),
+    ["second"],
+  )
+  assert.equal(second.nextCursor, undefined)
+  assert.deepEqual(calls, [
+    { limit: 1, cursor: undefined, rootOnly: true },
+    { limit: 2, cursor: "source-next", rootOnly: true },
+  ])
+})
+
 test("resource filesystem: note roots and child pages are created through resource source actions", async () => {
   const parentMeta: ResourceMeta = {
     ref: { scheme: "node", kind: "note", id: "parent" },

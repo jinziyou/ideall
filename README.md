@@ -55,7 +55,7 @@ Storage → FileSystem → IdeallFile → Engine → Display
 
 **要点：**
 
-- **本地能力（home / apps / tool / agent）不依赖后端**——离线、无账号、数据存在你设备上（本地应用启动器仅在 Tauri 桌面端可用）。跨端同步同样无账号且只上传密文，但执行同步仍需可用的 Sync 服务；当前同步范围是关注与笔记。
+- **本地能力（home / apps / tool / agent）不依赖后端**——离线、无账号、数据存在你设备上（本地应用启动器仅在 Tauri 桌面端可用）。跨端同步同样无账号且只上传密文，但执行同步仍需可用的 Sync 服务；当前同步范围是关注、笔记、书签与收藏夹。
 - **agent 是横跨本地的 AI 环境层**：使用 BYO-key 直连 OpenAI 兼容端点，可连接外部 MCP，并能联网搜索 / 抓取网页（出站受 egress 守卫约束）；桌面端还可把 ideall 经 ACP 暴露给编辑器。反向把外部 ACP CLI agent 用作聊天后端尚未接入执行链。
 - **需要聚合 / 知识图谱时**：默认连接 [wonita 后端](#连接后端)；也可换用自建后端或自行实现 `ServerPort`。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务，或冒充官方 Wonita / ideall 网络。

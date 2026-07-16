@@ -20,7 +20,11 @@ import {
   Users,
 } from "lucide-react"
 import { joinIdeallPath, type IdeallPath } from "@/filesystem/path"
-import type { NavigationSectionId as FileSystemNavigationSectionId } from "@/filesystem/navigation-file-system"
+import {
+  NAVIGATION_SECTIONS as FILE_SYSTEM_NAVIGATION_SECTIONS,
+  navigationSectionIdForLegacyRoot,
+  type NavigationSectionId as FileSystemNavigationSectionId,
+} from "@/filesystem/navigation-file-system"
 
 type NavigationIcon = ComponentType<{ className?: string }>
 
@@ -35,44 +39,28 @@ export type NavigationSection = Readonly<{
   colorClass?: string
 }>
 
+const NAVIGATION_SECTION_PRESENTATION: Readonly<
+  Record<NavigationSectionId, { icon: NavigationIcon; colorClass?: string }>
+> = {
+  home: { icon: Home },
+  activity: { icon: History },
+  browse: { icon: Compass, colorClass: "text-spoke-community" },
+  apps: { icon: AppWindow, colorClass: "text-spoke-tool" },
+  settings: { icon: Settings },
+}
+
 /**
  * Display 只保留五个稳定分区的图标/颜色装饰。名称、顺序、目录项和 link target
  * 均来自 ideall.root 与 navigation FileSystem，不能在这里再维护第二份信息架构。
  */
 export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
-  {
-    id: "home",
-    label: "我的",
-    path: "/home",
-    icon: Home,
-  },
-  {
-    id: "activity",
-    label: "活动",
-    path: "/activity",
-    icon: History,
-  },
-  {
-    id: "browse",
-    label: "浏览",
-    path: "/browse",
-    icon: Compass,
-    colorClass: "text-spoke-community",
-  },
-  {
-    id: "apps",
-    label: "应用",
-    path: "/apps",
-    icon: AppWindow,
-    colorClass: "text-spoke-tool",
-  },
-  {
-    id: "settings",
-    label: "设置",
-    path: "/settings",
-    icon: Settings,
-  },
-] as const
+  ...FILE_SYSTEM_NAVIGATION_SECTIONS.map((section) => ({
+    id: section.id,
+    label: section.name,
+    path: joinIdeallPath("/", section.pathName),
+    ...NAVIGATION_SECTION_PRESENTATION[section.id],
+  })),
+]
 
 const NAVIGATION_ICONS: Readonly<Record<string, NavigationIcon>> = {
   home: Home,
@@ -126,12 +114,5 @@ export function isNavigationSectionId(value: string): value is NavigationSection
 
 /** 旧根目录迁到五分区；动态挂载归“应用”，无效值安全回退“我的”。 */
 export function navigationSectionIdForRoot(rootId: string | null | undefined): NavigationSectionId {
-  if (!rootId) return "home"
-  if (isNavigationSectionId(rootId)) return rootId
-  if (["subscriptions", "bookmarks", "files", "notes"].includes(rootId)) return "home"
-  if (rootId === "workspace") return "activity"
-  if (["info", "community", "browser"].includes(rootId)) return "browse"
-  if (rootId === "tool") return "apps"
-  if (rootId === "system") return "settings"
-  return rootId.startsWith("mount:") ? "apps" : "home"
+  return navigationSectionIdForLegacyRoot(rootId)
 }

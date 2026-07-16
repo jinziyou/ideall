@@ -1,7 +1,13 @@
 import { isNodeKind, type Node } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
+import { WORKSPACE_ARCHIVE_LIMITS, type WorkspaceArchiveLimits } from "@protocol/workspace-archive"
 import { notifyFilesUpdated } from "@protocol/flowback"
 import { base64ToBytes, bytesToBase64, isBase64 } from "@/lib/base64"
+import {
+  decryptWorkspaceArchive,
+  encryptWorkspaceArchive,
+  isEncryptedWorkspaceArchive,
+} from "@/lib/workspace-archive-crypto"
 import {
   idbGetAll,
   idbReplaceStores,
@@ -29,7 +35,8 @@ import {
 import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 
 export const WORKSPACE_ARCHIVE_PACKAGE_KIND = "ideall.workspace-archive"
-export const WORKSPACE_ARCHIVE_PACKAGE_VERSION = 1
+export const WORKSPACE_ARCHIVE_PACKAGE_VERSION = 2
+export const WORKSPACE_ARCHIVE_LEGACY_VERSION = 1
 
 const WORKSPACE_ARCHIVE_ID = "workspace-archive"
 const WORKSPACE_ARCHIVE_LABEL = "完整工作区"
@@ -61,9 +68,19 @@ export type SerializedTrashSnapshot = {
   capturedAt: number
 }
 
-export type WorkspaceArchivePackage = {
+export type WorkspaceArchiveManifest = {
+  algorithm: "crc32"
+  checksum: string
+  nodeCount: number
+  blobCount: number
+  blobBytes: number
+  trashSnapshotCount: number
+  pluginCount: number
+  tabCount: number
+}
+
+type WorkspaceArchivePayload = {
   kind: typeof WORKSPACE_ARCHIVE_PACKAGE_KIND
-  version: typeof WORKSPACE_ARCHIVE_PACKAGE_VERSION
   exportedAt: string
   core: {
     nodes: Node[]
@@ -74,7 +91,21 @@ export type WorkspaceArchivePackage = {
   plugins: WorkspaceBackupPackage
 }
 
+export type WorkspaceArchivePackage = WorkspaceArchivePayload &
+  (
+    | {
+        version: typeof WORKSPACE_ARCHIVE_PACKAGE_VERSION
+        manifest: WorkspaceArchiveManifest
+      }
+    | {
+        version: typeof WORKSPACE_ARCHIVE_LEGACY_VERSION
+        manifest?: never
+      }
+  )
+
 export type WorkspaceArchiveImportPreview = PluginDataImportPreview & {
+  encrypted?: boolean
+  requiresPassphrase?: boolean
   archive?: {
     nodeCount: number
     blobCount: number
@@ -95,6 +126,91 @@ function requireRecord(value: unknown, label: string): Record<string, unknown> {
 
 function bytesOf(raw: string): number {
   return new TextEncoder().encode(raw).byteLength
+}
+
+function assertWithinLimit(value: number, maximum: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+    throw new Error(`${label} 超出归档限制（最大 ${maximum}）`)
+  }
+}
+
+function assertRawArchiveLimit(raw: string, limits: WorkspaceArchiveLimits): void {
+  if (raw.length > limits.maxPlaintextBytes) {
+    throw new Error(
+      `工作区归档过大（至少 ${raw.length} 字节，最大 ${limits.maxPlaintextBytes} 字节）`,
+    )
+  }
+  const bytes = bytesOf(raw)
+  if (bytes > limits.maxPlaintextBytes) {
+    throw new Error(`工作区归档过大（${bytes} 字节，最大 ${limits.maxPlaintextBytes} 字节）`)
+  }
+}
+
+function crc32(raw: string): string {
+  let checksum = 0xffffffff
+  for (const byte of new TextEncoder().encode(raw)) {
+    checksum ^= byte
+    for (let bit = 0; bit < 8; bit += 1) {
+      checksum = (checksum >>> 1) ^ (checksum & 1 ? 0xedb88320 : 0)
+    }
+  }
+  return ((checksum ^ 0xffffffff) >>> 0).toString(16).padStart(8, "0")
+}
+
+function workspaceArchiveManifest(
+  exportedAt: string,
+  core: WorkspaceArchivePayload["core"],
+  plugins: WorkspaceBackupPackage,
+): WorkspaceArchiveManifest {
+  return {
+    algorithm: "crc32",
+    checksum: crc32(JSON.stringify({ exportedAt, core, plugins })),
+    nodeCount: core.nodes.length,
+    blobCount: core.blobs.length,
+    blobBytes: core.blobs.reduce((total, blob) => total + blob.size, 0),
+    trashSnapshotCount: core.trashSnapshots.length,
+    pluginCount: plugins.plugins.length,
+    tabCount: core.workspace?.tabs.length ?? 0,
+  }
+}
+
+function normalizeWorkspaceArchiveManifest(
+  value: unknown,
+  expected: WorkspaceArchiveManifest,
+): WorkspaceArchiveManifest {
+  const manifest = requireRecord(value, "manifest")
+  const normalized: WorkspaceArchiveManifest = {
+    algorithm: manifest.algorithm === "crc32" ? "crc32" : invalidManifest("algorithm"),
+    checksum: requireString(manifest.checksum, "manifest.checksum"),
+    nodeCount: requireNonNegativeNumber(manifest.nodeCount, "manifest.nodeCount"),
+    blobCount: requireNonNegativeNumber(manifest.blobCount, "manifest.blobCount"),
+    blobBytes: requireNonNegativeNumber(manifest.blobBytes, "manifest.blobBytes"),
+    trashSnapshotCount: requireNonNegativeNumber(
+      manifest.trashSnapshotCount,
+      "manifest.trashSnapshotCount",
+    ),
+    pluginCount: requireNonNegativeNumber(manifest.pluginCount, "manifest.pluginCount"),
+    tabCount: requireNonNegativeNumber(manifest.tabCount, "manifest.tabCount"),
+  }
+  if (!/^[0-9a-f]{8}$/.test(normalized.checksum)) invalidManifest("checksum")
+  for (const key of [
+    "checksum",
+    "nodeCount",
+    "blobCount",
+    "blobBytes",
+    "trashSnapshotCount",
+    "pluginCount",
+    "tabCount",
+  ] as const) {
+    if (normalized[key] !== expected[key]) {
+      throw new Error(`工作区归档 manifest.${key} 校验失败`)
+    }
+  }
+  return normalized
+}
+
+function invalidManifest(field: string): never {
+  throw new Error(`工作区归档 manifest.${field} 格式无效`)
 }
 
 function requireString(value: unknown, label: string): string {
@@ -165,9 +281,14 @@ function serializedToBlob(record: SerializedBlobRecord): BlobRecord {
   return { key: record.key, blob: new Blob([buffer], { type: record.mime }) }
 }
 
-function normalizeSerializedBlob(value: unknown, label: string): SerializedBlobRecord {
+function normalizeSerializedBlob(
+  value: unknown,
+  label: string,
+  limits: WorkspaceArchiveLimits,
+): SerializedBlobRecord {
   if (!isRecord(value)) throw new Error(`${label} 格式无效`)
   const size = requireNonNegativeNumber(value.size, `${label}.size`)
+  assertWithinLimit(size, limits.maxSingleBlobBytes, `${label}.size`)
   const dataBase64 = requireStringValue(value.dataBase64, `${label}.dataBase64`)
   const bytes = requireBase64(dataBase64)
   if (bytes.byteLength !== size) throw new Error(`${label}.size 与 dataBase64 不一致`)
@@ -266,7 +387,11 @@ function normalizeNode(value: unknown, label: string): Node {
   }
 }
 
-function normalizeTrashSnapshot(value: unknown, index: number): SerializedTrashSnapshot {
+function normalizeTrashSnapshot(
+  value: unknown,
+  index: number,
+  limits: WorkspaceArchiveLimits,
+): SerializedTrashSnapshot {
   if (!isRecord(value)) throw new Error(`trashSnapshots[${index}] 格式无效`)
   const blob = value.blob
   return {
@@ -275,7 +400,7 @@ function normalizeTrashSnapshot(value: unknown, index: number): SerializedTrashS
     blob:
       blob === undefined
         ? undefined
-        : normalizeSerializedBlob(blob, `trashSnapshots[${index}].blob`),
+        : normalizeSerializedBlob(blob, `trashSnapshots[${index}].blob`, limits),
     capturedAt: requireNumber(value.capturedAt, `trashSnapshots[${index}].capturedAt`),
   }
 }
@@ -350,7 +475,7 @@ async function serializeTrashSnapshot(snapshot: {
 }
 
 export function createWorkspaceArchivePackage(
-  input: Omit<WorkspaceArchivePackage, "kind" | "version" | "exportedAt">,
+  input: Pick<WorkspaceArchivePayload, "core" | "plugins">,
   exportedAt = new Date().toISOString(),
 ): WorkspaceArchivePackage {
   return {
@@ -358,15 +483,23 @@ export function createWorkspaceArchivePackage(
     version: WORKSPACE_ARCHIVE_PACKAGE_VERSION,
     exportedAt,
     ...input,
+    manifest: workspaceArchiveManifest(exportedAt, input.core, input.plugins),
   }
 }
 
-export function parseWorkspaceArchivePackage(raw: string): WorkspaceArchivePackage {
+export function parseWorkspaceArchivePackage(
+  raw: string,
+  limits: WorkspaceArchiveLimits = WORKSPACE_ARCHIVE_LIMITS,
+): WorkspaceArchivePackage {
+  assertRawArchiveLimit(raw, limits)
   const parsed = JSON.parse(raw) as unknown
   if (!isRecord(parsed)) throw new Error("工作区归档 JSON 格式无效")
+  if (parsed.kind !== WORKSPACE_ARCHIVE_PACKAGE_KIND) {
+    throw new Error("不支持的工作区归档 JSON 版本")
+  }
   if (
-    parsed.kind !== WORKSPACE_ARCHIVE_PACKAGE_KIND ||
-    parsed.version !== WORKSPACE_ARCHIVE_PACKAGE_VERSION
+    parsed.version !== WORKSPACE_ARCHIVE_PACKAGE_VERSION &&
+    parsed.version !== WORKSPACE_ARCHIVE_LEGACY_VERSION
   ) {
     throw new Error("不支持的工作区归档 JSON 版本")
   }
@@ -377,22 +510,88 @@ export function parseWorkspaceArchivePackage(raw: string): WorkspaceArchivePacka
   if (!Array.isArray(core.trashSnapshots)) {
     throw new Error("工作区归档缺少 core.trashSnapshots")
   }
-  return {
+  assertWithinLimit(core.nodes.length, limits.maxNodes, "core.nodes 数量")
+  assertWithinLimit(core.blobs.length, limits.maxBlobs, "core.blobs 数量")
+  assertWithinLimit(
+    core.trashSnapshots.length,
+    limits.maxTrashSnapshots,
+    "core.trashSnapshots 数量",
+  )
+  const pluginEnvelope = requireRecord(parsed.plugins, "plugins")
+  if (!Array.isArray(pluginEnvelope.plugins)) throw new Error("工作区归档缺少 plugins.plugins")
+  assertWithinLimit(pluginEnvelope.plugins.length, limits.maxPlugins, "plugins.plugins 数量")
+  if (isRecord(core.workspace) && Array.isArray(core.workspace.tabs)) {
+    assertWithinLimit(core.workspace.tabs.length, limits.maxTabs, "core.workspace.tabs 数量")
+  }
+  const exportedAt = requireString(parsed.exportedAt, "exportedAt")
+  const normalizedBlobs = core.blobs.map((blob, index) =>
+    normalizeSerializedBlob(blob, `blobs[${index}]`, limits),
+  )
+  const normalizedTrash = core.trashSnapshots.map((snapshot, index) =>
+    normalizeTrashSnapshot(snapshot, index, limits),
+  )
+  const allNormalizedBlobs = [
+    ...normalizedBlobs,
+    ...normalizedTrash.flatMap((item) => item.blob ?? []),
+  ]
+  assertWithinLimit(allNormalizedBlobs.length, limits.maxBlobs, "归档 Blob 数量")
+  const totalBlobBytes = allNormalizedBlobs.reduce((total, blob) => total + blob.size, 0)
+  assertWithinLimit(totalBlobBytes, limits.maxTotalBlobBytes, "Blob 总字节数")
+  const normalized: WorkspaceArchivePayload = {
     kind: WORKSPACE_ARCHIVE_PACKAGE_KIND,
-    version: WORKSPACE_ARCHIVE_PACKAGE_VERSION,
-    exportedAt: requireString(parsed.exportedAt, "exportedAt"),
+    exportedAt,
     core: {
       nodes: core.nodes.map((node, index) => normalizeNode(node, `nodes[${index}]`)),
-      blobs: core.blobs.map((blob, index) => normalizeSerializedBlob(blob, `blobs[${index}]`)),
-      trashSnapshots: core.trashSnapshots.map(normalizeTrashSnapshot),
+      blobs: normalizedBlobs,
+      trashSnapshots: normalizedTrash,
       workspace: normalizeWorkspaceSnapshot(core.workspace),
     },
     plugins: parseWorkspaceBackupPackage(JSON.stringify(parsed.plugins)),
   }
+  if (parsed.version === WORKSPACE_ARCHIVE_LEGACY_VERSION) {
+    return { ...normalized, version: WORKSPACE_ARCHIVE_LEGACY_VERSION }
+  }
+  const expectedManifest = workspaceArchiveManifest(exportedAt, normalized.core, normalized.plugins)
+  expectedManifest.checksum = crc32(
+    JSON.stringify({ exportedAt, core: parsed.core, plugins: parsed.plugins }),
+  )
+  const manifest = normalizeWorkspaceArchiveManifest(parsed.manifest, expectedManifest)
+  return { ...normalized, version: WORKSPACE_ARCHIVE_PACKAGE_VERSION, manifest }
 }
 
-export function stringifyWorkspaceArchivePackage(pack: WorkspaceArchivePackage): string {
-  return JSON.stringify(pack, null, 2)
+export function stringifyWorkspaceArchivePackage(
+  pack: WorkspaceArchivePackage,
+  limits: WorkspaceArchiveLimits = WORKSPACE_ARCHIVE_LIMITS,
+): string {
+  assertWithinLimit(pack.core.nodes.length, limits.maxNodes, "core.nodes 数量")
+  assertWithinLimit(pack.core.blobs.length, limits.maxBlobs, "core.blobs 数量")
+  assertWithinLimit(
+    pack.core.trashSnapshots.length,
+    limits.maxTrashSnapshots,
+    "core.trashSnapshots 数量",
+  )
+  assertWithinLimit(pack.plugins.plugins.length, limits.maxPlugins, "plugins.plugins 数量")
+  assertWithinLimit(
+    pack.core.workspace?.tabs.length ?? 0,
+    limits.maxTabs,
+    "core.workspace.tabs 数量",
+  )
+  const allBlobs = [
+    ...pack.core.blobs,
+    ...pack.core.trashSnapshots.flatMap((snapshot) => snapshot.blob ?? []),
+  ]
+  assertWithinLimit(allBlobs.length, limits.maxBlobs, "归档 Blob 数量")
+  for (const [index, blob] of allBlobs.entries()) {
+    assertWithinLimit(blob.size, limits.maxSingleBlobBytes, `Blob[${index}].size`)
+  }
+  assertWithinLimit(
+    allBlobs.reduce((total, blob) => total + blob.size, 0),
+    limits.maxTotalBlobBytes,
+    "Blob 总字节数",
+  )
+  const raw = JSON.stringify(pack, null, 2)
+  assertRawArchiveLimit(raw, limits)
+  return raw
 }
 
 export function isWorkspaceArchiveRaw(raw: string): boolean {
@@ -411,7 +610,7 @@ function archiveSummary(
     pluginId: WORKSPACE_ARCHIVE_ID,
     pluginLabel: WORKSPACE_ARCHIVE_LABEL,
     dataKind: WORKSPACE_ARCHIVE_PACKAGE_KIND,
-    dataVersion: WORKSPACE_ARCHIVE_PACKAGE_VERSION,
+    dataVersion: pack.version,
     exportedAt: pack.exportedAt,
   }
 }
@@ -446,7 +645,7 @@ function archiveInspection(pack: WorkspaceArchivePackage, bytes?: number): Plugi
     pluginId: WORKSPACE_ARCHIVE_ID,
     label: WORKSPACE_ARCHIVE_LABEL,
     dataKind: WORKSPACE_ARCHIVE_PACKAGE_KIND,
-    dataVersion: WORKSPACE_ARCHIVE_PACKAGE_VERSION,
+    dataVersion: pack.version,
     status: payload.nodeCount || payload.blobCount || payload.pluginCount ? "ready" : "empty",
     itemCount:
       payload.nodeCount + payload.blobCount + payload.trashSnapshotCount + payload.pluginCount,
@@ -463,6 +662,25 @@ export async function exportWorkspaceArchiveJson(): Promise<string> {
     idbGetAll<{ id: string; node: Node; blob?: Blob; capturedAt: number }>(STORE_TRASH_SNAPSHOTS),
     exportWorkspaceBackupJson(),
   ])
+  assertWithinLimit(nodes.length, WORKSPACE_ARCHIVE_LIMITS.maxNodes, "core.nodes 数量")
+  assertWithinLimit(
+    trashSnapshots.length,
+    WORKSPACE_ARCHIVE_LIMITS.maxTrashSnapshots,
+    "core.trashSnapshots 数量",
+  )
+  const sourceBlobs = [
+    ...blobs.map((record) => record.blob),
+    ...trashSnapshots.flatMap((snapshot) => snapshot.blob ?? []),
+  ]
+  assertWithinLimit(sourceBlobs.length, WORKSPACE_ARCHIVE_LIMITS.maxBlobs, "归档 Blob 数量")
+  for (const [index, blob] of sourceBlobs.entries()) {
+    assertWithinLimit(blob.size, WORKSPACE_ARCHIVE_LIMITS.maxSingleBlobBytes, `Blob[${index}].size`)
+  }
+  assertWithinLimit(
+    sourceBlobs.reduce((total, blob) => total + blob.size, 0),
+    WORKSPACE_ARCHIVE_LIMITS.maxTotalBlobBytes,
+    "Blob 总字节数",
+  )
   const pack = createWorkspaceArchivePackage({
     core: {
       nodes,
@@ -475,11 +693,39 @@ export async function exportWorkspaceArchiveJson(): Promise<string> {
   return stringifyWorkspaceArchivePackage(pack)
 }
 
+export async function exportWorkspaceArchiveEncrypted(passphrase: string): Promise<string> {
+  return encryptWorkspaceArchive(await exportWorkspaceArchiveJson(), passphrase)
+}
+
 export async function previewWorkspaceArchiveImport(
   raw: string,
   filename?: string,
   ports?: readonly PluginDataPort[],
+  passphrase?: string,
 ): Promise<WorkspaceArchiveImportPreview> {
+  const encrypted = isEncryptedWorkspaceArchive(raw)
+  if (encrypted && !passphrase) {
+    return {
+      ok: false,
+      filename,
+      encrypted: true,
+      requiresPassphrase: true,
+      error: "请输入归档口令",
+    }
+  }
+  if (encrypted) {
+    try {
+      raw = await decryptWorkspaceArchive(raw, passphrase ?? "")
+    } catch (error) {
+      return {
+        ok: false,
+        filename,
+        encrypted: true,
+        requiresPassphrase: true,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
   let pack: WorkspaceArchivePackage
   try {
     pack = parseWorkspaceArchivePackage(raw)
@@ -487,6 +733,7 @@ export async function previewWorkspaceArchiveImport(
     return {
       ok: false,
       filename,
+      encrypted,
       error: error instanceof Error ? error.message : String(error),
     }
   }
@@ -500,6 +747,7 @@ export async function previewWorkspaceArchiveImport(
     return {
       ok: false,
       filename,
+      encrypted,
       package: archiveSummary(pack),
       archive: archivePayload(pack),
       error: pluginPreview.error ?? "工作区归档中的插件备份无法导入",
@@ -509,6 +757,8 @@ export async function previewWorkspaceArchiveImport(
   return {
     ok: true,
     filename,
+    encrypted,
+    requiresPassphrase: false,
     package: archiveSummary(pack),
     target: archiveTarget(),
     archive: archivePayload(pack),
@@ -562,12 +812,20 @@ async function applyWorkspaceArchivePackage(
 export async function importWorkspaceArchiveJson(
   raw: string,
   filename?: string,
+  passphrase?: string,
 ): Promise<PluginDataImportExecution> {
-  const preview = await previewWorkspaceArchiveImport(raw, filename)
+  const encrypted = isEncryptedWorkspaceArchive(raw)
+  const plaintext = encrypted ? await decryptWorkspaceArchive(raw, passphrase ?? "") : raw
+  const preview = await previewWorkspaceArchiveImport(plaintext, filename)
   if (!preview.ok || !preview.package) {
     throw new Error(preview.error ?? "工作区归档无法导入")
   }
-  const pack = parseWorkspaceArchivePackage(raw)
+  const executionPreview: WorkspaceArchiveImportPreview = {
+    ...preview,
+    encrypted,
+    requiresPassphrase: false,
+  }
+  const pack = parseWorkspaceArchivePackage(plaintext)
   const backup = await createWorkspaceArchiveBackup()
   let result: PluginImportResult
   try {
@@ -580,7 +838,12 @@ export async function importWorkspaceArchiveJson(
     }
     throw error
   }
-  return { preview, backup, result, after: archiveInspection(pack, bytesOf(raw)) }
+  return {
+    preview: executionPreview,
+    backup,
+    result,
+    after: archiveInspection(pack, bytesOf(plaintext)),
+  }
 }
 
 export async function restoreWorkspaceArchiveBackup(

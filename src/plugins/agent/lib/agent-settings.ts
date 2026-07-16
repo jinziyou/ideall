@@ -165,13 +165,13 @@ export function getAgentSettings(): AgentSettings {
   }
   lastRaw = raw
   if (!raw) {
-    cachedApiKey = secureFallbackGet(API_KEY_SECURE_KEY) ?? cachedApiKey
+    cachedApiKey = (isTauri() ? null : secureFallbackGet(API_KEY_SECURE_KEY)) ?? cachedApiKey
     lastParsed = { ...DEFAULT_SETTINGS, apiKey: cachedApiKey }
     if (!secureHydrated) void hydrateAgentSettingsSecure()
     return lastParsed
   }
   const parsed = parseSettings(raw)
-  const secureFallback = secureFallbackGet(API_KEY_SECURE_KEY)
+  const secureFallback = isTauri() ? null : secureFallbackGet(API_KEY_SECURE_KEY)
   if (secureFallback) {
     cachedApiKey = secureFallback
   } else if (!isTauri() && parsed.apiKey) {
@@ -182,17 +182,8 @@ export function getAgentSettings(): AgentSettings {
   return lastParsed
 }
 
-export function setAgentSettings(next: AgentSettings): void {
-  commitAgentSettingsAfterSecurePersistence(next)
-  const persistence = next.apiKey
-    ? secureSet(API_KEY_SECURE_KEY, next.apiKey).then(() => undefined)
-    : secureDelete(API_KEY_SECURE_KEY)
-  void persistence
-    .then(() => {
-      advanceCredentialRevision()
-      notify()
-    })
-    .catch(() => {})
+export function setAgentSettings(next: AgentSettings): Promise<void> {
+  return persistAgentSettings(next)
 }
 
 /**
@@ -240,7 +231,9 @@ export function subscribeAgentSettings(cb: () => void): () => void {
 
 /** 只返回是否存在凭据；供 FileSystem version/watch 使用，不暴露值。 */
 export function isAgentSettingsCredentialConfigured(): boolean {
-  return Boolean((cachedApiKey || secureFallbackGet(API_KEY_SECURE_KEY) || "").trim())
+  return Boolean(
+    (cachedApiKey || (isTauri() ? null : secureFallbackGet(API_KEY_SECURE_KEY)) || "").trim(),
+  )
 }
 
 function commitCredential(apiKey: string): void {

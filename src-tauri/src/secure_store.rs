@@ -9,6 +9,14 @@ pub struct SecureStoreStatus {
     pub native: bool,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecureStoreSelfTestResult {
+    pub backend: &'static str,
+    pub round_trip: bool,
+    pub cleaned_up: bool,
+}
+
 fn validate_key(key: &str) -> Result<&str, String> {
     let k = key.trim();
     if k.is_empty() || k.len() > MAX_KEY_LEN {
@@ -64,6 +72,38 @@ pub fn secure_store_delete(key: String) -> Result<(), String> {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(error.to_string()),
     }
+}
+
+/// 在真实系统凭据库中写入一次性随机值，读回校验后立即删除。
+/// 该命令不接收前端 secret，也不返回测试 key/value，适合作为安装后验收入口。
+#[tauri::command]
+pub fn secure_store_self_test() -> Result<SecureStoreSelfTestResult, String> {
+    let key = format!("ideall:self-test:{}", uuid::Uuid::new_v4().simple());
+    let value = uuid::Uuid::new_v4().to_string();
+    let credential = entry(&key)?;
+    credential
+        .set_password(&value)
+        .map_err(|error| format!("write-failed: {error}"))?;
+
+    let round_trip = matches!(credential.get_password(), Ok(ref actual) if actual == &value);
+    let delete_result = credential.delete_credential();
+    let cleaned_up = matches!(delete_result, Ok(()) | Err(keyring::Error::NoEntry))
+        && matches!(credential.get_password(), Err(keyring::Error::NoEntry));
+
+    if !round_trip || !cleaned_up {
+        let _ = credential.delete_credential();
+        return Err(if !round_trip {
+            "round-trip-failed".into()
+        } else {
+            "cleanup-failed".into()
+        });
+    }
+
+    Ok(SecureStoreSelfTestResult {
+        backend: "system-keychain",
+        round_trip,
+        cleaned_up,
+    })
 }
 
 #[cfg(test)]

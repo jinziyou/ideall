@@ -27,7 +27,7 @@
 
 ## 威胁模型与信任边界
 
-- **第一方 webview（可信）**：ideall 前端与本地数据层（IndexedDB）。登录令牌、同步码、模型 API Key、MCP secret / OAuth token 等敏感凭据经统一 secure-store 访问：Tauri App 优先写入系统凭据库；Web / dev 形态以及原生凭据库调用失败时，降级到宿主 origin 下带 `ideall:secure-fallback:` 前缀的 `localStorage`。公开设置与用户展示资料仍可存于普通 `localStorage`。系统凭据库降低静态磁盘与浏览器存储快照的暴露，但不把已获主窗口执行权的同源 XSS 变成可信代码。
+- **第一方 webview（可信）**：ideall 前端与本地数据层（IndexedDB）。登录令牌、同步码、模型 API Key、MCP secret / OAuth token 等敏感凭据经统一 secure-store 访问：Tauri App 写入系统凭据库，调用失败时 fail closed，不会降级写入或读取明文 fallback；Web / dev 形态使用宿主 origin 下带 `ideall:secure-fallback:` 前缀的 `localStorage`。公开设置与用户展示资料仍可存于普通 `localStorage`。系统凭据库降低静态磁盘与浏览器存储快照的暴露，但不把已获主窗口执行权的同源 XSS 变成可信代码。
 - **跨域嵌入页（半信任）**：`info`/`community` 默认嵌入 `wonita.link` 的 iframe，独立部署/独立供应链，经 MCP-over-postMessage 桥与宿主通信。
 - **模型端点（用户自选外部锚）**：BYO-key 直连，agent 发送的一切它都可见。
 - **外部 MCP（用户配置，不可信）**：远端 HTTP/SSE 服务或本机 stdio 子进程可看到发给它的初始化、工具参数与配置给该服务的凭据；其返回值会进入 agent 循环，并可能继续发给模型端点。
@@ -44,7 +44,7 @@
 | **用户选择的模型端点** | 用户发送普通对话或 agent 回合 | BYO API Key（`Authorization`）、模型名、系统提示、最近对话；启用上下文时包含 home 标题、用户当前活动文件的引用正文与浏览器上下文；agent 模式还会发送工具 schema、工具调用结果，以及外部 MCP / web 工具返回的数据 | 不自动上传整个 IndexedDB 或文件库；正文读取受活动文件与 `fs.notes:read` / `fs.blobs:read` 等能力闸约束。该端点能看到实际请求中的全部内容 |
 | **外部 MCP** | 用户配置并启用 stdio、SSE 或 Streamable HTTP server，agent 建连、发现工具或调用其工具 | MCP 初始化/发现流量、工具参数，以及为该 server 配置的 header、OAuth token 或 secret；本机 stdio 子进程同样能看到其 MCP 流量 | 不自动获得模型 API Key、同步码或完整本地库；但模型可能把对话或本地工具所得内容放入外部工具参数。外部工具在默认 `confirm` 策略下逐次确认，`auto` 策略仍对外部工具强制确认 |
 | **`web.search` / `web.fetch`** | agent 调用联网工具；`confirm` 策略会逐次确认，`auto` 策略可直接调用 | 搜索词会发给内置搜索源（DuckDuckGo，失败时级联 Wikipedia）；`web.fetch` 的目标 URL 会发给目标站点；接收方还可记录 IP、时间与常规网络元数据。抓回的结果会进入模型上下文 | 不带 cookie、`Authorization` 或模型 API Key。只允许 HTTPS/443，逐跳检查重定向、限制响应体与超时；App 侧再做 DNS 解析、私网阻断与连接钉定。搜索可对固定源使用 GET/POST，任意页面抓取只用 GET |
-| **同步服务** | 用户创建/加入同步并执行同步 | 每个同步 scope 的稳定 `storageId`、AES-GCM 密文块（`iv`、`ciphertext`、`updated_at`）、请求时序/大小与常规网络元数据；当前 scope 仅关注与笔记 | 同步码、AES 密钥与明文不离开设备；无需账号。服务端仍可回滚、扣留、覆盖密文或凭 `storageId` 干扰写入，详见下方密码学取舍 |
+| **同步服务** | 用户创建/加入同步并执行同步 | 关注、笔记、书签各自稳定的 `storageId`、AES-GCM 密文块（`iv`、`ciphertext`、`updated_at`）、请求时序/大小与常规网络元数据 | 同步码、AES 密钥与明文不离开设备；无需账号。服务端仍可回滚、扣留、覆盖密文或凭 `storageId` 干扰写入，详见下方密码学取舍 |
 
 核心承诺：**本地数据不自动整库上传，启用联网能力时按上表出站**；**跨端同步端到端加密、仅上传密文**；**BYO 密钥只发给用户选择的模型端点，不经 wonita、同步服务或嵌入桥**。涉及 `sync-crypto`、密钥派生、密文存储、嵌入桥能力面、agent 隐私闸的问题请优先报告。
 
@@ -62,7 +62,7 @@
 
 ## 已知取舍（有意接受，非疏漏）
 
-- **secure-store 降级与主窗口 XSS**：Tauri App 已通过系统凭据库保存登录令牌、同步码、模型 API Key、MCP secret / OAuth token 等凭据；Web / dev 形态固定降级到命名 `localStorage`，原生凭据库调用失败时也会降级。系统凭据库改善静态存储安全，但主窗口拥有不按 key 限域的 secure-store 读写命令；一旦第一方同源 XSS 获得该窗口执行权，仍可能读取凭据或经 `plugin-http` 外传。**路线**：按 owner / key scope 收窄 Tauri 命令，并为原生降级提供显式告警或 fail-closed 模式。
+- **secure-store 与主窗口 XSS**：Tauri App 已通过系统凭据库保存登录令牌、同步码、模型 API Key、MCP secret / OAuth token 等凭据，并在原生调用失败时 fail closed；Web / dev 形态固定使用命名 `localStorage`。系统凭据库改善静态存储安全，但主窗口拥有不按 key 限域的 secure-store 读写命令；一旦第一方同源 XSS 获得该窗口执行权，仍可能读取凭据或经 `plugin-http` 外传。**路线**：继续按 owner / key scope 收窄 Tauri 命令。
 - **CSP `script-src 'unsafe-inline'`**：Next.js 静态导出向 HTML 注入大量内联 hydration 脚本（单文件 70+），单 hash 无法覆盖、静态导出又无法用 nonce，故暂留 `unsafe-inline`。**路线**：迁移到可去内联脚本的 CSP 方案后移除。
 - **Tauri `http:default` 放行任意 URL（webview `connect-src` 已收窄）**：webview `connect-src` 现为 `'self' tauri:`（见本轮加固），但 App 出站实际走 Rust `plugin-http`，其 `capabilities/default.json` 放行 `https://*`/`http://*` 是 BYO-key 任意端点 + 自建后端的必需放宽——故 XSS 仍可经 `plugin-http` 外传，且不受 webview CSP 约束。**路线**：若未来 BYO 端点可枚举/白名单化，再收窄 `http:default`；当前为有意接受的残余面。
 - **agent 联网 egress 的残余面（出站不受 CSP 约束 / 提示注入 / 隐私 / 每轮次数）**：`web:fetch` 给了 agent 模型可控目标的网络出站。**名解析 SSRF 与 DNS-rebind 已由 Rust 侧 `agent_guarded_fetch` 守卫闭合**（见本轮加固，App 形态）；剩余有意接受的残余：① **dev/浏览器形态无 Rust 命令**——`pnpm dev` 纯浏览器态退回标准 `fetch`，受 CORS 限制且名解析 SSRF 不闭合，但 agent 仅以 App 形态分发，此态仅本地开发用。② 出站走 Rust（`plugin-http` 或 `agent_guarded_fetch`），**不受 webview `connect-src` 约束**——故 egress 策略是「应用层」强制而非 webview CSP 兜底（这是 App 直连后端/BYO 端点的必需放宽）。③ **间接提示注入**：抓回的网页正文回灌进 agent 循环，已靠系统提示标注「数据非指令」+ 正文截断压制，但模型层面无法绝对保证。④ **隐私**：即便正常调用，查询词/URL 也会发往搜索/被抓主机并被其日志记录（数据离设备）。**路线**：每轮抓取次数硬上限；可选「联网总开关」。

@@ -456,7 +456,7 @@ const DEFAULT_DEPS: AgentWorkspaceStoreDeps = {
   secureGet,
   secureSet,
   secureDelete,
-  secureFallbackGet,
+  secureFallbackGet: (key) => (isTauri() ? null : secureFallbackGet(key)),
   isTauri,
   now: Date.now,
   genId,

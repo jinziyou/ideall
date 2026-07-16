@@ -40,9 +40,32 @@ function fixture(overrides: Partial<SettingsFileSystemDeps> = {}) {
   const values: Record<SettingsSectionId, unknown> = {
     appearance: { choice: appearanceChoice, effectiveColorScheme: appearanceChoice },
     device: {
-      sync: { enabled: false },
+      sync: { enabled: false, lastRun: null },
       storage: null,
       publishingIdentity: { signedIn: false, user: null },
+    },
+    data: {
+      archive: {
+        kind: "ideall.workspace-archive",
+        version: 2,
+        includesSecrets: false,
+        importMode: "replace",
+      },
+      secureStore: {
+        backend: "system-keychain",
+        native: true,
+        fallbackValueCount: 0,
+        legacyValueCount: 0,
+        error: null,
+      },
+      database: {
+        name: "wonita-home",
+        version: 17,
+        status: "healthy",
+        counts: { nodes: 0, blobs: 0, trashSnapshots: 0, agentTasks: 0 },
+        error: null,
+      },
+      storage: { persistenceAvailable: true, persisted: true },
     },
     connections: [{ id: "connection-1" }],
     "runtime-extensions": [],
@@ -59,6 +82,36 @@ function fixture(overrides: Partial<SettingsFileSystemDeps> = {}) {
     },
     writeAppearance(choice) {
       appearanceChoice = choice
+    },
+    exportWorkspaceArchive() {
+      return { filename: "workspace.json", content: "{}", encrypted: false }
+    },
+    previewWorkspaceArchive(_content, filename) {
+      return {
+        ok: false,
+        encrypted: false,
+        requiresPassphrase: false,
+        filename: filename ?? null,
+        error: "invalid",
+        package: null,
+        archive: null,
+      }
+    },
+    importWorkspaceArchive() {
+      return {
+        changed: true,
+        reloadRequired: true,
+        imported: { nodes: 0, blobs: 0, trash: 0, plugins: 0 },
+      }
+    },
+    requestPersistentStorage() {
+      return { available: true, granted: true }
+    },
+    selfTestSecureStore() {
+      return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
+    },
+    migrateSecureStore() {
+      return { available: true, migrated: 0, removedPlaintext: 0, failed: 0, remaining: 0 }
     },
     revokeConnection(id) {
       return connectionIds.delete(id)

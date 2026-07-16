@@ -3,10 +3,13 @@
 import type { StorageSyncPort } from "@protocol/storage-sync"
 import { bulkPutSubscriptions, listAllSubscriptions } from "@/files/stores/subscriptions-store"
 import { bulkPutNotes, listAllNotes } from "@/files/stores/notes-store"
+import { bulkPutBookmarkNodes, listAllBookmarkNodes } from "@/files/stores/bookmarks-store"
 
 export const storageSyncPort: StorageSyncPort = {
   listAllSubscriptions,
   bulkPutSubscriptions,
   listAllNotes,
   bulkPutNotes,
+  listAllBookmarkNodes,
+  bulkPutBookmarkNodes,
 }

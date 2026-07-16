@@ -4,6 +4,7 @@ import { AUTH_TOKEN_SECURE_KEY } from "@/lib/auth/auth-store"
 import { SYNC_CODE_SECURE_KEY } from "@/lib/sync-code"
 import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { IDB_DATABASE_NAME, IDB_DATABASE_VERSION } from "@/lib/idb"
+import { FILE_TREE_EXPANDED_STORAGE_KEY, THEME_KEY } from "@/lib/public-config"
 import { AUDIO_DB_NAME, AUDIO_DB_VERSION } from "@/plugins/audio/audio-store"
 import { AGENT_SECRETS_STORAGE_KEY } from "@/plugins/agent/lib/agent-secrets"
 import { AGENT_SETTINGS_STORAGE_KEY } from "@/plugins/agent/lib/agent-settings"
@@ -84,19 +85,19 @@ test("inspectLocalDataSchemas: 识别 JSON 正常、损坏和旧明文敏感值"
   }
 })
 
-test("inspectLocalDataSchemas: agent task database reports v15 stale and v16 current", async () => {
+test("inspectLocalDataSchemas: agent task database reports v16 stale and v17 current", async () => {
   const dispose = registerTestSchemas()
   try {
-    assert.equal(IDB_DATABASE_VERSION, 16)
+    assert.equal(IDB_DATABASE_VERSION, 17)
     const stale = await inspectLocalDataSchemas({
-      indexedDBDatabases: async () => [{ name: IDB_DATABASE_NAME, version: 15 }],
+      indexedDBDatabases: async () => [{ name: IDB_DATABASE_NAME, version: 16 }],
     })
     const current = await inspectLocalDataSchemas({
       indexedDBDatabases: async () => [{ name: IDB_DATABASE_NAME, version: IDB_DATABASE_VERSION }],
     })
 
     assert.equal(stale.find((row) => row.id === "agent.tasks")?.status, "warning")
-    assert.match(stale.find((row) => row.id === "agent.tasks")?.detail ?? "", /期望 v16/)
+    assert.match(stale.find((row) => row.id === "agent.tasks")?.detail ?? "", /期望 v17/)
     assert.equal(current.find((row) => row.id === "agent.tasks")?.status, "ok")
   } finally {
     dispose()
@@ -148,4 +149,20 @@ test("repairLocalDataSchema: 移除损坏 JSON 并清理旧明文字段", async 
   } finally {
     dispose()
   }
+})
+
+test("public config schemas: repair invalid theme and filter malformed tree entries", async () => {
+  const data = {
+    [THEME_KEY]: "neon",
+    [FILE_TREE_EXPANDED_STORAGE_KEY]: JSON.stringify(["valid", 42, null]),
+  }
+  const localStorage = mutableMemoryStorage(data)
+
+  const theme = await repairLocalDataSchema("appearance.theme", { localStorage })
+  const tree = await repairLocalDataSchema("navigation.file-tree-expanded", { localStorage })
+
+  assert.equal(theme.ok, true)
+  assert.equal(data[THEME_KEY], "system")
+  assert.equal(tree.ok, true)
+  assert.deepEqual(JSON.parse(data[FILE_TREE_EXPANDED_STORAGE_KEY]), ["valid"])
 })

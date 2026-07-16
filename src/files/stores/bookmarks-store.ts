@@ -3,12 +3,13 @@
 //   - 书签节点: folderId→parentId, url/description/favicon 收进 content, title/tags 留顶层;
 //   - 收藏夹节点: name→title, 根级 (parentId=null);
 //   - 删除走软删标记 (deletedAt, 与笔记/关注一致), 读路径过滤删除标记 —— 当前用于撤销跨刷新稳健, 并为后续同步就绪。
-// 本切片不开同步 (维持现状未同步); sortKey/updatedAt 已补齐, 删除标记 GC 随 bookmark-sync 落地 (与笔记同纪律)。
+// 收藏夹与书签作为同一个加密域同步；完整快照 CAS、墓碑 GC 与恢复快照在同一事务落地。
 import { Bookmark, BookmarkFolder } from "@protocol/files"
 import type { Node, NodeKind, NodeOfKind } from "@protocol/node"
+import { StorageSyncConflictError, type BookmarkSyncNode } from "@protocol/storage-sync"
 import { faviconForUrl } from "@/lib/favicon"
 import { genId } from "@/lib/id"
-import { isLive } from "@protocol/sync"
+import { expiredTombstoneIdsToDelete, isLive, recordsEqual } from "@protocol/sync"
 import { cmpSibling, computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
 import {
   idbGetAllFromIndex,
@@ -126,6 +127,109 @@ async function allFolderNodes(): Promise<FolderNode[]> {
     "folder",
   )
   return all.filter((n): n is FolderNode => n.kind === "folder")
+}
+
+// ---- 跨端同步钩子 (仅由 core StorageSyncPort adapter 暴露给 sync 插件) ----
+
+/** 收藏夹与书签必须作为同一快照读取，避免同步只观察到父或子的一半。 */
+export async function listAllBookmarkNodes(): Promise<BookmarkSyncNode[]> {
+  return idbRunTransaction<BookmarkSyncNode[]>(
+    [STORE_NODES],
+    "readonly",
+    (transaction, setResult, abort) => {
+      readBookmarkTreeSnapshot(
+        transaction.objectStore(STORE_NODES),
+        ({ folders, bookmarks }) => setResult([...folders, ...bookmarks]),
+        abort,
+      )
+    },
+  )
+}
+
+/** 仅当本地仍匹配同步读取快照时，原子写入收藏夹、书签与墓碑 GC。 */
+export async function bulkPutBookmarkNodes(
+  nodes: BookmarkSyncNode[],
+  expectedLocal: BookmarkSyncNode[],
+): Promise<BookmarkSyncNode[]> {
+  const outcome = await idbRunTransaction<{ items: BookmarkSyncNode[]; changed: boolean }>(
+    [STORE_NODES, STORE_TRASH_SNAPSHOTS],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const store = transaction.objectStore(STORE_NODES)
+      const trashStore = transaction.objectStore(STORE_TRASH_SNAPSHOTS)
+      readBookmarkTreeSnapshot(
+        store,
+        ({ folders, bookmarks }) => {
+          const actual: BookmarkSyncNode[] = [...folders, ...bookmarks]
+          const batchIds = new Set<string>()
+          for (const node of nodes) {
+            if (batchIds.has(node.id)) throw new Error(`书签同步批次包含重复 id: ${node.id}`)
+            batchIds.add(node.id)
+          }
+          const activeFolderIds = new Set(
+            nodes.filter((node) => node.kind === "folder" && isLive(node)).map((node) => node.id),
+          )
+          for (const node of nodes) {
+            if (node.kind === "folder" && node.parentId !== null) {
+              throw new Error(`书签同步收藏夹不能嵌套: ${node.id}`)
+            }
+            if (
+              node.kind === "bookmark" &&
+              isLive(node) &&
+              node.parentId !== null &&
+              !activeFolderIds.has(node.parentId)
+            ) {
+              throw new Error(`书签同步批次包含孤儿书签: ${node.id}`)
+            }
+          }
+          if (recordsEqual(actual, nodes)) {
+            for (const node of nodes) {
+              if (isLive(node)) trashStore.delete(node.id)
+            }
+            setResult({ items: actual, changed: false })
+            return
+          }
+          if (!recordsEqual(actual, expectedLocal)) {
+            throw new StorageSyncConflictError("书签")
+          }
+
+          const existingById = new Map(actual.map((node) => [node.id, node]))
+          const keepIds = new Set(nodes.map((node) => node.id))
+          const now = Date.now()
+          const toDelete = expiredTombstoneIdsToDelete(actual, keepIds, now)
+          for (const node of nodes) {
+            const current = existingById.get(node.id)
+            if (current && current.kind !== node.kind) {
+              throw new Error(`书签同步不能改变节点 kind: ${node.id}`)
+            }
+            if (isLive(node)) {
+              trashStore.delete(node.id)
+            } else if (current && isLive(current)) {
+              trashStore.put({
+                id: current.id,
+                node: current,
+                capturedAt: now,
+              } satisfies TrashSnapshot)
+            }
+            // 新 id 使用 add，若撞到 note/file 等其它 kind，事务以 ConstraintError 整批回滚。
+            if (current) store.put(node)
+            else store.add(node)
+          }
+          for (const id of toDelete) {
+            store.delete(id)
+            trashStore.delete(id)
+          }
+          setResult({ items: nodes, changed: true })
+        },
+        abort,
+      )
+    },
+  )
+  if (outcome.changed) {
+    notifyFilesUpdated({ kind: "folder" })
+    notifyFilesUpdated({ kind: "bookmark" })
+  }
+  return outcome.items
 }
 
 // ---- 收藏夹 ----

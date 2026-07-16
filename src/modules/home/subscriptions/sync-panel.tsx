@@ -13,7 +13,7 @@ import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
 import { useFlowProgress } from "@/lib/use-flow-progress"
 
 /**
- * 跨端同步面板 —— 用同步码在多设备间同步关注 (端到端加密)。
+ * 跨端同步面板 —— 用同步码在多设备间同步关注、笔记与书签 (端到端加密)。
  * 同步码存本地 (useSyncExternalStore 读取); 已开启则进面板时自动同步一次。
  * 同步完成广播 `ideall:subscriptions-synced`, 关注流监听后刷新。
  */
@@ -49,7 +49,7 @@ export default function SyncPanel() {
 
   async function enable() {
     const c = generateSyncCode()
-    setSyncCode(c)
+    await setSyncCode(c)
     setReveal(true)
     await runSync(c)
   }
@@ -60,15 +60,19 @@ export default function SyncPanel() {
       toast.error("同步码格式不正确")
       return
     }
-    setSyncCode(c)
+    await setSyncCode(c)
     setInput("")
     await runSync(c)
   }
 
-  function disable() {
-    clearSyncCode()
-    setReveal(false)
-    toast.success("已关闭同步，云端加密备份仍保留")
+  async function disable() {
+    try {
+      await clearSyncCode()
+      setReveal(false)
+      toast.success("已关闭同步，云端加密备份仍保留")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "关闭同步失败")
+    }
   }
 
   function copyCode() {
@@ -108,7 +112,7 @@ export default function SyncPanel() {
             <Button size="sm" variant="outline" onClick={() => setReveal((v) => !v)}>
               {reveal ? "隐藏同步码" : "查看同步码"}
             </Button>
-            <Button size="sm" variant="ghost" onClick={disable}>
+            <Button size="sm" variant="ghost" onClick={() => void disable()}>
               关闭同步
             </Button>
           </div>

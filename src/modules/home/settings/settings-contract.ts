@@ -14,6 +14,7 @@ export const SETTINGS_WRITE_PERMISSION = "settings:write"
 export const SETTINGS_SECTION_IDS = [
   "appearance",
   "device",
+  "data",
   "connections",
   "runtime-extensions",
 ] as const
@@ -21,6 +22,12 @@ export const SETTINGS_SECTION_IDS = [
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
 
 export const SETTINGS_CONNECTION_REVOKE_ACTION = "revoke-connection"
+export const SETTINGS_DATA_EXPORT_ACTION = "export-workspace-archive"
+export const SETTINGS_DATA_PREVIEW_IMPORT_ACTION = "preview-workspace-archive-import"
+export const SETTINGS_DATA_IMPORT_ACTION = "import-workspace-archive"
+export const SETTINGS_DATA_PERSIST_ACTION = "request-persistent-storage"
+export const SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION = "self-test-secure-store"
+export const SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION = "migrate-legacy-secure-values"
 export const SETTINGS_RUNTIME_RETRY_ACTION = "retry-extension"
 export const SETTINGS_RUNTIME_REVOKE_ACTION = "revoke-extension"
 export const SETTINGS_RUNTIME_UNINSTALL_ACTION = "uninstall-extension"
@@ -41,7 +48,17 @@ export type AppearanceSettingsDocument = Readonly<{
 }>
 
 export type DeviceSettingsDocument = Readonly<{
-  sync: Readonly<{ enabled: boolean }>
+  sync: Readonly<{
+    enabled: boolean
+    lastRun: Readonly<{
+      status: "success" | "failure"
+      finishedAt: number
+      durationMs: number
+      total: number | null
+      added: number | null
+      failureCode: "block-limit" | "conflict" | "decrypt" | "network" | "unknown" | null
+    }> | null
+  }>
   storage: Readonly<{ usage: number; quota: number }> | null
   publishingIdentity:
     | Readonly<{
@@ -54,6 +71,96 @@ export type DeviceSettingsDocument = Readonly<{
         }>
       }>
     | Readonly<{ signedIn: false; user: null }>
+}>
+
+export type DataSettingsDocument = Readonly<{
+  archive: Readonly<{
+    kind: string
+    version: number
+    includesSecrets: false
+    importMode: "replace"
+  }>
+  secureStore: Readonly<{
+    backend: "system-keychain" | "web-localStorage" | "unavailable"
+    native: boolean
+    fallbackValueCount: number
+    legacyValueCount: number
+    error: string | null
+  }>
+  database: Readonly<{
+    name: string
+    version: number
+    status: "healthy" | "unavailable"
+    counts: Readonly<{
+      nodes: number
+      blobs: number
+      trashSnapshots: number
+      agentTasks: number
+    }> | null
+    error: string | null
+  }>
+  storage: Readonly<{
+    persistenceAvailable: boolean
+    persisted: boolean | null
+  }>
+}>
+
+export type SettingsDataArchiveCounts = Readonly<{
+  nodeCount: number
+  blobCount: number
+  trashSnapshotCount: number
+  pluginCount: number
+  tabCount: number
+}>
+
+export type SettingsDataExportResult = Readonly<{
+  filename: string
+  content: string
+  encrypted: boolean
+}>
+
+export type SettingsDataImportPreview = Readonly<{
+  ok: boolean
+  encrypted: boolean
+  requiresPassphrase: boolean
+  filename: string | null
+  error: string | null
+  package: Readonly<{
+    kind: string
+    version: number
+    exportedAt: string
+  }> | null
+  archive: SettingsDataArchiveCounts | null
+}>
+
+export type SettingsDataImportResult = Readonly<{
+  changed: boolean
+  reloadRequired: boolean
+  imported: Readonly<{
+    nodes: number
+    blobs: number
+    trash: number
+    plugins: number
+  }>
+}>
+
+export type SettingsDataPersistenceResult = Readonly<{
+  available: boolean
+  granted: boolean
+}>
+
+export type SettingsDataSecureStoreSelfTestResult = Readonly<{
+  backend: "system-keychain"
+  roundTrip: true
+  cleanedUp: true
+}>
+
+export type SettingsDataSecureStoreMigrationResult = Readonly<{
+  available: boolean
+  migrated: number
+  removedPlaintext: number
+  failed: number
+  remaining: number
 }>
 
 export type SettingsConnectionDocument = Readonly<{
@@ -98,6 +205,7 @@ export type SettingsMutationResult = Readonly<{ changed: boolean }>
 export type SettingsDocumentBySection = Readonly<{
   appearance: AppearanceSettingsDocument
   device: DeviceSettingsDocument
+  data: DataSettingsDocument
   connections: readonly SettingsConnectionDocument[]
   "runtime-extensions": readonly RuntimeExtensionSettingsDocument[]
 }>
@@ -159,6 +267,37 @@ export function decodeDeviceSettings(value: unknown): DeviceSettingsDocument {
   const candidate = record(value, "Device settings")
   const sync = record(candidate.sync, "Device sync settings")
   if (typeof sync.enabled !== "boolean") throw new TypeError("Device sync state is invalid")
+  const lastRun: DeviceSettingsDocument["sync"]["lastRun"] =
+    sync.lastRun === null
+      ? null
+      : (() => {
+          const item = record(sync.lastRun, "Last sync telemetry")
+          if (item.status !== "success" && item.status !== "failure") {
+            throw new TypeError("Last sync status is invalid")
+          }
+          const status = item.status
+          const total = item.total === null ? null : integer(item.total, "Last sync total")
+          const added = item.added === null ? null : integer(item.added, "Last sync added")
+          const failureCode = item.failureCode
+          if (
+            failureCode !== null &&
+            failureCode !== "block-limit" &&
+            failureCode !== "conflict" &&
+            failureCode !== "decrypt" &&
+            failureCode !== "network" &&
+            failureCode !== "unknown"
+          ) {
+            throw new TypeError("Last sync failure code is invalid")
+          }
+          return {
+            status,
+            finishedAt: integer(item.finishedAt, "Last sync finished time"),
+            durationMs: integer(item.durationMs, "Last sync duration"),
+            total,
+            added,
+            failureCode,
+          }
+        })()
 
   const storageValue = candidate.storage
   const storage =
@@ -175,7 +314,7 @@ export function decodeDeviceSettings(value: unknown): DeviceSettingsDocument {
   const identity = record(candidate.publishingIdentity, "Publishing identity")
   if (identity.signedIn === false && identity.user === null) {
     return {
-      sync: { enabled: sync.enabled },
+      sync: { enabled: sync.enabled, lastRun },
       storage,
       publishingIdentity: { signedIn: false, user: null },
     }
@@ -187,7 +326,7 @@ export function decodeDeviceSettings(value: unknown): DeviceSettingsDocument {
     throw new TypeError("Publishing identity avatar is invalid")
   }
   return {
-    sync: { enabled: sync.enabled },
+    sync: { enabled: sync.enabled, lastRun },
     storage,
     publishingIdentity: {
       signedIn: true,
@@ -198,6 +337,198 @@ export function decodeDeviceSettings(value: unknown): DeviceSettingsDocument {
         avatar: avatar === null ? null : text(avatar, "Publishing identity avatar", 4096),
       },
     },
+  }
+}
+
+export function decodeDataSettings(value: unknown): DataSettingsDocument {
+  const candidate = record(value, "Local data settings")
+  const archive = record(candidate.archive, "Workspace archive settings")
+  const secureStore = record(candidate.secureStore, "Secure store settings")
+  const database = record(candidate.database, "Local database settings")
+  const storage = record(candidate.storage, "Persistent storage settings")
+  const backend = secureStore.backend
+  if (
+    backend !== "system-keychain" &&
+    backend !== "web-localStorage" &&
+    backend !== "unavailable"
+  ) {
+    throw new TypeError("Secure store backend is invalid")
+  }
+  if (typeof secureStore.native !== "boolean") {
+    throw new TypeError("Secure store native state is invalid")
+  }
+  if (archive.includesSecrets !== false || archive.importMode !== "replace") {
+    throw new TypeError("Workspace archive policy is invalid")
+  }
+  const error = secureStore.error
+  if (error !== null && typeof error !== "string") {
+    throw new TypeError("Secure store error is invalid")
+  }
+  if (database.status !== "healthy" && database.status !== "unavailable") {
+    throw new TypeError("Local database health is invalid")
+  }
+  const databaseError = database.error
+  if (databaseError !== null && typeof databaseError !== "string") {
+    throw new TypeError("Local database error is invalid")
+  }
+  const counts =
+    database.counts === null
+      ? null
+      : (() => {
+          const item = record(database.counts, "Local database counts")
+          return {
+            nodes: integer(item.nodes, "Local database node count"),
+            blobs: integer(item.blobs, "Local database blob count"),
+            trashSnapshots: integer(item.trashSnapshots, "Local database trash count"),
+            agentTasks: integer(item.agentTasks, "Local database agent task count"),
+          }
+        })()
+  if (typeof storage.persistenceAvailable !== "boolean") {
+    throw new TypeError("Persistent storage availability is invalid")
+  }
+  if (storage.persisted !== null && typeof storage.persisted !== "boolean") {
+    throw new TypeError("Persistent storage state is invalid")
+  }
+  return {
+    archive: {
+      kind: text(archive.kind, "Workspace archive kind", 256),
+      version: integer(archive.version, "Workspace archive version"),
+      includesSecrets: false,
+      importMode: "replace",
+    },
+    secureStore: {
+      backend,
+      native: secureStore.native,
+      fallbackValueCount: integer(secureStore.fallbackValueCount, "Secure store fallback count"),
+      legacyValueCount: integer(secureStore.legacyValueCount, "Secure store legacy count"),
+      error: error === null ? null : text(error, "Secure store error", 1024),
+    },
+    database: {
+      name: text(database.name, "Local database name", 256),
+      version: integer(database.version, "Local database version"),
+      status: database.status,
+      counts,
+      error: databaseError === null ? null : text(databaseError, "Local database error", 1024),
+    },
+    storage: {
+      persistenceAvailable: storage.persistenceAvailable,
+      persisted: storage.persisted,
+    },
+  }
+}
+
+function decodeArchiveCounts(value: unknown): SettingsDataArchiveCounts {
+  const candidate = record(value, "Workspace archive counts")
+  return {
+    nodeCount: integer(candidate.nodeCount, "Workspace archive node count"),
+    blobCount: integer(candidate.blobCount, "Workspace archive blob count"),
+    trashSnapshotCount: integer(
+      candidate.trashSnapshotCount,
+      "Workspace archive trash snapshot count",
+    ),
+    pluginCount: integer(candidate.pluginCount, "Workspace archive plugin count"),
+    tabCount: integer(candidate.tabCount, "Workspace archive tab count"),
+  }
+}
+
+export function decodeSettingsDataExportResult(value: unknown): SettingsDataExportResult {
+  const candidate = record(value, "Workspace archive export result")
+  if (typeof candidate.encrypted !== "boolean") {
+    throw new TypeError("Workspace archive encryption state is invalid")
+  }
+  return {
+    filename: text(candidate.filename, "Workspace archive filename", 512),
+    content: text(candidate.content, "Workspace archive content", Number.MAX_SAFE_INTEGER),
+    encrypted: candidate.encrypted,
+  }
+}
+
+export function decodeSettingsDataImportPreview(value: unknown): SettingsDataImportPreview {
+  const candidate = record(value, "Workspace archive import preview")
+  if (
+    typeof candidate.ok !== "boolean" ||
+    typeof candidate.encrypted !== "boolean" ||
+    typeof candidate.requiresPassphrase !== "boolean"
+  ) {
+    throw new TypeError("Workspace archive preview state is invalid")
+  }
+  const filename = candidate.filename
+  const error = candidate.error
+  const packageValue = candidate.package
+  return {
+    ok: candidate.ok,
+    encrypted: candidate.encrypted,
+    requiresPassphrase: candidate.requiresPassphrase,
+    filename: filename === null ? null : text(filename, "Workspace archive preview filename", 512),
+    error: error === null ? null : text(error, "Workspace archive preview error", 1024),
+    package:
+      packageValue === null
+        ? null
+        : (() => {
+            const item = record(packageValue, "Workspace archive package summary")
+            return {
+              kind: text(item.kind, "Workspace archive package kind", 256),
+              version: integer(item.version, "Workspace archive package version"),
+              exportedAt: text(item.exportedAt, "Workspace archive exported time", 128),
+            }
+          })(),
+    archive: candidate.archive === null ? null : decodeArchiveCounts(candidate.archive),
+  }
+}
+
+export function decodeSettingsDataImportResult(value: unknown): SettingsDataImportResult {
+  const candidate = record(value, "Workspace archive import result")
+  const imported = record(candidate.imported, "Workspace archive imported counts")
+  if (typeof candidate.changed !== "boolean" || typeof candidate.reloadRequired !== "boolean") {
+    throw new TypeError("Workspace archive import result is invalid")
+  }
+  return {
+    changed: candidate.changed,
+    reloadRequired: candidate.reloadRequired,
+    imported: {
+      nodes: integer(imported.nodes, "Imported node count"),
+      blobs: integer(imported.blobs, "Imported blob count"),
+      trash: integer(imported.trash, "Imported trash count"),
+      plugins: integer(imported.plugins, "Imported plugin count"),
+    },
+  }
+}
+
+export function decodeSettingsDataPersistenceResult(value: unknown): SettingsDataPersistenceResult {
+  const candidate = record(value, "Persistent storage result")
+  if (typeof candidate.available !== "boolean" || typeof candidate.granted !== "boolean") {
+    throw new TypeError("Persistent storage result is invalid")
+  }
+  return { available: candidate.available, granted: candidate.granted }
+}
+
+export function decodeSettingsDataSecureStoreSelfTestResult(
+  value: unknown,
+): SettingsDataSecureStoreSelfTestResult {
+  const candidate = record(value, "Secure store self-test result")
+  if (
+    candidate.backend !== "system-keychain" ||
+    candidate.roundTrip !== true ||
+    candidate.cleanedUp !== true
+  ) {
+    throw new TypeError("Secure store self-test result is invalid")
+  }
+  return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
+}
+
+export function decodeSettingsDataSecureStoreMigrationResult(
+  value: unknown,
+): SettingsDataSecureStoreMigrationResult {
+  const candidate = record(value, "Secure store migration result")
+  if (typeof candidate.available !== "boolean") {
+    throw new TypeError("Secure store migration availability is invalid")
+  }
+  return {
+    available: candidate.available,
+    migrated: integer(candidate.migrated, "Secure store migrated count"),
+    removedPlaintext: integer(candidate.removedPlaintext, "Secure store removed plaintext count"),
+    failed: integer(candidate.failed, "Secure store migration failure count"),
+    remaining: integer(candidate.remaining, "Secure store remaining plaintext count"),
   }
 }
 

@@ -3,12 +3,14 @@ import { beforeEach, test } from "node:test"
 import { FILES_UPDATED, type FilesUpdate } from "@protocol/flowback"
 import { MAX_THREAD_TASK_ITEMS, ThreadTaskConflictError, type ThreadTask } from "@protocol/files"
 import type { NodeOfKind } from "@protocol/node"
-import { StorageSyncConflictError } from "@protocol/storage-sync"
+import { StorageSyncConflictError, type BookmarkSyncNode } from "@protocol/storage-sync"
 import {
   addBookmark,
   addFolder,
+  bulkPutBookmarkNodes,
   deleteBookmark,
   deleteFolder,
+  listAllBookmarkNodes,
   moveBookmark,
   moveFolder,
   restoreBookmark,
@@ -48,11 +50,13 @@ import {
   saveThreadAndTouchTaskAtomic,
   updateThreadTask,
 } from "./thread-tasks-store"
+import { listNodeSummaryPage } from "./nodes-store"
 import {
   IDB_DATABASE_NAME,
   IDB_DATABASE_VERSION,
   INDEX_NODES_KIND,
   INDEX_NODES_KIND_SORT_KEY,
+  INDEX_NODES_KIND_SORT_TITLE_ID,
   INDEX_NODES_THREAD_METADATA,
   idbGet,
   idbPut,
@@ -280,6 +284,20 @@ class FakeIndex {
     return req as IDBRequest<IDBCursor | null>
   }
 
+  openCursor(
+    query?: IDBValidKey | IDBKeyRange,
+    direction: IDBCursorDirection = "next",
+  ): IDBRequest<IDBCursorWithValue | null> {
+    const req = request<IDBCursorWithValue | null>()
+    this.transaction.trackCursor(
+      req as FakeRequest<IDBCursor | null>,
+      () => this.entries(query, direction),
+      () => {},
+      (primaryKey) => cloneValue(this.store.rows.get(primaryKey)),
+    )
+    return req as IDBRequest<IDBCursorWithValue | null>
+  }
+
   private entries(
     query?: IDBValidKey | IDBKeyRange,
     direction: IDBCursorDirection = "next",
@@ -364,6 +382,7 @@ class FakeTransaction {
     req: FakeRequest<IDBCursor | null>,
     readEntries: () => Array<{ key: IDBValidKey; primaryKey: IDBValidKey }>,
     onVisit: () => void = () => {},
+    valueFor?: (primaryKey: IDBValidKey) => unknown,
   ): void {
     this.pending += 1
     this.enqueue(() => {
@@ -385,6 +404,7 @@ class FakeTransaction {
           req.result = {
             key: cloneValue(entry.key),
             primaryKey: cloneValue(entry.primaryKey),
+            ...(valueFor ? { value: valueFor(entry.primaryKey) } : {}),
             continue: () => {
               if (continued) throw new Error("cursor continued twice")
               continued = true
@@ -524,6 +544,9 @@ function setupFakeIndexedDb(): void {
         upperOpen = false,
       ): IDBKeyRange {
         return { lower, upper, lowerOpen, upperOpen } as IDBKeyRange
+      },
+      only(value: IDBValidKey): IDBKeyRange {
+        return { lower: value, upper: value, lowerOpen: false, upperOpen: false } as IDBKeyRange
       },
     },
     configurable: true,
@@ -707,9 +730,9 @@ function task(id: string, updatedAt = 20, workspaceId = "workspace-a"): ThreadTa
   }
 }
 
-test("schema/list: v16 adds the kind/sortKey tail index and keeps the task index head", async () => {
+test("schema/list: v17 adds paged directory index and keeps the task index head", async () => {
   assert.equal(IDB_DATABASE_NAME, "wonita-home")
-  assert.equal(IDB_DATABASE_VERSION, 16)
+  assert.equal(IDB_DATABASE_VERSION, 17)
   assert.deepEqual(await listThreadTasks(), { revision: 0, tasks: [] })
   assert.deepEqual(await readThreadTaskIndexHead(), { revision: 0, count: 0 })
   assert.ok(fakeDbs.get(IDB_DATABASE_NAME)?.stores.has(STORE_AGENT_TASKS))
@@ -718,6 +741,59 @@ test("schema/list: v16 adds the kind/sortKey tail index and keeps the task index
     fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_NODES)?.indexes.get(INDEX_NODES_KIND_SORT_KEY),
     ["kind", "sortKey"],
   )
+  assert.deepEqual(
+    fakeDbs
+      .get(IDB_DATABASE_NAME)
+      ?.stores.get(STORE_NODES)
+      ?.indexes.get(INDEX_NODES_KIND_SORT_TITLE_ID),
+    ["kind", "sortKey", "title", "id"],
+  )
+})
+
+test("node summary paging: index cursor merges kinds without nodes getAll", async () => {
+  const row = (
+    id: string,
+    kind: "note" | "file",
+    sortKey: string,
+    parentId: string | null = null,
+  ) => ({
+    id,
+    kind,
+    title: id,
+    parentId,
+    sortKey,
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    ...(kind === "file"
+      ? { blobRef: { store: "blobs", key: id, size: 1, mime: "text/plain" }, content: null }
+      : { content: [] }),
+  })
+  await idbPut(STORE_NODES, row("note-a", "note", "a0"))
+  await idbPut(STORE_NODES, row("child", "note", "a1", "note-a"))
+  await idbPut(STORE_NODES, row("file-b", "file", "b0"))
+  await idbPut(STORE_NODES, row("note-c", "note", "c0"))
+
+  const first = await listNodeSummaryPage(["note", "file"], { limit: 2, parentId: null })
+  assert.deepEqual(
+    first.items.map((item) => item.id),
+    ["note-a", "file-b"],
+  )
+  assert.equal(first.items[0]?.hasChildren, true)
+  assert.ok(first.nextCursor)
+
+  const second = await listNodeSummaryPage(["note", "file"], {
+    limit: 2,
+    parentId: null,
+    cursor: first.nextCursor,
+  })
+  assert.deepEqual(
+    second.items.map((item) => item.id),
+    ["note-c"],
+  )
+  assert.equal(second.nextCursor, undefined)
+  assert.equal(getAllCalls.get(STORE_NODES) ?? 0, 0)
+  assert.equal(getAllCalls.get(INDEX_NODES_KIND_SORT_TITLE_ID) ?? 0, 0)
 })
 
 test("state compatibility: a v15 row without count is repaired once without an extra revision", async () => {
@@ -1849,6 +1925,114 @@ test("note sync: a remote note id cannot overwrite another node kind", async () 
 
   assert.deepEqual(await idbGet(STORE_NODES, occupied.id), occupied)
   assert.equal(await idbGet(STORE_NODES, safe.id), undefined)
+})
+
+test("bookmark sync: folder and bookmark commit atomically and reject a stale local snapshot", async () => {
+  const incoming: BookmarkSyncNode[] = [
+    {
+      id: "sync-folder",
+      kind: "folder",
+      title: "sync folder",
+      parentId: null,
+      sortKey: "a0",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: null,
+    },
+    {
+      id: "sync-bookmark",
+      kind: "bookmark",
+      title: "sync bookmark",
+      parentId: "sync-folder",
+      sortKey: "a0",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: { url: "https://sync.example", description: "", favicon: "" },
+    },
+  ]
+  const committed = await bulkPutBookmarkNodes(incoming, [])
+  assert.deepEqual(committed, incoming)
+  assert.deepEqual(await listAllBookmarkNodes(), incoming)
+
+  await updateNode("bookmark", "sync-bookmark", { title: "local edit" })
+  const locallyEdited = await idbGet<NodeOfKind<"bookmark">>(STORE_NODES, "sync-bookmark")
+  assert.ok(locallyEdited)
+  const remoteOnly: BookmarkSyncNode = {
+    ...incoming[1],
+    id: "remote-only-bookmark",
+    parentId: null,
+  } as BookmarkSyncNode
+  await assert.rejects(
+    () => bulkPutBookmarkNodes([...incoming, remoteOnly], committed),
+    (error) => error instanceof StorageSyncConflictError,
+  )
+  assert.deepEqual(await idbGet(STORE_NODES, "sync-bookmark"), locallyEdited)
+  assert.equal(await idbGet(STORE_NODES, "remote-only-bookmark"), undefined)
+})
+
+test("bookmark sync: a remote bookmark id cannot overwrite another node kind", async () => {
+  const occupied = storedNote("bookmark-cross-kind", null, "a0")
+  await idbPut(STORE_NODES, occupied)
+  const incoming: BookmarkSyncNode[] = [
+    {
+      id: "safe-sync-folder",
+      kind: "folder",
+      title: "safe",
+      parentId: null,
+      sortKey: "a0",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: null,
+    },
+    {
+      id: occupied.id,
+      kind: "bookmark",
+      title: "collision",
+      parentId: null,
+      sortKey: "a1",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: { url: "https://collision.example", description: "", favicon: "" },
+    },
+  ]
+
+  await assert.rejects(() => bulkPutBookmarkNodes(incoming, []), /duplicate key/)
+
+  assert.deepEqual(await idbGet(STORE_NODES, occupied.id), occupied)
+  assert.equal(await idbGet(STORE_NODES, "safe-sync-folder"), undefined)
+})
+
+test("bookmark sync CAS: rejects orphan bookmarks atomically", async () => {
+  const safeFolder: BookmarkSyncNode = {
+    id: "safe-folder-before-orphan",
+    kind: "folder",
+    title: "safe",
+    parentId: null,
+    sortKey: "a0",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    content: null,
+  }
+  const orphan: BookmarkSyncNode = {
+    id: "orphan-bookmark",
+    kind: "bookmark",
+    title: "orphan",
+    parentId: "missing-folder",
+    sortKey: "a1",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    content: { url: "https://example.com", description: "", favicon: "" },
+  }
+
+  await assert.rejects(() => bulkPutBookmarkNodes([safeFolder, orphan], []), /孤儿书签/)
+  assert.equal(await idbGet(STORE_NODES, safeFolder.id), undefined)
+  assert.equal(await idbGet(STORE_NODES, orphan.id), undefined)
 })
 
 test("note sync CAS: a stale merge cannot overwrite a move committed after listLocal", async () => {

@@ -50,6 +50,7 @@ import {
   activateBundledRuntimeExtensions,
   discoverBundledRuntimeExtensions,
 } from "./boot-runtime-extensions"
+import { assertShellBootContract } from "./boot-contract"
 
 let bootState: "idle" | "registering" | "ready" = "idle"
 
@@ -127,6 +128,10 @@ export function registerAll(): void {
       () => discoverBundledRuntimeExtensions(runtimeExtensionCatalog),
       // 持久化快照只重放可信 factory id，不承载可执行代码。
       () => runtimeExtensionCatalog.hydrate(),
+      () => {
+        assertShellBootContract()
+        return () => {}
+      },
     ])
     bootState = "ready"
   } catch (error) {

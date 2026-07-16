@@ -5,7 +5,16 @@ import { NODE_KINDS } from "@protocol/node"
 import type { SubscriptionType } from "@protocol/subscription"
 import { bytesToBase64 } from "@/lib/base64"
 import { safeHref } from "@/lib/safe-url"
-import { idbGet, idbGetAllFromIndex, idbGetMany, INDEX_NODES_KIND, STORE_NODES } from "@/lib/idb"
+import {
+  idbGet,
+  idbGetAllFromIndex,
+  idbGetMany,
+  idbRunTransaction,
+  INDEX_NODES_KIND,
+  INDEX_NODES_KIND_SORT_TITLE_ID,
+  INDEX_NODES_PARENT_ID,
+  STORE_NODES,
+} from "@/lib/idb"
 import { buildParentOf, effectiveParentId, type TreeItem } from "@/files/notes-tree-util"
 import { addNoteWithNode, updateNote, moveNote, deleteNote } from "@/files/stores/notes-store"
 import {
@@ -41,6 +50,18 @@ export interface NodeSummary extends TreeItem {
   mime?: string
 }
 
+export type NodeSummaryPage = Readonly<{
+  items: NodeSummary[]
+  nextCursor?: string
+}>
+
+export type NodeSummaryPageOptions = Readonly<{
+  limit: number
+  cursor?: string
+  /** undefined=不限制父级；null=根级；string=指定父节点。 */
+  parentId?: string | null
+}>
+
 /** 全部本地 node kind (fs.list kind 缺省时遍历全部)。 */
 export const ALL_NODE_KINDS: NodeKind[] = [...NODE_KINDS]
 
@@ -52,6 +73,201 @@ type RawNode = {
   sortKey?: string
   deletedAt?: number
   blobRef?: { mime?: string }
+}
+
+type NodeSummaryCursorPosition = Readonly<{ sortKey: string; title: string; id: string }>
+type NodeSummaryCursor = Readonly<{
+  version: 1
+  positions: Partial<Record<NodeKind, NodeSummaryCursorPosition>>
+}>
+
+function decodeNodeSummaryCursor(raw: string | undefined): NodeSummaryCursor {
+  if (raw === undefined) return { version: 1, positions: {} }
+  if (raw.length > 8192) throw new Error("节点目录 cursor 过长")
+  let value: unknown
+  try {
+    value = JSON.parse(decodeURIComponent(raw)) as unknown
+  } catch {
+    throw new Error("节点目录 cursor 无效")
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("节点目录 cursor 无效")
+  }
+  const candidate = value as { version?: unknown; positions?: unknown }
+  if (
+    candidate.version !== 1 ||
+    !candidate.positions ||
+    typeof candidate.positions !== "object" ||
+    Array.isArray(candidate.positions)
+  ) {
+    throw new Error("节点目录 cursor 无效")
+  }
+  const positions: Partial<Record<NodeKind, NodeSummaryCursorPosition>> = {}
+  for (const [kind, position] of Object.entries(candidate.positions)) {
+    if (!NODE_KINDS.includes(kind as NodeKind)) throw new Error("节点目录 cursor kind 无效")
+    if (!position || typeof position !== "object" || Array.isArray(position)) {
+      throw new Error("节点目录 cursor 位置无效")
+    }
+    const item = position as { sortKey?: unknown; title?: unknown; id?: unknown }
+    if (
+      typeof item.sortKey !== "string" ||
+      typeof item.title !== "string" ||
+      typeof item.id !== "string"
+    ) {
+      throw new Error("节点目录 cursor 位置无效")
+    }
+    positions[kind as NodeKind] = { sortKey: item.sortKey, title: item.title, id: item.id }
+  }
+  return { version: 1, positions }
+}
+
+function encodeNodeSummaryCursor(
+  positions: Partial<Record<NodeKind, NodeSummaryCursorPosition>>,
+): string {
+  return encodeURIComponent(JSON.stringify({ version: 1, positions } satisfies NodeSummaryCursor))
+}
+
+function compareNodeSummary(left: NodeSummary, right: NodeSummary): number {
+  if (left.sortKey !== right.sortKey) return left.sortKey < right.sortKey ? -1 : 1
+  if (left.title !== right.title) return left.title < right.title ? -1 : 1
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+}
+
+function rawNodeSummary(node: RawNode & { kind: NodeKind }): NodeSummary {
+  return {
+    id: node.id,
+    kind: node.kind,
+    title: node.title ?? "",
+    parentId: node.parentId ?? null,
+    sortKey: node.sortKey ?? "",
+    hasChildren: false,
+    mime: node.kind === "file" ? (node.blobRef?.mime ?? "") : undefined,
+  }
+}
+
+/**
+ * 通过 covering sort 索引逐 kind 游标读取节点摘要；页内仅 clone 命中候选，避免侧栏首屏
+ * 先把全部 note/thread 正文复制进 JS。多 kind cursor 分别保存续读位置，再做确定性归并。
+ */
+export async function listNodeSummaryPage(
+  kinds: NodeKind[],
+  options: NodeSummaryPageOptions,
+): Promise<NodeSummaryPage> {
+  const uniqueKinds = [...new Set(kinds)]
+  if (uniqueKinds.length === 0) return { items: [] }
+  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 1000) {
+    throw new Error("节点目录 limit 无效")
+  }
+  const decoded = decodeNodeSummaryCursor(options.cursor)
+  const limit = options.limit
+  return idbRunTransaction<NodeSummaryPage>(
+    [STORE_NODES],
+    "readonly",
+    (transaction, setResult, abort) => {
+      const store = transaction.objectStore(STORE_NODES)
+      const sortIndex = store.index(INDEX_NODES_KIND_SORT_TITLE_ID)
+      const candidates = new Map<NodeKind, NodeSummary[]>()
+      const ended = new Map<NodeKind, boolean>()
+      let pendingKinds = uniqueKinds.length
+      let failed = false
+
+      const fail = (error: unknown) => {
+        if (failed) return
+        failed = true
+        abort(error)
+      }
+
+      const finalize = () => {
+        if (failed || pendingKinds !== 0) return
+        const merged = [...candidates.values()].flat().sort(compareNodeSummary)
+        const page = merged.slice(0, limit)
+        const hasMore =
+          merged.length > limit || uniqueKinds.some((kind) => ended.get(kind) !== true)
+        const positions = { ...decoded.positions }
+        for (const item of page) {
+          positions[item.kind] = { sortKey: item.sortKey, title: item.title, id: item.id }
+        }
+
+        if (page.length === 0) {
+          setResult({ items: [] })
+          return
+        }
+        const childIndex = store.index(INDEX_NODES_PARENT_ID)
+        const wantedKinds = new Set(uniqueKinds)
+        let pendingChildren = page.length
+        const finishChild = () => {
+          pendingChildren -= 1
+          if (pendingChildren !== 0 || failed) return
+          setResult({
+            items: page,
+            ...(hasMore ? { nextCursor: encodeNodeSummaryCursor(positions) } : {}),
+          })
+        }
+        for (const item of page) {
+          const request = childIndex.openCursor(IDBKeyRange.only(item.id))
+          request.onerror = () => fail(request.error ?? new Error("读取节点子级状态失败"))
+          request.onsuccess = () => {
+            const cursor = request.result
+            if (!cursor) {
+              finishChild()
+              return
+            }
+            const child = cursor.value as RawNode
+            if (
+              child.deletedAt == null &&
+              child.kind !== undefined &&
+              wantedKinds.has(child.kind)
+            ) {
+              item.hasChildren = true
+              finishChild()
+              return
+            }
+            cursor.continue()
+          }
+        }
+      }
+
+      const finishKind = (kind: NodeKind, reachedEnd: boolean) => {
+        ended.set(kind, reachedEnd)
+        pendingKinds -= 1
+        finalize()
+      }
+
+      for (const kind of uniqueKinds) {
+        const items: NodeSummary[] = []
+        candidates.set(kind, items)
+        const position = decoded.positions[kind]
+        const range = position
+          ? IDBKeyRange.bound(
+              [kind, position.sortKey, position.title, position.id],
+              [kind, []],
+              true,
+              false,
+            )
+          : IDBKeyRange.bound([kind], [kind, []])
+        const request = sortIndex.openCursor(range)
+        request.onerror = () => fail(request.error ?? new Error("读取节点目录失败"))
+        request.onsuccess = () => {
+          const cursor = request.result
+          if (!cursor) {
+            finishKind(kind, true)
+            return
+          }
+          const node = cursor.value as RawNode
+          const matchesParent =
+            options.parentId === undefined || (node.parentId ?? null) === options.parentId
+          if (node.kind === kind && node.deletedAt == null && matchesParent) {
+            items.push(rawNodeSummary(node as RawNode & { kind: NodeKind }))
+            if (items.length >= limit + 1) {
+              finishKind(kind, false)
+              return
+            }
+          }
+          cursor.continue()
+        }
+      }
+    },
+  )
 }
 
 async function nodesByKinds<T extends { kind?: NodeKind }>(kinds: NodeKind[]): Promise<T[]> {

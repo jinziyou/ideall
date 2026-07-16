@@ -245,12 +245,12 @@ class McpOAuthProvider implements OAuthClientProvider {
     const s = load(this.serverId)
     if (scope === "tokens") {
       delete cacheFor(this.serverId).tokens
-      void secureDelete(secureTokensKey(this.serverId))
+      void secureDelete(secureTokensKey(this.serverId)).catch(() => {})
     }
     if (scope === "client") delete s.clientInfo
     if (scope === "verifier") {
       delete cacheFor(this.serverId).codeVerifier
-      void secureDelete(secureVerifierKey(this.serverId))
+      void secureDelete(secureVerifierKey(this.serverId)).catch(() => {})
     }
     write(this.serverId, s)
   }
@@ -368,8 +368,8 @@ export function lastAuthUrl(serverId: string): string | undefined {
 /** 撤销本地保存的授权 (token/client/verifier)。 */
 export function clearMcpAuth(serverId: string): void {
   secretCache.delete(serverId)
-  void secureDelete(secureTokensKey(serverId))
-  void secureDelete(secureVerifierKey(serverId))
+  void secureDelete(secureTokensKey(serverId)).catch(() => {})
+  void secureDelete(secureVerifierKey(serverId)).catch(() => {})
   if (typeof localStorage !== "undefined") localStorage.removeItem(keyOf(serverId))
 }
 

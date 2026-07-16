@@ -1,7 +1,7 @@
 // sync 插件 manifest —— 向「我的」注册 SyncPort (跨端同步编排)。
 // core 的同步面板经 @protocol/sync 的 getSyncPort() 调用, 不直接依赖本插件。
-// 一次 syncNow 同步两个独立加密块: 关注 + 笔记 (各自 storageId, 互不覆盖); 编排见 sync-orchestrator-machine (XState)。
-import { registerSyncPort } from "@protocol/sync"
+// 一次 syncNow 并发同步关注、笔记、书签三个独立加密块 (各自 storageId, 互不覆盖)。
+import { recordSyncTelemetry, registerSyncPort, type SyncFailureCode } from "@protocol/sync"
 import { SYNC_CODE_SECURE_KEY } from "@/lib/sync-code"
 import { secureFallbackStorageKey } from "@/lib/secure-store"
 import type { PluginDataPort } from "@/plugins/shared/plugin-data"
@@ -58,8 +58,43 @@ export const syncManifest = {
     return registerSyncPort({
       syncNow: async (code) => {
         const { runSyncOrchestrator } = await import("./lib/sync-orchestrator-machine")
-        return runSyncOrchestrator(code)
+        const startedAt = Date.now()
+        try {
+          const result = await runSyncOrchestrator(code)
+          const finishedAt = Date.now()
+          recordSyncTelemetry({
+            status: "success",
+            startedAt,
+            finishedAt,
+            durationMs: finishedAt - startedAt,
+            total: result.total,
+            added: result.added,
+            failureCode: null,
+          })
+          return result
+        } catch (error) {
+          const finishedAt = Date.now()
+          recordSyncTelemetry({
+            status: "failure",
+            startedAt,
+            finishedAt,
+            durationMs: finishedAt - startedAt,
+            total: null,
+            added: null,
+            failureCode: syncFailureCode(error),
+          })
+          throw error
+        }
       },
     })
   },
+}
+
+function syncFailureCode(error: unknown): SyncFailureCode {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/单块上限|同步记录超过/.test(message)) return "block-limit"
+  if (/冲突|本地变化/.test(message)) return "conflict"
+  if (/解密|同步码/.test(message)) return "decrypt"
+  if (/拉取|上传|网络|offline|fetch/i.test(message)) return "network"
+  return "unknown"
 }

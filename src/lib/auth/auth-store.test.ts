@@ -73,16 +73,16 @@ test("auth-store: 新旧用户资料同时存在时 canonical 用户资料胜出
   assert.equal(mem.get(LEGACY_AUTH_USER_STORAGE_KEY), undefined)
 })
 
-test("auth-store: 新登录只把 token 写入 secure-store fallback", () => {
+test("auth-store: 新登录只把 token 写入 secure-store fallback", async () => {
   mem.clear()
-  setSession("new-token", user)
+  await setSession("new-token", user)
 
   assert.deepEqual(getSession(), { token: "new-token", user })
   assert.equal(mem.get(AUTH_TOKEN_STORAGE_KEY), undefined)
   assert.equal(mem.get(secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)), "new-token")
   assert.equal(JSON.parse(mem.get(AUTH_USER_STORAGE_KEY) ?? "{}").email, user.email)
 
-  clearSession()
+  await clearSession()
   assert.equal(getSession(), null)
   assert.equal(mem.get(secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)), undefined)
   assert.equal(mem.get(AUTH_USER_STORAGE_KEY), undefined)

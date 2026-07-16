@@ -17,6 +17,7 @@ import {
   SETTINGS_ROOT_REF,
 } from "./builtin-app-roots"
 import { trashRootRef } from "./trash-file-system"
+import { joinIdeallPath, type IdeallPath } from "./path"
 import {
   FileSystemError,
   type FileReadOptions,
@@ -50,6 +51,14 @@ export type NavigationSectionDefinition = Readonly<{
   iconHint: string
   items: readonly NavigationItemDefinition[]
 }>
+
+export class NavigationContractError extends Error {
+  override name = "NavigationContractError"
+
+  constructor(message: string) {
+    super(message)
+  }
+}
 
 const resource = (
   ref: ResourceRef,
@@ -226,6 +235,87 @@ export const NAVIGATION_SECTIONS: readonly NavigationSectionDefinition[] = [
     ],
   },
 ] as const
+
+const LEGACY_ROOT_SECTIONS: Readonly<Record<string, NavigationSectionId>> = {
+  subscriptions: "home",
+  bookmarks: "home",
+  files: "home",
+  notes: "home",
+  workspace: "activity",
+  info: "browse",
+  community: "browse",
+  browser: "browse",
+  tool: "apps",
+  system: "settings",
+}
+
+export function navigationPath(sectionId: NavigationSectionId, itemId?: string): IdeallPath {
+  const section = NAVIGATION_SECTIONS.find((candidate) => candidate.id === sectionId)
+  if (!section) throw new NavigationContractError(`Unknown navigation section: ${sectionId}`)
+  const sectionPath = joinIdeallPath("/", section.pathName)
+  if (!itemId) return sectionPath
+  const item = section.items.find((candidate) => candidate.id === itemId)
+  if (!item) {
+    throw new NavigationContractError(`Unknown navigation item: ${sectionId}/${itemId}`)
+  }
+  return joinIdeallPath(sectionPath, item.pathName)
+}
+
+export function navigationSectionIdForLegacyRoot(
+  rootId: string | null | undefined,
+): NavigationSectionId {
+  if (!rootId) return "home"
+  if (NAVIGATION_SECTION_IDS.includes(rootId as NavigationSectionId)) {
+    return rootId as NavigationSectionId
+  }
+  return LEGACY_ROOT_SECTIONS[rootId] ?? (rootId.startsWith("mount:") ? "apps" : "home")
+}
+
+export function assertNavigationContract(
+  sections: readonly NavigationSectionDefinition[] = NAVIGATION_SECTIONS,
+): void {
+  const sectionIds = new Set<string>()
+  const sectionPaths = new Set<string>()
+  for (const section of sections) {
+    if (
+      !section.id ||
+      section.pathName !== section.id ||
+      !section.name.trim() ||
+      !section.iconHint.trim() ||
+      sectionIds.has(section.id) ||
+      sectionPaths.has(section.pathName)
+    ) {
+      throw new NavigationContractError(`Invalid navigation section: ${section.id || "<empty>"}`)
+    }
+    sectionIds.add(section.id)
+    sectionPaths.add(section.pathName)
+    const itemIds = new Set<string>()
+    const itemPaths = new Set<string>()
+    for (const item of section.items) {
+      if (
+        !item.id.trim() ||
+        !item.pathName.trim() ||
+        !item.name.trim() ||
+        !item.iconHint.trim() ||
+        !item.preferredEngine.trim() ||
+        !item.target.fileSystemId.trim() ||
+        !item.target.fileId.trim() ||
+        itemIds.has(item.id) ||
+        itemPaths.has(item.pathName)
+      ) {
+        throw new NavigationContractError(`Invalid navigation item: ${section.id}/${item.id}`)
+      }
+      itemIds.add(item.id)
+      itemPaths.add(item.pathName)
+    }
+  }
+  if (
+    sections.length !== NAVIGATION_SECTION_IDS.length ||
+    NAVIGATION_SECTION_IDS.some((id) => !sectionIds.has(id))
+  ) {
+    throw new NavigationContractError("Navigation sections do not match the shell contract")
+  }
+}
 
 export const navigationRootRef: FileRef = {
   fileSystemId: NAVIGATION_FILE_SYSTEM_ID,

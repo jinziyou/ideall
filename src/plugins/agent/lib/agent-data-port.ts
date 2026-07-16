@@ -148,7 +148,7 @@ const SECTION_ADAPTERS: Record<AgentPublicConfigSectionId, AgentPublicConfigSect
       decodeAgentSettingsPublic(value, getAgentSettings())
     },
     write(value) {
-      setAgentSettings(decodeAgentSettingsPublic(value, getAgentSettings()))
+      return setAgentSettings(decodeAgentSettingsPublic(value, getAgentSettings()))
     },
     subscribe: subscribeAgentSettings,
     sanitize: sanitizeSettings,

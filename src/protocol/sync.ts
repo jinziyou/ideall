@@ -1,12 +1,12 @@
 // 跨端同步接口约定 —— 加密同步块的形状 + 纯合并逻辑 (LWW 并集)。
 // AES/HKDF 密码学与编排在 sync 插件内; 此处只放跨端共享的接口约定与可独立单测的纯逻辑。
 //
-// 合并逻辑对「可同步记录」泛型化 (SyncRecord): 关注 (Subscription) 与笔记 (Note) 等本地优先实体
+// 合并逻辑对「可同步记录」泛型化 (SyncRecord): 关注、笔记、书签等本地优先实体
 // 都满足该形状 (id + 版本时间 + 软删除标记), 故共用同一套 LWW 并集 / 删除标记 GC, 不各写一份。
 
 /**
  * 可跨端同步的记录的最小形状 —— LWW 合并只需: 主键 id、版本时间 (updatedAt)、软删除标记 (deletedAt)。
- * 关注 / 笔记等实体结构上满足即可参与同一套合并。
+ * 关注 / 笔记 / 书签等实体结构上满足即可参与同一套合并。
  */
 export interface SyncRecord {
   id: string
@@ -18,8 +18,69 @@ export interface SyncRecord {
 /** 服务端不透明存储的加密同步块 (PUT/GET /sync/{id})。 */
 export type SyncBlob = { iv: string; ciphertext: string; updated_at: number }
 
+export type SyncBlockBudget = Readonly<{
+  maxRecords: number
+  maxPlaintextBytes: number
+  maxCiphertextBase64Chars: number
+}>
+
+const MIB = 1024 * 1024
+
+function syncBlockBudget(maxRecords: number, maxPlaintextBytes: number): SyncBlockBudget {
+  return Object.freeze({
+    maxRecords,
+    maxPlaintextBytes,
+    // AES-GCM 在明文后追加 16-byte tag，再按 Base64 4/3 膨胀。
+    maxCiphertextBase64Chars: 4 * Math.ceil((maxPlaintextBytes + 16) / 3),
+  })
+}
+
+/** 单块客户端硬预算；服务端仍只看见不透明密文。 */
+export const SYNC_BLOCK_BUDGETS = Object.freeze({
+  subs: syncBlockBudget(50_000, 4 * MIB),
+  notes: syncBlockBudget(100_000, 32 * MIB),
+  bookmarks: syncBlockBudget(100_000, 16 * MIB),
+})
+
+export const SYNC_MAX_RESPONSE_BYTES =
+  Math.max(...Object.values(SYNC_BLOCK_BUDGETS).map((budget) => budget.maxCiphertextBase64Chars)) +
+  4_096
+
+/** 分片 0 保持历史 storageId；未来新增分片只可使用 1..1023。 */
+export const SYNC_MAX_PARTITION = 1_023
+
 /** 一次同步的结果摘要。 */
 export type SyncResult = { total: number; added: number }
+
+export type SyncFailureCode = "block-limit" | "conflict" | "decrypt" | "network" | "unknown"
+
+export type SyncTelemetrySnapshot = Readonly<{
+  status: "success" | "failure"
+  startedAt: number
+  finishedAt: number
+  durationMs: number
+  total: number | null
+  added: number | null
+  failureCode: SyncFailureCode | null
+}>
+
+let syncTelemetrySnapshot: SyncTelemetrySnapshot | null = null
+const syncTelemetryListeners = new Set<() => void>()
+
+/** 最近一次同步的非敏感运行指标；只驻留当前进程，不包含同步码、storageId 或错误正文。 */
+export function getSyncTelemetrySnapshot(): SyncTelemetrySnapshot | null {
+  return syncTelemetrySnapshot
+}
+
+export function recordSyncTelemetry(snapshot: SyncTelemetrySnapshot): void {
+  syncTelemetrySnapshot = Object.freeze({ ...snapshot })
+  for (const listener of syncTelemetryListeners) listener()
+}
+
+export function subscribeSyncTelemetry(listener: () => void): () => void {
+  syncTelemetryListeners.add(listener)
+  return () => syncTelemetryListeners.delete(listener)
+}
 
 /** 跨端同步端口 —— sync 插件实现 (编排: 拉远端→解密→合并→写本地→加密→推远端)。 */
 export interface SyncPort {

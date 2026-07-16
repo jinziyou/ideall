@@ -4,6 +4,12 @@ import { FileSystemError } from "@/filesystem/types"
 import { setThemeChoice } from "@/lib/theme"
 import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
+  SETTINGS_DATA_EXPORT_ACTION,
+  SETTINGS_DATA_IMPORT_ACTION,
+  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
+  SETTINGS_DATA_PERSIST_ACTION,
+  SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+  SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
   SETTINGS_READ_PERMISSION,
   SETTINGS_ROOT_MEDIA_TYPE,
   SETTINGS_RUNTIME_RETRY_ACTION,
@@ -28,14 +34,38 @@ function createFixture(
     writeAppearance?: () => void
     revokeConnection?: (id: string) => boolean
     manageRuntimeExtension?: (action: SettingsRuntimeAction, id: string) => boolean
+    importWorkspaceArchive?: () => void
   } = {},
 ) {
   const state: Record<SettingsSectionId, unknown> = {
     appearance: { choice: "light", effectiveColorScheme: "light" },
     device: {
-      sync: { enabled: true },
+      sync: { enabled: true, lastRun: null },
       storage: { usage: 10, quota: 100 },
       publishingIdentity: { signedIn: false, user: null },
+    },
+    data: {
+      archive: {
+        kind: "ideall.workspace-archive",
+        version: 2,
+        includesSecrets: false,
+        importMode: "replace",
+      },
+      secureStore: {
+        backend: "system-keychain",
+        native: true,
+        fallbackValueCount: 0,
+        legacyValueCount: 0,
+        error: null,
+      },
+      database: {
+        name: "wonita-home",
+        version: 17,
+        status: "healthy",
+        counts: { nodes: 2, blobs: 1, trashSnapshots: 0, agentTasks: 1 },
+        error: null,
+      },
+      storage: { persistenceAvailable: true, persisted: false },
     },
     connections: [
       {
@@ -54,6 +84,7 @@ function createFixture(
   const writes: string[] = []
   const connectionRevocations: string[] = []
   const runtimeActions: Array<{ action: SettingsRuntimeAction; id: string }> = []
+  const archiveImports: Array<{ content: string; filename?: string; passphrase?: string }> = []
   const listeners = new Map<SettingsSectionId, Set<() => void>>()
   const subscriptions = new Map<SettingsSectionId, number>()
   const deps: SettingsFileSystemDeps = {
@@ -65,6 +96,52 @@ function createFixture(
       if (options.writeAppearance) return options.writeAppearance()
       writes.push(choice)
       state.appearance = { choice, effectiveColorScheme: choice }
+    },
+    exportWorkspaceArchive() {
+      return {
+        filename: "workspace.json",
+        content: '{"kind":"ideall.workspace-archive"}',
+        encrypted: false,
+      }
+    },
+    previewWorkspaceArchive(content, filename) {
+      return {
+        ok: content.includes("ideall.workspace-archive"),
+        encrypted: false,
+        requiresPassphrase: false,
+        filename: filename ?? null,
+        error: null,
+        package: { kind: "ideall.workspace-archive", version: 1, exportedAt: "2026-01-01" },
+        archive: {
+          nodeCount: 2,
+          blobCount: 1,
+          trashSnapshotCount: 0,
+          pluginCount: 3,
+          tabCount: 1,
+        },
+      }
+    },
+    importWorkspaceArchive(content, filename, passphrase) {
+      archiveImports.push({
+        content,
+        ...(filename ? { filename } : {}),
+        ...(passphrase ? { passphrase } : {}),
+      })
+      options.importWorkspaceArchive?.()
+      return {
+        changed: true,
+        reloadRequired: true,
+        imported: { nodes: 2, blobs: 1, trash: 0, plugins: 3 },
+      }
+    },
+    requestPersistentStorage() {
+      return { available: true, granted: true }
+    },
+    selfTestSecureStore() {
+      return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
+    },
+    migrateSecureStore() {
+      return { available: true, migrated: 1, removedPlaintext: 1, failed: 0, remaining: 0 }
     },
     revokeConnection(id) {
       connectionRevocations.push(id)
@@ -95,6 +172,7 @@ function createFixture(
     writes,
     connectionRevocations,
     runtimeActions,
+    archiveImports,
     subscriptions,
     emit(section: SettingsSectionId) {
       for (const listener of listeners.get(section) ?? []) listener()
@@ -109,7 +187,7 @@ const UI_WRITE = { actor: "ui", permissions: [], intent: "write" } as const
 const UI_ACTION = { actor: "ui", permissions: [], intent: "action" } as const
 const UI_WATCH = { actor: "ui", permissions: [], intent: "watch" } as const
 
-test("settings filesystem: semantic root projects four stable snapshot files without reading them", async () => {
+test("settings filesystem: semantic root projects five stable snapshot files without reading them", async () => {
   const fixture = createFixture()
   const root = await fixture.fs.stat(settingsRootRef, UI_METADATA)
 
@@ -122,7 +200,7 @@ test("settings filesystem: semantic root projects four stable snapshot files wit
   const first = await fixture.fs.readDirectory(settingsRootRef, UI_DIRECTORY, { limit: 2 })
   const second = await fixture.fs.readDirectory(settingsRootRef, UI_DIRECTORY, {
     cursor: first.nextCursor,
-    limit: 2,
+    limit: 3,
   })
   const entries = [...first.entries, ...second.entries]
   assert.deepEqual(
@@ -131,7 +209,7 @@ test("settings filesystem: semantic root projects four stable snapshot files wit
   )
   assert.deepEqual(
     entries.map((entry) => entry.pathName),
-    ["appearance.json", "device.json", "connections.json", "runtime-extensions.json"],
+    ["appearance.json", "device.json", "data.json", "connections.json", "runtime-extensions.json"],
   )
   assert.deepEqual(
     entries.map((entry) => entry.target),
@@ -375,6 +453,115 @@ test("settings filesystem: mutation actions are specialized, validated and requi
   )
 })
 
+test("settings filesystem: local data archive actions separate preview/export from destructive import", async () => {
+  const fixture = createFixture()
+  const data = settingsSectionFileRef("data")
+  const actions = await fixture.fs.actions(data, UI_ACTION)
+
+  assert.deepEqual(
+    actions.slice(1).map(({ id, risk, requires }) => ({ id, risk, requires })),
+    [
+      {
+        id: SETTINGS_DATA_EXPORT_ACTION,
+        risk: "safe",
+        requires: [SETTINGS_READ_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+        risk: "safe",
+        requires: [SETTINGS_READ_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_IMPORT_ACTION,
+        risk: "destructive",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_PERSIST_ACTION,
+        risk: "caution",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
+        risk: "caution",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
+        risk: "caution",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+    ],
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_EXPORT_ACTION, undefined, UI_ACTION),
+    {
+      filename: "workspace.json",
+      content: '{"kind":"ideall.workspace-archive"}',
+      encrypted: false,
+    },
+  )
+  const input = {
+    filename: "workspace.json",
+    content: '{"kind":"ideall.workspace-archive"}',
+  }
+  assert.equal(
+    (
+      (await fixture.fs.invoke(data, SETTINGS_DATA_PREVIEW_IMPORT_ACTION, input, UI_ACTION)) as {
+        ok: boolean
+      }
+    ).ok,
+    true,
+  )
+  const before = await fixture.fs.read(data, UI_CONTENT)
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_IMPORT_ACTION, input, UI_ACTION, {
+      expectedVersion: before.version,
+    }),
+    {
+      changed: true,
+      reloadRequired: true,
+      imported: { nodes: 2, blobs: 1, trash: 0, plugins: 3 },
+    },
+  )
+  assert.deepEqual(fixture.archiveImports, [input])
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_PERSIST_ACTION, undefined, UI_ACTION),
+    { available: true, granted: true },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      data,
+      SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
+      undefined,
+      UI_ACTION,
+    ),
+    { backend: "system-keychain", roundTrip: true, cleanedUp: true },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION, undefined, UI_ACTION),
+    { available: true, migrated: 1, removedPlaintext: 1, failed: 0, remaining: 0 },
+  )
+
+  await assert.rejects(
+    fixture.fs.invoke(
+      data,
+      SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+      { content: "{}", extra: true },
+      UI_ACTION,
+    ),
+    (error) => error instanceof FileSystemError && error.code === "invalid-input",
+  )
+  await assert.rejects(
+    fixture.fs.invoke(data, SETTINGS_DATA_IMPORT_ACTION, input, {
+      actor: "system",
+      permissions: [SETTINGS_READ_PERMISSION],
+      intent: "action",
+    }),
+    (error) => error instanceof FileSystemError && error.code === "permission-denied",
+  )
+})
+
 test("settings filesystem: mutation actions validate fresh versions before touching backends", async () => {
   const fixture = createFixture()
   const ref = settingsSectionFileRef("connections")
@@ -484,7 +671,7 @@ test("settings filesystem: root watch coalesces source events and tears down all
   assert.ok(handle)
   assert.deepEqual(
     SETTINGS_SECTION_IDS.map((section) => fixture.subscriptions.get(section)),
-    [1, 1, 1, 1],
+    [1, 1, 1, 1, 1],
   )
 
   fixture.emit("connections")
@@ -503,7 +690,7 @@ test("settings filesystem: root watch coalesces source events and tears down all
   handle.dispose()
   assert.deepEqual(
     SETTINGS_SECTION_IDS.map((section) => fixture.subscriptions.get(section)),
-    [0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
   )
   fixture.emit("device")
   await Promise.resolve()

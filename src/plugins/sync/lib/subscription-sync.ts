@@ -11,6 +11,7 @@ import {
   unionMerge,
   isSaneSyncTimestamp,
   pruneExpiredTombstones,
+  SYNC_BLOCK_BUDGETS,
   type SyncResult,
 } from "@protocol/sync"
 import { getStorageSyncPort } from "@protocol/storage-sync"
@@ -42,6 +43,7 @@ function isValidRemoteSub(s: unknown, now: number): s is Subscription {
 
 /** 关注域同步配置 (供 XState domain machine / orchestrator 复用)。 */
 export const subscriptionsSyncConfig: DomainSyncConfig<Subscription> = {
+  budget: SYNC_BLOCK_BUDGETS.subs,
   listLocal: () => getStorageSyncPort().listAllSubscriptions(),
   merge: unionMerge,
   gc: pruneExpiredTombstones,

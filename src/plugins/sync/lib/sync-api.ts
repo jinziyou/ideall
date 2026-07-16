@@ -3,7 +3,7 @@
 
 import { API_V1 } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
-import type { SyncBlob } from "@protocol/sync"
+import { SYNC_MAX_RESPONSE_BYTES, type SyncBlob } from "@protocol/sync"
 
 /** v1 统一成功响应封装 `{ data, meta? }` (见 wonita infra/response.rs)。 */
 type Enveloped<T> = { data: T; meta?: unknown }
@@ -13,6 +13,7 @@ export async function getSyncBlob(id: string): Promise<ApiResult<SyncBlob | null
   const res = await apiFetch<Enveloped<SyncBlob>>(`${API_V1}/sync/${encodeURIComponent(id)}`, {
     cache: "no-store",
     defaultErrorMessage: "拉取同步数据失败",
+    maxResponseBytes: SYNC_MAX_RESPONSE_BYTES,
   })
   if (!res.ok) return res.status === 404 ? { ok: true, data: null } : res
   return { ok: true, data: res.data ? res.data.data : null }

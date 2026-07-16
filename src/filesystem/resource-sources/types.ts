@@ -15,6 +15,8 @@ export type ResourceQuery = {
   kind?: string
   kinds?: readonly string[]
   parent?: ResourceRef
+  /** 仅返回没有父级的根节点；与 parent 互斥。 */
+  rootOnly?: boolean
   text?: string
   limit?: number
   cursor?: string

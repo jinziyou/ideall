@@ -14,6 +14,7 @@ import {
   RuntimeExtensionsPanel,
   type RuntimeExtensionPanelAction,
 } from "./runtime-extensions-panel"
+import { LocalDataPanel } from "./local-data-panel"
 import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
   SETTINGS_RUNTIME_RETRY_ACTION,
@@ -21,6 +22,7 @@ import {
   SETTINGS_RUNTIME_UNINSTALL_ACTION,
   decodeAppearanceSettings,
   decodeConnectionSettings,
+  decodeDataSettings,
   decodeDeviceSettings,
   decodeRuntimeExtensionSettings,
   decodeSettingsMutationResult,
@@ -30,6 +32,7 @@ import {
 
 const APPEARANCE_REF = settingsSectionFileRef("appearance")
 const DEVICE_REF = settingsSectionFileRef("device")
+const DATA_REF = settingsSectionFileRef("data")
 const CONNECTIONS_REF = settingsSectionFileRef("connections")
 const RUNTIME_EXTENSIONS_REF = settingsSectionFileRef("runtime-extensions")
 
@@ -51,6 +54,7 @@ function DocumentFailure({ error }: { error: unknown | null }) {
 export default function SettingsPage() {
   const appearance = useFileDocument(APPEARANCE_REF, decodeAppearanceSettings)
   const device = useFileDocument(DEVICE_REF, decodeDeviceSettings)
+  const data = useFileDocument(DATA_REF, decodeDataSettings)
   const connections = useFileDocument(CONNECTIONS_REF, decodeConnectionSettings)
   const runtimeExtensions = useFileDocument(RUNTIME_EXTENSIONS_REF, decodeRuntimeExtensionSettings)
 
@@ -97,11 +101,15 @@ export default function SettingsPage() {
         <DocumentFailure error={appearance.error} />
       </Panel>
 
+      <LocalDataPanel document={data} />
+      <DocumentFailure error={data.error} />
+
       <Panel>
         {device.data ? (
           <LocalDeviceStatusView
             value={{
               synced: device.data.sync.enabled,
+              lastSync: device.data.sync.lastRun,
               storage: device.data.storage,
               publishingIdentity: device.data.publishingIdentity,
             }}
