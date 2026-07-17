@@ -10,8 +10,10 @@ import { nextUpdatedAt } from "@/files/version"
 
 export const DATABASE_DB_NAME = "ideall:database"
 export const DATABASE_DB_VERSION = 1
-const STORE_TABLES = "tables"
-const STORE_ROWS = "rows"
+export const STORE_DATABASE_TABLES = "tables"
+export const STORE_DATABASE_ROWS = "rows"
+const STORE_TABLES = STORE_DATABASE_TABLES
+const STORE_ROWS = STORE_DATABASE_ROWS
 
 export type DataTable = {
   id: string

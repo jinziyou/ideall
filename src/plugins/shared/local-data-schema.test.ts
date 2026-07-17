@@ -20,9 +20,12 @@ import { gitManifest } from "@/plugins/git/manifest"
 import { agentManifest } from "@/plugins/agent/manifest"
 import { syncManifest } from "@/plugins/sync/manifest"
 import {
+  LOCAL_DATA_STORAGE_CLASSES,
   inspectLocalDataSchemas,
+  listLocalDataSchemas,
   registerLocalDataSchemas,
   repairLocalDataSchema,
+  type LocalDataSchema,
 } from "./local-data-schema"
 
 function registerTestSchemas(): () => void {
@@ -181,4 +184,119 @@ test("public config schemas: removes malformed capture onboarding state", async 
 
   assert.equal(repaired.ok, true)
   assert.equal(data[CAPTURE_ONBOARDING_STORAGE_KEY], undefined)
+})
+
+test("storage classes: 全部已注册 schema 均带合法 XDG 存储类", () => {
+  const dispose = registerTestSchemas()
+  try {
+    const schemas = listLocalDataSchemas()
+    assert.equal(schemas.length, 23)
+    for (const schema of schemas) {
+      assert.ok(
+        LOCAL_DATA_STORAGE_CLASSES.includes(schema.storageClass),
+        `${schema.id} 缺少合法 storageClass`,
+      )
+    }
+    const byId = new Map(schemas.map((schema) => [schema.id, schema]))
+    assert.equal(byId.get("auth.token")?.storageClass, "secrets")
+    assert.equal(byId.get("sync.code")?.storageClass, "secrets")
+    assert.equal(byId.get("workspace.session")?.storageClass, "runtime")
+    assert.equal(byId.get("workspace.local")?.storageClass, "state")
+    assert.equal(byId.get("display.engine-preferences")?.storageClass, "config")
+    assert.equal(byId.get("agent.tasks")?.storageClass, "data")
+    assert.equal(byId.get("agent.tasks")?.storeClasses?.["local_search_index"], "cache")
+    assert.equal(byId.get("agent.tasks")?.storeClasses?.["local_semantic_index"], "cache")
+    assert.equal(byId.get("agent.tasks")?.storeClasses?.["agent_write_audit"], "state")
+    assert.equal(byId.get("audio.db")?.storeClasses?.["state"], "state")
+    assert.equal(byId.get("audio.db")?.storeClasses?.["tracks"], "data")
+  } finally {
+    dispose()
+  }
+})
+
+test("storage classes: inspection 透传 storageClass 与 storeClasses", async () => {
+  const dispose = registerTestSchemas()
+  try {
+    const rows = await inspectLocalDataSchemas({
+      localStorage: memoryStorage({}),
+      indexedDBDatabases: async () => [{ name: IDB_DATABASE_NAME, version: IDB_DATABASE_VERSION }],
+    })
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    assert.equal(byId.get("appearance.theme")?.storageClass, "config")
+    assert.equal(byId.get("agent.tasks")?.storeClasses?.["nodes"], "data")
+    assert.equal(byId.get("agent.tasks")?.storeClasses?.["local_search_index"], "cache")
+  } finally {
+    dispose()
+  }
+})
+
+function storageClassProbe(overrides: Partial<LocalDataSchema>): LocalDataSchema {
+  return {
+    id: "test.storage-class-probe",
+    label: "探针",
+    owner: "test",
+    storage: "localStorage",
+    key: "test:storage-class-probe",
+    currentVersion: 1,
+    storageClass: "config",
+    ...overrides,
+  }
+}
+
+test("storage classes: cache/runtime/secrets 不得 portable，secrets 必标 sensitive", () => {
+  for (const storageClass of ["cache", "runtime", "secrets"] as const) {
+    assert.throws(
+      () =>
+        registerLocalDataSchemas([
+          storageClassProbe({ storageClass, portable: true, sensitive: true }),
+        ]),
+      /must not be portable/,
+      `${storageClass} 不应允许 portable`,
+    )
+  }
+  assert.throws(
+    () => registerLocalDataSchemas([storageClassProbe({ storageClass: "secrets" })]),
+    /must be marked sensitive/,
+  )
+  assert.throws(
+    () =>
+      registerLocalDataSchemas([
+        storageClassProbe({ storageClass: "bogus" as LocalDataSchema["storageClass"] }),
+      ]),
+    /Invalid storage class/,
+  )
+  // 合法 secrets（sensitive + 非 portable）与合法 config 可注册并精确注销。
+  const dispose = registerLocalDataSchemas([
+    storageClassProbe({
+      id: "test.storage-class-secrets",
+      storageClass: "secrets",
+      sensitive: true,
+    }),
+  ])
+  dispose()
+})
+
+test("storage classes: storeClasses 仅允许 indexedDB 且取值合法", () => {
+  assert.throws(
+    () => registerLocalDataSchemas([storageClassProbe({ storeClasses: { nodes: "data" } })]),
+    /requires indexedDB storage/,
+  )
+  assert.throws(
+    () =>
+      registerLocalDataSchemas([
+        storageClassProbe({
+          storage: "indexedDB",
+          storeClasses: { "": "data" },
+        }),
+      ]),
+    /invalid storeClasses entry/,
+  )
+  const dispose = registerLocalDataSchemas([
+    storageClassProbe({
+      id: "test.storage-class-idb",
+      storage: "indexedDB",
+      storeClasses: { nodes: "data", local_search_index: "cache" },
+    }),
+  ])
+  dispose()
 })

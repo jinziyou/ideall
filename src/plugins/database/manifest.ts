@@ -9,6 +9,8 @@ import {
   DATABASE_DATA_SPEC,
   DATABASE_DB_NAME,
   DATABASE_DB_VERSION,
+  STORE_DATABASE_ROWS,
+  STORE_DATABASE_TABLES,
   exportDatabaseJson,
   inspectDatabaseData,
 } from "./database-store"
@@ -51,6 +53,11 @@ const databaseLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "indexedDB",
     key: DATABASE_DB_NAME,
     currentVersion: DATABASE_DB_VERSION,
+    storageClass: "data",
+    storeClasses: {
+      [STORE_DATABASE_TABLES]: "data",
+      [STORE_DATABASE_ROWS]: "data",
+    },
     portable: true,
   },
 ]

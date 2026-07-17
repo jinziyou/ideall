@@ -8,6 +8,8 @@ import {
   AUDIO_DATA_SPEC,
   AUDIO_DB_NAME,
   AUDIO_DB_VERSION,
+  STORE_AUDIO_STATE,
+  STORE_AUDIO_TRACKS,
   exportAudioLibraryJson,
   inspectAudioLibraryData,
 } from "./audio-store"
@@ -48,6 +50,11 @@ const audioLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "indexedDB",
     key: AUDIO_DB_NAME,
     currentVersion: AUDIO_DB_VERSION,
+    storageClass: "data",
+    storeClasses: {
+      [STORE_AUDIO_TRACKS]: "data",
+      [STORE_AUDIO_STATE]: "state",
+    },
     portable: true,
   },
 ]

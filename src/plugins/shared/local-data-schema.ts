@@ -12,6 +12,23 @@ import {
 export type LocalDataStorageKind = "localStorage" | "sessionStorage" | "indexedDB"
 export type LocalDataSchemaStatus = "ok" | "missing" | "warning" | "error" | "unknown"
 
+/**
+ * 借 XDG Base Directory 的存储分类（见 docs/freedesktop-alignment.md §2）：
+ * data 用户内容权威副本；config 偏好与公开配置；cache 可重建派生；state 跨会话状态/历史；
+ * runtime 会话级；secrets 凭据材料本体（secure-store 或其 Web 版本化 fallback）。
+ * 策略从类派生：cache/runtime/secrets 绝不进入归档导出（不得 portable）；secrets 必标 sensitive。
+ */
+export type LocalDataStorageClass = "data" | "config" | "cache" | "state" | "runtime" | "secrets"
+
+export const LOCAL_DATA_STORAGE_CLASSES: readonly LocalDataStorageClass[] = [
+  "data",
+  "config",
+  "cache",
+  "state",
+  "runtime",
+  "secrets",
+]
+
 export type LocalDataSchema = {
   id: string
   label: string
@@ -19,6 +36,10 @@ export type LocalDataSchema = {
   storage: LocalDataStorageKind
   key: string
   currentVersion: number
+  /** XDG 存储类；混合 IndexedDB 库用 storeClasses 逐 store 细分。 */
+  storageClass: LocalDataStorageClass
+  /** 仅 indexedDB：库内各 object store 的存储类（库内策略混合时必填，如索引 cache / 审计 state）。 */
+  storeClasses?: Readonly<Record<string, LocalDataStorageClass>>
   sensitive?: boolean
   portable?: boolean
   parseAs?: "json" | "text"
@@ -49,6 +70,8 @@ export type LocalDataSchemaInspection = {
   storage: LocalDataStorageKind
   key: string
   currentVersion: number
+  storageClass: LocalDataStorageClass
+  storeClasses?: Readonly<Record<string, LocalDataStorageClass>>
   status: LocalDataSchemaStatus
   sensitive: boolean
   portable: boolean
@@ -111,6 +134,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: THEME_KEY,
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "text",
     validate: (value) =>
@@ -124,6 +148,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: FILE_TREE_EXPANDED_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "state",
     parseAs: "json",
     validate: (value) =>
       Array.isArray(value) && value.every((item) => typeof item === "string")
@@ -144,6 +169,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: CAPTURE_ONBOARDING_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "state",
     parseAs: "json",
     validate: (value) => (isPersistedCaptureOnboarding(value) ? [] : ["引导状态无效"]),
     repair: (value) =>
@@ -158,6 +184,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "sessionStorage",
     key: WORKSPACE_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "runtime",
     parseAs: "json",
     validate: jsonObjectIssues,
     repair: () => ({ action: "remove", detail: "已移除损坏的会话快照" }),
@@ -169,6 +196,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: WORKSPACE_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "state",
     parseAs: "json",
     validate: jsonObjectIssues,
     repair: () => ({ action: "remove", detail: "已移除损坏的恢复快照" }),
@@ -180,6 +208,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: ENGINE_PREFERENCES_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonObjectIssues,
@@ -192,6 +221,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: enginePreferencesStorageKey("audio"),
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonObjectIssues,
@@ -204,6 +234,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: enginePreferencesStorageKey("development"),
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonObjectIssues,
@@ -216,6 +247,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: STARTUP_TARGET_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonObjectIssues,
@@ -228,6 +260,7 @@ const coreSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY),
     currentVersion: 1,
+    storageClass: "secrets",
     sensitive: true,
     parseAs: "text",
     validate: (_value, raw) => (raw.trim() ? ["登录令牌是本机能力凭证, 不进入插件数据导出"] : []),
@@ -246,6 +279,33 @@ function assertLocalDataSchema(schema: LocalDataSchema): void {
     schema.currentVersion < 1
   ) {
     throw new TypeError(`Invalid local data schema: ${schema.id || "<empty>"}`)
+  }
+  if (!LOCAL_DATA_STORAGE_CLASSES.includes(schema.storageClass)) {
+    throw new TypeError(`Invalid storage class for local data schema: ${schema.id}`)
+  }
+  // 策略不变量（docs/freedesktop-alignment.md §2.2）：可重建/会话级/凭据绝不进入导出面。
+  if (
+    schema.portable === true &&
+    (schema.storageClass === "cache" ||
+      schema.storageClass === "runtime" ||
+      schema.storageClass === "secrets")
+  ) {
+    throw new TypeError(
+      `Local data schema ${schema.id}: ${schema.storageClass} must not be portable`,
+    )
+  }
+  if (schema.storageClass === "secrets" && schema.sensitive !== true) {
+    throw new TypeError(`Local data schema ${schema.id}: secrets must be marked sensitive`)
+  }
+  if (schema.storeClasses !== undefined) {
+    if (schema.storage !== "indexedDB") {
+      throw new TypeError(`Local data schema ${schema.id}: storeClasses requires indexedDB storage`)
+    }
+    for (const [store, storeClass] of Object.entries(schema.storeClasses)) {
+      if (!store.trim() || !LOCAL_DATA_STORAGE_CLASSES.includes(storeClass)) {
+        throw new TypeError(`Local data schema ${schema.id}: invalid storeClasses entry`)
+      }
+    }
   }
 }
 
@@ -393,6 +453,8 @@ function baseInspection(
     storage: schema.storage,
     key: schema.key,
     currentVersion: schema.currentVersion,
+    storageClass: schema.storageClass,
+    ...(schema.storeClasses === undefined ? {} : { storeClasses: schema.storeClasses }),
     sensitive: Boolean(schema.sensitive),
     portable: Boolean(schema.portable),
     repairable: Boolean(schema.repair && schema.storage !== "indexedDB"),

@@ -54,6 +54,7 @@ const gitLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: GIT_REPOS_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonArrayIssues,

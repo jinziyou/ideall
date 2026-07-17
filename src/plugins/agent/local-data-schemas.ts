@@ -7,7 +7,17 @@ import {
   type LocalDataSchema,
   type LocalDataSchemaRepairPatch,
 } from "@/plugins/shared/local-data-schema"
-import { IDB_DATABASE_NAME, IDB_DATABASE_VERSION } from "@/lib/idb"
+import {
+  IDB_DATABASE_NAME,
+  IDB_DATABASE_VERSION,
+  STORE_AGENT_TASKS,
+  STORE_AGENT_WRITE_AUDIT,
+  STORE_BLOBS,
+  STORE_LOCAL_SEARCH_INDEX,
+  STORE_LOCAL_SEMANTIC_INDEX,
+  STORE_NODES,
+  STORE_TRASH_SNAPSHOTS,
+} from "@/lib/idb"
 import { withAgentWorkspaceFileWriteLocks } from "./agent-workspace-write-adapter"
 import { ACP_SETTINGS_STORAGE_KEY } from "./lib/acp/acp-settings"
 import { AGENT_MCP_STORAGE_KEY } from "./lib/agent-mcp-registry"
@@ -129,6 +139,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: AGENT_SETTINGS_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     sensitive: true,
     portable: true,
     parseAs: "json",
@@ -142,6 +153,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "state",
     parseAs: "text",
     validate: (_value, raw) => (/^(0|[1-9]\d{0,63})$/.test(raw) ? [] : ["应为非负十进制单调版本"]),
   },
@@ -152,6 +164,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: AGENT_MCP_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonArrayIssues,
@@ -164,6 +177,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: AGENT_RULES_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonArrayIssues,
@@ -176,6 +190,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: AGENT_SKILLS_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonArrayIssues,
@@ -188,6 +203,17 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "indexedDB",
     key: IDB_DATABASE_NAME,
     currentVersion: IDB_DATABASE_VERSION,
+    storageClass: "data",
+    // wonita-home 为多 owner 混合库：检索索引可重建（cache）、审计为状态（state），均不进归档/同步。
+    storeClasses: {
+      [STORE_NODES]: "data",
+      [STORE_BLOBS]: "data",
+      [STORE_TRASH_SNAPSHOTS]: "data",
+      [STORE_AGENT_TASKS]: "data",
+      [STORE_AGENT_WRITE_AUDIT]: "state",
+      [STORE_LOCAL_SEARCH_INDEX]: "cache",
+      [STORE_LOCAL_SEMANTIC_INDEX]: "cache",
+    },
     portable: true,
   },
   {
@@ -197,6 +223,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: AGENT_WORKSPACES_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     sensitive: true,
     portable: true,
     parseAs: "json",
@@ -230,6 +257,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: AGENT_SECRETS_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     sensitive: true,
     portable: true,
     parseAs: "json",
@@ -243,6 +271,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: ACP_SETTINGS_STORAGE_KEY,
     currentVersion: 1,
+    storageClass: "config",
     parseAs: "json",
     validate: jsonObjectIssues,
     repair: repairJsonObject,

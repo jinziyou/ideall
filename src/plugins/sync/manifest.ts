@@ -44,6 +44,7 @@ const syncLocalDataSchemas: readonly LocalDataSchema[] = [
     storage: "localStorage",
     key: secureFallbackStorageKey(SYNC_CODE_SECURE_KEY),
     currentVersion: 1,
+    storageClass: "secrets",
     sensitive: true,
     parseAs: "text",
     validate: (_value, raw) => (raw.trim() ? ["同步码是本机能力凭证, 不进入插件数据导出"] : []),

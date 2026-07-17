@@ -11,8 +11,10 @@ import { nextUpdatedAt } from "@/files/version"
 
 export const AUDIO_DB_NAME = "ideall:audio"
 export const AUDIO_DB_VERSION = 1
-const STORE_TRACKS = "tracks"
-const STORE_STATE = "state"
+export const STORE_AUDIO_TRACKS = "tracks"
+export const STORE_AUDIO_STATE = "state"
+const STORE_TRACKS = STORE_AUDIO_TRACKS
+const STORE_STATE = STORE_AUDIO_STATE
 const AUDIO_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"])
 
 export type AudioTrack = {

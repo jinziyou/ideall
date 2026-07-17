@@ -42,17 +42,19 @@ Tauri App 标识为 `org.wonita.ideall`，定义在 [`src-tauri/tauri.conf.json`
 
 数据库名保留历史名称是有意行为。IndexedDB 不能原子重命名，直接改名会让旧数据表现为“丢失”。
 
+**存储类（XDG 分类）**：每个存储点都归入六类之一——`data`（用户内容权威副本）、`config`（偏好与公开配置）、`cache`（可重建派生）、`state`（跨会话状态/历史）、`runtime`（会话级）、`secrets`（凭据本体）。分类登记在 [`src/plugins/shared/local-data-schema.ts`](../src/plugins/shared/local-data-schema.ts) 的 `storageClass`/`storeClasses` 字段（含构造期不变量：cache/runtime/secrets 不得 portable），设计见 [freedesktop-alignment.md](freedesktop-alignment.md) §2。归档 ⊆ data+config+state，同步只在 data 内按 scope 决策，仅 cache 可清除重建。
+
 v17 在既有 `kind`、`[kind,sortKey]` 等索引上增加 `[kind,sortKey,title,id]` 覆盖索引。v18 增加 `local_search_index` 全文派生仓；v19 增加 `agent_write_audit` 脱敏审计 outbox；v20 增加可选的 `local_semantic_index` 向量派生仓。所有检索索引都可从 FileSystem 源数据重建，不是源数据。
 
-| Object store | 内容 | 说明 |
-| --- | --- | --- |
-| `nodes` | `note`、`bookmark`、`folder`、`file`、`feed`、`thread` | 一切皆文件的统一 Node 库 |
-| `blobs` | 上传文件的原始 Blob | `file` Node 只保存 `blobRef`；Blob 默认不进入同步 |
-| `trash_snapshots` | 删除前的 Node / Blob 恢复快照 | 与软删除墓碑共同支持回收站恢复 |
-| `agent_tasks` | Agent 任务关系、revision、count、迁移状态 | 任务关联的对话正文仍是 `nodes` 中的 `thread` |
-| `agent_write_audit` | Agent mutating tool 的脱敏 pending outbox 与终态回执 | 本机最多 1,000 条，不进入同步或配置导出；pending 不参与容量裁剪 |
-| `local_search_index` | 标题、标签和正文检索投影 | 本机派生数据，不进入同步或工作区归档；损坏时回退源数据扫描并重建 |
-| `local_semantic_index` | 固定模型生成的 384 维 embedding | 可选本机派生数据，最多 10,000 个对象、约 14.7 MiB；源版本漂移或损坏时停止语义混排并重建 |
+| Object store | 内容 | 存储类 | 说明 |
+| --- | --- | --- | --- |
+| `nodes` | `note`、`bookmark`、`folder`、`file`、`feed`、`thread` | data | 一切皆文件的统一 Node 库 |
+| `blobs` | 上传文件的原始 Blob | data | `file` Node 只保存 `blobRef`；Blob 默认不进入同步 |
+| `trash_snapshots` | 删除前的 Node / Blob 恢复快照 | data | 与软删除墓碑共同支持回收站恢复 |
+| `agent_tasks` | Agent 任务关系、revision、count、迁移状态 | data | 任务关联的对话正文仍是 `nodes` 中的 `thread` |
+| `agent_write_audit` | Agent mutating tool 的脱敏 pending outbox 与终态回执 | state | 本机最多 1,000 条，不进入同步或配置导出；pending 不参与容量裁剪 |
+| `local_search_index` | 标题、标签和正文检索投影 | cache | 本机派生数据，不进入同步或工作区归档；损坏时回退源数据扫描并重建 |
+| `local_semantic_index` | 固定模型生成的 384 维 embedding | cache | 可选本机派生数据，最多 10,000 个对象、约 14.7 MiB；源版本漂移或损坏时停止语义混排并重建 |
 
 核心内容与对象仓的映射如下：
 
@@ -76,24 +78,24 @@ v17 在既有 `kind`、`[kind,sortKey]` 等索引上增加 `[kind,sortKey,title,
 
 不是所有 App 数据都强行写入 `wonita-home`。插件保留自己的事务和存储语义，再通过 FileSystem 投影到统一命名空间。
 
-| 数据库 | 数据 | 实现 |
-| --- | --- | --- |
-| `ideall:audio` | 音轨 Blob、音轨元数据、播放状态 | [`src/plugins/audio/audio-store.ts`](../src/plugins/audio/audio-store.ts) |
-| `ideall:database` | 数据表、字段和行 | [`src/plugins/database/database-store.ts`](../src/plugins/database/database-store.ts) |
+| 数据库 | 数据 | 存储类 | 实现 |
+| --- | --- | --- | --- |
+| `ideall:audio` | 音轨 Blob、音轨元数据（`tracks` = data）、播放状态（`state` = state） | data（混合，见 storeClasses） | [`src/plugins/audio/audio-store.ts`](../src/plugins/audio/audio-store.ts) |
+| `ideall:database` | 数据表、字段和行 | data | [`src/plugins/database/database-store.ts`](../src/plugins/database/database-store.ts) |
 
 ### 2.4 localStorage 与 sessionStorage
 
 localStorage 主要保存小型公开配置、索引和跨重启 UI 状态，不作为核心大正文的默认容器。
 
-| 数据 | 典型键/位置 | 说明 |
-| --- | --- | --- |
-| 工作区快照 | `ideall:workspace:v1` | 标签、当前标签、活动分区、工作区类型、侧栏状态等；同时写 sessionStorage 与 localStorage |
-| 默认启动目标 | `ideall:startup-target:v1` | 没有可恢复标签时使用 |
-| Agent 工作区公开状态 | `ideall:agent:workspaces:v1` | 不含 API Key；包含单调 revision |
-| Agent 设置、规则、MCP、Skills 等公开配置 | `ideall:agent:*` | 由各 owner store 维护，敏感值另存 secure store |
-| 本地语义混排开关 | `ideall:semantic-search:v1` | 仅保存是否启用；模型本体在 Cache Storage，向量在 IndexedDB |
-| Git 仓库挂载列表 | `ideall:git:repos` | 保存 mount/grant/path 信息，不保存仓库内容 |
-| Engine 偏好、树展开状态、主题等 | 各模块命名键 | 只保存 Display 或本机配置状态 |
+| 数据 | 典型键/位置 | 存储类 | 说明 |
+| --- | --- | --- | --- |
+| 工作区快照 | `ideall:workspace:v1` | state（localStorage）/ runtime（sessionStorage） | 标签、当前标签、活动分区、工作区类型、侧栏状态等；同时写 sessionStorage 与 localStorage |
+| 默认启动目标 | `ideall:startup-target:v1` | config | 没有可恢复标签时使用 |
+| Agent 工作区公开状态 | `ideall:agent:workspaces:v1` | config | 不含 API Key；包含单调 revision |
+| Agent 设置、规则、MCP、Skills 等公开配置 | `ideall:agent:*` | config（凭据 revision 为 state） | 由各 owner store 维护，敏感值另存 secure store |
+| 本地语义混排开关 | `ideall:semantic-search:v1` | config | 仅保存是否启用；模型本体在 Cache Storage，向量在 IndexedDB |
+| Git 仓库挂载列表 | `ideall:git:repos` | config | 保存 mount/grant/path 信息，不保存仓库内容 |
+| Engine 偏好、树展开状态、主题等 | 各模块命名键 | config（Engine 偏好/主题/启动目标）、state（树展开等 UI 状态） | 只保存 Display 或本机配置状态 |
 
 工作区快照的双写入口是 [`src/workspace/workspace-persist.ts`](../src/workspace/workspace-persist.ts)，本地数据 schema 汇总入口是 [`src/plugins/shared/local-data-schema.ts`](../src/plugins/shared/local-data-schema.ts)。
 
@@ -101,7 +103,7 @@ localStorage 主要保存小型公开配置、索引和跨重启 UI 状态，不
 
 桌面 App 通过 Rust `keyring` 使用操作系统凭据后端，入口位于 [`src-tauri/src/secure_store.rs`](../src-tauri/src/secure_store.rs)，前端适配位于 [`src/lib/secure-store.ts`](../src/lib/secure-store.ts)。
 
-当前已登记的核心敏感项包括：
+当前已登记的核心敏感项（全部归 `secrets` 存储类）包括：
 
 | 项 | Secure store key |
 | --- | --- |
