@@ -48,6 +48,28 @@ test("engine preferences: 单文件和 media type 偏好均可不可变地设置
     ),
     null,
   )
+  // 精确移除后不再有父链回落以外的命中：application/json 无精确偏好时回 null。
+  assert.equal(getMediaTypeEnginePreference(withFile, "application/json"), null)
+})
+
+test("engine preferences: media type 偏好沿 subclass 父链继承（近亲优先）", () => {
+  const empty = emptyEnginePreferences()
+  const withPlain = withMediaTypeEnginePreference(empty, "text/plain", "plain.editor")
+
+  // 父类型上的偏好对子类型生效（GIO 语义）。
+  assert.equal(getMediaTypeEnginePreference(withPlain, "text/markdown"), "plain.editor")
+  assert.equal(getMediaTypeEnginePreference(withPlain, "application/json"), "plain.editor")
+  // 祖父类沿链上溯：application/ld+json → application/json → text/plain。
+  assert.equal(getMediaTypeEnginePreference(withPlain, "application/ld+json"), "plain.editor")
+
+  // 近亲优先：application/json 的精确偏好压过祖父 text/plain。
+  const withJson = withMediaTypeEnginePreference(withPlain, "application/json", "json.editor")
+  assert.equal(getMediaTypeEnginePreference(withJson, "application/ld+json"), "json.editor")
+  assert.equal(getMediaTypeEnginePreference(withJson, "text/markdown"), "plain.editor")
+
+  // 无链类型不继承；空值不命中。
+  assert.equal(getMediaTypeEnginePreference(withPlain, "audio/mpeg"), null)
+  assert.equal(getMediaTypeEnginePreference(withPlain, ""), null)
 })
 
 test("engine preferences: 注入存储后可持久化、重载和清空", () => {

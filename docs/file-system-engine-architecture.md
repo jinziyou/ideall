@@ -31,6 +31,7 @@ Storage → FileSystem → IdeallFile → Engine → Display
 ## Engine 与 Display
 
 - Engine descriptor 只声明匹配条件、优先级、布局、access 和是否支持独立窗口，不直接引用 React 组件。
+- 媒体类型匹配借 shared-mime-info 的 `<sub-class-of>` 引入显式 subclass 表（`src/engines/media-type-tree.ts`）：pattern 直接未命中时沿父链上溯，命中按距离折损特异度（`SUBCLASS_DISTANCE_PENALTY = 150`，折损后 ≤0 不匹配）。subclass 关系**只来自显式表，不做隐式 suffix（+xml/+json）推导**；`application/vnd.ideall.*` 语义类型不进表、无父类，隔离性不被层级穿透。父链命中低于同模式直接命中，未登记的标准类型（如 `application/yaml`）因此优雅降级到声明父类型的引擎（code），而不是只剩通用预览。默认解析的 media type 偏好查找同样沿父链上溯（近亲优先）：父类型上的默认引擎对子类型生效，精确偏好永远优先。设计与语料保全论证见 [freedesktop-alignment.md](freedesktop-alignment.md) §3。
 - Display 通过动态 `FileEngineRendererRegistry` 按 `engineId` 注册渲染回调。`registerFileEngineContribution()` 会原子注册 descriptor 与 renderer，拒绝重复或半注册；workspace 订阅 registry revision，因此运行期注册和卸载会立即反映到视图。
 - shell 启动时由 composition root 注册内置 renderer。未注册 renderer 的 Engine 显示受控的不支持状态，不在 workspace 中维护静态 renderer switch。
 - 默认 Engine 解析顺序为：当前工作区的单文件偏好、当前工作区的 media type 偏好、工作区默认策略、候选 Engine 的 priority/specificity、通用预览兜底。旧的全局偏好键作为文件工作区偏好继续使用，音频与开发工作区使用独立键。

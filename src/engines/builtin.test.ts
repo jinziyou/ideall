@@ -169,3 +169,80 @@ test("builtin engines: editable text renderers declare serializable suspension",
   assert.equal(engineRegistry.get("ideall.preview")?.suspension, "serializable")
   assert.equal(engineRegistry.get("ideall.shell")?.suspension, undefined)
 })
+
+test("builtin engines: subclass 语料保全——当前产出类型的匹配清单逐项不变", () => {
+  registerBuiltInEngines()
+  // 语料覆盖当前仓库实际产出的 mediaType（见 docs/freedesktop-alignment.md §3.4）：
+  // 这些类型本来就被直接模式覆盖，父链不改变任何匹配清单。
+  const corpus: ReadonlyArray<readonly [string, readonly string[]]> = [
+    ["text/markdown", ["ideall.code", "ideall.preview"]],
+    ["text/csv", ["ideall.code", "ideall.preview"]],
+    ["application/json", ["ideall.code", "ideall.preview"]],
+    ["image/svg+xml", ["ideall.code", "ideall.preview"]],
+    ["text/uri-list", ["ideall.browser", "ideall.code", "ideall.preview"]],
+    ["audio/mpeg", ["ideall.audio", "ideall.preview"]],
+    ["application/octet-stream", ["ideall.preview"]],
+    ["application/vnd.ideall.note+json", ["ideall.note", "ideall.preview"]],
+    [
+      "application/vnd.ideall.bookmark+json",
+      ["ideall.bookmark", "ideall.browser", "ideall.preview"],
+    ],
+    ["application/vnd.ideall.feed+json", ["ideall.feed", "ideall.preview"]],
+    ["application/vnd.ideall.thread+json", ["ideall.thread", "ideall.preview"]],
+    ["application/vnd.ideall.installed-app+json", ["ideall.installed-app", "ideall.preview"]],
+    ["application/vnd.ideall.database+json", ["ideall.database", "ideall.code", "ideall.preview"]],
+    ["application/vnd.ideall.info.entity+json", ["ideall.connected", "ideall.preview"]],
+  ]
+  for (const [mediaType, expected] of corpus) {
+    assert.deepEqual(
+      engineRegistry.matching(file(mediaType)).map(({ descriptor }) => descriptor.engineId),
+      expected,
+      mediaType,
+    )
+  }
+})
+
+test("builtin engines: subclass 新能力——未登记标准类型优雅降级到 code", () => {
+  registerBuiltInEngines()
+  // 第三方来源（MCP 资源/上传）的未登记类型经父链获得可用的语义引擎，而非只剩通用预览。
+  for (const mediaType of ["application/yaml", "application/toml", "application/ld+json"]) {
+    const resolution = engineRegistry.resolve(file(mediaType))
+    assert.equal(resolution?.descriptor.engineId, "ideall.code", mediaType)
+    assert.equal(resolution?.source, "priority", mediaType)
+    assert.deepEqual(
+      engineRegistry.matching(file(mediaType)).map(({ descriptor }) => descriptor.engineId),
+      ["ideall.code", "ideall.preview"],
+      mediaType,
+    )
+  }
+})
+
+test("builtin engines: subclass 偏好继承——父类型默认引擎对子类型生效", () => {
+  registerBuiltInEngines()
+  // 为 text/plain 设置的默认引擎对 application/json 生效（父链上溯）。
+  const inherited = withMediaTypeEnginePreference(
+    emptyEnginePreferences(),
+    "text/plain",
+    "ideall.preview",
+  )
+  const resolution = engineRegistry.resolve(file("application/json"), inherited)
+  assert.equal(resolution?.descriptor.engineId, "ideall.preview")
+  assert.equal(resolution?.source, "media-type-preference")
+
+  // 精确偏好压过继承偏好。
+  const exact = withMediaTypeEnginePreference(inherited, "application/json", "ideall.code")
+  assert.equal(
+    engineRegistry.resolve(file("application/json"), exact)?.descriptor.engineId,
+    "ideall.code",
+  )
+  // 继承的偏好指向不匹配该类型的引擎时静默下落（audio 不匹配 application/json）。
+  const stale = withMediaTypeEnginePreference(
+    emptyEnginePreferences(),
+    "text/plain",
+    "ideall.audio",
+  )
+  assert.equal(
+    engineRegistry.resolve(file("application/json"), stale)?.descriptor.engineId,
+    "ideall.code",
+  )
+})

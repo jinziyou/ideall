@@ -1,5 +1,6 @@
 import type { FileRef } from "@protocol/file-system"
 import { fileRefKey } from "@protocol/file-system"
+import { mediaTypeAncestors } from "./media-type-tree"
 import { normalizeMediaType } from "./matcher"
 
 export const ENGINE_PREFERENCES_VERSION = 1 as const
@@ -112,12 +113,22 @@ export function getFileEnginePreference(
   return Object.hasOwn(preferences.files, key) ? preferences.files[key] : null
 }
 
+/**
+ * 查找 media type 的默认引擎偏好：先精确类型，再沿显式 subclass 父链上溯（近亲优先，
+ * 与 shared-mime-info/GIO 的默认应用查找同语义）——为 `text/plain` 设置的默认引擎
+ * 对 `text/markdown` 生效，除非 `text/markdown` 另有偏好。
+ */
 export function getMediaTypeEnginePreference(
   preferences: EnginePreferences,
   mediaType: string,
 ): string | null {
   const key = normalizeMediaType(mediaType)
-  return Object.hasOwn(preferences.mediaTypes, key) ? preferences.mediaTypes[key] : null
+  if (!key) return null
+  if (Object.hasOwn(preferences.mediaTypes, key)) return preferences.mediaTypes[key]
+  for (const ancestor of mediaTypeAncestors(key)) {
+    if (Object.hasOwn(preferences.mediaTypes, ancestor)) return preferences.mediaTypes[ancestor]
+  }
+  return null
 }
 
 export function withFileEnginePreference(
