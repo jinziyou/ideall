@@ -197,9 +197,9 @@ export class MessagePortTransport implements Transport {
 | `hub.addSubscription` | `NewSubscription` | `Subscription` | `hub.subscriptions:write` | `addSubscription(input)` |
 | `hub.removeSubscription` | `{type:SubscriptionType, key:string}` | `{ok:true}` | `hub.subscriptions:write` | `removeSubscription(type,key)` |
 | `hub.isSubscribed` | `{type, key}` | `boolean` | `hub.subscriptions:read` | `isSubscribed(type,key)` |
-| `hub.addBookmark` | `NewBookmark` | `Bookmark` | `hub.bookmarks:write` | `addBookmark(input)` |
+| `hub.addBookmark` | `CaptureBookmarkInput` | `Bookmark` | `hub.bookmarks:write` | bookmarks FileSystem `capture.bookmark` |
 
-> 用户在 info 里"订阅发布者"、community 里"收藏 peer"等动作经此**写回本地 home**——主权动作落在主权层，不留扩展侧。
+> 用户在 info/community 里“保存到我的”时，宿主只接受有界标题、HTTP(S) URL、摘要和 favicon，再经 `UiActions` 转入 bookmarks FileSystem。新对象自动带收件箱标签；canonical URL 的检查与创建位于同一 IndexedDB 事务，重复调用返回已有 `Bookmark`。主权动作落在主权层，不留扩展侧。
 
 **宿主导航（当前能力）**
 
@@ -241,12 +241,13 @@ export class MessagePortTransport implements Transport {
   "permissions": [
     "identity:read", "identity.publish",
     "hub.subscriptions:read", "hub.subscriptions:write",
+    "hub.bookmarks:write",
     "host.external", "host.nav"
   ]
 }
 ```
 
-info 的现行 manifest 授予 `hub.subscriptions:read|write`、`hub.bookmarks:write`、`host.external` 与 `host.nav`；公共语料由页面直连，不存在 `data.info:read`。community 另有 `identity:read` / `identity.publish`。完整清单以 `src/plugins/embed/manifest.ts` 为准。
+info 与 community 的现行 manifest 都授予 `hub.subscriptions:read|write`、`hub.bookmarks:write`、`host.external` 与 `host.nav`，因此资讯文章和社区发布使用同一捕获能力；公共语料由页面直连，不存在 `data.info:read`。community 另有 `identity:read` / `identity.publish`。完整清单以 `src/plugins/embed/manifest.ts` 为准。
 
 ### 6.2 权限位清单
 

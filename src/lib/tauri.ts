@@ -20,6 +20,17 @@ export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 }
 
+export type NativeCaptureSharePayload =
+  | Readonly<{ kind: "url"; url: string; title?: string | null }>
+  | Readonly<{ kind: "file"; name: string; mime: string; base64: string }>
+  | Readonly<{ kind: "error"; name: string; message: string }>
+
+/** 取走已由原生壳完成路由、类型与体积校验的系统分享投递。 */
+export async function takeNativeCaptureShares(): Promise<NativeCaptureSharePayload[]> {
+  if (!isTauri()) return []
+  return invokeCommand<NativeCaptureSharePayload[]>("capture_take_pending")
+}
+
 /** 调用自定义命令 (静态 invoke, 免受 HMR chunk 删除影响)。仅在 isTauri() 为真时调用。 */
 async function invokeCommand<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   return coreInvoke<T>(cmd, args)
@@ -151,6 +162,8 @@ export interface BrowserPageContent {
   url: string
   title: string
   text: string
+  /** 页面或非密码输入控件中的当前选中文本。 */
+  selection: string
 }
 
 export async function browserGetPageContent(): Promise<BrowserPageContent> {

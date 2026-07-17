@@ -58,7 +58,10 @@ const AI_TASKS_PANEL_ID_PREFIX = "ai-tasks:"
 const MAX_PANEL_PARAMETER_LENGTH = 256
 
 export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
-  home: [{ id: "home", name: "我的", tabKind: "home-overview", module: "home" }],
+  home: [
+    { id: "home", name: "我的", tabKind: "home-overview", module: "home" },
+    { id: "inbox", name: "收件箱", tabKind: "home-inbox", module: "home" },
+  ],
   subscriptions: [
     {
       id: "subscriptions",

@@ -571,6 +571,91 @@ test("catalog: package verification is fail-closed and mismatched receipts never
   assert.equal(creates, 0)
 })
 
+test("catalog: authorize persists one grant and projects verification audit metadata", async () => {
+  const factory = packageFactory("authorize.connector")
+  const storage = memoryStorage()
+  const catalog = new RuntimeExtensionCatalog(noOpRegistry(), {
+    storage: storage.storage,
+    ...trustFakes(),
+  })
+  catalog.discover(factory)
+
+  assert.equal(await catalog.authorize(factory.id), true)
+  assert.equal(await catalog.authorize(factory.id), false)
+  assert.deepEqual(catalog.state(factory.id)?.verification, {
+    verifierId: "host-verifier",
+    verifiedAt: 1,
+  })
+  assert.equal(catalog.state(factory.id)?.grantedAt, 2)
+  assert.match(storage.values.get(RUNTIME_EXTENSION_INSTALLS_STORAGE_KEY)!, /consent:/)
+})
+
+test("catalog: concurrent authorization issues only one verifier and consent receipt", async () => {
+  const factory = packageFactory("concurrent-authorize.connector")
+  let verifies = 0
+  let requests = 0
+  const catalog = new RuntimeExtensionCatalog(noOpRegistry(), {
+    verifier: {
+      verify(descriptor) {
+        verifies += 1
+        return verificationFor(descriptor)
+      },
+    },
+    consent: {
+      request(descriptor) {
+        requests += 1
+        return consentFor(descriptor)
+      },
+      restore: () => null,
+      revoke: () => undefined,
+    },
+  })
+  catalog.discover(factory)
+
+  assert.deepEqual(
+    await Promise.all([catalog.authorize(factory.id), catalog.authorize(factory.id)]),
+    [true, true],
+  )
+  assert.equal(verifies, 1)
+  assert.equal(requests, 1)
+  assert.deepEqual(catalog.installedIds(), [factory.id])
+})
+
+test("catalog: uninstall during consent revokes the late receipt instead of resurrecting a grant", async () => {
+  const factory = packageFactory("cancel-consent.connector")
+  let release!: (receipt: RuntimeExtensionConsentReceipt) => void
+  const request = new Promise<RuntimeExtensionConsentReceipt>((resolve) => {
+    release = resolve
+  })
+  let markRequested!: () => void
+  const requested = new Promise<void>((resolve) => {
+    markRequested = resolve
+  })
+  const revoked: string[] = []
+  const catalog = new RuntimeExtensionCatalog(noOpRegistry(), {
+    verifier: trustFakes().verifier,
+    consent: {
+      request: () => {
+        markRequested()
+        return request
+      },
+      restore: () => null,
+      revoke: (receipt) => void revoked.push(receipt.receiptId),
+    },
+  })
+  catalog.discover(factory)
+  const authorization = catalog.authorize(factory.id)
+  await requested
+  await catalog.uninstall(factory.id)
+  const lateReceipt = consentFor(factory)
+  release(lateReceipt)
+
+  await assert.rejects(authorization, /authorization was cancelled/)
+  assert.deepEqual(revoked, [lateReceipt.receiptId])
+  assert.deepEqual(catalog.installedIds(), [])
+  assert.equal(catalog.state(factory.id)?.health, "consent-required")
+})
+
 test("catalog: version or permission digest changes require fresh consent", async () => {
   const baseFactory = packageFactory("upgrade.connector")
   const firstStorage = memoryStorage()
@@ -647,6 +732,47 @@ test("catalog: matching persisted receipt is restored only through injected auth
   assert.equal(creates, 1)
 })
 
+test("catalog: consent authority restore failures are diagnosable and do not activate", async () => {
+  const factory = packageFactory("restore-failure.connector")
+  const raw = JSON.stringify({
+    version: 2,
+    records: [
+      {
+        id: factory.id,
+        version: factory.version,
+        digest: factory.digest,
+        permissionDigest: factory.permissionDigest,
+        consentReceipt: "persisted-receipt",
+      },
+    ],
+  })
+  const { storage } = memoryStorage(raw)
+  let creates = 0
+  const catalog = new RuntimeExtensionCatalog(noOpRegistry(), {
+    storage,
+    verifier: trustFakes().verifier,
+    consent: {
+      request: (descriptor) => consentFor(descriptor),
+      restore: () => {
+        throw new Error("credential store unavailable")
+      },
+    },
+  })
+  catalog.discover({
+    ...factory,
+    create: () => {
+      creates += 1
+      return extension(factory.id)
+    },
+  })
+  catalog.hydrate()
+
+  await assert.rejects(catalog.resume(factory.id), /credential store unavailable/)
+  assert.equal(creates, 0)
+  assert.equal(catalog.state(factory.id)?.health, "degraded")
+  assert.match(String(catalog.failure(factory.id)), /credential store unavailable/)
+})
+
 test("catalog: revoke restores a persisted receipt through the authority before invalidating it", async () => {
   const factory = packageFactory("persisted-revoke.connector")
   const receiptId = "persisted-consent-receipt"
@@ -714,7 +840,7 @@ test("catalog: revoke restores a persisted receipt through the authority before 
   await assert.rejects(replay.activate(factory.id), /consent required/)
 })
 
-test("catalog: revoke fails explicitly but clears local state when persisted consent cannot be restored", async () => {
+test("catalog: revoke failure retains the receipt reference for a safe retry", async () => {
   const factory = packageFactory("unrestorable-revoke.connector")
   const { storage, values } = memoryStorage(
     JSON.stringify({
@@ -738,14 +864,97 @@ test("catalog: revoke fails explicitly but clears local state when persisted con
   catalog.hydrate()
 
   await assert.rejects(catalog.revoke(factory.id), /revoke failed/i)
-  assert.deepEqual(catalog.installedIds(), [])
-  assert.equal(catalog.state(factory.id)?.health, "revoked")
+  assert.deepEqual(catalog.installedIds(), [factory.id])
+  assert.equal(catalog.state(factory.id)?.health, "revocation-failed")
   assert.ok(catalog.state(factory.id)?.failure instanceof AggregateError)
-  assert.deepEqual(
+  assert.equal(
     (JSON.parse(values.get(RUNTIME_EXTENSION_INSTALLS_STORAGE_KEY)!) as { records: unknown[] })
-      .records,
-    [],
+      .records.length,
+    1,
   )
+  await assert.rejects(catalog.retry(factory.id), /revocation must be retried/)
+  await assert.rejects(catalog.uninstall(factory.id), /revocation must be retried/)
+})
+
+test("catalog: upgraded descriptor revokes the old persisted binding without restoring it", async () => {
+  const factory = packageFactory("upgraded-revoke.connector", {
+    version: 2,
+    digest: "upgraded-revoke.connector:content:v2",
+  })
+  const oldRecord = {
+    id: factory.id,
+    version: 1,
+    digest: "upgraded-revoke.connector:content:v1",
+    permissionDigest: factory.permissionDigest,
+    consentReceipt: "old-persisted-consent",
+  }
+  const { storage } = memoryStorage(JSON.stringify({ version: 2, records: [oldRecord] }))
+  let restored = 0
+  let revokedReference: unknown
+  const catalog = new RuntimeExtensionCatalog(noOpRegistry(), {
+    storage,
+    verifier: trustFakes().verifier,
+    consent: {
+      request: (descriptor) => consentFor(descriptor),
+      restore: () => {
+        restored += 1
+        return null
+      },
+      revokePersisted(reference) {
+        revokedReference = reference
+      },
+    },
+  })
+  catalog.discover(factory)
+  catalog.hydrate()
+
+  assert.equal(await catalog.revoke(factory.id), true)
+  assert.equal(restored, 0)
+  assert.deepEqual(revokedReference, {
+    receiptId: oldRecord.consentReceipt,
+    id: oldRecord.id,
+    version: oldRecord.version,
+    digest: oldRecord.digest,
+    permissionDigest: oldRecord.permissionDigest,
+  })
+  assert.equal(catalog.state(factory.id)?.health, "revoked")
+  assert.deepEqual(catalog.installedIds(), [])
+})
+
+test("catalog: failed credential revocation stops runtime and can be completed later", async () => {
+  const events: string[] = []
+  let credentialStoreAvailable = false
+  const factory = packageFactory("retry-revoke.connector", {
+    create: () =>
+      extension("retry-revoke.connector", {
+        dispose() {
+          events.push("stopped")
+        },
+      }),
+  })
+  const trust = trustFakes()
+  const catalog = new RuntimeExtensionCatalog(noOpRegistry(), {
+    verifier: trust.verifier,
+    consent: {
+      ...trust.consent,
+      revoke() {
+        if (!credentialStoreAvailable) throw new Error("credential store unavailable")
+      },
+    },
+  })
+  catalog.discover(factory)
+  await catalog.authorize(factory.id)
+  await catalog.activate(factory.id)
+
+  await assert.rejects(catalog.revoke(factory.id), /revoke failed/)
+  assert.deepEqual(events, ["stopped"])
+  assert.equal(catalog.state(factory.id)?.health, "revocation-failed")
+  assert.deepEqual(catalog.installedIds(), [factory.id])
+
+  credentialStoreAvailable = true
+  assert.equal(await catalog.revoke(factory.id), true)
+  assert.equal(catalog.state(factory.id)?.health, "revoked")
+  assert.deepEqual(catalog.installedIds(), [])
 })
 
 test("catalog: revoke clears grant, aborts/tears down runtime and records diagnostics", async () => {
@@ -905,5 +1114,10 @@ test("catalog: unknown valid persisted records stay unavailable and never become
 
   assert.deepEqual(catalog.installedIds(), ["unknown.connector"])
   assert.equal(catalog.state("unknown.connector")?.health, "unavailable")
+  assert.equal(catalog.hasDiscovered("unknown.connector"), false)
   await assert.rejects(catalog.activate("unknown.connector"), /Unknown runtime extension/)
+
+  catalog.discover(packageFactory("unknown.connector", { version: 7 }))
+  assert.equal(catalog.hasDiscovered("unknown.connector"), true)
+  assert.equal(catalog.state("unknown.connector")?.health, "consent-required")
 })

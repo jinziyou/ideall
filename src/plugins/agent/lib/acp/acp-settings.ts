@@ -3,6 +3,8 @@
 export const ACP_SETTINGS_STORAGE_KEY = "ideall:acp:settings"
 export const LEGACY_ACP_SETTINGS_STORAGE_KEY = "wonita:acp:settings"
 
+export type AgentExecutionBackend = "model" | "external-acp"
+
 /** 客户端方向: 要驱动的外部 ACP 智能体命令 (用户配置, 非模型可控)。 */
 export interface ExternalAgentConfig {
   /** 可执行程序 (如 npx / claude-code-acp / gemini)。 */
@@ -20,27 +22,46 @@ export interface AcpSettings {
   listenPort: number
   /** 客户端方向要驱动的外部智能体命令。 */
   externalAgent: ExternalAgentConfig
+  /** 对话执行后端；外部 ACP 仅在桌面 App 且命令已配置时可用。 */
+  executionBackend: AgentExecutionBackend
 }
 
 export const DEFAULT_ACP_SETTINGS: AcpSettings = {
   allowEditorConnect: false,
   listenPort: 0,
   externalAgent: { program: "", args: "", cwd: "" },
+  executionBackend: "model",
 }
 
-const str = (v: unknown): string => (typeof v === "string" ? v : "")
+function safeCommandField(value: unknown, maxLength: number): string {
+  if (typeof value !== "string" || /[\u0000\r\n]/u.test(value)) return ""
+  return value.slice(0, maxLength)
+}
+
+export function isExternalAcpConfigured(settings: AcpSettings): boolean {
+  return settings.externalAgent.program.trim().length > 0
+}
 
 /** 解析持久化串为设置 (纯函数, 便于单测): null/非法 → 默认; 部分字段 → 与默认合并。 */
 export function parseAcpSettings(raw: string | null): AcpSettings {
   if (!raw) return DEFAULT_ACP_SETTINGS
   try {
     const p = JSON.parse(raw) as Partial<AcpSettings>
-    const portOk = typeof p.listenPort === "number" && p.listenPort >= 0 && p.listenPort <= 65535
+    const portOk =
+      typeof p.listenPort === "number" &&
+      Number.isInteger(p.listenPort) &&
+      p.listenPort >= 0 &&
+      p.listenPort <= 65535
     const ea: Partial<ExternalAgentConfig> = p.externalAgent ?? {}
     return {
       allowEditorConnect: Boolean(p.allowEditorConnect),
       listenPort: portOk ? (p.listenPort as number) : DEFAULT_ACP_SETTINGS.listenPort,
-      externalAgent: { program: str(ea.program), args: str(ea.args), cwd: str(ea.cwd) },
+      externalAgent: {
+        program: safeCommandField(ea.program, 512),
+        args: safeCommandField(ea.args, 8_192),
+        cwd: safeCommandField(ea.cwd, 4_096),
+      },
+      executionBackend: p.executionBackend === "external-acp" ? "external-acp" : "model",
     }
   } catch {
     return DEFAULT_ACP_SETTINGS
@@ -76,17 +97,29 @@ export function getAcpSettings(): AcpSettings {
     return DEFAULT_ACP_SETTINGS
   }
   if (raw === lastRaw) return lastParsed
-  lastRaw = raw
   lastParsed = parseAcpSettings(raw)
+  const normalizedRaw = JSON.stringify(lastParsed)
+  lastRaw = normalizedRaw
+  if (raw !== null && raw !== normalizedRaw) {
+    try {
+      localStorage.setItem(ACP_SETTINGS_STORAGE_KEY, normalizedRaw)
+    } catch {}
+  }
   return lastParsed
 }
 
 export function setAcpSettings(next: AcpSettings): void {
+  const normalized = parseAcpSettings(JSON.stringify(next))
   try {
-    localStorage.setItem(ACP_SETTINGS_STORAGE_KEY, JSON.stringify(next))
+    localStorage.setItem(ACP_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
     localStorage.removeItem(LEGACY_ACP_SETTINGS_STORAGE_KEY)
   } catch {
     /* 隐私模式 / 存储受限时忽略 */
   }
   for (const l of listeners) l()
+}
+
+export function subscribeAcpSettings(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }

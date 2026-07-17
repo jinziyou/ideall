@@ -1,8 +1,13 @@
 import { AUTH_TOKEN_SECURE_KEY } from "@/lib/auth/auth-store"
+import { isPersistedCaptureOnboarding } from "@/lib/capture-onboarding"
 import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { STARTUP_TARGET_STORAGE_KEY, WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 import { ENGINE_PREFERENCES_STORAGE_KEY, enginePreferencesStorageKey } from "@/engines/preferences"
-import { FILE_TREE_EXPANDED_STORAGE_KEY, THEME_KEY } from "@/lib/public-config"
+import {
+  CAPTURE_ONBOARDING_STORAGE_KEY,
+  FILE_TREE_EXPANDED_STORAGE_KEY,
+  THEME_KEY,
+} from "@/lib/public-config"
 
 export type LocalDataStorageKind = "localStorage" | "sessionStorage" | "indexedDB"
 export type LocalDataSchemaStatus = "ok" | "missing" | "warning" | "error" | "unknown"
@@ -132,6 +137,20 @@ const coreSchemas: readonly LocalDataSchema[] = [
         : [],
       detail: "已移除无效的文件树展开项",
     }),
+  },
+  {
+    id: "capture.onboarding",
+    label: "首次捕获引导状态",
+    owner: "capture",
+    storage: "localStorage",
+    key: CAPTURE_ONBOARDING_STORAGE_KEY,
+    currentVersion: 1,
+    parseAs: "json",
+    validate: (value) => (isPersistedCaptureOnboarding(value) ? [] : ["引导状态无效"]),
+    repair: (value) =>
+      isPersistedCaptureOnboarding(value)
+        ? null
+        : { action: "remove", detail: "已重置首次捕获引导" },
   },
   {
     id: "workspace.session",

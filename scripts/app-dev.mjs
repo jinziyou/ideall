@@ -284,7 +284,7 @@ export async function main(argv = process.argv.slice(2), cwd = process.cwd()) {
 
     // Next dev 依赖 eval + HMR WebSocket；仅开发 wrapper 放宽 CSP，生产仍使用 tauri.conf.json。
     const devCsp =
-      "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: ws: wss: http://127.0.0.1:* http://localhost:*; frame-src 'self' tauri: https://www.wonita.link https://wonita.link https://stately.ai; worker-src 'self' blob:"
+      "default-src 'self' tauri:; script-src 'self' tauri: 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self' data:; connect-src 'self' tauri: ws: wss: http://127.0.0.1:* http://localhost:*; frame-src 'self' tauri: https://www.wonita.link https://wonita.link https://stately.ai; worker-src 'self' blob:"
     const wrapperConfig = JSON.stringify({
       build: { beforeDevCommand: "", devUrl },
       app: { security: { csp: devCsp } },

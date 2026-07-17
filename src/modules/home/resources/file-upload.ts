@@ -21,11 +21,11 @@ function errorMessage(error: unknown): string {
 
 const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
 
-export function saveUploadedFile(file: File): Promise<unknown> {
+export function saveUploadedFile(file: File, tags: readonly string[] = []): Promise<unknown> {
   return invokeFileAction(
     corePlaceRef("files"),
     "create",
-    { kind: "file", file },
+    { kind: "file", file, tags: [...tags] },
     UI_ACTION_CONTEXT,
   )
 }

@@ -1,7 +1,11 @@
 import { sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import type { FileMeta } from "@protocol/files"
 import { readAllDirectoryEntries } from "@/filesystem/directory-pagination"
-import { fileSystemRegistry, type FileSystemRegistry } from "@/filesystem/registry"
+import {
+  fileSystemRegistry,
+  invokeFileAction,
+  type FileSystemRegistry,
+} from "@/filesystem/registry"
 import { corePlaceRef, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { FileSystemError } from "@/filesystem/types"
 import { mapConcurrentOrdered } from "@/lib/map-concurrent-ordered"
@@ -17,6 +21,7 @@ export type ManagedFilesLoadOptions = {
 const FILES_ROOT_REF = corePlaceRef("files")
 const UI_DIRECTORY_CONTEXT = { actor: "ui", permissions: [], intent: "directory" } as const
 const UI_METADATA_CONTEXT = { actor: "ui", permissions: [], intent: "metadata" } as const
+const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
 const DEFAULT_STAT_CONCURRENCY = 4
 const MAX_STAT_CONCURRENCY = 32
 
@@ -79,4 +84,10 @@ export async function loadManagedFiles(
   return files
     .filter((file): file is ManagedFile => file !== null)
     .sort((left, right) => right.createdAt - left.createdAt)
+}
+
+export function updateManagedFileTags(file: ManagedFile, tags: string[]): Promise<unknown> {
+  return invokeFileAction(file.ref, "edit", { tags }, UI_ACTION_CONTEXT, {
+    expectedVersion: file.version,
+  })
 }

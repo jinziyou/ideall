@@ -17,6 +17,7 @@ test("descriptorForPath: 根路径与 /home 落到「我的」概览", () => {
 })
 
 test("descriptorForPath: 精确匹配各模块面板路由", () => {
+  assert.equal(descriptorForPath("/home/inbox")?.kind, "home-inbox")
   assert.equal(descriptorForPath("/home/notes")?.kind, "home-notes")
   assert.equal(descriptorForPath("/home/bookmarks")?.kind, "file-engine")
   assert.equal(descriptorForPath("/home/publications")?.module, "publications")

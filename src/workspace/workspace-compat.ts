@@ -155,6 +155,8 @@ function migrateStaticWorkspaceTab(tab: Tab & { kind: StaticTabKind }): Tab | nu
   switch (tab.kind) {
     case "home-overview":
       return hydratePanelFileTab(panelFileRef("home"), tab, "home")
+    case "home-inbox":
+      return hydratePanelFileTab(panelFileRef("inbox"), tab, "home")
     case "home-notes":
       return hydratePanelFileTab(panelFileRef("notes"), tab, "home")
     case "subscriptions":

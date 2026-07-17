@@ -10,6 +10,7 @@ import {
   FOLLOWING_TARGET,
   HOME_SUBPAGES,
   HOME_TARGET,
+  INBOX_TARGET,
   INSTALLED_APPS_TARGET,
   NEWS_TARGET,
   OVERVIEW_TARGET,
@@ -21,10 +22,22 @@ import {
 
 test("shell navigation targets use canonical FileSystem paths", () => {
   assert.deepEqual(
-    [HOME_TARGET, FILES_TARGET, FOLLOWING_TARGET, RESOURCES_TARGET, BOOKMARKS_TARGET].map(
-      (target) => target.path,
-    ),
-    ["/home", "/home/files", "/home/following", "/home/resources", "/home/bookmarks"],
+    [
+      HOME_TARGET,
+      INBOX_TARGET,
+      FILES_TARGET,
+      FOLLOWING_TARGET,
+      RESOURCES_TARGET,
+      BOOKMARKS_TARGET,
+    ].map((target) => target.path),
+    [
+      "/home",
+      "/home/inbox",
+      "/home/files",
+      "/home/following",
+      "/home/resources",
+      "/home/bookmarks",
+    ],
   )
   assert.deepEqual(
     [NEWS_TARGET, COMMUNITY_TARGET, BROWSER_TARGET, SEARCH_TARGET].map((target) => target.path),

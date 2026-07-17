@@ -14,16 +14,16 @@ import {
 import { getMcpServers, LOOPBACK_ID } from "./agent-mcp-registry"
 import { hydrateAgentSettingsSecure } from "./agent-settings"
 import { resolveSkills } from "./agent-skills"
+import { assembleSystemPrompt, buildWorkspaceSegments, gatherHomeContext } from "./agent-context"
 import {
-  assembleSystemPrompt,
-  buildWorkspaceSegments,
-  gatherHomeContext,
-  gatherReferencedContext,
-  gatherBrowserContext,
-} from "./agent-context"
+  getAcpSettings,
+  isExternalAcpConfigured,
+  type ExternalAgentConfig,
+} from "./acp/acp-settings"
 
 /** 一次运行解析出的连接 + 已组装系统提示 + 能力收窄 (工作区 / 精确模式在此注入)。 */
-export interface ResolvedRun {
+export interface ModelResolvedRun {
+  backend: "model"
   baseURL: string
   model: string
   apiKey: string
@@ -33,19 +33,37 @@ export interface ResolvedRun {
   mcp?: ConnectAgentOpts
 }
 
+export interface ExternalAcpResolvedRun {
+  backend: "external-acp"
+  externalAgent: ExternalAgentConfig
+  /** 已组装好的系统提示；作为 ACP prompt 的系统段发送。 */
+  system: string
+}
+
+export type ResolvedRun = ModelResolvedRun | ExternalAcpResolvedRun
+
 /** 解析一个工作空间的本次运行 (未配置模型 → null, 调用方提示去设置)。 */
 export async function resolveWorkspaceRun(
   ws: AgentWorkspace,
   useAgent: boolean,
+  selectedContext = "",
 ): Promise<ResolvedRun | null> {
   await hydrateAgentWorkspaceSecretsSecure()
   // 水合会先按耐久 revision 刷新；随后必须按稳定 id 重取，不能继续使用调用前的旧 render 快照。
   const currentWorkspace = getWorkspace(ws.id)
   if (!currentWorkspace) return null
-  // 全局模型的 API key 也来自 secure-store；冷启动不能依赖 getAgentSettings 的后台水合。
-  if (currentWorkspace.model.useGlobal) await hydrateAgentSettingsSecure()
-  const m = resolveModel(currentWorkspace)
-  if (!m.apiKey.trim() || !m.baseURL.trim() || !m.model.trim()) return null
+  const acpSettings = getAcpSettings()
+  const externalAgent =
+    acpSettings.executionBackend === "external-acp" && isExternalAcpConfigured(acpSettings)
+      ? acpSettings.externalAgent
+      : null
+  let model: ReturnType<typeof resolveModel> | null = null
+  if (!externalAgent) {
+    // 全局模型的 API key 也来自 secure-store；冷启动不能依赖 getAgentSettings 的后台水合。
+    if (currentWorkspace.model.useGlobal) await hydrateAgentSettingsSecure()
+    model = resolveModel(currentWorkspace)
+    if (!model.apiKey.trim() || !model.baseURL.trim() || !model.model.trim()) return null
+  }
 
   // MCP 注册表 → 本次运行的工具源: loopback 开关 + 启用的外部 server (sse/http/stdio)。
   const servers = getMcpServers()
@@ -73,32 +91,34 @@ export async function resolveWorkspaceRun(
 
   // 精确模式「原样发送」: 直接用用户编辑后的最终提示 (冻结快照, 不再取数)。
   if (currentWorkspace.prompt.precise && currentWorkspace.prompt.override.trim()) {
-    return { ...m, system: currentWorkspace.prompt.override, mcp }
+    const selected = buildWorkspaceSegments({
+      tools: useAgent,
+      homeContext: "",
+      selected: selectedContext,
+    }).selected
+    return {
+      ...(externalAgent
+        ? { backend: "external-acp" as const, externalAgent }
+        : { backend: "model" as const, ...model! }),
+      system: [currentWorkspace.prompt.override, selected].filter(Boolean).join("\n\n"),
+      ...(!externalAgent ? { mcp } : {}),
+    }
   }
 
   const sel = homeSelectionOf(currentWorkspace)
   let homeContext = ""
-  let referenced = ""
-  let browser = ""
   if (sel) {
     try {
       homeContext = await gatherHomeContext(sel)
     } catch {
       /* 取数失败时降级为空上下文 */
     }
-    try {
-      referenced = await gatherReferencedContext()
-    } catch {
-      /* 忽略 */
-    }
-    browser = gatherBrowserContext()
   }
   const system = assembleSystemPrompt(
     buildWorkspaceSegments({
       tools: useAgent,
       homeContext,
-      referenced,
-      browser,
+      selected: selectedContext,
       instructions: currentWorkspace.prompt.instructions,
       rules: workspaceRulesText(currentWorkspace),
       examples: "",
@@ -107,5 +127,7 @@ export async function resolveWorkspaceRun(
     }),
     currentWorkspace.prompt.template,
   )
-  return { ...m, system, mcp }
+  return externalAgent
+    ? { backend: "external-acp", externalAgent, system }
+    : { backend: "model", ...model!, system, mcp }
 }

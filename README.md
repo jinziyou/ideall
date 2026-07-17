@@ -38,7 +38,7 @@ Storage → FileSystem → IdeallFile → Engine → Display
 - 普通打开由默认引擎在当前标签页显示；“打开方式”选择其他引擎时创建同一文件的独立 Engine 标签。只有文件 capability 与 Engine 策略同时允许时，才可另开独立 App 窗口。
 - 默认引擎支持按工作区、单文件或内容类型配置；任意“文件 + 引擎”都可设为首次启动界面。正常启动优先恢复上次关闭的工作现场。
 - 音频和 Code 是针对同一文件的场景化引擎；Git、数据库与 Shell 是保持挂载的工作区工具。精确 legacy 路由 `/audio`、`/git`、`/database`、`/shell` 只切换对应 Workspace Dock，不创建标签；完整 App surface 通过 `FileRef + Engine` 深链打开。旧 Resource/Node 标签及其深链仍只在解析或水合边界迁移，运行期不保留第二套标签身份。
-- 普通领域 CRUD 即使经兼容 `FilesPort` 调用，也会进入 FileSystem registry；只有需要墓碑全量快照与原子批处理的同步流程使用独立的窄 `StorageSyncPort`。可信运行时扩展可把 FileSystem 与 Engine/renderer 作为一个组合贡献原子安装、卸载；package 的重放记录绑定版本、内容/权限摘要与经宿主恢复的 consent receipt，不从存储执行代码。
+- 普通领域 CRUD 即使经兼容 `FilesPort` 调用，也会进入 FileSystem registry；只有需要墓碑全量快照与原子批处理的同步流程使用独立的窄 `StorageSyncPort`。可信运行时扩展可把 FileSystem 与 Engine/renderer 作为组合贡献原子安装、卸载；package 重放记录绑定版本、内容/权限摘要与宿主恢复的 consent receipt，不从存储执行代码。桌面端支持官方内置及用户核对指纹后导入的第三方 Minisign publisher 根、单调累积签名撤销清单、当前/下一密钥双签名计划轮换，以及签名 envelope 的安装、更新、回滚和物理卸载；轮换后的旧指纹永久退役，旧签名包不会继续运行。固定官方联网 Registry 的分页页逐页验签并缓存原始信封；生产发布链复用 updater 根在 Actions 中签名并经 staging Release 原子切换，API 服务只代理公开信封而不持有私钥。已安装扩展的更高版本可由用户触发安全下载，经过 DNS/IP 钉连、包 SHA、publisher、manifest 与权限差异复验后再确认安装，旧授权不会继承。包在发现、授权和每次启动都会复验根、撤销状态、manifest 与 MCP stdio connector 摘要，不向 webview 加载包代码。完整 receipt 进入系统凭据库，公开快照只有不可自证的 receipt id；未注入 verifier 或非桌面环境均 fail closed。详见[签名运行时扩展包](docs/runtime-extension-packages.md)。
 
 完整契约、权限和迁移说明见 [文件系统与引擎架构](docs/file-system-engine-architecture.md)以及 [architecture.md](docs/architecture.md)。
 
@@ -56,7 +56,7 @@ Storage → FileSystem → IdeallFile → Engine → Display
 **要点：**
 
 - **本地能力（home / apps / tool / agent）不依赖后端**——离线、无账号、数据存在你设备上（本地应用启动器仅在 Tauri 桌面端可用）。跨端同步同样无账号且只上传密文，但执行同步仍需可用的 Sync 服务；当前同步范围是关注、笔记、书签与收藏夹。
-- **agent 是横跨本地的 AI 环境层**：使用 BYO-key 直连 OpenAI 兼容端点，可连接外部 MCP，并能联网搜索 / 抓取网页（出站受 egress 守卫约束）；桌面端还可把 ideall 经 ACP 暴露给编辑器。反向把外部 ACP CLI agent 用作聊天后端尚未接入执行链。
+- **agent 是横跨本地的 AI 环境层**：可用 BYO-key 直连 OpenAI 兼容端点，也可在桌面端选择用户配置的外部 ACP CLI Agent 作为对话后端；还能连接外部 MCP、联网搜索 / 抓取网页（出站受 egress 守卫约束），并把 ideall 经 ACP 暴露给编辑器。外部 CLI 是当前 OS 用户权限下的本机进程，不是沙箱。
 - **需要聚合 / 知识图谱时**：默认连接 [wonita 后端](#连接后端)；也可换用自建后端或自行实现 `ServerPort`。
 - **请勿**用 Wonita 商标对外提供竞争性信息服务，或冒充官方 Wonita / ideall 网络。
 

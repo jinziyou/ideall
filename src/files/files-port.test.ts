@@ -13,7 +13,13 @@ import {
 import { FileSystemError } from "@/filesystem/types"
 import { createFileSystemFilesPort, type FileSystemFilesGateway } from "./files-port"
 
-type Operation = { method: string; ref: FileRef; intent?: string; action?: string }
+type Operation = {
+  method: string
+  ref: FileRef
+  intent?: string
+  action?: string
+  expectedVersion?: string | null
+}
 
 function fixture() {
   let sequence = 0
@@ -62,6 +68,7 @@ function fixture() {
     mediaType: "application/json",
     capabilities: ["read", "write", "actions"],
     source: { kind: "local", id: "test" },
+    version: String(node.updatedAt),
     properties: {
       hasChildren: [...nodes.values()].some(
         (candidate) => candidate.parentId === node.id && candidate.kind === node.kind,
@@ -123,7 +130,12 @@ function fixture() {
       return { data: node, mediaType: "application/json" }
     },
     async write(ref, input, ctx) {
-      operations.push({ method: "write", ref, intent: ctx.intent })
+      operations.push({
+        method: "write",
+        ref,
+        intent: ctx.intent,
+        expectedVersion: input.expectedVersion,
+      })
       const node = nodeForRef(ref)
       if (!node) throw new FileSystemError("not-found", "missing", ref)
       const patch = input.data as Record<string, unknown>
@@ -142,8 +154,14 @@ function fixture() {
       put(next)
       return file(next)
     },
-    async invoke(ref, action, input, ctx) {
-      operations.push({ method: "invoke", ref, intent: ctx.intent, action })
+    async invoke(ref, action, input, ctx, options) {
+      operations.push({
+        method: "invoke",
+        ref,
+        intent: ctx.intent,
+        action,
+        expectedVersion: options?.expectedVersion,
+      })
       const place = ref.fileId.startsWith("place:") ? ref.fileId.slice("place:".length) : null
       if (place && action === "create") {
         const raw = input as Record<string, unknown>
@@ -273,6 +291,26 @@ test("filesystem FilesPort: common mutations use create/write/action FileSystem 
       ["metadata", "content", "write", "action"].includes(item.intent ?? ""),
     ),
   )
+})
+
+test("filesystem FilesPort: forwards approval versions to write, move and delete CAS", async () => {
+  const { gateway, operations } = fixture()
+  const port = createFileSystemFilesPort(gateway)
+
+  await port.fsUpdateNode("bookmark", "bookmark-a", { title: "Versioned" }, "2")
+  await port.fsMoveNode("bookmark", "bookmark-a", null, undefined, "3")
+  await port.fsDeleteNode("bookmark", "bookmark-a", "3")
+
+  assert.deepEqual(
+    operations
+      .filter((operation) => operation.method === "write" || operation.action === "move")
+      .map((operation) => [operation.method, operation.action, operation.expectedVersion]),
+    [
+      ["write", undefined, "2"],
+      ["invoke", "move", "3"],
+    ],
+  )
+  assert.equal(operations.find((operation) => operation.action === "delete")?.expectedVersion, "3")
 })
 
 test("filesystem FilesPort: recursive place projection avoids per-directory full scans", async () => {

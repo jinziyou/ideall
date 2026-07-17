@@ -50,7 +50,7 @@ import type {
   AgentWorkspaceActivateResult,
   AgentWorkspaceCreateResult,
 } from "../agent-management-file-contract"
-import { ACP_SETTINGS_STORAGE_KEY } from "./acp/acp-settings"
+import { ACP_SETTINGS_STORAGE_KEY, parseAcpSettings, setAcpSettings } from "./acp/acp-settings"
 import {
   decodeAgentMcpServers,
   decodeAgentRules,
@@ -481,7 +481,9 @@ export async function importAgentConfigJson(raw: string): Promise<{ keys: number
     const publicId = publicByStorageKey.get(key)
     if (publicId === "settings") await writeAgentPublicConfigFileSection(publicId, value)
     else if (publicId) await writeAgentPublicConfigSection(publicId, value)
-    else writeJson(key, value)
+    else if (key === ACP_SETTINGS_STORAGE_KEY) {
+      setAcpSettings(parseAcpSettings(JSON.stringify(value)))
+    } else writeJson(key, value)
     keys += 1
   }
   return { keys }

@@ -18,13 +18,14 @@ test("createHomeOverviewData: 聚合本地区段计数, 工具关注不计入关
       sub({ id: "publisher:a", type: "publisher", createdAt: 1 }),
       sub({ id: "tool:x", type: "tool", createdAt: 2 }),
     ],
-    bookmarks: [{ id: "b1", title: "B", createdAt: 3 }],
-    files: [{ id: "f1", name: "a.txt", type: "text/plain", createdAt: 4 }],
-    notes: [{ id: "n1", title: "N", createdAt: 5 }],
+    bookmarks: [{ id: "b1", title: "B", tags: ["收件箱"], createdAt: 3 }],
+    files: [{ id: "f1", name: "a.txt", type: "text/plain", tags: ["收件箱"], createdAt: 4 }],
+    notes: [{ id: "n1", title: "N", tags: [], createdAt: 5 }],
     threads: [{ id: "t1" }, { id: "t2" }],
   })
 
   assert.deepEqual(data.counts, {
+    inbox: 2,
     subscriptions: 1,
     bookmarks: 1,
     resources: 1,
@@ -37,13 +38,14 @@ test("buildHomeActivity: 按时间倒序合并最近动态并截断到 12 条", 
   const notes = Array.from({ length: 13 }, (_, index) => ({
     id: `n${index}`,
     title: index === 0 ? "" : `N${index}`,
+    tags: [],
     createdAt: index,
   }))
 
   const activity = buildHomeActivity({
     subs: [sub({ id: "publisher:a", type: "publisher", createdAt: 100 })],
-    bookmarks: [{ id: "b1", title: "Bookmark", createdAt: 50 }],
-    files: [{ id: "f1", name: "report.pdf", type: "application/pdf", createdAt: 75 }],
+    bookmarks: [{ id: "b1", title: "Bookmark", tags: [], createdAt: 50 }],
+    files: [{ id: "f1", name: "report.pdf", type: "application/pdf", tags: [], createdAt: 75 }],
     notes,
   })
 
@@ -65,7 +67,7 @@ test("buildHomeActivity: 文件动态只生成规范 FileSystem path", () => {
     subs: [],
     bookmarks: [],
     files: [],
-    notes: [{ id: "n1", title: "N", createdAt: 1 }],
+    notes: [{ id: "n1", title: "N", tags: [], createdAt: 1 }],
   })
 
   assert.equal(note.path, "/home/files")

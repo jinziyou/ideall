@@ -1,4 +1,4 @@
-import { Bot } from "lucide-react"
+import { Bot, Inbox } from "lucide-react"
 import type { ComponentType } from "react"
 import { navigationPath, type NavigationSectionId } from "@/filesystem/navigation-file-system"
 import { panelFileRef } from "@/filesystem/resource-file-system"
@@ -48,6 +48,7 @@ function pathLink(
 }
 
 export const HOME_TARGET = navigationTarget("home")
+export const INBOX_TARGET = navigationTarget("home", "inbox")
 export const FOLLOWING_TARGET = navigationTarget("home", "following")
 export const BOOKMARKS_TARGET = navigationTarget("home", "bookmarks")
 export const RESOURCES_TARGET = navigationTarget("home", "resources")
@@ -120,6 +121,11 @@ export const HOME_SUBPAGES: NavLink[] = [
     label: MODULE_META.overview.label,
     icon: MODULE_META.overview.icon,
   },
+  pathLink("inbox", INBOX_TARGET, {
+    label: "收件箱",
+    icon: Inbox,
+    hint: "集中整理浏览器捕获",
+  }),
   pathLink("files", FILES_TARGET, {
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,

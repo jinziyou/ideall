@@ -1,6 +1,8 @@
 import { RuntimeExtensionCatalog } from "./catalog"
 import { RuntimeExtensionRegistry } from "./registry"
 import type { ExtensionStorage } from "./persistence"
+import { createSecureRuntimeExtensionConsentAuthority } from "./secure-consent"
+import { createRuntimeExtensionTrustBoundary, type RuntimeExtensionTrustHost } from "./trust-host"
 
 function browserExtensionStorage(): ExtensionStorage | undefined {
   if (typeof window === "undefined") return undefined
@@ -13,8 +15,16 @@ function browserExtensionStorage(): ExtensionStorage | undefined {
 
 export const runtimeExtensionRegistry = new RuntimeExtensionRegistry()
 
-// 缺省没有 package verifier/consent authority，因此全局目录只能 discoverBuiltin；外部 loader 必须
-// 由桌面宿主构造自己的 Catalog 或在后续 composition root 注入这两个 fail-closed 边界。
+const trustBoundary = createRuntimeExtensionTrustBoundary()
+
+// verifier 仍必须由桌面宿主注入；consent 缺省进入系统凭据库。两条边界任一不可用都 fail closed。
 export const runtimeExtensionCatalog = new RuntimeExtensionCatalog(runtimeExtensionRegistry, {
   storage: browserExtensionStorage(),
+  verifier: trustBoundary.verifier,
+  consent: createSecureRuntimeExtensionConsentAuthority(),
 })
+
+/** 由桌面 composition root 在首次验证 package 前调用一次。 */
+export function configureRuntimeExtensionTrustHost(host: RuntimeExtensionTrustHost): void {
+  trustBoundary.configure(host)
+}

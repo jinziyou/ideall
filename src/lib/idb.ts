@@ -4,18 +4,25 @@
 //   blobs —— 文件二进制旁存 ({key,blob}, keyPath = key); 文件节点存 blobRef 指向此处, Blob 不进同步
 //   trash_snapshots —— 回收站本机快照, 用于恢复会被同步删除标记压缩掉的正文 / Blob。
 //   agent_tasks —— thread 的本机任务关系与 revision/count/migration state, keyPath = key。
+//   agent_write_audit —— Agent 写入与工具变更的脱敏本机审计, keyPath = id。
+//   local_search_index —— 可丢弃、可重建的本地全文搜索投影, keyPath = key。
+//   local_semantic_index —— 可选、可删除、可重建的本地 embedding 向量, keyPath = key。
 
 // IndexedDB 实例名保持历史 "wonita-home": IndexedDB 不能原子重命名, 直接改名会让老用户本地数据看似丢失。
 export const IDB_DATABASE_NAME = "wonita-home"
 // onupgradeneeded 只声明 object store/index schema，不执行应用层读写或数据迁移
 // (浏览器仍会为新增索引构建索引；报错会 abort DB open 且无恢复 UI)。
 // 版本号只升不降, 否则既有库会 VersionError; onversionchange 让旧标签页主动让位避免 onblocked 冻结。
-export const IDB_DATABASE_VERSION = 17
+export const IDB_DATABASE_VERSION = 20
 
 export const STORE_NODES = "nodes"
 export const STORE_BLOBS = "blobs"
 export const STORE_TRASH_SNAPSHOTS = "trash_snapshots"
 export const STORE_AGENT_TASKS = "agent_tasks"
+export const STORE_AGENT_WRITE_AUDIT = "agent_write_audit"
+export const STORE_LOCAL_SEARCH_INDEX = "local_search_index"
+export const STORE_LOCAL_SEMANTIC_INDEX = "local_semantic_index"
+export const INDEX_AGENT_WRITE_AUDIT_UPDATED_AT = "updatedAt"
 export const INDEX_NODES_DELETED_AT = "deletedAt"
 export const INDEX_NODES_KIND = "kind"
 /** kind 目录的排序覆盖索引；reverse key cursor 可 O(1) 取得尾键且不 clone 节点正文。 */
@@ -86,6 +93,23 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_AGENT_TASKS)) {
         db.createObjectStore(STORE_AGENT_TASKS, { keyPath: "key" })
+      }
+      const agentWriteAudit = db.objectStoreNames.contains(STORE_AGENT_WRITE_AUDIT)
+        ? req.transaction?.objectStore(STORE_AGENT_WRITE_AUDIT)
+        : db.createObjectStore(STORE_AGENT_WRITE_AUDIT, { keyPath: "id" })
+      if (
+        agentWriteAudit &&
+        !agentWriteAudit.indexNames.contains(INDEX_AGENT_WRITE_AUDIT_UPDATED_AT)
+      ) {
+        agentWriteAudit.createIndex(INDEX_AGENT_WRITE_AUDIT_UPDATED_AT, "updatedAt", {
+          unique: false,
+        })
+      }
+      if (!db.objectStoreNames.contains(STORE_LOCAL_SEARCH_INDEX)) {
+        db.createObjectStore(STORE_LOCAL_SEARCH_INDEX, { keyPath: "key" })
+      }
+      if (!db.objectStoreNames.contains(STORE_LOCAL_SEMANTIC_INDEX)) {
+        db.createObjectStore(STORE_LOCAL_SEMANTIC_INDEX, { keyPath: "key" })
       }
     }
     req.onsuccess = () => {

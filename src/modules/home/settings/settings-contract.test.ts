@@ -6,6 +6,8 @@ import {
   decodeDataSettings,
   decodeDeviceSettings,
   decodeRuntimeExtensionSettings,
+  decodeRuntimeExtensionPublisherRotationCandidate,
+  decodeRuntimeExtensionUpdateCandidate,
   decodeSettingsMutationResult,
   decodeSettingsDataExportResult,
   decodeSettingsDataImportPreview,
@@ -36,7 +38,13 @@ test("settings contract decodes the five bounded JSON projections", () => {
         name: "wonita-home",
         version: 17,
         status: "healthy",
-        counts: { nodes: 2, blobs: 1, trashSnapshots: 0, agentTasks: 1 },
+        counts: {
+          nodes: 2,
+          blobs: 1,
+          trashSnapshots: 0,
+          agentTasks: 1,
+          agentWriteAudits: 0,
+        },
         error: null,
       },
       storage: { persistenceAvailable: true, persisted: false },
@@ -59,7 +67,13 @@ test("settings contract decodes the five bounded JSON projections", () => {
         name: "wonita-home",
         version: 17,
         status: "healthy",
-        counts: { nodes: 2, blobs: 1, trashSnapshots: 0, agentTasks: 1 },
+        counts: {
+          nodes: 2,
+          blobs: 1,
+          trashSnapshots: 0,
+          agentTasks: 1,
+          agentWriteAudits: 0,
+        },
         error: null,
       },
       storage: { persistenceAvailable: true, persisted: false },
@@ -131,37 +145,132 @@ test("settings contract decodes the five bounded JSON projections", () => {
     ],
   )
   assert.deepEqual(
-    decodeRuntimeExtensionSettings([
-      {
-        id: "extension-1",
-        label: "Example",
-        version: 1,
-        source: { kind: "package", id: "package-1", location: "drop" },
-        permissions: ["fs:read"],
-        digest: "digest",
-        permissionDigest: "permission-digest",
-        desired: true,
-        health: "active",
-        failure: null,
-        pendingCleanup: [],
-        consentReceipt: "drop",
+    decodeRuntimeExtensionSettings({
+      nativeAvailable: true,
+      extensions: [
+        {
+          id: "extension-1",
+          label: "Example",
+          version: 1,
+          source: { kind: "package", id: "package-1", location: "drop" },
+          publisherFingerprint: `sha256:${"A".repeat(43)}`,
+          permissions: ["fs:read"],
+          digest: "digest",
+          permissionDigest: "permission-digest",
+          verification: { verifierId: "host-verifier", verifiedAt: 10 },
+          grantedAt: 11,
+          desired: true,
+          health: "active",
+          failure: null,
+          pendingCleanup: [],
+          rollbackVersion: 1,
+          consentReceipt: "drop",
+        },
+      ],
+      publishers: [
+        {
+          publisher: "package-1",
+          label: "Package One",
+          fingerprint: `sha256:${"A".repeat(43)}`,
+          status: "trusted",
+          trustedAt: 9,
+          revokedAt: null,
+          revocationSequence: 2,
+          revocationIssuedAt: 8,
+          revokedDigestCount: 1,
+          keySequence: 1,
+          rotatedAt: null,
+          retiredKeyCount: 0,
+        },
+      ],
+      registry: {
+        status: "current",
+        source: "network",
+        fetchedAt: 20,
+        generatedAt: 19,
+        expiresAt: 30,
+        sequence: 3,
+        failureCode: null,
+        entries: [
+          {
+            id: "acme.search",
+            label: "Acme Search",
+            summary: "Search local resources.",
+            version: 2,
+            publisher: "package-1",
+            publisherFingerprint: `sha256:${"A".repeat(43)}`,
+            permissions: ["resources:read"],
+            digest: `sha256:${"B".repeat(43)}`,
+            packageUrl: "https://downloads.example.test/acme.search.ideall-extension",
+            packageSha256: "a".repeat(64),
+            publishedAt: 18,
+            ignored: true,
+          },
+        ],
       },
-    ]),
-    [
-      {
-        id: "extension-1",
-        label: "Example",
-        version: 1,
-        source: { kind: "package", id: "package-1" },
-        permissions: ["fs:read"],
-        digest: "digest",
-        permissionDigest: "permission-digest",
-        desired: true,
-        health: "active",
-        failure: null,
-        pendingCleanup: [],
+    }),
+    {
+      nativeAvailable: true,
+      extensions: [
+        {
+          id: "extension-1",
+          label: "Example",
+          version: 1,
+          source: { kind: "package", id: "package-1" },
+          publisherFingerprint: `sha256:${"A".repeat(43)}`,
+          permissions: ["fs:read"],
+          digest: "digest",
+          permissionDigest: "permission-digest",
+          verification: { verifierId: "host-verifier", verifiedAt: 10 },
+          grantedAt: 11,
+          desired: true,
+          health: "active",
+          failure: null,
+          pendingCleanup: [],
+          rollbackVersion: 1,
+        },
+      ],
+      publishers: [
+        {
+          publisher: "package-1",
+          label: "Package One",
+          fingerprint: `sha256:${"A".repeat(43)}`,
+          status: "trusted",
+          trustedAt: 9,
+          revokedAt: null,
+          revocationSequence: 2,
+          revocationIssuedAt: 8,
+          revokedDigestCount: 1,
+          keySequence: 1,
+          rotatedAt: null,
+          retiredKeyCount: 0,
+        },
+      ],
+      registry: {
+        status: "current",
+        source: "network",
+        fetchedAt: 20,
+        generatedAt: 19,
+        expiresAt: 30,
+        sequence: 3,
+        failureCode: null,
+        entries: [
+          {
+            id: "acme.search",
+            label: "Acme Search",
+            summary: "Search local resources.",
+            version: 2,
+            publisher: "package-1",
+            publisherFingerprint: `sha256:${"A".repeat(43)}`,
+            permissions: ["resources:read"],
+            digest: `sha256:${"B".repeat(43)}`,
+            packageUrl: "https://downloads.example.test/acme.search.ideall-extension",
+            packageSha256: "a".repeat(64),
+            publishedAt: 18,
+          },
+        ],
       },
-    ],
+    },
   )
   assert.deepEqual(decodeSettingsMutationResult({ changed: true, secret: "drop" }), {
     changed: true,
@@ -260,7 +369,13 @@ test("settings contract rejects malformed or unbounded projections", () => {
           name: "wonita-home",
           version: 17,
           status: "healthy",
-          counts: { nodes: 0, blobs: 0, trashSnapshots: 0, agentTasks: 0 },
+          counts: {
+            nodes: 0,
+            blobs: 0,
+            trashSnapshots: 0,
+            agentTasks: 0,
+            agentWriteAudits: 0,
+          },
           error: null,
         },
         storage: { persistenceAvailable: true, persisted: false },
@@ -269,22 +384,77 @@ test("settings contract rejects malformed or unbounded projections", () => {
   )
   assert.throws(
     () =>
-      decodeRuntimeExtensionSettings([
-        {
-          id: "extension-1",
-          label: "Example",
-          version: 1,
-          source: null,
-          permissions: [],
-          digest: "digest",
-          permissionDigest: "permission-digest",
-          desired: true,
-          health: "compromised",
-          failure: null,
-          pendingCleanup: [],
-        },
-      ]),
+      decodeRuntimeExtensionSettings({
+        nativeAvailable: false,
+        extensions: [
+          {
+            id: "extension-1",
+            label: "Example",
+            version: 1,
+            source: null,
+            publisherFingerprint: null,
+            permissions: [],
+            digest: "digest",
+            permissionDigest: "permission-digest",
+            verification: null,
+            grantedAt: null,
+            desired: true,
+            health: "compromised",
+            failure: null,
+            pendingCleanup: [],
+            rollbackVersion: null,
+          },
+        ],
+        publishers: [],
+      }),
     /health is invalid/,
   )
   assert.throws(() => decodeSettingsMutationResult({ changed: "yes" }), /result is invalid/)
+})
+
+test("settings contract decodes bounded publisher rotation candidates", () => {
+  const value = {
+    publisher: "acme.tools",
+    label: "Acme Tools",
+    sequence: 2,
+    issuedAt: 100,
+    currentFingerprint: `sha256:${"A".repeat(43)}`,
+    nextFingerprint: `sha256:${"B".repeat(43)}`,
+    payload: '{"schemaVersion":1}',
+    currentSignature: "current\nsignature",
+    nextSignature: "next\nsignature",
+  }
+  assert.deepEqual(decodeRuntimeExtensionPublisherRotationCandidate(value), value)
+  assert.throws(() =>
+    decodeRuntimeExtensionPublisherRotationCandidate({
+      ...value,
+      nextFingerprint: value.currentFingerprint,
+    }),
+  )
+})
+
+test("settings contract decodes a bound extension update candidate", () => {
+  const value = {
+    token: "123e4567-e89b-42d3-a456-426614174000",
+    registrySequence: 4,
+    registryExpiresAt: 300,
+    id: "acme.search",
+    label: "Acme Search",
+    currentVersion: 2,
+    nextVersion: 3,
+    publisher: "acme.tools",
+    publisherFingerprint: `sha256:${"A".repeat(43)}`,
+    currentPermissions: ["resources:read"],
+    nextPermissions: ["resources:read", "tools:invoke"],
+    addedPermissions: ["tools:invoke"],
+    removedPermissions: [],
+    digest: `sha256:${"B".repeat(43)}`,
+    packageSha256: "a".repeat(64),
+    publishedAt: 100,
+  }
+  assert.deepEqual(decodeRuntimeExtensionUpdateCandidate(value), value)
+  assert.throws(() =>
+    decodeRuntimeExtensionUpdateCandidate({ ...value, removedPermissions: ["resources:read"] }),
+  )
+  assert.throws(() => decodeRuntimeExtensionUpdateCandidate({ ...value, nextVersion: 1 }))
 })

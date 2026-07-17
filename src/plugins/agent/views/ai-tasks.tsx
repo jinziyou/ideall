@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/ui/button"
 import { getUiActions } from "@/lib/ui-actions"
+import { isTauri } from "@/lib/tauri"
 import AgentPanel from "./agent-panel"
 import ContextComposer from "./context-composer"
 import PrecisePrompt from "./precise-prompt"
@@ -30,6 +31,11 @@ import {
 import { getServerTasks, getTasks, subscribeTasks } from "../lib/agent-tasks"
 import { createTaskThread, deleteTask } from "../agent-task-write-adapter"
 import { deleteWorkspace, renameWorkspace } from "../agent-workspace-write-adapter"
+import {
+  getAcpSettings,
+  isExternalAcpConfigured,
+  subscribeAcpSettings,
+} from "../lib/acp/acp-settings"
 
 export default function AiTasks({ workspaceId }: { workspaceId: string }) {
   const wsState = React.useSyncExternalStore(
@@ -38,23 +44,34 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
     getServerWorkspacesState,
   )
   const tasks = React.useSyncExternalStore(subscribeTasks, getTasks, getServerTasks)
+  const acpSettings = React.useSyncExternalStore(
+    subscribeAcpSettings,
+    getAcpSettings,
+    getAcpSettings,
+  )
   const workspaceSourceVersion = agentWorkspacesRevisionSnapshot()
   const ws = wsState.workspaces.find((w) => w.id === workspaceId) ?? null
-  const configured = ws ? isWorkspaceConfigured(ws) : false
+  const externalAcpSelected = acpSettings.executionBackend === "external-acp"
+  const externalAcpRuntimeAvailable = isTauri()
+  const configured = externalAcpSelected
+    ? externalAcpRuntimeAvailable && isExternalAcpConfigured(acpSettings)
+    : ws
+      ? isWorkspaceConfigured(ws)
+      : false
 
   const [view, setView] = React.useState<"tasks" | "config">("tasks")
   const [configView, setConfigView] = React.useState<"compose" | "precise">("compose")
   const [deleting, setDeleting] = React.useState(false)
 
   React.useEffect(() => {
-    if (!configured) setView("config")
-  }, [configured, workspaceId])
+    if (!configured && !externalAcpSelected) setView("config")
+  }, [configured, externalAcpSelected, workspaceId])
 
   // 发送时读最新工作空间 (组合器改动即时生效)。
   const resolveRun = React.useCallback(
-    async (useAgent: boolean) => {
+    async (useAgent: boolean, selectedContext: string) => {
       const w = getWorkspace(workspaceId)
-      return w ? resolveWorkspaceRun(w, useAgent) : null
+      return w ? resolveWorkspaceRun(w, useAgent, selectedContext) : null
     },
     [workspaceId],
   )
@@ -69,9 +86,11 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
 
   const scopeIds = tasks.filter((t) => t.workspaceId === workspaceId).map((t) => t.id)
   const skills = resolveSkills(ws.capabilities.skillIds)
-  const modelLabel = ws.model.useGlobal
-    ? `${resolveModel(ws).model}（全局）`
-    : resolveModel(ws).model
+  const modelLabel = externalAcpSelected
+    ? `外部 · ${acpSettings.externalAgent.program.trim()}`
+    : ws.model.useGlobal
+      ? `${resolveModel(ws).model}（全局）`
+      : resolveModel(ws).model
 
   async function onDelete() {
     if (deleting || wsState.workspaces.length <= 1) return
@@ -102,7 +121,13 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
             className="w-full max-w-xs truncate bg-transparent text-[15px] font-semibold leading-tight outline-none focus:rounded focus:bg-accent/60 focus:px-1"
           />
           <p className="truncate text-[13px] text-muted-foreground">
-            {configured ? `就绪 · ${modelLabel}` : "未配置模型 · 见「配置 · 模型」"}
+            {configured
+              ? `就绪 · ${modelLabel}`
+              : externalAcpSelected
+                ? externalAcpRuntimeAvailable
+                  ? "未配置外部 Agent · 见全局 AI 设置"
+                  : "外部 Agent 仅桌面 App 可用"
+                : "未配置模型 · 见「配置 · 模型」"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1 rounded-md border p-0.5">
@@ -146,7 +171,10 @@ export default function AiTasks({ workspaceId }: { workspaceId: string }) {
               scopeIds={scopeIds}
               createScopedThread={() => createTaskThread(workspaceId)}
               deleteScopedThread={deleteTask}
-              onOpenSettings={() => setView("config")}
+              onOpenSettings={() => {
+                if (externalAcpSelected) getUiActions()?.openAiSettings?.()
+                else setView("config")
+              }}
               newLabel="新任务"
               emptyLabel="还没有任务"
             />

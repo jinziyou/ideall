@@ -183,7 +183,7 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
   },
   {
     id: "agent.tasks",
-    label: "AI 任务索引",
+    label: "AI 本机任务与写入审计",
     owner: "agent",
     storage: "indexedDB",
     key: IDB_DATABASE_NAME,

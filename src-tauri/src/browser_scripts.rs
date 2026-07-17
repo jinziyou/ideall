@@ -4,9 +4,19 @@ pub const CONTENT_JS: &str = r#"
 (function(){
   try {
     var t = (document.body && document.body.innerText) || '';
-    return JSON.stringify({title: document.title || '', text: t.slice(0, 8000)});
+    var s = '';
+    try {
+      s = String((window.getSelection && window.getSelection()) || '');
+      var active = document.activeElement;
+      if (!s && active && active.type !== 'password' && typeof active.value === 'string' &&
+          typeof active.selectionStart === 'number' && typeof active.selectionEnd === 'number' &&
+          active.selectionEnd > active.selectionStart) {
+        s = active.value.slice(active.selectionStart, active.selectionEnd);
+      }
+    } catch (_) {}
+    return JSON.stringify({title: document.title || '', text: t.slice(0, 8000), selection: s.slice(0, 8000)});
   } catch(e) {
-    return JSON.stringify({title: '', text: '', error: String(e)});
+    return JSON.stringify({title: '', text: '', selection: '', error: String(e)});
   }
 })()
 "#;

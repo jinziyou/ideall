@@ -1,6 +1,6 @@
 "use client"
 
-// Skills 注册表视图 —— 管理「可调用流程」: 一段预置指令 + 可选「需当前节点 / 智能体模式」。
+// Skills 注册表视图 —— 管理「可调用流程」: 一段预置指令 + 可选上下文门槛 / 智能体模式。
 // 主从布局: 上方技能列表 (ListRow), 下方所选技能的详情编辑器 (Panel)。与「规则」分车道。
 
 import * as React from "react"
@@ -34,6 +34,7 @@ function createCustomSkill(): AgentSkill {
     hint: "",
     prompt: "",
     needsActiveNode: undefined,
+    minContextItems: undefined,
     agentMode: undefined,
     builtin: false,
     enabled: true,
@@ -175,6 +176,32 @@ export default function AiSkills() {
                     onChange={(e) => patch({ label: e.target.value })}
                     placeholder="技能短名"
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="skill-context-minimum">显式上下文要求</Label>
+                  <Select
+                    value={String(selected.minContextItems ?? 0)}
+                    disabled={selected.builtin}
+                    onValueChange={(value) =>
+                      patch({ minContextItems: value === "0" ? undefined : Number(value) })
+                    }
+                  >
+                    <SelectTrigger id="skill-context-minimum" className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">不要求</SelectItem>
+                      {Array.from({ length: 8 }, (_, index) => index + 1).map((count) => (
+                        <SelectItem key={count} value={String(count)}>
+                          至少 {count} 项资料
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[13px] leading-relaxed text-muted-foreground">
+                    不足时不会发送请求；只计算上下文托盘中明确选择的资料。
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">

@@ -16,6 +16,7 @@ import {
   listNoteFiles,
   moveNoteFile,
   restoreNoteFile,
+  updateNoteFileTags,
 } from "./note-file-system"
 
 type Invocation = {
@@ -154,6 +155,12 @@ test("note adapter: IdeallFile/ReadResult versions reach move/delete and undo re
   await moveNoteFile(metadataOnly[0]!, null, "after")
   await deleteNoteFile(metadataOnly[1]!)
   await createNoteFile(null)
+  await createNoteFile("parent", {
+    title: "Captured page",
+    tags: ["网页快照", "离线"],
+    content: [{ type: "p", children: [{ text: "offline text" }] }],
+  })
+  await updateNoteFileTags(metadataOnly[0]!, ["归档"])
   await restoreNoteFile("parent")
 
   assert.deepEqual(invocations, [
@@ -164,6 +171,20 @@ test("note adapter: IdeallFile/ReadResult versions reach move/delete and undo re
     },
     { action: "delete", input: undefined, options: { expectedVersion: null } },
     { action: "create", input: {}, options: undefined },
+    {
+      action: "create",
+      input: {
+        title: "Captured page",
+        tags: ["网页快照", "离线"],
+        content: [{ type: "p", children: [{ text: "offline text" }] }],
+      },
+      options: undefined,
+    },
+    {
+      action: "edit",
+      input: { tags: ["归档"] },
+      options: { expectedVersion: "parent-meta-v" },
+    },
     { action: "restore", input: undefined, options: undefined },
   ])
 })

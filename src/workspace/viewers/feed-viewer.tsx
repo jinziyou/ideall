@@ -13,6 +13,7 @@ import type { Subscription } from "@protocol/subscription"
 import { renameNodeTab } from "../store"
 import type { NodeViewerProps } from "../node-kind-ui"
 import { useNodeFile } from "./use-node-file"
+import { CaptureLinkButton } from "@/shared/feeders/capture-link-button"
 
 const CTX = { perSource: 20, searchWindow: 200 }
 
@@ -127,18 +128,21 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
           {items.map((it) => (
             <li key={it.key} className="flex flex-col gap-0.5 border-b pb-3 last:border-0">
               {/* it.url 来自其他社区用户发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
-              {safeHref(it.url) ? (
-                <a
-                  href={safeHref(it.url)}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="text-sm font-medium hover:underline"
-                >
-                  {it.title}
-                </a>
-              ) : (
-                <span className="text-sm font-medium">{it.title}</span>
-              )}
+              <div className="flex items-start gap-1">
+                {safeHref(it.url) ? (
+                  <a
+                    href={safeHref(it.url)}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="min-w-0 flex-1 text-sm font-medium hover:underline"
+                  >
+                    {it.title}
+                  </a>
+                ) : (
+                  <span className="min-w-0 flex-1 text-sm font-medium">{it.title}</span>
+                )}
+                <CaptureLinkButton title={it.title} url={it.url ?? ""} description={it.body} />
+              </div>
               {it.body && (
                 <span className="line-clamp-2 text-xs text-muted-foreground">{it.body}</span>
               )}

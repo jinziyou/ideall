@@ -17,6 +17,8 @@ import {
 } from "./registry"
 import type {
   RuntimeExtensionConsentAuthority,
+  RuntimeExtensionConsentBinding,
+  RuntimeExtensionConsentReference,
   RuntimeExtensionConsentReceipt,
   RuntimeExtensionDescriptor,
   RuntimeExtensionFactory,
@@ -25,6 +27,19 @@ import type {
   RuntimeExtensionVerifier,
 } from "./types"
 import { aggregateFailure, descriptorFor, snapshotFactory, validateFactory } from "./validation"
+
+function consentReference(
+  value: RuntimeExtensionConsentBinding,
+  receiptId: string,
+): RuntimeExtensionConsentReference {
+  return {
+    receiptId,
+    id: value.id,
+    version: value.version,
+    digest: value.digest,
+    permissionDigest: value.permissionDigest,
+  }
+}
 
 export type RuntimeExtensionCatalogOptions = Readonly<{
   storage?: ExtensionStorage
@@ -43,6 +58,7 @@ export type RuntimeExtensionHealth =
   | "tearing-down"
   | "degraded"
   | "quarantined"
+  | "revocation-failed"
   | "revoked"
   | "unavailable"
 
@@ -54,6 +70,8 @@ export type RuntimeExtensionCatalogState = Readonly<{
   permissions: readonly string[]
   digest: string
   permissionDigest: string
+  verification: Readonly<{ verifierId: string; verifiedAt: number }> | null
+  grantedAt: number | null
   consentReceipt: string | null
   desired: boolean
   health: RuntimeExtensionHealth
@@ -65,12 +83,15 @@ type CatalogEntry = {
   factory: RuntimeExtensionFactory
   descriptor: RuntimeExtensionDescriptor
   verification?: RuntimeExtensionVerificationReceipt
+  verificationTask?: Promise<RuntimeExtensionVerificationReceipt>
   consent?: RuntimeExtensionConsentReceipt
+  consentTask?: Promise<RuntimeExtensionConsentReceipt>
   health: RuntimeExtensionHealth
   failure?: unknown
   activation?: Promise<void>
   runtimeDispose?: RuntimeExtensionDisposeHandle
   activationController?: AbortController
+  trustEpoch: number
   disposed: boolean
 }
 
@@ -107,58 +128,116 @@ export class RuntimeExtensionCatalog {
 
   async verify(id: string): Promise<RuntimeExtensionVerificationReceipt> {
     const entry = this.#requireEntry(id)
+    if (entry.verificationTask) return entry.verificationTask
     if (entry.factory.source.kind === "builtin") {
       throw new Error(`Built-in extension does not use package verification: ${id}`)
     }
-    if (!this.#verifier) throw new Error(`No runtime extension verifier configured: ${id}`)
-    entry.health = "verifying"
-    entry.failure = undefined
-    this.#notify()
-    try {
-      const candidate = await this.#verifier.verify(entry.descriptor)
-      const receipt = acceptedVerificationReceipt(candidate, entry.descriptor)
-      if (!receipt) {
-        throw new Error(`Runtime extension verification rejected: ${id}`)
+    const verifier = this.#verifier
+    if (!verifier) throw new Error(`No runtime extension verifier configured: ${id}`)
+    const operation = (async () => {
+      entry.health = "verifying"
+      entry.failure = undefined
+      this.#notify()
+      try {
+        const candidate = await verifier.verify(entry.descriptor)
+        const receipt = acceptedVerificationReceipt(candidate, entry.descriptor)
+        if (!receipt) {
+          throw new Error(`Runtime extension verification rejected: ${id}`)
+        }
+        entry.verification = receipt
+        entry.health = "verified"
+        this.#failures.delete(id)
+        this.#notify()
+        return receipt
+      } catch (error) {
+        entry.health = "degraded"
+        entry.failure = error
+        this.#failures.set(id, error)
+        this.#notify()
+        throw error
       }
-      entry.verification = receipt
-      entry.health = "verified"
-      this.#failures.delete(id)
-      this.#notify()
-      return receipt
-    } catch (error) {
-      entry.health = "degraded"
-      entry.failure = error
-      this.#failures.set(id, error)
-      this.#notify()
-      throw error
+    })()
+    entry.verificationTask = operation
+    try {
+      return await operation
+    } finally {
+      if (entry.verificationTask === operation) entry.verificationTask = undefined
     }
   }
 
   async consent(id: string): Promise<RuntimeExtensionConsentReceipt> {
     const entry = this.#requireEntry(id)
+    if (entry.consent && validConsentReceipt(entry.consent, entry.descriptor)) {
+      return entry.consent
+    }
+    if (entry.consentTask) return entry.consentTask
     if (entry.factory.source.kind === "builtin") {
       throw new Error(`Built-in extension is trusted by the bundled host: ${id}`)
     }
-    const verification = entry.verification ?? (await this.verify(id))
-    if (!this.#consentAuthority) throw new Error(`No extension consent authority configured: ${id}`)
-    const candidate = await this.#consentAuthority.request(entry.descriptor, verification)
-    const receipt = acceptedConsentReceipt(candidate, entry.descriptor)
-    if (!receipt) {
-      const error = new Error(`Runtime extension consent rejected: ${id}`)
-      entry.health = "consent-required"
-      entry.failure = error
-      this.#failures.set(id, error)
+    const operation = (async () => {
+      const trustEpoch = entry.trustEpoch
+      const cancelled = () =>
+        entry.disposed || entry.trustEpoch !== trustEpoch || this.#entries.get(id) !== entry
+      const verification = entry.verification ?? (await this.verify(id))
+      if (cancelled()) {
+        throw new Error(`Runtime extension authorization was cancelled: ${id}`)
+      }
+      if (!this.#consentAuthority) {
+        throw new Error(`No extension consent authority configured: ${id}`)
+      }
+      const candidate = await this.#consentAuthority.request(entry.descriptor, verification)
+      const receipt = acceptedConsentReceipt(candidate, entry.descriptor)
+      if (!receipt) {
+        const error = new Error(`Runtime extension consent rejected: ${id}`)
+        entry.health = "consent-required"
+        entry.failure = error
+        this.#failures.set(id, error)
+        this.#notify()
+        throw error
+      }
+      if (cancelled()) {
+        try {
+          if (this.#consentAuthority.revoke) {
+            await this.#consentAuthority.revoke(receipt)
+          } else if (this.#consentAuthority.revokePersisted) {
+            await this.#consentAuthority.revokePersisted(
+              consentReference(receipt, receipt.receiptId),
+            )
+          } else {
+            throw new Error(`No extension consent revocation authority configured: ${id}`)
+          }
+        } catch (error) {
+          throw aggregateFailure(`Cancelled runtime extension consent cleanup failed: ${id}`, [
+            error,
+          ])
+        }
+        throw new Error(`Runtime extension authorization was cancelled: ${id}`)
+      }
+      entry.consent = receipt
+      entry.health = "ready"
+      entry.failure = undefined
+      this.#wanted.set(id, installRecord(entry.descriptor, receipt.receiptId))
+      this.#failures.delete(id)
+      this.#persist()
       this.#notify()
-      throw error
+      return receipt
+    })()
+    entry.consentTask = operation
+    try {
+      return await operation
+    } finally {
+      if (entry.consentTask === operation) entry.consentTask = undefined
     }
-    entry.consent = receipt
-    entry.health = "ready"
-    entry.failure = undefined
-    this.#wanted.set(id, installRecord(entry.descriptor, receipt.receiptId))
-    this.#failures.delete(id)
-    this.#persist()
-    this.#notify()
-    return receipt
+  }
+
+  async authorize(id: string): Promise<boolean> {
+    const entry = this.#requireEntry(id)
+    if (entry.factory.source.kind === "builtin") {
+      throw new Error(`Built-in extension is trusted by the bundled host: ${id}`)
+    }
+    if (entry.consent && validConsentReceipt(entry.consent, entry.descriptor)) return false
+    await this.consent(id)
+    return true
   }
 
   async restoreConsent(id: string): Promise<boolean> {
@@ -181,11 +260,20 @@ export class RuntimeExtensionCatalog {
       this.#notify()
       return false
     }
-    const candidate = await this.#consentAuthority.restore(
-      entry.descriptor,
-      verification,
-      wanted.consentReceipt,
-    )
+    let candidate: RuntimeExtensionConsentReceipt | null
+    try {
+      candidate = await this.#consentAuthority.restore(
+        entry.descriptor,
+        verification,
+        wanted.consentReceipt,
+      )
+    } catch (error) {
+      entry.health = "degraded"
+      entry.failure = error
+      this.#failures.set(id, error)
+      this.#notify()
+      throw error
+    }
     const receipt = acceptedConsentReceipt(candidate, entry.descriptor)
     if (!receipt || receipt.receiptId !== wanted.consentReceipt) {
       entry.health = "consent-required"
@@ -276,6 +364,9 @@ export class RuntimeExtensionCatalog {
 
   async resume(id: string): Promise<boolean> {
     const entry = this.#requireEntry(id)
+    if (entry.health === "revocation-failed") {
+      throw new Error(`Runtime extension revocation must be retried before activation: ${id}`)
+    }
     if (this.#registry.health(id) === "quarantined") {
       await this.#registry.retryCleanup(id)
       entry.failure = undefined
@@ -295,6 +386,10 @@ export class RuntimeExtensionCatalog {
 
   async uninstall(id: string, reason: "uninstall" | "revoke" = "uninstall"): Promise<boolean> {
     const entry = this.#entries.get(id)
+    if (reason === "uninstall" && entry?.health === "revocation-failed") {
+      throw new Error(`Runtime extension revocation must be retried before uninstall: ${id}`)
+    }
+    if (entry) entry.trustEpoch += 1
     const changed = this.#wanted.delete(id) || this.#registry.health(id) !== "inactive"
     let failure: unknown
     try {
@@ -336,10 +431,12 @@ export class RuntimeExtensionCatalog {
     const wanted = this.#wanted.get(id)
     let consent = entry.consent
     const failures: unknown[] = []
+    let revocationFailed = false
+    let restoreFailure: unknown
     if (!consent && wanted) {
       if (!matchesDescriptor(wanted, entry.descriptor)) {
-        failures.push(
-          new Error(`Persisted consent does not match the current extension descriptor: ${id}`),
+        restoreFailure = new Error(
+          `Persisted consent does not match the current extension descriptor: ${id}`,
         )
       } else {
         try {
@@ -349,7 +446,7 @@ export class RuntimeExtensionCatalog {
             throw new Error(`Persisted runtime extension consent could not be restored: ${id}`)
           }
         } catch (error) {
-          failures.push(error)
+          restoreFailure = error
         }
       }
     }
@@ -358,21 +455,47 @@ export class RuntimeExtensionCatalog {
     } catch (error) {
       failures.push(error)
     }
-    entry.verification = undefined
-    entry.consent = undefined
-    entry.health = this.#registry.health(id) === "quarantined" ? "quarantined" : "revoked"
     if (consent) {
       if (!this.#consentAuthority?.revoke) {
         failures.push(new Error(`No extension consent revocation authority configured: ${id}`))
+        revocationFailed = true
       } else {
         try {
           await this.#consentAuthority.revoke(consent)
         } catch (error) {
           failures.push(error)
+          revocationFailed = true
+        }
+      }
+    } else if (wanted) {
+      if (!this.#consentAuthority?.revokePersisted) {
+        failures.push(
+          restoreFailure ??
+            new Error(`No persisted consent revocation authority configured: ${id}`),
+        )
+        revocationFailed = true
+      } else {
+        try {
+          await this.#consentAuthority.revokePersisted(
+            consentReference(wanted, wanted.consentReceipt),
+          )
+        } catch (error) {
+          if (restoreFailure) failures.push(restoreFailure)
+          failures.push(error)
+          revocationFailed = true
         }
       }
     }
-    this.#wanted.delete(id)
+    if (revocationFailed && wanted) {
+      this.#wanted.set(id, wanted)
+      entry.consent = consent
+      entry.health = "revocation-failed"
+    } else {
+      this.#wanted.delete(id)
+      entry.verification = undefined
+      entry.consent = undefined
+      entry.health = this.#registry.health(id) === "quarantined" ? "quarantined" : "revoked"
+    }
     if (failures.length === 0) {
       entry.failure = undefined
       this.#failures.delete(id)
@@ -421,6 +544,8 @@ export class RuntimeExtensionCatalog {
         permissions: [],
         digest: wanted.digest,
         permissionDigest: wanted.permissionDigest,
+        verification: null,
+        grantedAt: null,
         consentReceipt: wanted.consentReceipt,
         desired: true,
         health: "unavailable",
@@ -431,13 +556,15 @@ export class RuntimeExtensionCatalog {
     const current = entry!
     const registryHealth = this.#registry.health(id)
     const health =
-      registryHealth === "quarantined"
-        ? "quarantined"
-        : registryHealth === "tearing-down" && current.runtimeDispose
-          ? "tearing-down"
-          : registryHealth === "active" && current.runtimeDispose
-            ? "active"
-            : current.health
+      current.health === "revocation-failed"
+        ? "revocation-failed"
+        : registryHealth === "quarantined"
+          ? "quarantined"
+          : registryHealth === "tearing-down" && current.runtimeDispose
+            ? "tearing-down"
+            : registryHealth === "active" && current.runtimeDispose
+              ? "active"
+              : current.health
     return {
       id,
       label: current.descriptor.label,
@@ -446,6 +573,13 @@ export class RuntimeExtensionCatalog {
       permissions: current.descriptor.permissions,
       digest: current.descriptor.digest,
       permissionDigest: current.descriptor.permissionDigest,
+      verification: current.verification
+        ? {
+            verifierId: current.verification.verifierId,
+            verifiedAt: current.verification.verifiedAt,
+          }
+        : null,
+      grantedAt: current.consent?.grantedAt ?? null,
       consentReceipt: wanted?.consentReceipt ?? current.consent?.receiptId ?? null,
       desired: Boolean(wanted),
       health,
@@ -461,6 +595,11 @@ export class RuntimeExtensionCatalog {
 
   installedIds(): string[] {
     return [...this.#wanted.keys()].sort()
+  }
+
+  /** state 也可能只来自持久化 wanted 记录；宿主用此方法判断 factory 是否已经发现。 */
+  hasDiscovered(id: string): boolean {
+    return this.#entries.has(id)
   }
 
   failure(id: string): unknown | null {
@@ -492,6 +631,7 @@ export class RuntimeExtensionCatalog {
       factory: storedFactory,
       descriptor: descriptorFor(storedFactory),
       health: expectedKind === "builtin" ? "ready" : "discovered",
+      trustEpoch: 0,
       disposed: false,
     }
     this.#entries.set(id, entry)
@@ -503,6 +643,7 @@ export class RuntimeExtensionCatalog {
       if (disposed) return
       disposed = true
       entry.disposed = true
+      entry.trustEpoch += 1
       entry.activationController?.abort("factory-removed")
       const entryId = entry.descriptor.id
       if (this.#entries.get(entryId) !== entry) return

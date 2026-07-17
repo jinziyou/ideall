@@ -39,6 +39,7 @@ test("tabDescriptor: 支持保留 kind 但覆盖 module/title/params/path", () =
 test("tab definitions: layout 与视图分类由 kind 单源推导", () => {
   assert.equal(tabDefinitionLayout("browser-view"), "fill")
   assert.equal(tabDefinitionLayout("home-bookmarks"), "padded")
+  assert.equal(tabDefinitionLayout("home-inbox"), "padded")
   assert.equal(tabDefinitionViewType("home-overview"), "overview")
   assert.equal(tabDefinitionViewType("ai-settings"), "config")
   assert.equal(tabDefinitionLayout("agent-spaces"), "padded")

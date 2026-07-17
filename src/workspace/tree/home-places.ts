@@ -1,11 +1,17 @@
 import type { ComponentType } from "react"
-import { MessagesSquare } from "lucide-react"
+import { Inbox, MessagesSquare } from "lucide-react"
 import type { NodeKind } from "@protocol/node"
 import type { IdeallPath } from "@/filesystem/path"
 import { directorySurface } from "../directory-surfaces"
 import { MODULE_META } from "../module-meta"
 
-export type HomePlaceId = "subscriptions" | "bookmarks" | "resources" | "notes" | "workspace"
+export type HomePlaceId =
+  | "inbox"
+  | "subscriptions"
+  | "bookmarks"
+  | "resources"
+  | "notes"
+  | "workspace"
 
 export type HomePlaceStaticChild = {
   id: string
@@ -28,6 +34,13 @@ export type HomePlace = {
 
 /** 「我的」places 单源: 侧栏、概览卡片与移动面包屑都从这里派生。 */
 export const HOME_PLACES: HomePlace[] = [
+  {
+    id: "inbox",
+    label: "收件箱",
+    icon: Inbox,
+    defaultPath: "/home/inbox",
+    childKinds: [],
+  },
   {
     id: "subscriptions",
     label: MODULE_META.subscriptions.label,

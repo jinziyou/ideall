@@ -1,4 +1,5 @@
 import type {
+  RuntimeExtensionConsentBinding,
   RuntimeExtensionConsentReceipt,
   RuntimeExtensionDescriptor,
   RuntimeExtensionVerificationReceipt,
@@ -120,7 +121,7 @@ function validVerificationReceipt(
     receipt &&
     validBoundedText(receipt.receiptId, MAX_RECEIPT_LENGTH) &&
     validBoundedText(receipt.verifierId, MAX_EXTENSION_ID_LENGTH) &&
-    Number.isFinite(receipt.verifiedAt) &&
+    Number.isSafeInteger(receipt.verifiedAt) &&
     receipt.verifiedAt >= 0 &&
     receipt.id === descriptor.id &&
     receipt.version === descriptor.version &&
@@ -158,12 +159,12 @@ export function acceptedVerificationReceipt(
 
 export function validConsentReceipt(
   receipt: RuntimeExtensionConsentReceipt | null,
-  descriptor: RuntimeExtensionDescriptor,
+  descriptor: RuntimeExtensionConsentBinding,
 ): receipt is RuntimeExtensionConsentReceipt {
   return Boolean(
     receipt &&
     validBoundedText(receipt.receiptId, MAX_RECEIPT_LENGTH) &&
-    Number.isFinite(receipt.grantedAt) &&
+    Number.isSafeInteger(receipt.grantedAt) &&
     receipt.grantedAt >= 0 &&
     receipt.id === descriptor.id &&
     receipt.version === descriptor.version &&

@@ -1,7 +1,14 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import type { PermissionOption, SessionUpdate } from "@agentclientprotocol/sdk"
-import { EMPTY_TURN, foldAcpUpdate, turnToolEvents, pickPermissionOption } from "./acp-chat"
+import {
+  EMPTY_TURN,
+  MAX_ACP_TEXT_LENGTH,
+  MAX_ACP_TOOL_CALLS,
+  foldAcpUpdate,
+  pickPermissionOption,
+  turnToolEvents,
+} from "./acp-chat"
 
 test("折叠: 文本块累加 + 工具调用按状态更新", () => {
   const updates: SessionUpdate[] = [
@@ -57,4 +64,34 @@ test("pickPermissionOption: 无 allow_once 时退任一 allow_*", () => {
     { optionId: "okA", name: "总是允许", kind: "allow_always" },
   ]
   assert.equal(pickPermissionOption(options, true)?.optionId, "okA")
+})
+
+test("pickPermissionOption: 对端未提供 allow 选项时保持拒绝", () => {
+  const options: PermissionOption[] = [{ optionId: "rej", name: "拒绝", kind: "reject_once" }]
+  assert.equal(pickPermissionOption(options, true), null)
+})
+
+test("折叠限制外部文本和工具数量，并接纳先到的 update", () => {
+  const textTurn = foldAcpUpdate(EMPTY_TURN, {
+    sessionUpdate: "agent_message_chunk",
+    content: { type: "text", text: "x".repeat(MAX_ACP_TEXT_LENGTH + 20) },
+  })
+  assert.equal(textTurn.text.length, MAX_ACP_TEXT_LENGTH)
+  assert.match(textTurn.text, /…$/u)
+
+  let toolTurn = foldAcpUpdate(EMPTY_TURN, {
+    sessionUpdate: "tool_call_update",
+    toolCallId: "update-first",
+    title: "先到更新",
+    status: "in_progress",
+  })
+  assert.equal(toolTurn.tools[0]?.title, "先到更新")
+  for (let index = 0; index < MAX_ACP_TOOL_CALLS + 20; index += 1) {
+    toolTurn = foldAcpUpdate(toolTurn, {
+      sessionUpdate: "tool_call",
+      toolCallId: `tool-${index}`,
+      title: `工具 ${index}`,
+    })
+  }
+  assert.equal(toolTurn.tools.length, MAX_ACP_TOOL_CALLS)
 })

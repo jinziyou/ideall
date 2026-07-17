@@ -46,6 +46,7 @@ test("builtin filesystem: root exposes the five navigation sections", async () =
   assert.deepEqual(
     home.entries.map((entry) => [entry.pathName, entry.properties?.preferredEngine]),
     [
+      ["inbox", "ideall.panel"],
       ["following", "ideall.subscriptions"],
       ["bookmarks", "ideall.bookmarks"],
       ["resources", "ideall.resources"],

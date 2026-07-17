@@ -1,11 +1,28 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, Puzzle, RefreshCw, ShieldOff, Trash2 } from "lucide-react"
+import {
+  Download,
+  ExternalLink,
+  FileWarning,
+  KeyRound,
+  Loader2,
+  Puzzle,
+  RefreshCw,
+  RotateCcw,
+  ShieldOff,
+  Trash2,
+} from "lucide-react"
 import type {
+  RuntimeExtensionPublisherCandidate,
+  RuntimeExtensionPublisherRotationCandidate,
+  RuntimeExtensionPublisherSettingsDocument,
+  RuntimeExtensionRegistrySettings,
   RuntimeExtensionSettingsDocument,
   RuntimeExtensionSettingsHealth,
+  RuntimeExtensionUpdateCandidate,
 } from "./settings-contract"
+import { openExternal } from "@/lib/safe-url"
 import { ConfirmDialog } from "@/shared/prompt-dialog"
 import { Button } from "@/ui/button"
 import { Chip } from "@/ui/chip"
@@ -50,7 +67,17 @@ const HEALTH: Record<RuntimeExtensionSettingsHealth, HealthPresentation> = {
     tone: "error",
     description: "部分资源清理失败，扩展已隔离；请重试清理。",
   },
+  "revocation-failed": {
+    label: "撤销待重试",
+    tone: "error",
+    description: "扩展已停止，但系统凭据尚未确认删除；请重试撤销。",
+  },
   revoked: { label: "已撤销", tone: "idle", description: "扩展授权已撤销。" },
+  rejected: {
+    label: "包已拒绝",
+    tone: "error",
+    description: "扩展包未通过来源、清单或文件摘要校验，没有进入可授权与可执行目录。",
+  },
   unavailable: {
     label: "来源不可用",
     tone: "error",
@@ -83,47 +110,103 @@ export function runtimeExtensionFailureMessage(failure: unknown): string | null 
 }
 
 export function runtimeExtensionActionPolicy(state: RuntimeExtensionSettingsDocument): Readonly<{
+  authorize: boolean
   retry: boolean
   revoke: boolean
   uninstall: boolean
 }> {
   const hasGrant = state.desired
+  if (state.health === "revocation-failed") {
+    return { authorize: false, retry: false, revoke: true, uninstall: false }
+  }
+  const authorize =
+    state.source?.kind === "package" &&
+    !hasGrant &&
+    ["discovered", "verified", "consent-required", "degraded", "revoked"].includes(state.health)
   const retry =
     state.health === "quarantined" ||
-    (["ready", "degraded"].includes(state.health) && (state.source?.kind === "builtin" || hasGrant))
+    (["ready", "degraded", "consent-required"].includes(state.health) &&
+      (state.source?.kind === "builtin" || hasGrant))
   const revoke = state.source?.kind === "package" && state.health !== "revoked" && hasGrant
   const uninstall =
     state.source?.kind !== "builtin" &&
-    (state.desired ||
+    state.health !== "rejected" &&
+    (state.source?.kind === "package" ||
+      state.desired ||
       ["activating", "active", "tearing-down", "degraded", "quarantined", "unavailable"].includes(
         state.health,
       ))
-  return { retry, revoke, uninstall }
+  return { authorize, retry, revoke, uninstall }
 }
 
-type DangerousAction = Readonly<{
-  kind: "revoke" | "uninstall"
-  extension: RuntimeExtensionSettingsDocument
-}>
+type DangerousAction =
+  | Readonly<{
+      kind: "revoke" | "uninstall" | "rollback"
+      extension: RuntimeExtensionSettingsDocument
+    }>
+  | Readonly<{
+      kind: "revoke-publisher"
+      publisher: RuntimeExtensionPublisherSettingsDocument
+    }>
 
-export type RuntimeExtensionPanelAction = "retry" | "revoke" | "uninstall"
+export type RuntimeExtensionPanelAction = "authorize" | "retry" | "revoke" | "uninstall"
+export type RuntimeExtensionManagementAction =
+  | "install-package"
+  | "refresh-registry"
+  | "prepare-update"
+  | "apply-update"
+  | "discard-update"
+  | "inspect-publisher"
+  | "inspect-publisher-rotation"
+  | "apply-publisher-rotation"
+  | "trust-publisher"
+  | "revoke-publisher"
+  | "import-revocations"
+  | "rollback-package"
+
+const EMPTY_REGISTRY: RuntimeExtensionRegistrySettings = {
+  status: "unavailable",
+  source: null,
+  fetchedAt: null,
+  generatedAt: null,
+  expiresAt: null,
+  sequence: null,
+  failureCode: null,
+  entries: [],
+}
 
 export function RuntimeExtensionsPanel({
   extensions,
+  publishers = [],
+  registry = EMPTY_REGISTRY,
+  nativeAvailable = false,
   loading = false,
   disabled = false,
   onAction,
+  onManagement,
 }: {
   extensions: readonly RuntimeExtensionSettingsDocument[]
+  publishers?: readonly RuntimeExtensionPublisherSettingsDocument[]
+  registry?: RuntimeExtensionRegistrySettings
+  nativeAvailable?: boolean
   loading?: boolean
   disabled?: boolean
   onAction(id: string, action: RuntimeExtensionPanelAction): Promise<boolean>
+  onManagement?(action: RuntimeExtensionManagementAction, input?: unknown): Promise<unknown>
 }) {
   const [busy, setBusy] = React.useState<{ id: string; action: string } | null>(null)
   const [actionFailure, setActionFailure] = React.useState<{ id: string; message: string } | null>(
     null,
   )
   const [dangerousAction, setDangerousAction] = React.useState<DangerousAction | null>(null)
+  const [publisherCandidate, setPublisherCandidate] =
+    React.useState<RuntimeExtensionPublisherCandidate | null>(null)
+  const [rotationCandidate, setRotationCandidate] =
+    React.useState<RuntimeExtensionPublisherRotationCandidate | null>(null)
+  const [updateCandidate, setUpdateCandidate] =
+    React.useState<RuntimeExtensionUpdateCandidate | null>(null)
+  const updateConfirmed = React.useRef(false)
+  const [notice, setNotice] = React.useState<string | null>(null)
 
   const run = React.useCallback(
     async (id: string, action: RuntimeExtensionPanelAction) => {
@@ -149,11 +232,346 @@ export function RuntimeExtensionsPanel({
     [onAction],
   )
 
+  const runManagement = React.useCallback(
+    async (action: RuntimeExtensionManagementAction, input?: unknown) => {
+      if (!onManagement) return
+      setBusy({ id: "$management", action })
+      setActionFailure(null)
+      setNotice(null)
+      try {
+        const result = await onManagement(action, input)
+        if (action === "inspect-publisher") {
+          setPublisherCandidate(result as RuntimeExtensionPublisherCandidate | null)
+          return
+        }
+        if (action === "inspect-publisher-rotation") {
+          setRotationCandidate(result as RuntimeExtensionPublisherRotationCandidate | null)
+          return
+        }
+        if (action === "prepare-update") {
+          setUpdateCandidate(result as RuntimeExtensionUpdateCandidate)
+          return
+        }
+        if (result && typeof result === "object" && "cancelled" in result && result.cancelled) {
+          return
+        }
+        if (action === "install-package") {
+          const operation =
+            result && typeof result === "object" && "operation" in result
+              ? (result as { operation?: unknown }).operation
+              : null
+          setNotice(
+            operation === "updated"
+              ? "扩展已更新；旧授权已撤销，请核对新版本权限后重新授权。"
+              : operation === "unchanged"
+                ? "所选扩展包与当前版本一致。"
+                : "扩展包已安装；验证权限后可单独授权启用。",
+          )
+        } else if (action === "refresh-registry") {
+          setUpdateCandidate(null)
+          const snapshot = result as { source?: unknown; failureCode?: unknown } | null
+          setNotice(
+            snapshot?.source === "cache" && snapshot.failureCode
+              ? "联网刷新失败，已继续使用本地重新验签的目录缓存。"
+              : "联网扩展目录已刷新并完成逐页验签。",
+          )
+        } else if (action === "import-revocations") {
+          setNotice("签名撤销清单已导入，受影响扩展已停止并从可执行目录隔离。")
+        } else if (action === "trust-publisher") {
+          setPublisherCandidate(null)
+          setNotice("publisher 信任根已保存；其扩展仍需逐个验证和授权。")
+        } else if (action === "revoke-publisher") {
+          setNotice("publisher 信任已撤销，其扩展已停止且不会再通过复验。")
+        } else if (action === "apply-publisher-rotation") {
+          setRotationCandidate(null)
+          setNotice(
+            "publisher 密钥已轮换；旧密钥和旧签名扩展已退役，请安装重新签名的包并逐项授权。",
+          )
+        } else if (action === "apply-update") {
+          setUpdateCandidate(null)
+          setNotice("扩展已更新并保留上一可信版本；旧授权已撤销，请核对新版本后重新授权。")
+        } else if (action === "rollback-package") {
+          setNotice("已恢复上一签名版本；原授权已撤销，请重新核对并授权。")
+        }
+      } catch (error) {
+        setActionFailure({
+          id: "$management",
+          message: runtimeExtensionFailureMessage(error) ?? "扩展管理操作失败",
+        })
+      } finally {
+        setBusy(null)
+      }
+    },
+    [onManagement],
+  )
+
   return (
     <Panel title="运行时扩展">
       <p className="mb-4 text-[13px] leading-relaxed text-muted-foreground">
-        查看由可信宿主发现的文件系统与渲染引擎扩展。权限必须经过明确授权，卸载不会删除来源数据。
+        安装包先由桌面宿主验证
+        publisher、签名、摘要与撤销状态；代码安装不等于授权，权限仍需逐个明确确认。
       </p>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={!nativeAvailable || disabled || busy !== null || !onManagement}
+          onClick={() => void runManagement("install-package")}
+        >
+          {busy?.action === "install-package" ? (
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="mr-1.5 h-4 w-4" />
+          )}
+          安装 / 更新签名包
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!nativeAvailable || disabled || busy !== null || !onManagement}
+          onClick={() => void runManagement("inspect-publisher")}
+        >
+          <KeyRound className="mr-1.5 h-4 w-4" />
+          导入 publisher 根
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!nativeAvailable || disabled || busy !== null || !onManagement}
+          onClick={() => void runManagement("inspect-publisher-rotation")}
+        >
+          {busy?.action === "inspect-publisher-rotation" ? (
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <KeyRound className="mr-1.5 h-4 w-4" />
+          )}
+          导入密钥轮换
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!nativeAvailable || disabled || busy !== null || !onManagement}
+          onClick={() => void runManagement("import-revocations")}
+        >
+          <FileWarning className="mr-1.5 h-4 w-4" />
+          导入撤销清单
+        </Button>
+      </div>
+
+      {!nativeAvailable ? (
+        <p className="mb-4 rounded-md border bg-muted/30 p-3 text-[13px] text-muted-foreground">
+          浏览器预览只展示扩展状态；安装、publisher 与撤销管理仅在桌面 App 中可用。
+        </p>
+      ) : null}
+      {notice ? (
+        <p
+          role="status"
+          className="mb-4 rounded-md border border-success/30 bg-success/10 p-3 text-[13px] text-success"
+        >
+          {notice}
+        </p>
+      ) : null}
+      {actionFailure?.id === "$management" ? (
+        <p
+          role="alert"
+          className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-[13px] text-destructive"
+        >
+          {actionFailure.message}
+        </p>
+      ) : null}
+
+      <section className="mb-5 space-y-2" aria-labelledby="runtime-extension-registry">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 id="runtime-extension-registry" className="text-sm font-medium">
+              联网扩展目录
+            </h3>
+            <Chip
+              tone={
+                registry.status === "current"
+                  ? "ok"
+                  : registry.status === "stale"
+                    ? "warn"
+                    : "neutral"
+              }
+            >
+              {registry.status === "current"
+                ? registry.source === "network"
+                  ? "已联网验签"
+                  : "可信缓存"
+                : registry.status === "stale"
+                  ? "缓存已过期"
+                  : "尚未获取"}
+            </Chip>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!nativeAvailable || disabled || busy !== null || !onManagement}
+            onClick={() => void runManagement("refresh-registry")}
+          >
+            {busy?.action === "refresh-registry" ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+            )}
+            刷新目录
+          </Button>
+        </div>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          目录页由官方 Registry 签名；已安装扩展可由宿主安全下载并复验更新，确认安装后仍需重新授权。
+          {registry.sequence !== null
+            ? ` 当前序列 ${registry.sequence}，有效期至 ${new Date(registry.expiresAt ?? 0).toISOString()}。`
+            : ""}
+        </p>
+        {registry.failureCode ? (
+          <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-[12px] text-warning">
+            {registry.status === "unavailable" ? "目录不可用" : "本次刷新未完成"}：
+            {registry.failureCode}
+          </p>
+        ) : null}
+        {registry.entries.length > 0 ? (
+          <div className="divide-y rounded-md border">
+            {registry.entries.map((entry) => {
+              const installed = extensions.find((extension) => extension.id === entry.id)
+              const hasUpdate =
+                installed?.source?.kind === "package" && installed.version < entry.version
+              const availability = installed
+                ? hasUpdate
+                  ? `可更新 · 已安装 v${installed.version}`
+                  : `已安装 v${installed.version}`
+                : "未安装"
+              return (
+                <article
+                  key={entry.id}
+                  className="flex flex-wrap items-start justify-between gap-3 p-3"
+                >
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{entry.label}</span>
+                      <Chip tone={hasUpdate ? "warn" : "neutral"}>{availability}</Chip>
+                    </div>
+                    <p className="text-[12px] leading-relaxed text-muted-foreground">
+                      {entry.summary}
+                    </p>
+                    <p className="break-all font-mono text-[11px] text-muted-foreground">
+                      {entry.id} · v{entry.version} · {entry.publisher}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      权限：{entry.permissions.join("、")}
+                    </p>
+                  </div>
+                  {hasUpdate ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        registry.status !== "current" ||
+                        !nativeAvailable ||
+                        disabled ||
+                        busy !== null ||
+                        !onManagement
+                      }
+                      onClick={() => void runManagement("prepare-update", { id: entry.id })}
+                    >
+                      {busy?.action === "prepare-update" ? (
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-1.5 h-4 w-4" />
+                      )}
+                      下载并检查更新
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={disabled || busy !== null}
+                      onClick={() => openExternal(entry.packageUrl)}
+                    >
+                      <ExternalLink className="mr-1.5 h-4 w-4" />
+                      获取签名包
+                    </Button>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        ) : registry.status !== "unavailable" ? (
+          <p className="rounded-md border bg-muted/20 p-3 text-[12px] text-muted-foreground">
+            当前可信目录没有可用扩展。
+          </p>
+        ) : null}
+      </section>
+
+      {publishers.length > 0 ? (
+        <section className="mb-5 space-y-2" aria-labelledby="runtime-extension-publishers">
+          <h3 id="runtime-extension-publishers" className="text-sm font-medium">
+            Publisher 信任根
+          </h3>
+          <div className="divide-y rounded-md border">
+            {publishers.map((publisher) => (
+              <div
+                key={publisher.publisher}
+                className="flex flex-wrap items-start justify-between gap-3 p-3"
+              >
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{publisher.label}</span>
+                    <Chip
+                      tone={
+                        publisher.status === "revoked"
+                          ? "error"
+                          : publisher.status === "official"
+                            ? "info"
+                            : "ok"
+                      }
+                    >
+                      {publisher.status === "official"
+                        ? "官方内置"
+                        : publisher.status === "trusted"
+                          ? "已信任"
+                          : "已撤销"}
+                    </Chip>
+                  </div>
+                  <p className="break-all font-mono text-[11px] text-muted-foreground">
+                    {publisher.publisher} · {publisher.fingerprint}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground">
+                    撤销序列 {publisher.revocationSequence ?? "未导入"} · 已撤销摘要{" "}
+                    {publisher.revokedDigestCount}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground">
+                    密钥序列 {publisher.keySequence} · 已退役密钥 {publisher.retiredKeyCount}
+                    {publisher.rotatedAt
+                      ? ` · 最近轮换 ${new Date(publisher.rotatedAt).toISOString()}`
+                      : ""}
+                  </p>
+                </div>
+                {publisher.status === "trusted" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={disabled || busy !== null || !onManagement}
+                    onClick={() => setDangerousAction({ kind: "revoke-publisher", publisher })}
+                  >
+                    <ShieldOff className="mr-1.5 h-4 w-4" />
+                    撤销根信任
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
@@ -199,6 +617,42 @@ export function RuntimeExtensionsPanel({
                     <dt className="text-muted-foreground">来源</dt>
                     <dd>{runtimeExtensionSourceLabel(extension.source)}</dd>
                   </div>
+                  {extension.source?.kind === "package" ? (
+                    <>
+                      <div>
+                        <dt className="text-muted-foreground">来源验证</dt>
+                        <dd className="break-all">
+                          {extension.verification
+                            ? `${extension.verification.verifierId} · ${new Date(extension.verification.verifiedAt).toISOString()}`
+                            : "尚未验证"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Publisher 指纹</dt>
+                        <dd className="break-all font-mono text-[11px]">
+                          {extension.publisherFingerprint ?? "不可用"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">可回滚版本</dt>
+                        <dd>
+                          {extension.rollbackVersion === null
+                            ? "无"
+                            : `v${extension.rollbackVersion}`}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">授权凭据</dt>
+                        <dd>
+                          {extension.grantedAt !== null
+                            ? `已恢复 · ${new Date(extension.grantedAt).toISOString()}`
+                            : extension.desired
+                              ? "等待系统凭据库恢复"
+                              : "未授权"}
+                        </dd>
+                      </div>
+                    </>
+                  ) : null}
                 </dl>
 
                 <div className="space-y-2">
@@ -241,8 +695,26 @@ export function RuntimeExtensionsPanel({
                   </div>
                 ) : null}
 
-                {policy.retry || policy.revoke || policy.uninstall ? (
+                {policy.authorize ||
+                policy.retry ||
+                policy.revoke ||
+                policy.uninstall ||
+                extension.rollbackVersion !== null ? (
                   <div className="flex flex-wrap justify-end gap-2">
+                    {policy.authorize ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isBusy}
+                        onClick={() => void run(extension.id, "authorize")}
+                      >
+                        {busy?.id === extension.id && busy.action === "authorize" ? (
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        ) : null}
+                        验证并授权
+                      </Button>
+                    ) : null}
                     {policy.retry ? (
                       <Button
                         type="button"
@@ -284,6 +756,18 @@ export function RuntimeExtensionsPanel({
                         卸载
                       </Button>
                     ) : null}
+                    {extension.rollbackVersion !== null ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isBusy || busy !== null || !onManagement}
+                        onClick={() => setDangerousAction({ kind: "rollback", extension })}
+                      >
+                        <RotateCcw className="mr-1.5 h-4 w-4" />
+                        回滚至 v{extension.rollbackVersion}
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </article>
@@ -300,19 +784,102 @@ export function RuntimeExtensionsPanel({
         title={
           dangerousAction?.kind === "revoke"
             ? `撤销「${dangerousAction.extension.label}」的授权？`
-            : `卸载「${dangerousAction?.extension.label ?? "扩展"}」？`
+            : dangerousAction?.kind === "uninstall"
+              ? `卸载「${dangerousAction.extension.label}」及其代码？`
+              : dangerousAction?.kind === "rollback"
+                ? `回滚「${dangerousAction.extension.label}」？`
+                : dangerousAction?.kind === "revoke-publisher"
+                  ? `撤销「${dangerousAction.publisher.label}」的根信任？`
+                  : "确认扩展管理操作？"
         }
         description={
           dangerousAction?.kind === "revoke"
             ? "扩展会被停止并撤销当前信任凭据；再次使用前必须重新验证和授权。"
-            : "扩展提供的文件系统和渲染引擎会被移除，但不会删除其来源数据。"
+            : dangerousAction?.kind === "uninstall"
+              ? "扩展会停止，授权凭据会撤销，当前代码和回滚副本会删除；扩展产生的个人数据不会删除。"
+              : dangerousAction?.kind === "rollback"
+                ? "当前扩展会停止并撤销授权，然后恢复上一已验证版本；回滚后需要重新授权。"
+                : "该 publisher 的全部扩展会立即停止并拒绝复验；已有代码不会执行。"
         }
-        confirmLabel={dangerousAction?.kind === "revoke" ? "撤销授权" : "卸载"}
+        confirmLabel={
+          dangerousAction?.kind === "revoke"
+            ? "撤销授权"
+            : dangerousAction?.kind === "uninstall"
+              ? "卸载代码"
+              : dangerousAction?.kind === "rollback"
+                ? "确认回滚"
+                : "撤销根信任"
+        }
         destructive
         onConfirm={() => {
           const action = dangerousAction
           setDangerousAction(null)
-          if (action) void run(action.extension.id, action.kind)
+          if (!action) return
+          if (action.kind === "revoke-publisher") {
+            void runManagement("revoke-publisher", {
+              publisher: action.publisher.publisher,
+              fingerprint: action.publisher.fingerprint,
+            })
+          } else if (action.kind === "rollback") {
+            void runManagement("rollback-package", { id: action.extension.id })
+          } else {
+            void run(action.extension.id, action.kind)
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={updateCandidate !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (updateConfirmed.current) {
+              updateConfirmed.current = false
+              return
+            }
+            const candidate = updateCandidate
+            setUpdateCandidate(null)
+            if (candidate) void runManagement("discard-update", { token: candidate.token })
+          }
+        }}
+        title={`更新「${updateCandidate?.label ?? "扩展"}」？`}
+        description={`候选包已完成 Registry、下载 SHA-256、publisher 签名、manifest 摘要和撤销状态复验。确认后会停止旧版本并撤销旧授权，再原子安装新版本并保留一个回滚副本。\n\nv${updateCandidate?.currentVersion ?? ""} → v${updateCandidate?.nextVersion ?? ""}\n新增权限：${updateCandidate?.addedPermissions.join("、") || "无"}\n移除权限：${updateCandidate?.removedPermissions.join("、") || "无"}\nPublisher：${updateCandidate?.publisherFingerprint ?? ""}`}
+        confirmLabel="停止旧版本并安装更新"
+        destructive
+        onConfirm={() => {
+          const candidate = updateCandidate
+          updateConfirmed.current = true
+          setUpdateCandidate(null)
+          if (candidate) void runManagement("apply-update", candidate)
+        }}
+      />
+
+      <ConfirmDialog
+        open={rotationCandidate !== null}
+        onOpenChange={(open) => {
+          if (!open) setRotationCandidate(null)
+        }}
+        title={`轮换「${rotationCandidate?.label ?? "publisher"}」的签名密钥？`}
+        description={`宿主已验证当前密钥授权和下一密钥持有证明。轮换后旧密钥永久退役，所有旧密钥签名的已安装包和回滚副本会停止通过复验，且原授权会被撤销。请先确认发行方已准备重新签名的包。\n\n序列：${rotationCandidate?.sequence ?? ""}\n当前：${rotationCandidate?.currentFingerprint ?? ""}\n下一：${rotationCandidate?.nextFingerprint ?? ""}`}
+        confirmLabel="确认轮换并停用旧包"
+        destructive
+        onConfirm={() => {
+          const candidate = rotationCandidate
+          setRotationCandidate(null)
+          if (candidate) void runManagement("apply-publisher-rotation", candidate)
+        }}
+      />
+
+      <ConfirmDialog
+        open={publisherCandidate !== null}
+        onOpenChange={(open) => {
+          if (!open) setPublisherCandidate(null)
+        }}
+        title={`信任「${publisherCandidate?.label ?? "publisher"}」？`}
+        description={`请通过独立渠道核对 publisher ID 与公钥指纹。建立根信任只允许其扩展进入逐包授权流程，不会自动运行代码。\n\n${publisherCandidate?.publisher ?? ""}\n${publisherCandidate?.fingerprint ?? ""}`}
+        confirmLabel="指纹已核对，建立信任"
+        onConfirm={() => {
+          const candidate = publisherCandidate
+          if (candidate) void runManagement("trust-publisher", candidate)
         }}
       />
     </Panel>

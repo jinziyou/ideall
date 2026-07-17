@@ -96,6 +96,18 @@ test("workspace migration: malformed file-engine snapshots are discarded", () =>
 })
 
 test("workspace migration: legacy static panels and AI tasks become file-engine tabs", () => {
+  const inbox = migrateWorkspaceTab({
+    id: "home-inbox",
+    kind: "home-inbox",
+    module: "home",
+    title: "收件箱",
+  })
+  assert.deepEqual(parseFileEngineTabParams(inbox?.params), {
+    ref: { fileSystemId: "ideall.core", fileId: "panel:inbox" },
+    engineId: "ideall.panel",
+  })
+  assert.equal(inbox?.rootId, "home")
+
   const settings = migrateWorkspaceTab({
     id: "home-settings",
     kind: "home-settings",

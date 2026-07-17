@@ -8,8 +8,9 @@ import {
 } from "@protocol/file-system"
 import type { ResourceRef } from "@protocol/resource"
 import { paginateDirectoryItems } from "./provider-input"
-import { corePlaceRef, resourceFileRef } from "./resource-file-system"
+import { corePlaceRef, panelFileRef, resourceFileRef } from "./resource-file-system"
 import {
+  AGENT_AUDIT_FILE_REF,
   AGENT_SETTINGS_FILE_REF,
   AGENT_TASKS_FILE_REF,
   AGENT_WORKSPACES_FILE_REF,
@@ -83,6 +84,15 @@ export const NAVIGATION_SECTIONS: readonly NavigationSectionDefinition[] = [
     iconHint: "home",
     items: [
       {
+        id: "inbox",
+        pathName: "inbox",
+        name: "收件箱",
+        iconHint: "inbox",
+        target: panelFileRef("inbox"),
+        preferredEngine: "ideall.panel",
+        targetKind: "file",
+      },
+      {
         id: "following",
         pathName: "following",
         name: "关注",
@@ -126,6 +136,15 @@ export const NAVIGATION_SECTIONS: readonly NavigationSectionDefinition[] = [
     name: "活动",
     iconHint: "history",
     items: [
+      {
+        id: "audit",
+        pathName: "audit",
+        name: "审计",
+        iconHint: "shield-check",
+        target: AGENT_AUDIT_FILE_REF,
+        preferredEngine: "ideall.agent-write-audit",
+        targetKind: "file",
+      },
       {
         id: "spaces",
         pathName: "spaces",

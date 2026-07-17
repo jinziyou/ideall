@@ -373,9 +373,12 @@ export async function setTaskStarredRaw(id: string, starred: boolean): Promise<v
 }
 
 /** 原子移除任务关系并软删除对应 core 线程；失败时不发布局部快照。 */
-export async function deleteTaskRaw(id: string): Promise<void> {
+export async function deleteTaskRaw(id: string, expectedThreadUpdatedAt?: number): Promise<void> {
   await ensureTasksReadyRaw()
-  const mutation = await getFilesPort().deleteTaskThread(id)
+  const mutation = await getFilesPort().deleteTaskThread(
+    id,
+    expectedThreadUpdatedAt === undefined ? undefined : { updatedAt: expectedThreadUpdatedAt },
+  )
   await reconcileMutation(id, mutation)
 }
 

@@ -19,6 +19,12 @@ const TAB_DEFINITIONS = {
     layout: "padded",
     viewType: "overview",
   },
+  "home-inbox": {
+    module: "home",
+    title: "收件箱",
+    path: "/home/inbox",
+    layout: "padded",
+  },
   "home-notes": {
     module: "home",
     title: "文件",

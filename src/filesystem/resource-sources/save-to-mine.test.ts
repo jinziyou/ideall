@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import type { Bookmark, NewBookmark } from "@protocol/files"
+import type { Bookmark } from "@protocol/files"
+import type { CaptureBookmarkInput } from "@protocol/capture"
 import type { ResourceRef } from "@protocol/resource"
 import type { NewSubscription, Subscription, SubscriptionType } from "@protocol/subscription"
 import { projectSaveToMine, saveResourceToMine, type SaveToMineDeps } from "./save-to-mine"
@@ -38,8 +39,12 @@ function deps({
 }: {
   subscriptions?: Subscription[]
   bookmarks?: Bookmark[]
-} = {}): { deps: SaveToMineDeps; addedBookmarks: NewBookmark[]; addedSubs: NewSubscription[] } {
-  const addedBookmarks: NewBookmark[] = []
+} = {}): {
+  deps: SaveToMineDeps
+  addedBookmarks: CaptureBookmarkInput[]
+  addedSubs: NewSubscription[]
+} {
+  const addedBookmarks: CaptureBookmarkInput[] = []
   const addedSubs: NewSubscription[] = []
   return {
     addedBookmarks,
@@ -55,20 +60,22 @@ function deps({
           subscription(input)
         )
       },
-      async listBookmarks() {
-        return bookmarks
-      },
-      async addBookmark(input: NewBookmark) {
+      async captureBookmark(input) {
+        const existing = bookmarks.find((bookmark) => bookmark.url === input.url)
+        if (existing) return { status: "existing", bookmark: existing }
         addedBookmarks.push(input)
         return {
-          id: "bm-1",
-          title: input.title,
-          url: input.url,
-          description: input.description ?? "",
-          favicon: input.favicon ?? "",
-          folderId: input.folderId ?? null,
-          tags: input.tags ?? [],
-          createdAt: 1,
+          status: "created",
+          bookmark: {
+            id: "bm-1",
+            title: input.title,
+            url: input.url,
+            description: input.description ?? "",
+            favicon: input.favicon ?? "",
+            folderId: null,
+            tags: ["收件箱"],
+            createdAt: 1,
+          },
         }
       },
     },

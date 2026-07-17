@@ -151,6 +151,11 @@ export interface ThreadTaskMutation {
   task?: ThreadTask
 }
 
+export type ThreadTaskDeleteExpectation = Readonly<{
+  /** 本次撤销只允许删除这个已提交 thread.updatedAt。 */
+  updatedAt: number
+}>
+
 export interface ThreadTaskMigration extends ThreadTaskSnapshot {
   /** 本次调用是否执行了旧 localStorage 快照迁移；false 表示其它窗口已完成。 */
   migrated: boolean
@@ -189,8 +194,11 @@ export interface ThreadTaskStoragePort {
   }>
   attachThreadTask(workspaceId: string, threadId: string): Promise<ThreadTaskMutation>
   updateThreadTask(id: string, patch: ThreadTaskPatch): Promise<ThreadTaskMutation>
-  /** 无论是否有关联 task，都幂等软删除 thread；有关联时在同一事务移除索引。 */
-  deleteTaskThread(id: string): Promise<ThreadTaskMutation>
+  /**
+   * 无论是否有关联 task，都幂等软删除 thread；有关联时在同一事务移除索引。
+   * expected 用于用户撤销新建任务：只有线程仍是本次提交版本时才允许删除。
+   */
+  deleteTaskThread(id: string, expected?: ThreadTaskDeleteExpectation): Promise<ThreadTaskMutation>
   /** 原子替换轻量索引；引用不存在/已删除的 thread 时拒绝整次写入。 */
   replaceThreadTasks(
     tasks: readonly ThreadTask[],
@@ -257,17 +265,23 @@ export interface FilesPort extends ThreadTaskStoragePort {
   fsGetNode(id: string): Promise<Node | undefined>
   /** fs.create 后端: 按 kind 新建, 回读为 Node (file 不可创建)。 */
   fsCreateNode(input: FsCreateInput): Promise<Node>
-  /** fs.write 后端: 按 kind 改字段, 回读为 Node。 */
-  fsUpdateNode(kind: NodeKind, id: string, patch: FsWritePatch): Promise<Node | undefined>
+  /** fs.write 后端: 按 kind 改字段, 回读为 Node；expectedVersion 绑定用户审批时快照。 */
+  fsUpdateNode(
+    kind: NodeKind,
+    id: string,
+    patch: FsWritePatch,
+    expectedVersion?: string,
+  ): Promise<Node | undefined>
   /** fs.move 后端: 改父 + 同级位置 (note 树 / bookmark 归夹)。 */
   fsMoveNode(
     kind: NodeKind,
     id: string,
     parentId: string | null,
     afterSortKey?: string | null,
+    expectedVersion?: string,
   ): Promise<Node | undefined>
-  /** fs.delete 后端: 按 kind 删 (软删 / 取消关注)。 */
-  fsDeleteNode(kind: NodeKind, id: string): Promise<void>
+  /** fs.delete 后端: 按 kind 删 (软删 / 取消关注)；expectedVersion 防止旧审批删除新版。 */
+  fsDeleteNode(kind: NodeKind, id: string, expectedVersion?: string): Promise<void>
   /** fs.readBlob 后端: 文件二进制 base64 (大文件不内联, base64 空)。 */
   fsReadBlob(id: string): Promise<{ mime: string; size: number; base64: string } | undefined>
 }

@@ -10,8 +10,18 @@ import {
   type IdeallFile,
 } from "@protocol/file-system"
 import type { ResourceRecord, ResourceRef } from "@protocol/resource"
+import {
+  CAPTURE_BOOKMARK_ACTION,
+  CAPTURE_BOOKMARK_DESCRIPTION_LIMIT,
+  CAPTURE_BOOKMARK_FAVICON_LIMIT,
+  CAPTURE_BOOKMARK_TITLE_LIMIT,
+  CAPTURE_BOOKMARK_URL_LIMIT,
+  CAPTURE_INBOX_TAG,
+} from "@protocol/capture"
 import { countTrashItems } from "@/files/stores/trash-store"
+import { captureBookmark as captureBookmarkStore } from "@/files/stores/bookmarks-store"
 import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
+import { canonicalHttpUrl } from "@/lib/canonical-http-url"
 import {
   createResource,
   getResources,
@@ -73,6 +83,44 @@ import {
   versionForResource,
   type PlaceResourceQuery,
 } from "./policy"
+
+function boundedCaptureText(value: unknown, limit: number): string {
+  if (typeof value !== "string") return ""
+  const normalized = value.replace(/\s+/g, " ").trim()
+  if (normalized.length <= limit) return normalized
+  return `${normalized.slice(0, Math.max(1, limit - 1)).trimEnd()}…`
+}
+
+function captureBookmarkInput(value: unknown): {
+  title: string
+  url: string
+  description?: string
+  favicon?: string
+  tags: string[]
+} {
+  const raw =
+    value != null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {}
+  const url = typeof raw.url === "string" ? raw.url.trim() : ""
+  if (!url || url.length > CAPTURE_BOOKMARK_URL_LIMIT || !canonicalHttpUrl(url)) {
+    throw new FileSystemError("unsupported", "捕获只支持有界 HTTP(S) 链接")
+  }
+  const title = boundedCaptureText(raw.title, CAPTURE_BOOKMARK_TITLE_LIMIT)
+  const description = boundedCaptureText(raw.description, CAPTURE_BOOKMARK_DESCRIPTION_LIMIT)
+  const faviconRaw =
+    typeof raw.favicon === "string" && raw.favicon.length <= CAPTURE_BOOKMARK_FAVICON_LIMIT
+      ? raw.favicon.trim()
+      : ""
+  const favicon = faviconRaw && canonicalHttpUrl(faviconRaw) ? faviconRaw : undefined
+  return {
+    title: title || new URL(url).hostname.replace(/^www\./i, "") || url,
+    url,
+    ...(description ? { description } : {}),
+    ...(favicon ? { favicon } : {}),
+    tags: [CAPTURE_INBOX_TAG],
+  }
+}
 
 function sourceContext(
   ctx: FileSystemAccessContext,
@@ -644,31 +692,46 @@ export function createResourceFileSystem(): FileSystemProvider {
       assertCanListActions(ref, ctx)
       if (!resource) {
         const place = placeForFile(ref)
-        return place === "home" ||
+        if (
+          place === "home" ||
           place === "subscriptions" ||
           place === "notes" ||
           place === "bookmarks" ||
           place === "files"
-          ? [
-              { id: "open", label: "打开", kind: "display" },
-              {
-                id: "create",
-                label:
-                  place === "home"
-                    ? "新建对话"
-                    : place === "subscriptions"
-                      ? "新增关注"
-                      : place === "notes"
-                        ? "新建页面"
-                        : place === "bookmarks"
-                          ? "新增书签"
-                          : "添加文件",
-                requires: ["create"],
-                kind: "specialized",
-                reason: "需由对应内容界面收集创建参数",
-              },
-            ]
-          : [{ id: "open", label: "打开", kind: "display" }]
+        ) {
+          const actions: FileAction[] = [
+            { id: "open", label: "打开", kind: "display" },
+            {
+              id: "create",
+              label:
+                place === "home"
+                  ? "新建对话"
+                  : place === "subscriptions"
+                    ? "新增关注"
+                    : place === "notes"
+                      ? "新建页面"
+                      : place === "bookmarks"
+                        ? "新增书签"
+                        : "添加文件",
+              requires: ["create"],
+              kind: "specialized",
+              reason: "需由对应内容界面收集创建参数",
+            },
+          ]
+          if (place === "bookmarks") {
+            actions.push({
+              id: CAPTURE_BOOKMARK_ACTION,
+              label: "保存到我的",
+              requires: ["create"],
+              risk: "safe",
+              idempotent: true,
+              kind: "specialized",
+              reason: "由内容界面提供链接、标题和摘要",
+            })
+          }
+          return actions
+        }
+        return [{ id: "open", label: "打开", kind: "display" }]
       }
       try {
         const actions = await resourceActions(resource, sourceContext(ctx, ref, "action"))
@@ -700,6 +763,14 @@ export function createResourceFileSystem(): FileSystemProvider {
         return { panel }
       }
       const place = placeForFile(ref)
+      if (place === "bookmarks" && action === CAPTURE_BOOKMARK_ACTION) {
+        assertCanInvoke(ref, action, ctx)
+        try {
+          return await captureBookmarkStore(captureBookmarkInput(input))
+        } catch (error) {
+          rethrowFileSystemError(error, ref)
+        }
+      }
       if (place && placeFile(place).capabilities.includes("create") && action === "create") {
         assertCanInvoke(ref, action, ctx)
         try {

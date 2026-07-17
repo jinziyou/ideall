@@ -32,12 +32,48 @@ export const DEFAULT_AGENT_SETTINGS_DOCUMENT: AgentSettingsDocument = {
 export const AGENT_SETTINGS_CREDENTIAL_STATUS_ACTION = "credential-status"
 export const AGENT_SETTINGS_SET_API_KEY_ACTION = "set-api-key"
 export const AGENT_SETTINGS_CLEAR_API_KEY_ACTION = "clear-api-key"
+export const AGENT_SETTINGS_ACP_READ_ACTION = "acp.settings.read"
+export const AGENT_SETTINGS_ACP_WRITE_ACTION = "acp.settings.write"
+export const AGENT_SETTINGS_ACP_DETECT_ACTION = "acp.agent.detect"
+export const AGENT_SETTINGS_ACP_PROBE_ACTION = "acp.agent.probe"
 export const MAX_AGENT_SETTINGS_BASE_URL_LENGTH = 2_048
 export const MAX_AGENT_SETTINGS_MODEL_LENGTH = 256
 export const MAX_AGENT_SETTINGS_API_KEY_LENGTH = 16_384
 
 export type AgentSettingsCredentialStatus = Readonly<{ configured: boolean }>
 export type AgentSettingsSetApiKeyInput = Readonly<{ apiKey: string }>
+
+export type AgentExecutionBackend = "model" | "external-acp"
+
+export type AgentExternalAcpConfig = Readonly<{
+  program: string
+  args: string
+  cwd: string
+}>
+
+export type AgentAcpSettings = Readonly<{
+  allowEditorConnect: boolean
+  listenPort: number
+  externalAgent: AgentExternalAcpConfig
+  executionBackend: AgentExecutionBackend
+}>
+
+export const DEFAULT_AGENT_ACP_SETTINGS: AgentAcpSettings = {
+  allowEditorConnect: false,
+  listenPort: 0,
+  externalAgent: { program: "", args: "", cwd: "" },
+  executionBackend: "model",
+}
+
+export type AgentDetectedAcpAgent = Readonly<{
+  id: string
+  label: string
+  note?: string
+  config: AgentExternalAcpConfig
+}>
+
+export type AgentAcpProbeInput = Readonly<{ externalAgent: AgentExternalAcpConfig }>
+export type AgentAcpProbeResult = Readonly<{ latencyMs: number; protocolVersion: number }>
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -73,6 +109,100 @@ function booleanField(value: Record<string, unknown>, key: string, label: string
   const field = value[key]
   if (typeof field !== "boolean") throw new Error(`${label}.${key}必须是布尔值`)
   return field
+}
+
+function boundedCommandField(
+  value: Record<string, unknown>,
+  key: string,
+  label: string,
+  maxLength: number,
+): string {
+  const field = value[key]
+  if (typeof field !== "string") throw new Error(`${label}.${key}必须是字符串`)
+  if (field.length > maxLength) throw new Error(`${label}.${key}过长`)
+  if (/[\u0000\r\n]/u.test(field)) throw new Error(`${label}.${key}不能包含控制字符`)
+  return field
+}
+
+export function decodeAgentExternalAcpConfig(value: unknown): AgentExternalAcpConfig {
+  const source = record(value, "外部 ACP Agent 配置")
+  assertOnlyKeys(source, ["program", "args", "cwd"], "外部 ACP Agent 配置")
+  return {
+    program: boundedCommandField(source, "program", "外部 ACP Agent 配置", 512),
+    args: boundedCommandField(source, "args", "外部 ACP Agent 配置", 8_192),
+    cwd: boundedCommandField(source, "cwd", "外部 ACP Agent 配置", 4_096),
+  }
+}
+
+export function decodeAgentAcpSettings(value: unknown): AgentAcpSettings {
+  const source = record(value, "ACP 设置")
+  assertOnlyKeys(
+    source,
+    ["allowEditorConnect", "listenPort", "externalAgent", "executionBackend"],
+    "ACP 设置",
+  )
+  const port = source.listenPort
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > 65_535) {
+    throw new Error("ACP 设置.listenPort无效")
+  }
+  if (source.executionBackend !== "model" && source.executionBackend !== "external-acp") {
+    throw new Error("ACP 设置.executionBackend无效")
+  }
+  return {
+    allowEditorConnect: booleanField(source, "allowEditorConnect", "ACP 设置"),
+    listenPort: port,
+    externalAgent: decodeAgentExternalAcpConfig(source.externalAgent),
+    executionBackend: source.executionBackend,
+  }
+}
+
+export function decodeAgentDetectedAcpAgents(value: unknown): AgentDetectedAcpAgent[] {
+  if (!Array.isArray(value) || value.length > 64) throw new Error("ACP Agent 检测结果无效")
+  return value.map((item, index) => {
+    const label = `ACP Agent 检测结果[${index}]`
+    const source = record(item, label)
+    assertOnlyKeys(source, ["id", "label", "note", "config"], label)
+    const id = boundedCommandField(source, "id", label, 128)
+    const name = boundedCommandField(source, "label", label, 160)
+    const note = source.note
+    if (
+      note !== undefined &&
+      (typeof note !== "string" || note.length > 240 || /[\u0000-\u001f\u007f]/u.test(note))
+    ) {
+      throw new Error(`${label}.note无效`)
+    }
+    return {
+      id,
+      label: name,
+      ...(note ? { note } : {}),
+      config: decodeAgentExternalAcpConfig(source.config),
+    }
+  })
+}
+
+export function decodeAgentAcpProbeInput(value: unknown): AgentAcpProbeInput {
+  const source = record(value, "ACP Agent 诊断输入")
+  assertOnlyKeys(source, ["externalAgent"], "ACP Agent 诊断输入")
+  const externalAgent = decodeAgentExternalAcpConfig(source.externalAgent)
+  if (!externalAgent.program.trim()) throw new Error("ACP Agent 诊断输入.program不能为空")
+  return { externalAgent }
+}
+
+export function decodeAgentAcpProbeResult(value: unknown): AgentAcpProbeResult {
+  const source = record(value, "ACP Agent 诊断结果")
+  assertOnlyKeys(source, ["latencyMs", "protocolVersion"], "ACP Agent 诊断结果")
+  const { latencyMs, protocolVersion } = source
+  if (
+    typeof latencyMs !== "number" ||
+    !Number.isSafeInteger(latencyMs) ||
+    latencyMs < 0 ||
+    typeof protocolVersion !== "number" ||
+    !Number.isSafeInteger(protocolVersion) ||
+    protocolVersion < 0
+  ) {
+    throw new Error("ACP Agent 诊断结果无效")
+  }
+  return { latencyMs, protocolVersion }
 }
 
 /** Display 边界严格解码公开 body；apiKey 和任何未知字段都不能进入 UI 状态。 */

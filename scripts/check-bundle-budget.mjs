@@ -6,9 +6,12 @@ import { pathToFileURL } from "node:url"
 import { gzipSync } from "node:zlib"
 
 export const DEFAULT_BUNDLE_BUDGET = Object.freeze({
-  totalBytes: 5_600_000,
+  // R2 写前预览/审计与 R3 扩展信任边界增加常驻 provider、系统凭据 consent、
+  // 设置审计面及 publisher 双签密钥轮换。raw 与单 chunk 上限保持；轮换仅追加 5 kB
+  // 总 gzip 预算，继续阻止无界常驻增长。
+  totalBytes: 5_650_000,
   largestChunkBytes: 1_150_000,
-  totalGzipBytes: 1_750_000,
+  totalGzipBytes: 1_760_000,
   largestChunkGzipBytes: 390_000,
 })
 

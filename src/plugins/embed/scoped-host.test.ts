@@ -58,6 +58,38 @@ function fakePort(): FilesPort {
   return f as unknown as FilesPort
 }
 
+test("versioned writes: approval version is forwarded without entering returned Node data", async () => {
+  let updateVersion: string | undefined
+  let moveVersion: string | undefined
+  let deleteVersion: string | undefined
+  const port = {
+    ...fakePort(),
+    fsUpdateNode: async (_kind: string, _id: string, _patch: unknown, version?: string) => {
+      updateVersion = version
+      return bm
+    },
+    fsMoveNode: async (
+      _kind: string,
+      _id: string,
+      _parentId: string | null,
+      _afterSortKey?: string | null,
+      version?: string,
+    ) => {
+      moveVersion = version
+      return bm
+    },
+    fsDeleteNode: async (_kind: string, _id: string, version?: string) => {
+      deleteVersion = version
+    },
+  } as FilesPort
+  const files = makeScopedFiles(port, false)
+
+  await files.updateNode("bookmark", "b", { title: "next" }, "11")
+  await files.moveNode("bookmark", "b", null, undefined, "12")
+  await files.deleteNode("bookmark", "b", "13")
+  assert.deepEqual([updateVersion, moveVersion, deleteVersion], ["11", "12", "13"])
+})
+
 const noteContent = (n: Node) => (n as NodeOfKind<"note">).content
 const threadMsgs = (n: Node) => (n as NodeOfKind<"thread">).content.messages
 

@@ -7,6 +7,7 @@ import * as React from "react"
 import { Loader2, Send, Sparkles, Wrench, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/ui/button"
+import { Chip } from "@/ui/chip"
 import { Textarea } from "@/ui/textarea"
 import {
   DropdownMenu,
@@ -15,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
 import type { AgentSkill } from "../lib/agent-skills"
+import type { AgentToolPreview } from "../lib/agent-tool-preview"
 import { ComposerShell } from "./ui-kit"
 
 /** 工具执行确认条 (approvalPolicy=confirm 时智能体调工具前弹出): 允许 / 拒绝。 */
@@ -24,17 +26,40 @@ export function ToolApprovalBar({
   onDecide,
 }: {
   compact: boolean
-  pending: { name: string; argsText: string }
+  pending: AgentToolPreview
   onDecide: (allow: boolean) => void
 }) {
   return (
     <div className={cn("shrink-0", compact ? "px-4 pb-3" : "mt-4")}>
-      <ComposerShell className="flex items-center justify-between gap-3 text-sm">
-        <span className="min-w-0 text-[13px]">
-          <span className="font-medium">请求执行工具</span>
-          <span className="ml-1 font-mono text-muted-foreground">
-            {pending.name}
-            {pending.argsText ? `(${pending.argsText})` : ""}
+      <ComposerShell className="flex items-start justify-between gap-4 text-sm">
+        <span className="min-w-0 space-y-2 text-[13px]">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{pending.title}</span>
+            <Chip
+              tone={
+                pending.risk === "high" ? "error" : pending.risk === "medium" ? "warn" : "neutral"
+              }
+            >
+              {pending.risk === "high" ? "高风险" : pending.risk === "medium" ? "中风险" : "低风险"}
+            </Chip>
+          </span>
+          <span className="block leading-5 text-muted-foreground">{pending.summary}</span>
+          {pending.target && (
+            <span className="block break-all">
+              <span className="text-muted-foreground">目标：</span>
+              {pending.target.label}
+              {pending.target.kind ? ` · ${pending.target.kind}` : ""}
+              {pending.target.id ? ` · ${pending.target.id}` : ""}
+            </span>
+          )}
+          {pending.fields.map((field) => (
+            <span key={field.label} className="block break-all">
+              <span className="text-muted-foreground">{field.label}：</span>
+              {field.value}
+            </span>
+          ))}
+          <span className="block font-mono text-[11px] text-muted-foreground">
+            {pending.toolName}
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
@@ -53,6 +78,7 @@ export function ToolApprovalBar({
 export default function AgentComposer({
   compact,
   configured,
+  preparing,
   sending,
   streaming,
   agentMode,
@@ -68,6 +94,8 @@ export default function AgentComposer({
 }: {
   compact: boolean
   configured: boolean
+  /** 正在读取上下文、创建线程或解析运行配置；尚无可中止的网络请求。 */
+  preparing: boolean
   sending: boolean
   /** 是否正在流式输出 (发送钮的 spinner 态)。 */
   streaming: boolean
@@ -84,6 +112,7 @@ export default function AgentComposer({
 }) {
   // WebKitGTK 下 keydown.isComposing 不可靠, 以 composition 事件自记组合态兜底 (防 IME 上屏误发送)。
   const composingRef = React.useRef(false)
+  const busy = preparing || sending
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !composingRef.current) {
@@ -111,7 +140,7 @@ export default function AgentComposer({
           <button
             type="button"
             onClick={onToggleAgentMode}
-            disabled={sending}
+            disabled={busy}
             title="开启后智能体可读写「我的」的数据"
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] transition-colors disabled:opacity-50",
@@ -127,7 +156,7 @@ export default function AgentComposer({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                disabled={sending}
+                disabled={busy}
                 title="一键技能"
                 className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-accent disabled:opacity-50"
               >
@@ -161,7 +190,7 @@ export default function AgentComposer({
             value={input}
             placeholder={
               !configured && compact
-                ? "配置 API Key 后即可对话…"
+                ? "配置执行后端后即可对话…"
                 : agentMode
                   ? "让智能体整理本机的关注、书签、资源…"
                   : "输入消息，Enter 发送，Shift+Enter 换行"
@@ -192,10 +221,10 @@ export default function AgentComposer({
               size="icon"
               className="h-9 w-9 shrink-0"
               onClick={onSend}
-              disabled={!input.trim()}
+              disabled={preparing || !input.trim()}
               title="发送"
             >
-              {streaming ? (
+              {preparing || streaming ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />

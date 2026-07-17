@@ -6,6 +6,10 @@ import type { FileRef } from "@protocol/file-system"
  */
 export const AUDIO_FILE_SYSTEM_ID = "app.audio-library"
 export const AGENT_CONFIG_FILE_SYSTEM_ID = "app.agent-config"
+export const AGENT_AUDIT_FILE_SYSTEM_ID = "app.agent-write-audit"
+export const AGENT_AUDIT_APPEND_ACTION = "audit.append"
+export const AGENT_AUDIT_COMPLETE_ACTION = "audit.complete"
+export const AGENT_AUDIT_WRITE_PERMISSION = "agent.audit:write"
 export const DATABASE_FILE_SYSTEM_ID = "app.database"
 export const GIT_FILE_SYSTEM_ID = "app.git-repositories"
 export const INSTALLED_APPS_FILE_SYSTEM_ID = "third-party.installed-apps"
@@ -14,6 +18,7 @@ export const AGENT_CONFIG_ROOT_MEDIA_TYPE = "application/vnd.ideall.agent-config
 export const AGENT_SETTINGS_MEDIA_TYPE = "application/vnd.ideall.agent-settings+json"
 export const AGENT_WORKSPACES_MEDIA_TYPE = "application/vnd.ideall.agent-workspaces+json"
 export const AGENT_TASKS_MEDIA_TYPE = "application/vnd.ideall.agent-tasks+json"
+export const AGENT_AUDIT_MEDIA_TYPE = "application/vnd.ideall.agent-write-audit+json"
 export const INSTALLED_APPS_ROOT_MEDIA_TYPE = "application/vnd.ideall.installed-apps+json"
 export const SETTINGS_ROOT_MEDIA_TYPE = "application/vnd.ideall.settings+json"
 
@@ -35,6 +40,11 @@ export const AGENT_WORKSPACES_FILE_REF: FileRef = {
 export const AGENT_TASKS_FILE_REF: FileRef = {
   fileSystemId: AGENT_CONFIG_FILE_SYSTEM_ID,
   fileId: "config:tasks",
+}
+
+export const AGENT_AUDIT_FILE_REF: FileRef = {
+  fileSystemId: AGENT_AUDIT_FILE_SYSTEM_ID,
+  fileId: "audit.json",
 }
 
 export const AUDIO_LIBRARY_ROOT_REF: FileRef = {

@@ -1,6 +1,7 @@
 import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
 import type { ResourceMeta, ResourceRecord, ResourceRef } from "@protocol/resource"
+import { CAPTURE_BOOKMARK_ACTION } from "@protocol/capture"
 import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
 import {
   clearResourceSourcesForTest,
@@ -384,6 +385,32 @@ test("resource filesystem: management navigation targets real place roots", asyn
     const panel = await fs.stat(panelFileRef(panelId), ctx)
     assert.equal(panel?.properties?.navigationHidden, true, panelId)
   }
+})
+
+test("resource filesystem: bookmarks root advertises a permission-gated capture action", async () => {
+  const fs = createResourceFileSystem()
+  const root = corePlaceRef("bookmarks")
+  const actions = await fs.actions(root, { actor: "ui", permissions: [], intent: "action" })
+  const capture = actions.find((action) => action.id === CAPTURE_BOOKMARK_ACTION)
+  assert.deepEqual(capture, {
+    id: CAPTURE_BOOKMARK_ACTION,
+    label: "保存到我的",
+    requires: ["create"],
+    risk: "safe",
+    idempotent: true,
+    kind: "specialized",
+    reason: "由内容界面提供链接、标题和摘要",
+  })
+
+  await assert.rejects(
+    fs.invoke(
+      root,
+      CAPTURE_BOOKMARK_ACTION,
+      { title: "Blocked", url: "https://example.com" },
+      { actor: "embed", permissions: [], intent: "action" },
+    ),
+    (error) => error instanceof FileSystemError && error.code === "permission-denied",
+  )
 })
 
 test("resource filesystem: AI threads are linked from Home while the legacy workspace root remains", async () => {

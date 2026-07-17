@@ -10,10 +10,12 @@ import {
   FolderOpen,
   History,
   Home,
+  Inbox,
   Newspaper,
   Rss,
   Search,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Trash2,
@@ -64,6 +66,7 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
 
 const NAVIGATION_ICONS: Readonly<Record<string, NavigationIcon>> = {
   home: Home,
+  inbox: Inbox,
   history: History,
   compass: Compass,
   "app-window": AppWindow,
@@ -82,6 +85,7 @@ const NAVIGATION_ICONS: Readonly<Record<string, NavigationIcon>> = {
   sliders: SlidersHorizontal,
   "sliders-horizontal": SlidersHorizontal,
   bot: Bot,
+  "shield-check": ShieldCheck,
 }
 
 export function navigationIconForHint(

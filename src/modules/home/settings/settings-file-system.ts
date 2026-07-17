@@ -29,8 +29,31 @@ import {
 } from "@/plugins/embed/connections"
 import {
   runtimeExtensionCatalog,
+  runtimeExtensionPackageRejections,
+  subscribeRuntimeExtensionPackageRejections,
   type RuntimeExtensionCatalogState,
+  type RuntimeExtensionPackageRejection,
 } from "@/shell/runtime-extensions"
+import {
+  desktopRuntimeExtensionManagementAvailable,
+  applyDesktopRuntimeExtensionUpdate,
+  applyDesktopRuntimeExtensionPublisherRotation,
+  discardDesktopRuntimeExtensionUpdate,
+  desktopRuntimeExtensionPackages,
+  getDesktopRuntimeExtensionRegistrySnapshot,
+  importDesktopRuntimeExtensionRevocations,
+  inspectDesktopRuntimeExtensionPublisher,
+  inspectDesktopRuntimeExtensionPublisherRotation,
+  installDesktopRuntimeExtensionPackage,
+  listDesktopRuntimeExtensionPublishers,
+  prepareDesktopRuntimeExtensionUpdate,
+  revokeDesktopRuntimeExtensionPublisher,
+  refreshDesktopRuntimeExtensionRegistry,
+  rollbackDesktopRuntimeExtensionPackage,
+  trustDesktopRuntimeExtensionPublisher,
+  uninstallDesktopRuntimeExtensionPackage,
+} from "@/shell/runtime-extensions/desktop-host"
+import type { NativeRuntimeExtensionRegistrySnapshot } from "@/shell/runtime-extensions/native-host"
 import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
   SETTINGS_DATA_EXPORT_ACTION,
@@ -44,12 +67,27 @@ import {
   SETTINGS_ROOT_MEDIA_TYPE,
   SETTINGS_ROOT_REF,
   SETTINGS_RUNTIME_ACTIONS,
+  SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+  SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_AUTHORIZE_ACTION,
+  SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION,
+  SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION,
   SETTINGS_RUNTIME_RETRY_ACTION,
+  SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION,
+  SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_REVOKE_ACTION,
+  SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_UNINSTALL_ACTION,
   SETTINGS_SECTION_IDS,
   SETTINGS_SECTION_MEDIA_TYPE,
   SETTINGS_WRITE_PERMISSION,
+  decodeRuntimeExtensionPublisherRotationCandidate,
+  decodeRuntimeExtensionUpdateCandidate,
   settingsSectionFileRef,
   type SettingsDataExportResult,
   type SettingsDataImportPreview,
@@ -58,6 +96,10 @@ import {
   type SettingsDataSecureStoreMigrationResult,
   type SettingsDataSecureStoreSelfTestResult,
   type SettingsRuntimeAction,
+  type RuntimeExtensionPublisherCandidate,
+  type RuntimeExtensionPublisherRotationCandidate,
+  type RuntimeExtensionRegistrySettings,
+  type RuntimeExtensionUpdateCandidate,
   type SettingsSectionId,
   type SettingsThemeChoice,
 } from "./settings-contract"
@@ -75,8 +117,21 @@ export {
   SETTINGS_READ_PERMISSION,
   SETTINGS_ROOT_MEDIA_TYPE,
   SETTINGS_ROOT_REF,
+  SETTINGS_RUNTIME_AUTHORIZE_ACTION,
+  SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+  SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION,
+  SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION,
   SETTINGS_RUNTIME_RETRY_ACTION,
+  SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION,
+  SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_REVOKE_ACTION,
+  SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_UNINSTALL_ACTION,
   SETTINGS_SECTION_IDS,
   SETTINGS_SECTION_MEDIA_TYPE,
@@ -145,6 +200,22 @@ export type SettingsFileSystemDeps = Readonly<{
   migrateSecureStore(): MaybePromise<SettingsDataSecureStoreMigrationResult>
   revokeConnection(id: string): MaybePromise<boolean>
   manageRuntimeExtension(action: SettingsRuntimeAction, id: string): MaybePromise<boolean>
+  inspectRuntimeExtensionPublisher?(): MaybePromise<RuntimeExtensionPublisherCandidate | null>
+  inspectRuntimeExtensionPublisherRotation?(): MaybePromise<RuntimeExtensionPublisherRotationCandidate | null>
+  applyRuntimeExtensionPublisherRotation?(
+    candidate: RuntimeExtensionPublisherRotationCandidate,
+  ): MaybePromise<unknown>
+  trustRuntimeExtensionPublisher?(
+    candidate: RuntimeExtensionPublisherCandidate,
+  ): MaybePromise<boolean>
+  revokeRuntimeExtensionPublisher?(publisher: string, fingerprint: string): MaybePromise<boolean>
+  importRuntimeExtensionRevocations?(): MaybePromise<unknown>
+  installRuntimeExtensionPackage?(): MaybePromise<unknown>
+  prepareRuntimeExtensionUpdate?(id: string): MaybePromise<RuntimeExtensionUpdateCandidate>
+  applyRuntimeExtensionUpdate?(candidate: RuntimeExtensionUpdateCandidate): MaybePromise<unknown>
+  discardRuntimeExtensionUpdate?(token: string): MaybePromise<boolean>
+  rollbackRuntimeExtensionPackage?(id: string): MaybePromise<unknown>
+  refreshRuntimeExtensionRegistry?(): MaybePromise<NativeRuntimeExtensionRegistrySnapshot>
   subscribe(section: SettingsSectionId, listener: () => void): () => void
 }>
 
@@ -183,6 +254,39 @@ function redactDiagnosticString(value: string): string {
   return redacted.length > MAX_DIAGNOSTIC_LENGTH
     ? `${redacted.slice(0, MAX_DIAGNOSTIC_LENGTH - 1)}…`
     : redacted
+}
+
+function runtimeExtensionRegistryFailureCode(value: unknown): string {
+  const candidate = typeof value === "string" ? value : value instanceof Error ? value.message : ""
+  return /^[a-z0-9-]{1,128}$/.test(candidate) ? candidate : "extension-registry-unavailable"
+}
+
+function runtimeExtensionRegistrySettings(
+  snapshot: NativeRuntimeExtensionRegistrySnapshot | null,
+  failureCode: string | null = null,
+): RuntimeExtensionRegistrySettings {
+  if (snapshot === null) {
+    return {
+      status: "unavailable",
+      source: null,
+      fetchedAt: null,
+      generatedAt: null,
+      expiresAt: null,
+      sequence: null,
+      failureCode,
+      entries: [],
+    }
+  }
+  return {
+    status: snapshot.stale ? "stale" : "current",
+    source: snapshot.source,
+    fetchedAt: snapshot.fetchedAt,
+    generatedAt: snapshot.generatedAt,
+    expiresAt: snapshot.expiresAt,
+    sequence: snapshot.sequence,
+    failureCode: snapshot.failureCode,
+    entries: snapshot.entries,
+  }
 }
 
 /** 把不可信诊断压缩成有界、无循环、无常见凭证与命令参数的 JSON 安全值。 */
@@ -241,19 +345,51 @@ export function settingsDiagnosticMessage(failure: unknown): string | null {
   return text.length > MAX_DIAGNOSTIC_LENGTH ? `${text.slice(0, MAX_DIAGNOSTIC_LENGTH - 1)}…` : text
 }
 
-export function settingsRuntimeExtensionSnapshot(state: RuntimeExtensionCatalogState) {
+export function settingsRuntimeExtensionSnapshot(
+  state: RuntimeExtensionCatalogState,
+  packageValue?: Readonly<{
+    publisherFingerprint: string
+    rollbackVersion: number | null
+  }>,
+) {
   return {
     id: state.id,
     label: state.label,
     version: state.version,
     source: state.source ? { kind: state.source.kind, id: state.source.id } : null,
+    publisherFingerprint: packageValue?.publisherFingerprint ?? null,
     permissions: [...state.permissions],
     digest: state.digest,
     permissionDigest: state.permissionDigest,
+    verification: state.verification ? { ...state.verification } : null,
+    grantedAt: state.grantedAt,
     desired: state.desired,
     health: state.health,
     failure: settingsDiagnosticMessage(state.failure),
     pendingCleanup: state.pendingCleanup.map(redactDiagnosticString),
+    rollbackVersion: packageValue?.rollbackVersion ?? null,
+  }
+}
+
+export function settingsRejectedRuntimeExtensionSnapshot(
+  rejection: RuntimeExtensionPackageRejection,
+) {
+  return {
+    id: `rejected:${rejection.directory}`,
+    label: rejection.directory,
+    version: 0,
+    source: null,
+    publisherFingerprint: null,
+    permissions: [],
+    digest: "",
+    permissionDigest: "",
+    verification: null,
+    grantedAt: null,
+    desired: false,
+    health: "rejected" as const,
+    failure: settingsDiagnosticMessage(rejection.code),
+    pendingCleanup: [],
+    rollbackVersion: null,
   }
 }
 
@@ -381,6 +517,7 @@ const defaultDeps: SettingsFileSystemDeps = {
             blobs: number
             trashSnapshots: number
             agentTasks: number
+            agentWriteAudits: number
           } | null
           error: string | null
         }
@@ -390,6 +527,7 @@ const defaultDeps: SettingsFileSystemDeps = {
             database.STORE_BLOBS,
             database.STORE_TRASH_SNAPSHOTS,
             database.STORE_AGENT_TASKS,
+            database.STORE_AGENT_WRITE_AUDIT,
           ])
           databaseHealth = {
             status: "healthy",
@@ -398,6 +536,7 @@ const defaultDeps: SettingsFileSystemDeps = {
               blobs: counts[database.STORE_BLOBS] ?? 0,
               trashSnapshots: counts[database.STORE_TRASH_SNAPSHOTS] ?? 0,
               agentTasks: counts[database.STORE_AGENT_TASKS] ?? 0,
+              agentWriteAudits: counts[database.STORE_AGENT_WRITE_AUDIT] ?? 0,
             },
             error: null,
           }
@@ -443,8 +582,33 @@ const defaultDeps: SettingsFileSystemDeps = {
           permissions: [...connection.permissions],
           grantedAt: connection.grantedAt,
         }))
-      case "runtime-extensions":
-        return runtimeExtensionCatalog.states().map(settingsRuntimeExtensionSnapshot)
+      case "runtime-extensions": {
+        let registry: RuntimeExtensionRegistrySettings
+        try {
+          registry = runtimeExtensionRegistrySettings(
+            await getDesktopRuntimeExtensionRegistrySnapshot(),
+          )
+        } catch (error) {
+          registry = runtimeExtensionRegistrySettings(
+            null,
+            runtimeExtensionRegistryFailureCode(error),
+          )
+        }
+        return {
+          nativeAvailable: desktopRuntimeExtensionManagementAvailable(),
+          extensions: [
+            ...runtimeExtensionCatalog.states().map((state) => {
+              const packageValue = desktopRuntimeExtensionPackages().find(
+                (item) => item.id === state.id,
+              )
+              return settingsRuntimeExtensionSnapshot(state, packageValue)
+            }),
+            ...runtimeExtensionPackageRejections().map(settingsRejectedRuntimeExtensionSnapshot),
+          ],
+          publishers: await listDesktopRuntimeExtensionPublishers(),
+          registry,
+        }
+      }
     }
   },
   writeAppearance: setThemeChoice,
@@ -525,13 +689,51 @@ const defaultDeps: SettingsFileSystemDeps = {
   },
   manageRuntimeExtension(action, id) {
     switch (action) {
+      case SETTINGS_RUNTIME_AUTHORIZE_ACTION:
+        return runtimeExtensionCatalog.authorize(id)
       case SETTINGS_RUNTIME_RETRY_ACTION:
         return runtimeExtensionCatalog.retry(id)
       case SETTINGS_RUNTIME_REVOKE_ACTION:
         return runtimeExtensionCatalog.revoke(id)
       case SETTINGS_RUNTIME_UNINSTALL_ACTION:
-        return runtimeExtensionCatalog.uninstall(id)
+        return uninstallDesktopRuntimeExtensionPackage(id)
     }
+  },
+  inspectRuntimeExtensionPublisher() {
+    return inspectDesktopRuntimeExtensionPublisher()
+  },
+  inspectRuntimeExtensionPublisherRotation() {
+    return inspectDesktopRuntimeExtensionPublisherRotation()
+  },
+  applyRuntimeExtensionPublisherRotation(candidate) {
+    return applyDesktopRuntimeExtensionPublisherRotation(candidate)
+  },
+  trustRuntimeExtensionPublisher(candidate) {
+    return trustDesktopRuntimeExtensionPublisher(candidate)
+  },
+  revokeRuntimeExtensionPublisher(publisher, fingerprint) {
+    return revokeDesktopRuntimeExtensionPublisher(publisher, fingerprint)
+  },
+  importRuntimeExtensionRevocations() {
+    return importDesktopRuntimeExtensionRevocations()
+  },
+  installRuntimeExtensionPackage() {
+    return installDesktopRuntimeExtensionPackage()
+  },
+  prepareRuntimeExtensionUpdate(id) {
+    return prepareDesktopRuntimeExtensionUpdate(id)
+  },
+  applyRuntimeExtensionUpdate(candidate) {
+    return applyDesktopRuntimeExtensionUpdate(candidate)
+  },
+  discardRuntimeExtensionUpdate(token) {
+    return discardDesktopRuntimeExtensionUpdate(token)
+  },
+  rollbackRuntimeExtensionPackage(id) {
+    return rollbackDesktopRuntimeExtensionPackage(id)
+  },
+  refreshRuntimeExtensionRegistry() {
+    return refreshDesktopRuntimeExtensionRegistry()
   },
   subscribe(section, listener) {
     switch (section) {
@@ -548,7 +750,10 @@ const defaultDeps: SettingsFileSystemDeps = {
       case "connections":
         return subscribeConnections(listener)
       case "runtime-extensions":
-        return runtimeExtensionCatalog.subscribe(listener)
+        return combineSubscriptions(
+          (notify) => runtimeExtensionCatalog.subscribe(notify),
+          subscribeRuntimeExtensionPackageRejections,
+        )(listener)
     }
   },
 }
@@ -723,6 +928,123 @@ function settingsActionTargetId(ref: FileRef, input: unknown): string {
   return id
 }
 
+function settingsActionNoInput(ref: FileRef, input: unknown): void {
+  if (input !== undefined) {
+    throw new FileSystemError("invalid-input", "Settings action takes no input", ref)
+  }
+}
+
+function settingsPublisherCandidate(
+  ref: FileRef,
+  input: unknown,
+): RuntimeExtensionPublisherCandidate {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Publisher trust requires a candidate", ref)
+  }
+  const candidate = input as Record<string, unknown>
+  const keys = Object.keys(candidate).sort()
+  if (
+    keys.join(",") !== "fingerprint,label,publicKey,publisher" ||
+    typeof candidate.publisher !== "string" ||
+    typeof candidate.label !== "string" ||
+    typeof candidate.publicKey !== "string" ||
+    typeof candidate.fingerprint !== "string" ||
+    !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(candidate.publisher) ||
+    candidate.publisher.length > 128 ||
+    candidate.label.length === 0 ||
+    candidate.label.length > 160 ||
+    candidate.publicKey.length === 0 ||
+    candidate.publicKey.length > 256 ||
+    !/^sha256:[A-Za-z0-9_-]{43}$/.test(candidate.fingerprint)
+  ) {
+    throw new FileSystemError("invalid-input", "Publisher trust candidate is invalid", ref)
+  }
+  return {
+    publisher: candidate.publisher,
+    label: candidate.label,
+    publicKey: candidate.publicKey,
+    fingerprint: candidate.fingerprint,
+  }
+}
+
+function settingsPublisherTarget(
+  ref: FileRef,
+  input: unknown,
+): { publisher: string; fingerprint: string } {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Publisher revocation requires a target", ref)
+  }
+  const candidate = input as Record<string, unknown>
+  const keys = Object.keys(candidate).sort()
+  if (
+    keys.join(",") !== "fingerprint,publisher" ||
+    typeof candidate.publisher !== "string" ||
+    typeof candidate.fingerprint !== "string" ||
+    !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(candidate.publisher) ||
+    candidate.publisher.length > 128 ||
+    !/^sha256:[A-Za-z0-9_-]{43}$/.test(candidate.fingerprint)
+  ) {
+    throw new FileSystemError("invalid-input", "Publisher revocation target is invalid", ref)
+  }
+  return { publisher: candidate.publisher, fingerprint: candidate.fingerprint }
+}
+
+function settingsPublisherRotationCandidate(
+  ref: FileRef,
+  input: unknown,
+): RuntimeExtensionPublisherRotationCandidate {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Publisher rotation requires a candidate", ref)
+  }
+  const keys = Object.keys(input).sort()
+  if (
+    keys.join(",") !==
+    "currentFingerprint,currentSignature,issuedAt,label,nextFingerprint,nextSignature,payload,publisher,sequence"
+  ) {
+    throw new FileSystemError("invalid-input", "Publisher rotation candidate is invalid", ref)
+  }
+  try {
+    const candidate = decodeRuntimeExtensionPublisherRotationCandidate(input)
+    if (candidate) return candidate
+  } catch {
+    // Convert the public document decoder failure into a provider-scoped input error.
+  }
+  throw new FileSystemError("invalid-input", "Publisher rotation candidate is invalid", ref)
+}
+
+function settingsUpdateCandidate(ref: FileRef, input: unknown): RuntimeExtensionUpdateCandidate {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Extension update requires a candidate", ref)
+  }
+  const keys = Object.keys(input).sort()
+  if (
+    keys.join(",") !==
+    "addedPermissions,currentPermissions,currentVersion,digest,id,label,nextPermissions,nextVersion,packageSha256,publishedAt,publisher,publisherFingerprint,registryExpiresAt,registrySequence,removedPermissions,token"
+  ) {
+    throw new FileSystemError("invalid-input", "Extension update candidate is invalid", ref)
+  }
+  try {
+    return decodeRuntimeExtensionUpdateCandidate(input)
+  } catch {
+    throw new FileSystemError("invalid-input", "Extension update candidate is invalid", ref)
+  }
+}
+
+function settingsUpdateToken(ref: FileRef, input: unknown): string {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    throw new FileSystemError("invalid-input", "Extension update discard requires a token", ref)
+  }
+  const candidate = input as Record<string, unknown>
+  if (
+    Object.keys(candidate).join(",") !== "token" ||
+    typeof candidate.token !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(candidate.token)
+  ) {
+    throw new FileSystemError("invalid-input", "Extension update token is invalid", ref)
+  }
+  return candidate.token
+}
+
 const OPEN_SETTINGS_ACTION = { id: "open", label: "打开", kind: "display" } as const
 
 const CONNECTION_SETTINGS_ACTIONS: readonly FileAction[] = [
@@ -740,6 +1062,102 @@ const CONNECTION_SETTINGS_ACTIONS: readonly FileAction[] = [
 const RUNTIME_EXTENSION_SETTINGS_ACTIONS: readonly FileAction[] = [
   OPEN_SETTINGS_ACTION,
   {
+    id: SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION,
+    label: "刷新联网扩展目录",
+    kind: "specialized",
+    reason: "由原生宿主访问固定官方端点，逐页验签后原子更新本地缓存。",
+    risk: "safe",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION,
+    label: "安装或更新签名扩展包",
+    kind: "specialized",
+    reason: "需要由原生文件选择器读取扩展包，并在宿主中完成验签与原子安装。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION,
+    label: "下载并检查签名扩展更新",
+    kind: "specialized",
+    reason: "从已验签且未过期的 Registry 条目下载包，并复验 SHA、publisher、签名和权限差异。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+    label: "应用签名扩展更新",
+    kind: "specialized",
+    reason: "停止旧 connector、撤销旧授权并原子安装已复验更新，保留一个可信回滚版本。",
+    risk: "destructive",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION,
+    label: "丢弃签名扩展更新候选",
+    kind: "specialized",
+    reason: "删除尚未安装的已下载更新临时文件。",
+    risk: "safe",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION,
+    label: "检查 publisher 信任根",
+    kind: "specialized",
+    reason: "先读取并展示 publisher 身份和公钥指纹，确认后才能建立信任。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION,
+    label: "信任 publisher",
+    kind: "specialized",
+    reason: "publisher 根会影响其签名扩展能否进入授权流程，必须核对指纹并明确确认。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION,
+    label: "检查 publisher 密钥轮换",
+    kind: "specialized",
+    reason: "宿主先用当前密钥与下一密钥双重验证轮换信封，再展示序列和指纹供确认。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+    label: "应用 publisher 密钥轮换",
+    kind: "specialized",
+    reason: "会退役旧密钥并停止所有仍由旧密钥签名的扩展，必须重新签名、安装和授权。",
+    risk: "destructive",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION,
+    label: "撤销 publisher 信任",
+    kind: "specialized",
+    reason: "会立即停止并拒绝该 publisher 的全部扩展。",
+    risk: "destructive",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION,
+    label: "导入签名撤销清单",
+    kind: "specialized",
+    reason: "宿主将验证 publisher 签名、单调序列和累积撤销约束。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_AUTHORIZE_ACTION,
+    label: "验证并授权运行时扩展",
+    kind: "specialized",
+    reason: "需要验证扩展来源并让用户查看后明确授予所列权限。",
+    risk: "caution",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
     id: SETTINGS_RUNTIME_RETRY_ACTION,
     label: "重试运行时扩展",
     kind: "specialized",
@@ -752,6 +1170,14 @@ const RUNTIME_EXTENSION_SETTINGS_ACTIONS: readonly FileAction[] = [
     label: "撤销运行时扩展授权",
     kind: "specialized",
     reason: "需要结合扩展来源与授权状态选择目标并确认。",
+    risk: "destructive",
+    requires: [SETTINGS_WRITE_PERMISSION],
+  },
+  {
+    id: SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION,
+    label: "回滚运行时扩展",
+    kind: "specialized",
+    reason: "需要停止当前版本并恢复宿主保留的上一已验证版本。",
     risk: "destructive",
     requires: [SETTINGS_WRITE_PERMISSION],
   },
@@ -1221,6 +1647,299 @@ export function createSettingsFileSystem(
             ref,
           )
         }
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        settingsActionNoInput(ref, input)
+        if (!deps.refreshRuntimeExtensionRegistry) {
+          throw new FileSystemError("unsupported", "Extension registry is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.refreshRuntimeExtensionRegistry!()
+            scheduleNotification(section)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Extension registry refresh failed: ${runtimeExtensionRegistryFailureCode(error)}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (
+        section === "runtime-extensions" &&
+        action === SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION
+      ) {
+        assertSettingsMutationAccess(ref, ctx)
+        settingsActionNoInput(ref, input)
+        if (!deps.inspectRuntimeExtensionPublisher) {
+          throw new FileSystemError("unsupported", "Publisher inspection is unavailable", ref)
+        }
+        try {
+          return await deps.inspectRuntimeExtensionPublisher()
+        } catch (error) {
+          if (error instanceof FileSystemError) throw error
+          throw new FileSystemError(
+            "unavailable",
+            `Publisher inspection failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+            ref,
+          )
+        }
+      }
+
+      if (
+        section === "runtime-extensions" &&
+        action === SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION
+      ) {
+        assertSettingsMutationAccess(ref, ctx)
+        settingsActionNoInput(ref, input)
+        if (!deps.inspectRuntimeExtensionPublisherRotation) {
+          throw new FileSystemError(
+            "unsupported",
+            "Publisher rotation inspection is unavailable",
+            ref,
+          )
+        }
+        try {
+          return await deps.inspectRuntimeExtensionPublisherRotation()
+        } catch (error) {
+          if (error instanceof FileSystemError) throw error
+          throw new FileSystemError(
+            "unavailable",
+            `Publisher rotation inspection failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+            ref,
+          )
+        }
+      }
+
+      if (
+        section === "runtime-extensions" &&
+        action === SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION
+      ) {
+        assertSettingsMutationAccess(ref, ctx)
+        const candidate = settingsPublisherRotationCandidate(ref, input)
+        if (!deps.applyRuntimeExtensionPublisherRotation) {
+          throw new FileSystemError("unsupported", "Publisher rotation is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.applyRuntimeExtensionPublisherRotation!(candidate)
+            scheduleNotification(section)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Publisher rotation failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        const id = settingsActionTargetId(ref, input)
+        if (!deps.prepareRuntimeExtensionUpdate) {
+          throw new FileSystemError(
+            "unsupported",
+            "Extension update preparation is unavailable",
+            ref,
+          )
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            return await deps.prepareRuntimeExtensionUpdate!(id)
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Extension update preparation failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_APPLY_UPDATE_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        const candidate = settingsUpdateCandidate(ref, input)
+        if (!deps.applyRuntimeExtensionUpdate) {
+          throw new FileSystemError("unsupported", "Extension update is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.applyRuntimeExtensionUpdate!(candidate)
+            scheduleNotification(section)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Extension update failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        const token = settingsUpdateToken(ref, input)
+        if (!deps.discardRuntimeExtensionUpdate) {
+          throw new FileSystemError("unsupported", "Extension update discard is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          try {
+            return { changed: await deps.discardRuntimeExtensionUpdate!(token) }
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Extension update discard failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        settingsActionNoInput(ref, input)
+        if (!deps.installRuntimeExtensionPackage) {
+          throw new FileSystemError("unsupported", "Extension installation is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.installRuntimeExtensionPackage!()
+            scheduleNotification(section)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Extension installation failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        const candidate = settingsPublisherCandidate(ref, input)
+        if (!deps.trustRuntimeExtensionPublisher) {
+          throw new FileSystemError("unsupported", "Publisher trust is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const changed = await deps.trustRuntimeExtensionPublisher!(candidate)
+            if (changed) scheduleNotification(section)
+            return { changed: Boolean(changed) }
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Publisher trust failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        const target = settingsPublisherTarget(ref, input)
+        if (!deps.revokeRuntimeExtensionPublisher) {
+          throw new FileSystemError("unsupported", "Publisher revocation is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const changed = await deps.revokeRuntimeExtensionPublisher!(
+              target.publisher,
+              target.fingerprint,
+            )
+            if (changed) scheduleNotification(section)
+            return { changed: Boolean(changed) }
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Publisher revocation failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (
+        section === "runtime-extensions" &&
+        action === SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION
+      ) {
+        assertSettingsMutationAccess(ref, ctx)
+        settingsActionNoInput(ref, input)
+        if (!deps.importRuntimeExtensionRevocations) {
+          throw new FileSystemError("unsupported", "Revocation import is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.importRuntimeExtensionRevocations!()
+            scheduleNotification(section)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Revocation import failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
+      }
+
+      if (section === "runtime-extensions" && action === SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION) {
+        assertSettingsMutationAccess(ref, ctx)
+        const id = settingsActionTargetId(ref, input)
+        if (!deps.rollbackRuntimeExtensionPackage) {
+          throw new FileSystemError("unsupported", "Extension rollback is unavailable", ref)
+        }
+        return withSettingsSectionMutationLock(section, async () => {
+          const current = await snapshot(section, deps)
+          assertExpectedVersion(ref, options?.expectedVersion, current.version)
+          try {
+            const result = await deps.rollbackRuntimeExtensionPackage!(id)
+            scheduleNotification(section)
+            return result
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError(
+              "unavailable",
+              `Extension rollback failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
+              ref,
+            )
+          }
+        })
       }
 
       assertSettingsMutationAccess(ref, ctx)

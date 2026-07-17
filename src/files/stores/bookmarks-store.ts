@@ -9,6 +9,7 @@ import type { Node, NodeKind, NodeOfKind } from "@protocol/node"
 import { StorageSyncConflictError, type BookmarkSyncNode } from "@protocol/storage-sync"
 import { faviconForUrl } from "@/lib/favicon"
 import { genId } from "@/lib/id"
+import { canonicalHttpUrl } from "@/lib/canonical-http-url"
 import { expiredTombstoneIdsToDelete, isLive, recordsEqual } from "@protocol/sync"
 import { cmpSibling, computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
 import {
@@ -446,6 +447,78 @@ export async function addBookmarkWithNode(input: NewBookmark): Promise<BookmarkN
 /** 兼容既有 FilesPort DTO；创建真相由 addBookmarkWithNode 返回。 */
 export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
   return nodeToBookmark(await addBookmarkWithNode(input))
+}
+
+export type CaptureBookmarkStoreResult = Readonly<{
+  status: "created" | "existing"
+  bookmark: Bookmark
+}>
+
+/**
+ * 把外部内容幂等捕获为根级书签。
+ *
+ * canonical URL 检查与创建位于同一个 IndexedDB readwrite 事务内，因此新闻、社区、
+ * 浏览器或多个窗口同时捕获同一链接时只会提交一个对象。页面锚点不参与资产身份，
+ * query 仍保留；已归档对象只返回 existing，不会被静默重新放回收件箱。
+ */
+export async function captureBookmark(
+  input: Omit<NewBookmark, "folderId">,
+): Promise<CaptureBookmarkStoreResult> {
+  const url = input.url.trim()
+  const canonical = canonicalHttpUrl(url)
+  if (!canonical) throw new Error("只能捕获 HTTP(S) 链接")
+
+  const now = Date.now()
+  const id = genId("bm")
+  const outcome = await idbRunTransaction<{
+    status: "created" | "existing"
+    node: BookmarkNode
+  }>([STORE_NODES], "readwrite", (transaction, setResult, abort) => {
+    const store = transaction.objectStore(STORE_NODES)
+    const request = store.index(INDEX_NODES_KIND).getAll("bookmark")
+    request.onerror = () => abort(request.error ?? new Error("读取书签失败"))
+    request.onsuccess = () => {
+      try {
+        const existing = (request.result as Node[]).find((candidate): candidate is BookmarkNode => {
+          if (candidate.kind !== "bookmark" || !isLive(candidate)) return false
+          return canonicalHttpUrl(candidate.content.url) === canonical
+        })
+        if (existing) {
+          setResult({ status: "existing", node: existing })
+          return
+        }
+
+        addNodeAtKindTail(
+          store,
+          { kind: "bookmark", parentId: null },
+          (sortKey) => ({
+            id,
+            kind: "bookmark",
+            title: input.title.trim() || url,
+            parentId: null,
+            sortKey,
+            tags: [...new Set(input.tags ?? [])],
+            createdAt: now,
+            updatedAt: now,
+            content: {
+              url,
+              description: input.description?.trim() ?? "",
+              favicon: input.favicon || faviconForUrl(url),
+            },
+          }),
+          (node) => setResult({ status: "created", node }),
+          abort,
+        )
+      } catch (error) {
+        abort(error)
+      }
+    }
+  })
+
+  if (outcome.status === "created") {
+    notifyFilesUpdated({ kind: "bookmark", id: outcome.node.id })
+  }
+  return { status: outcome.status, bookmark: nodeToBookmark(outcome.node) }
 }
 
 export async function updateBookmark(

@@ -2,7 +2,18 @@
 
 // 内嵌浏览器标签内容 (路线 A): 顶部工具条 + 下方内容占位区; 原生子 webview 对齐占位区 (Windows/macOS/Linux)。
 import * as React from "react"
-import { ArrowLeft, ArrowRight, Globe, RotateCw } from "lucide-react"
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookmarkCheck,
+  BookmarkPlus,
+  FileCheck2,
+  FileDown,
+  Globe,
+  Highlighter,
+  Loader2,
+  RotateCw,
+} from "lucide-react"
 import { toast } from "sonner"
 import { IconButton } from "@/ui/icon-button"
 import { safeHref } from "@/lib/safe-url"
@@ -21,8 +32,17 @@ import {
   type BrowserBackendInfo,
 } from "@/lib/tauri"
 import { setBrowserUrl, setBrowserBackend } from "@/lib/browser-state"
+import {
+  captureCurrentBrowserExcerpt,
+  captureCurrentBrowserPage,
+  captureCurrentBrowserSnapshot,
+} from "./browser-capture"
 import { subscribePendingBrowserUrl, takePendingBrowserUrl } from "./browser-open"
 import { useTabActive } from "./tab-active-context"
+import {
+  captureBookmarkSuccessToast,
+  captureOnboardingToastGuide,
+} from "@/shared/feeders/capture-bookmark-feedback"
 
 const START_URL = "https://www.google.com"
 /** TopBar(44) + TabBar(36) + 浏览器卡片边距/工具条(≈64); 低于此 y 会盖住壳层 (HWND 在 CSS 之上)。 */
@@ -93,6 +113,10 @@ export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl
   const currentUrlRef = React.useRef(initialUrl)
   const [addr, setAddr] = React.useState(initialUrl)
   const [backend, setBackend] = React.useState<BrowserBackendInfo | null>(null)
+  const [captureState, setCaptureState] = React.useState<"idle" | "saving" | "saved">("idle")
+  const [snapshotState, setSnapshotState] = React.useState<"idle" | "saving" | "saved">("idle")
+  const [excerptState, setExcerptState] = React.useState<"idle" | "saving" | "saved">("idle")
+  const captureRunningRef = React.useRef(false)
 
   React.useEffect(() => {
     if (!isTauri()) return
@@ -220,6 +244,9 @@ export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl
       currentUrlRef.current = url
       setAddr(url)
       setBrowserUrl(url)
+      setCaptureState("idle")
+      setSnapshotState("idle")
+      setExcerptState("idle")
       if (openedRef.current) {
         browserNavigate(url).catch(() => toast.error("导航失败"))
         const b = boundsOf()
@@ -257,6 +284,9 @@ export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl
       currentUrlRef.current = u
       setAddr(u)
       setBrowserUrl(u)
+      setCaptureState("idle")
+      setSnapshotState("idle")
+      setExcerptState("idle")
     }).then((u) => {
       unUrl = u
     })
@@ -285,6 +315,9 @@ export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl
     currentUrlRef.current = v
     setAddr(v)
     setBrowserUrl(v)
+    setCaptureState("idle")
+    setSnapshotState("idle")
+    setExcerptState("idle")
     if (!(await ensureBrowserReady())) {
       toast.error("浏览器尚未就绪，请稍候再试")
       return
@@ -295,6 +328,86 @@ export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl
       toast.error("导航失败")
     }
   }
+
+  const capturePage = async () => {
+    if (captureRunningRef.current) return
+    if (!(await ensureBrowserReady())) {
+      toast.error("浏览器尚未就绪，请稍候再试")
+      return
+    }
+    captureRunningRef.current = true
+    setCaptureState("saving")
+    try {
+      const result = await captureCurrentBrowserPage()
+      setCaptureState("saved")
+      captureBookmarkSuccessToast({
+        status: result.status,
+        title: result.title,
+      })
+    } catch (error) {
+      setCaptureState("idle")
+      toast.error("保存当前页面失败", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      captureRunningRef.current = false
+    }
+  }
+
+  const captureSnapshot = async () => {
+    if (captureRunningRef.current) return
+    if (!(await ensureBrowserReady())) {
+      toast.error("浏览器尚未就绪，请稍候再试")
+      return
+    }
+    captureRunningRef.current = true
+    setSnapshotState("saving")
+    try {
+      const result = await captureCurrentBrowserSnapshot()
+      setSnapshotState("saved")
+      const guide = result.status === "created" ? captureOnboardingToastGuide() : null
+      toast.success(result.status === "existing" ? "当前页面已有离线快照" : "已保存离线快照", {
+        description: result.truncated ? `${result.title} · 正文过长，已截断保存` : result.title,
+        ...(guide?.action ? { action: guide.action } : {}),
+      })
+    } catch (error) {
+      setSnapshotState("idle")
+      toast.error("保存离线快照失败", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      captureRunningRef.current = false
+    }
+  }
+
+  const captureExcerpt = async () => {
+    if (captureRunningRef.current) return
+    if (!(await ensureBrowserReady())) {
+      toast.error("浏览器尚未就绪，请稍候再试")
+      return
+    }
+    captureRunningRef.current = true
+    setExcerptState("saving")
+    try {
+      const result = await captureCurrentBrowserExcerpt()
+      setExcerptState("saved")
+      const guide = result.status === "created" ? captureOnboardingToastGuide() : null
+      toast.success(result.status === "existing" ? "这段摘录已经保存" : "已保存选中文本", {
+        description: result.excerpt,
+        ...(guide?.action ? { action: guide.action } : {}),
+      })
+    } catch (error) {
+      setExcerptState("idle")
+      toast.error("保存网页摘录失败", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      captureRunningRef.current = false
+    }
+  }
+
+  const captureBusy =
+    captureState === "saving" || snapshotState === "saving" || excerptState === "saving"
 
   if (!tauri) {
     return (
@@ -369,6 +482,52 @@ export default function BrowserView({ initialUrl: initialUrlProp }: { initialUrl
               className="h-9 w-full min-w-0 rounded-lg border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </form>
+          <IconButton
+            onClick={() => void capturePage()}
+            disabled={captureBusy}
+            aria-label={captureState === "saved" ? "当前页面已保存" : "保存当前页面到书签"}
+            aria-pressed={captureState === "saved"}
+            title={captureState === "saved" ? "已保存到书签" : "保存到书签"}
+            className={captureState === "saved" ? "text-primary" : undefined}
+          >
+            {captureState === "saving" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : captureState === "saved" ? (
+              <BookmarkCheck className="h-4 w-4" />
+            ) : (
+              <BookmarkPlus className="h-4 w-4" />
+            )}
+          </IconButton>
+          <IconButton
+            onClick={() => void captureSnapshot()}
+            disabled={captureBusy}
+            aria-label={snapshotState === "saved" ? "当前页面已有离线快照" : "保存当前页面离线快照"}
+            aria-pressed={snapshotState === "saved"}
+            title={snapshotState === "saved" ? "已保存离线快照" : "保存离线快照"}
+            className={snapshotState === "saved" ? "text-primary" : undefined}
+          >
+            {snapshotState === "saving" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : snapshotState === "saved" ? (
+              <FileCheck2 className="h-4 w-4" />
+            ) : (
+              <FileDown className="h-4 w-4" />
+            )}
+          </IconButton>
+          <IconButton
+            onClick={() => void captureExcerpt()}
+            disabled={captureBusy}
+            aria-label={excerptState === "saved" ? "选中文本已保存" : "保存选中文本为网页摘录"}
+            aria-pressed={excerptState === "saved"}
+            title={excerptState === "saved" ? "选中文本已保存" : "保存选中文本"}
+            className={excerptState === "saved" ? "text-primary" : undefined}
+          >
+            {excerptState === "saving" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Highlighter className="h-4 w-4" />
+            )}
+          </IconButton>
         </div>
         <div ref={contentRef} className="relative z-0 min-h-0 flex-1 bg-background">
           {backend?.mode === "cdp" ? (

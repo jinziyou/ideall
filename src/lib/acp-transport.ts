@@ -63,34 +63,61 @@ async function makeMessageStream(opts: {
   send: (id: string, line: string) => Promise<void>
 }): Promise<{ stream: Stream; dispose: () => void }> {
   const { listen } = await import("@tauri-apps/api/event")
-  let unMsg: () => void = () => {}
-  let unClosed: () => void = () => {}
+  let controller: ReadableStreamDefaultController<AnyMessage> | undefined
+  const queued: AnyMessage[] = []
+  let remotelyClosed = false
+  let disposed = false
 
-  const readable = new ReadableStream<AnyMessage>({
-    async start(controller) {
-      unMsg = await listen<{ id?: string; connId?: string; line: string }>(
-        opts.messageEvent,
-        (e) => {
-          if ((e.payload.id ?? e.payload.connId) !== opts.id) return
-          try {
-            controller.enqueue(JSON.parse(e.payload.line) as AnyMessage)
-          } catch {
-            // 容错: ACP 保证每行合法 JSON。
-          }
-        },
-      )
-      unClosed = await listen<{ id?: string; connId?: string }>(opts.closedEvent, (e) => {
-        if ((e.payload.id ?? e.payload.connId) !== opts.id) return
+  const unMsg = await listen<{ id?: string; connId?: string; line: string }>(
+    opts.messageEvent,
+    (e) => {
+      if ((e.payload.id ?? e.payload.connId) !== opts.id || remotelyClosed) return
+      try {
+        const message = JSON.parse(e.payload.line) as AnyMessage
+        if (controller) controller.enqueue(message)
+        else queued.push(message)
+      } catch {
+        // 容错: ACP 保证每行合法 JSON。
+      }
+    },
+  )
+  let unClosed: () => void
+  try {
+    unClosed = await listen<{ id?: string; connId?: string }>(opts.closedEvent, (e) => {
+      if ((e.payload.id ?? e.payload.connId) !== opts.id || remotelyClosed) return
+      remotelyClosed = true
+      queued.length = 0
+      if (controller) {
         try {
           controller.close()
         } catch {
           // 已关。
         }
-      })
+      }
+    })
+  } catch (error) {
+    unMsg()
+    throw error
+  }
+
+  function dispose(): void {
+    if (disposed) return
+    disposed = true
+    unMsg()
+    unClosed()
+  }
+
+  const readable = new ReadableStream<AnyMessage>({
+    start(nextController) {
+      controller = nextController
+      if (remotelyClosed) {
+        nextController.close()
+        return
+      }
+      for (const message of queued.splice(0)) nextController.enqueue(message)
     },
     cancel() {
-      unMsg()
-      unClosed()
+      dispose()
     },
   })
 
@@ -102,10 +129,7 @@ async function makeMessageStream(opts: {
 
   return {
     stream: { readable, writable },
-    dispose() {
-      unMsg()
-      unClosed()
-    },
+    dispose,
   }
 }
 

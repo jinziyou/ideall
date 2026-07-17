@@ -70,6 +70,7 @@ const EmbedHost = React.lazy(() =>
 )
 
 const Overview = React.lazy(() => import("@/modules/home/overview"))
+const InboxPage = React.lazy(() => import("@/modules/home/inbox/inbox-page"))
 const NotesManager = React.lazy(() => import("@/modules/home/notes/notes-manager"))
 const SyncPanel = React.lazy(() => import("@/modules/home/subscriptions/sync-panel"))
 const SubscriptionFeed = React.lazy(() => import("@/modules/home/subscriptions/subscription-feed"))
@@ -111,6 +112,7 @@ function renderSubscriptionsSurface(): React.ReactNode {
 
 const REGISTRY: Partial<Record<StaticTabKind, Entry>> = {
   "home-overview": { render: () => <Overview /> },
+  "home-inbox": { render: () => <InboxPage /> },
   "home-notes": { render: () => <NotesManager /> },
   subscriptions: {
     render: renderSubscriptionsSurface,

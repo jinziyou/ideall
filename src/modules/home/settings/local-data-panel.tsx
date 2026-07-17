@@ -11,6 +11,7 @@ import {
   Download,
   Loader2,
   RefreshCw,
+  Search,
   ShieldAlert,
   ShieldCheck,
   Upload,
@@ -21,6 +22,14 @@ import type { FileDocumentBinding } from "@/shared/use-file-document"
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
 import { Panel } from "@/ui/panel"
+import {
+  getLocalSearchIndexStatus,
+  LOCAL_SEARCH_INDEX_UPDATED,
+  rebuildLocalSearchIndex,
+  type LocalSearchIndexStatus,
+} from "@/workspace/local-search-items"
+import type { LocalSemanticSearchStatus } from "@/workspace/local-semantic-search"
+import { loadLocalSemanticRuntime } from "@/workspace/local-semantic-runtime-client"
 import {
   SETTINGS_DATA_EXPORT_ACTION,
   SETTINGS_DATA_IMPORT_ACTION,
@@ -51,6 +60,74 @@ export function LocalDataPanel({
   const [reloadRequired, setReloadRequired] = React.useState(false)
   const [exportPassphrase, setExportPassphrase] = React.useState("")
   const [importPassphrase, setImportPassphrase] = React.useState("")
+  const [searchIndex, setSearchIndex] = React.useState<LocalSearchIndexStatus | null>(null)
+  const [rebuildingIndex, setRebuildingIndex] = React.useState(false)
+  const [semanticSearch, setSemanticSearch] = React.useState<LocalSemanticSearchStatus | null>(null)
+  const [semanticBusy, setSemanticBusy] = React.useState(false)
+
+  React.useEffect(() => {
+    let alive = true
+    const refresh = () => {
+      void getLocalSearchIndexStatus()
+        .then((status) => {
+          if (alive) setSearchIndex(status)
+        })
+        .catch(() => {})
+    }
+    const refreshSemantic = () => {
+      void loadLocalSemanticRuntime()
+        .then(({ getLocalSemanticSearchStatus }) => getLocalSemanticSearchStatus())
+        .then((status) => {
+          if (alive) setSemanticSearch(status)
+        })
+        .catch(() => {})
+    }
+    refresh()
+    refreshSemantic()
+    window.addEventListener(LOCAL_SEARCH_INDEX_UPDATED, refresh)
+    return () => {
+      alive = false
+      window.removeEventListener(LOCAL_SEARCH_INDEX_UPDATED, refresh)
+    }
+  }, [])
+
+  const rebuildSearchIndex = React.useCallback(async () => {
+    setRebuildingIndex(true)
+    try {
+      const status = await rebuildLocalSearchIndex()
+      setSearchIndex(status)
+      toast.success(`全文索引已重建，共 ${status.documentCount} 个对象`)
+    } catch (error) {
+      toast.error("全文索引重建失败", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setRebuildingIndex(false)
+    }
+  }, [])
+
+  const runSemanticAction = React.useCallback(
+    async (action: "install" | "rebuild" | "toggle" | "delete", enabled?: boolean) => {
+      setSemanticBusy(true)
+      try {
+        const semantic = await loadLocalSemanticRuntime()
+        const status =
+          action === "install"
+            ? await semantic.installLocalSemanticSearch()
+            : action === "rebuild"
+              ? await semantic.rebuildLocalSemanticSearch()
+              : action === "toggle"
+                ? await semantic.setLocalSemanticSearchActive(Boolean(enabled))
+                : await semantic.deleteLocalSemanticSearch()
+        setSemanticSearch(status)
+      } catch {
+        toast.error("语义检索失败")
+      } finally {
+        setSemanticBusy(false)
+      }
+    },
+    [],
+  )
 
   const exportArchive = React.useCallback(async () => {
     if (
@@ -349,6 +426,8 @@ export function LocalDataPanel({
                   {document.data.database.counts.blobs}个 Blob /{" "}
                   {document.data.database.counts.trashSnapshots} 个回收站快照 /{" "}
                   {document.data.database.counts.agentTasks} 条 Agent 任务记录
+                  <br />
+                  {document.data.database.counts.agentWriteAudits} 条 Agent 写入审计
                 </p>
               ) : null}
               {document.data?.database.error ? (
@@ -373,6 +452,103 @@ export function LocalDataPanel({
                     onClick={() => void requestPersistence()}
                   >
                     请求持久存储
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="flex items-start gap-3">
+            <Search className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">本地全文索引</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {searchIndex?.ready
+                  ? `已索引 ${searchIndex.documentCount} 个对象${
+                      searchIndex.rebuiltAt
+                        ? `，上次完整重建于 ${new Date(searchIndex.rebuiltAt).toLocaleString()}`
+                        : ""
+                    }。日常编辑会增量更新；索引仅保存在本机且可随时重建。`
+                  : "索引尚未就绪；搜索会暂时回退为直接读取源文件。"}
+              </p>
+              <Button
+                className="mt-2"
+                size="sm"
+                variant="outline"
+                disabled={rebuildingIndex}
+                onClick={() => void rebuildSearchIndex()}
+              >
+                {rebuildingIndex ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                重建全文索引
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="flex items-start gap-3">
+            <Search className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">语义检索</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {semanticSearch == null
+                  ? "正在检查本地模型与向量索引…"
+                  : !semanticSearch.available
+                    ? "不支持，使用全文检索。"
+                    : !semanticSearch.modelReady
+                      ? "默认关闭；下载约 129 MiB 模型，内容仅在本机处理。"
+                      : semanticSearch.indexReady
+                        ? `已索引 ${semanticSearch.documentCount} 个对象，混排已${semanticSearch.enabled ? "开" : "关"}。`
+                        : "请构建语义索引。"}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {semanticSearch?.available ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={semanticBusy || (semanticSearch.modelReady && !searchIndex?.ready)}
+                    onClick={() =>
+                      void runSemanticAction(semanticSearch.modelReady ? "rebuild" : "install")
+                    }
+                  >
+                    {semanticBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : semanticSearch.modelReady ? (
+                      <RefreshCw className="h-4 w-4" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    {semanticSearch.modelReady
+                      ? semanticSearch.indexReady
+                        ? "重建索引"
+                        : "构建索引"
+                      : "下载并构建"}
+                  </Button>
+                ) : null}
+                {semanticSearch?.enabled || semanticSearch?.indexReady ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={semanticBusy}
+                    onClick={() => void runSemanticAction("toggle", !semanticSearch?.enabled)}
+                  >
+                    {semanticSearch?.enabled ? "停用混排" : "启用混排"}
+                  </Button>
+                ) : null}
+                {semanticSearch && semanticSearch.modelBytes > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={semanticBusy}
+                    onClick={() => void runSemanticAction("delete")}
+                  >
+                    删除模型和索引
                   </Button>
                 ) : null}
               </div>

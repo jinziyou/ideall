@@ -4,8 +4,13 @@
 // note/thread 正文的私密读闸下沉到 host.files (见 scoped-host.ts); 本文件不再触达模块单例。
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import type { NewBookmark } from "@protocol/files"
 import { NODE_KINDS, type NodeKind } from "@protocol/node"
+import {
+  CAPTURE_BOOKMARK_DESCRIPTION_LIMIT,
+  CAPTURE_BOOKMARK_FAVICON_LIMIT,
+  CAPTURE_BOOKMARK_TITLE_LIMIT,
+  CAPTURE_BOOKMARK_URL_LIMIT,
+} from "@protocol/capture"
 import { getUiActions } from "@/lib/ui-actions"
 import { safeHref } from "@/lib/safe-url"
 import { webSearch, webFetch, WebError } from "@/lib/web-search"
@@ -150,21 +155,22 @@ export function registerGrantedTools(
     server.tool(
       TOOL.hubAddBookmark,
       {
-        title: z.string(),
-        url: z.string(),
-        description: z.string().optional(),
-        favicon: z.string().optional(),
-        folderId: z.string().nullable().optional(),
-        tags: z.array(z.string()).optional(),
+        title: z.string().max(CAPTURE_BOOKMARK_TITLE_LIMIT),
+        url: z.string().max(CAPTURE_BOOKMARK_URL_LIMIT),
+        description: z.string().max(CAPTURE_BOOKMARK_DESCRIPTION_LIMIT).optional(),
+        favicon: z.string().max(CAPTURE_BOOKMARK_FAVICON_LIMIT).optional(),
       },
       async (a) => {
-        // 第三方嵌入页经 MCP 传入 url: 过协议白名单 (与 agent-tools 写入边界一致), 拦 javascript:/data: 伪协议入库。
+        // 一方嵌入页传入的 URL 仍先过协议白名单；实际写入由 UI action port 转交
+        // bookmarks FileSystem 的统一捕获 action，保证 canonical 去重、收件箱标签和同一回执。
         if (!safeHref(a.url)) return fail(-32602, "blocked-protocol")
-        // 去重: addBookmark 非幂等; 同 url 重复点会产生重复书签 (与 ideall SaveToMine 一致)。
-        const existing = await host.files.listBookmarks()
-        const dup = existing.find((b) => b.url === a.url)
-        if (dup) return ok(dup)
-        return ok(await host.files.addBookmark(a as NewBookmark))
+        const capture = getUiActions()?.captureBookmark
+        if (!capture) return fail(-32000, "capture-unavailable")
+        try {
+          return ok((await capture(a)).bookmark)
+        } catch {
+          return fail(-32000, "capture-failed")
+        }
       },
     )
   }
@@ -236,16 +242,22 @@ export function registerGrantedTools(
         tags: z.array(z.string()).optional(),
         content: z.unknown().optional(),
         parentId: z.string().nullable().optional(),
+        expectedVersion: z.string().optional(),
       },
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          const n = await host.files.updateNode(a.kind, a.id, {
-            title: a.title,
-            tags: a.tags,
-            content: a.content,
-            parentId: a.parentId,
-          })
+          const n = await host.files.updateNode(
+            a.kind,
+            a.id,
+            {
+              title: a.title,
+              tags: a.tags,
+              content: a.content,
+              parentId: a.parentId,
+            },
+            a.expectedVersion,
+          )
           return n ? ok(n) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
@@ -260,11 +272,18 @@ export function registerGrantedTools(
         id: z.string(),
         parentId: z.string().nullable(),
         afterSortKey: z.string().nullable().optional(),
+        expectedVersion: z.string().optional(),
       },
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          const n = await host.files.moveNode(a.kind, a.id, a.parentId, a.afterSortKey)
+          const n = await host.files.moveNode(
+            a.kind,
+            a.id,
+            a.parentId,
+            a.afterSortKey,
+            a.expectedVersion,
+          )
           return n ? ok(n) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
@@ -272,15 +291,19 @@ export function registerGrantedTools(
       },
     )
 
-    server.tool(TOOL.fsDelete, { kind: nodeKind, id: z.string() }, async (a) => {
-      if (!canWrite(a.kind)) return fail(-32003, "consent-required")
-      try {
-        await host.files.deleteNode(a.kind, a.id)
-        return ok({ ok: true })
-      } catch (e) {
-        return fsWriteErr(e)
-      }
-    })
+    server.tool(
+      TOOL.fsDelete,
+      { kind: nodeKind, id: z.string(), expectedVersion: z.string().optional() },
+      async (a) => {
+        if (!canWrite(a.kind)) return fail(-32003, "consent-required")
+        try {
+          await host.files.deleteNode(a.kind, a.id, a.expectedVersion)
+          return ok({ ok: true })
+        } catch (e) {
+          return fsWriteErr(e)
+        }
+      },
+    )
   }
 
   // Agent 配置不是通用 fs.read 的旁路：只在一方 loopback 显式注入 registry adapter，且

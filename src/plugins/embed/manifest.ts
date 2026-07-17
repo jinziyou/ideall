@@ -62,6 +62,7 @@ export const communityEmbedManifest: Manifest = {
     "identity.publish",
     "hub.subscriptions:read",
     "hub.subscriptions:write",
+    "hub.bookmarks:write",
     "host.external",
     "host.nav",
   ],

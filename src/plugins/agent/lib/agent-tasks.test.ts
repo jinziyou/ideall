@@ -292,6 +292,30 @@ test("agent tasks: delete failure keeps the same visible snapshot", async () => 
   }
 })
 
+test("agent tasks: version-bound delete reaches the atomic storage operation", async () => {
+  const initialRevision = nextRevision()
+  const deletedRevision = nextRevision()
+  const existing = task(31)
+  let received: { id: string; expected?: number } | undefined
+  const unregister = registerFilesPort({
+    async listThreadTasks() {
+      return { revision: initialRevision, tasks: [existing] }
+    },
+    async deleteTaskThread(id: string, expected?: { updatedAt: number }) {
+      received = { id, expected: expected?.updatedAt }
+      return { revision: deletedRevision }
+    },
+  } as unknown as FilesPort)
+
+  try {
+    await refreshTasks()
+    await deleteTaskRaw(existing.id, 77)
+    assert.deepEqual(received, { id: existing.id, expected: 77 })
+  } finally {
+    unregister()
+  }
+})
+
 test("agent tasks: every global delete uses the atomic task/thread operation", async () => {
   const initialRevision = nextRevision()
   const deletedRevision = nextRevision()

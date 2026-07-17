@@ -458,6 +458,7 @@ export function decodeAgentSkills(value: unknown): AgentSkill[] {
         "hint",
         "prompt",
         "needsActiveNode",
+        "minContextItems",
         "agentMode",
         "builtin",
         "enabled",
@@ -469,12 +470,23 @@ export function decodeAgentSkills(value: unknown): AgentSkill[] {
       record.invocation === undefined
         ? undefined
         : requireEnum(record, "invocation", ["auto", "manual"], label)
+    const minContextItems =
+      record.minContextItems === undefined
+        ? undefined
+        : requireNumber(record, "minContextItems", label)
+    if (
+      minContextItems !== undefined &&
+      (!Number.isSafeInteger(minContextItems) || minContextItems < 1 || minContextItems > 8)
+    ) {
+      throw new Error(`${label}.minContextItems必须是 1..8 的安全整数`)
+    }
     return {
       id: requireString(record, "id", label, true),
       label: requireString(record, "label", label),
       hint: requireString(record, "hint", label),
       prompt: requireString(record, "prompt", label),
       needsActiveNode: optionalBoolean(record, "needsActiveNode", label),
+      minContextItems,
       agentMode: optionalBoolean(record, "agentMode", label),
       builtin: optionalBoolean(record, "builtin", label),
       enabled: optionalBoolean(record, "enabled", label),

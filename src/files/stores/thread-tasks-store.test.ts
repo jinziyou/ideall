@@ -8,9 +8,11 @@ import {
   addBookmark,
   addFolder,
   bulkPutBookmarkNodes,
+  captureBookmark,
   deleteBookmark,
   deleteFolder,
   listAllBookmarkNodes,
+  listBookmarks,
   moveBookmark,
   moveFolder,
   restoreBookmark,
@@ -54,6 +56,7 @@ import { listNodeSummaryPage } from "./nodes-store"
 import {
   IDB_DATABASE_NAME,
   IDB_DATABASE_VERSION,
+  INDEX_AGENT_WRITE_AUDIT_UPDATED_AT,
   INDEX_NODES_KIND,
   INDEX_NODES_KIND_SORT_KEY,
   INDEX_NODES_KIND_SORT_TITLE_ID,
@@ -62,10 +65,32 @@ import {
   idbPut,
   STORE_BLOBS,
   STORE_AGENT_TASKS,
+  STORE_AGENT_WRITE_AUDIT,
   STORE_NODES,
+  STORE_LOCAL_SEARCH_INDEX,
+  STORE_LOCAL_SEMANTIC_INDEX,
   STORE_TRASH_SNAPSHOTS,
 } from "@/lib/idb"
 import { feedNodeId } from "@/files/feed-node"
+import {
+  deleteLocalSearchIndexDocument,
+  localSearchIndexDocumentKey,
+  putLocalSearchIndexDocument,
+  readLocalSearchIndex,
+  replaceLocalSearchIndex,
+  type LocalSearchIndexDocument,
+} from "@/files/local-search-index-store"
+import {
+  createLocalSemanticVector,
+  deleteLocalSemanticVector,
+  putLocalSemanticVector,
+  readLocalSemanticIndex,
+  replaceLocalSemanticIndex,
+} from "@/files/local-semantic-index-store"
+import {
+  LOCAL_SEMANTIC_MODEL_ID,
+  LOCAL_SEMANTIC_VECTOR_DIMENSIONS,
+} from "@/lib/local-semantic-contract"
 
 type FakeStore = {
   keyPath: string
@@ -595,6 +620,44 @@ beforeEach(() => {
   resetFakeIndexedDb()
 })
 
+test("capture bookmark: canonical URL deduplication is atomic and keeps searchable metadata", async () => {
+  const results = await Promise.all([
+    captureBookmark({
+      title: "Research A",
+      url: "https://EXAMPLE.com:443/research#first",
+      description: "Searchable finding",
+      tags: ["收件箱"],
+    }),
+    captureBookmark({
+      title: "Research B",
+      url: "https://example.com/research#second",
+      description: "Duplicate finding",
+      tags: ["收件箱"],
+    }),
+  ])
+
+  assert.equal(results.filter((result) => result.status === "created").length, 1)
+  assert.equal(results.filter((result) => result.status === "existing").length, 1)
+  assert.equal(results[0]?.bookmark.id, results[1]?.bookmark.id)
+  const bookmarks = await listBookmarks()
+  assert.equal(bookmarks.length, 1)
+  assert.deepEqual(bookmarks[0]?.tags, ["收件箱"])
+  assert.equal(bookmarks[0]?.description, "Searchable finding")
+})
+
+test("capture bookmark: rejects unsafe protocols before opening a write transaction", async () => {
+  await assert.rejects(
+    () =>
+      captureBookmark({
+        title: "Unsafe",
+        url: "javascript:alert(1)",
+        tags: ["收件箱"],
+      }),
+    /HTTP\(S\)/,
+  )
+  assert.deepEqual(await listBookmarks(), [])
+})
+
 function threadNode(id: string, deletedAt?: number): NodeOfKind<"thread"> {
   return {
     id,
@@ -730,13 +793,26 @@ function task(id: string, updatedAt = 20, workspaceId = "workspace-a"): ThreadTa
   }
 }
 
-test("schema/list: v17 adds paged directory index and keeps the task index head", async () => {
+test("schema/list: v20 adds the optional semantic index and keeps existing stores", async () => {
   assert.equal(IDB_DATABASE_NAME, "wonita-home")
-  assert.equal(IDB_DATABASE_VERSION, 17)
+  assert.equal(IDB_DATABASE_VERSION, 20)
   assert.deepEqual(await listThreadTasks(), { revision: 0, tasks: [] })
   assert.deepEqual(await readThreadTaskIndexHead(), { revision: 0, count: 0 })
   assert.ok(fakeDbs.get(IDB_DATABASE_NAME)?.stores.has(STORE_AGENT_TASKS))
   assert.equal(fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_AGENT_TASKS)?.keyPath, "key")
+  assert.equal(fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_LOCAL_SEARCH_INDEX)?.keyPath, "key")
+  assert.equal(
+    fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_LOCAL_SEMANTIC_INDEX)?.keyPath,
+    "key",
+  )
+  assert.equal(fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_AGENT_WRITE_AUDIT)?.keyPath, "id")
+  assert.equal(
+    fakeDbs
+      .get(IDB_DATABASE_NAME)
+      ?.stores.get(STORE_AGENT_WRITE_AUDIT)
+      ?.indexes.get(INDEX_AGENT_WRITE_AUDIT_UPDATED_AT),
+    "updatedAt",
+  )
   assert.deepEqual(
     fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_NODES)?.indexes.get(INDEX_NODES_KIND_SORT_KEY),
     ["kind", "sortKey"],
@@ -748,6 +824,115 @@ test("schema/list: v17 adds paged directory index and keeps the task index head"
       ?.indexes.get(INDEX_NODES_KIND_SORT_TITLE_ID),
     ["kind", "sortKey", "title", "id"],
   )
+})
+
+test("local search index store: rebuild, incremental upsert and delete keep a consistent head", async () => {
+  const document = (id: string, value: string): LocalSearchIndexDocument => {
+    const target = { fileSystemId: "ideall.core", fileId: `resource:node:note:${id}` }
+    return {
+      key: localSearchIndexDocumentKey(target),
+      type: "document",
+      target,
+      group: "文件",
+      kind: "note",
+      label: id,
+      fields: [{ label: "正文", value }],
+      sourceVersion: "1",
+      indexedAt: 1,
+    }
+  }
+  const first = document("first", "alpha")
+  const second = document("second", "beta")
+
+  await replaceLocalSearchIndex([first])
+  assert.deepEqual((await readLocalSearchIndex()).documents, [first])
+
+  await putLocalSearchIndexDocument(second)
+  assert.deepEqual((await readLocalSearchIndex()).documents.map((item) => item.label).sort(), [
+    "first",
+    "second",
+  ])
+
+  await putLocalSearchIndexDocument({ ...second, fields: [{ label: "正文", value: "updated" }] })
+  const updated = await readLocalSearchIndex()
+  assert.equal(updated.ready, true)
+  assert.equal(updated.documents.length, 2)
+  assert.equal(
+    updated.documents.find((item) => item.label === "second")?.fields[0]?.value,
+    "updated",
+  )
+
+  await deleteLocalSearchIndexDocument(first.target)
+  assert.deepEqual(
+    (await readLocalSearchIndex()).documents.map((item) => item.label),
+    ["second"],
+  )
+
+  await idbPut(STORE_LOCAL_SEARCH_INDEX, {
+    ...second,
+    fields: [{ label: "正文", value: 42 }],
+  })
+  assert.equal((await readLocalSearchIndex()).ready, false)
+})
+
+test("local semantic index store: rebuild, upsert, delete and corruption stay bounded", async () => {
+  const vector = (seed: number) =>
+    Float32Array.from(
+      { length: LOCAL_SEMANTIC_VECTOR_DIMENSIONS },
+      (_, index) => seed + index / 1000,
+    )
+  const first = createLocalSemanticVector(
+    "document:first",
+    "1",
+    LOCAL_SEMANTIC_MODEL_ID,
+    vector(1),
+    10,
+  )
+  const second = createLocalSemanticVector(
+    "document:second",
+    "1",
+    LOCAL_SEMANTIC_MODEL_ID,
+    vector(2),
+    20,
+  )
+
+  await replaceLocalSemanticIndex(LOCAL_SEMANTIC_MODEL_ID, [first])
+  assert.deepEqual((await readLocalSemanticIndex()).vectors, [first])
+
+  await putLocalSemanticVector(second)
+  const inserted = await readLocalSemanticIndex()
+  assert.equal(inserted.ready, true)
+  assert.deepEqual(inserted.vectors.map((item) => item.documentKey).sort(), [
+    "document:first",
+    "document:second",
+  ])
+
+  const updatedSecond = createLocalSemanticVector(
+    "document:second",
+    "2",
+    LOCAL_SEMANTIC_MODEL_ID,
+    vector(3),
+    30,
+  )
+  await putLocalSemanticVector(updatedSecond)
+  assert.equal((await readLocalSemanticIndex()).vectors.length, 2)
+  assert.equal(
+    (await readLocalSemanticIndex()).vectors.find((item) => item.documentKey === "document:second")
+      ?.sourceVersion,
+    "2",
+  )
+
+  await deleteLocalSemanticVector("document:first")
+  assert.deepEqual(
+    (await readLocalSemanticIndex()).vectors.map((item) => item.documentKey),
+    ["document:second"],
+  )
+
+  await idbPut(STORE_LOCAL_SEMANTIC_INDEX, {
+    ...updatedSecond,
+    vector: new Float32Array(1),
+  })
+  assert.equal((await readLocalSemanticIndex()).ready, false)
 })
 
 test("node summary paging: index cursor merges kinds without nodes getAll", async () => {
@@ -2593,6 +2778,36 @@ test("delete: snapshot, tombstone and task removal commit together", async () =>
   assert.equal(retry.revision, 2)
   assert.equal(retry.deleted, false)
   assert.deepEqual(await listThreadTasks(), { revision: 2, tasks: [] })
+})
+
+test("delete: stale thread expectation preserves a task that was edited after creation", async () => {
+  const created = await createTaskThread("workspace-a")
+  const saved = await saveThreadAndTouchTaskAtomic({
+    ...created.thread,
+    messages: [{ role: "assistant", content: "continued" }],
+  })
+
+  await assert.rejects(
+    () =>
+      deleteTaskThread(created.thread.id, {
+        kind: "thread",
+        updatedAt: created.thread.updatedAt,
+        deletedAt: null,
+      }),
+    /节点在写入前已变更/,
+  )
+  assert.equal(
+    (await idbGet<NodeOfKind<"thread">>(STORE_NODES, created.thread.id))?.deletedAt,
+    undefined,
+  )
+  assert.equal((await listThreadTasks()).tasks.length, 1)
+
+  const deleted = await deleteTaskThread(created.thread.id, {
+    kind: "thread",
+    updatedAt: saved.thread.updatedAt,
+    deletedAt: null,
+  })
+  assert.equal(deleted.deleted, true)
 })
 
 test("delete: a late node write failure rolls back trash snapshot and task removal", async () => {

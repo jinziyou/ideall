@@ -376,6 +376,7 @@ pub fn get_content(app: &AppHandle) -> Result<crate::BrowserPageContent, String>
             url,
             title: v["title"].as_str().unwrap_or("").to_string(),
             text: v["text"].as_str().unwrap_or("").to_string(),
+            selection: v["selection"].as_str().unwrap_or("").to_string(),
         })
     })
 }
