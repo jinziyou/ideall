@@ -1638,12 +1638,8 @@ pub(crate) fn runtime_extension_publisher_rotation_inspect(
     let envelope: PublisherRotationEnvelope =
         serde_json::from_slice(&bytes).map_err(|_| error("invalid-publisher-rotation-envelope"))?;
     let store = load_store(&app)?;
-    let payload = validate_publisher_rotation_with(
-        &store,
-        &envelope,
-        now_ms()?,
-        |key, content, signature| verify_minisign_with_key(key, content, signature),
-    )?;
+    let payload =
+        validate_publisher_rotation_with(&store, &envelope, now_ms()?, verify_minisign_with_key)?;
     Ok(Some(publisher_rotation_candidate(
         &store, &envelope, &payload,
     )?))
@@ -1662,12 +1658,8 @@ pub(crate) fn runtime_extension_publisher_rotation_apply(
     };
     let mut store = load_store(&app)?;
     let timestamp = now_ms()?;
-    let payload = validate_publisher_rotation_with(
-        &store,
-        &envelope,
-        timestamp,
-        |key, content, signature| verify_minisign_with_key(key, content, signature),
-    )?;
+    let payload =
+        validate_publisher_rotation_with(&store, &envelope, timestamp, verify_minisign_with_key)?;
     let expected = publisher_rotation_candidate(&store, &envelope, &payload)?;
     if candidate != expected {
         return Err(error("publisher-rotation-candidate-changed"));
