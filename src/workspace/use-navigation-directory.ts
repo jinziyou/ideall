@@ -74,13 +74,11 @@ async function loadNavigationDirectory(
       })
       return { items, loading: false, unavailable: false }
     })
-    .catch(
-      (): NavigationDirectoryState => ({
-        items: [],
-        loading: false,
-        unavailable: true,
-      }),
-    )
+    .catch((): NavigationDirectoryState => ({
+      items: [],
+      loading: false,
+      unavailable: true,
+    }))
     .then((state) => {
       if (getFileSystem(fileSystemId) === provider) {
         directoryCache.set(key, { provider, state })

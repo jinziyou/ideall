@@ -379,8 +379,7 @@ async function discoverRevocationEndpoint(serverUrl: string): Promise<string | u
     const prm = await discoverOAuthProtectedResourceMetadata(serverUrl)
     const authUrl = prm?.authorization_servers?.[0] ?? serverUrl
     const meta = (await discoverAuthorizationServerMetadata(authUrl)) as
-      | { revocation_endpoint?: string }
-      | undefined
+      { revocation_endpoint?: string } | undefined
     return meta?.revocation_endpoint ? String(meta.revocation_endpoint) : undefined
   } catch {
     return undefined

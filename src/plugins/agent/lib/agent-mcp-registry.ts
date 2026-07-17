@@ -10,12 +10,7 @@ import type { McpConnectionDiagnostic } from "./agent-mcp-diagnostics"
 
 export type McpTransport = "loopback" | "stdio" | "sse" | "http"
 export type McpRunStatus =
-  | "connected"
-  | "connecting"
-  | "degraded"
-  | "error"
-  | "disabled"
-  | "pending"
+  "connected" | "connecting" | "degraded" | "error" | "disabled" | "pending"
 
 export const MCP_TRANSPORTS: { value: McpTransport; label: string }[] = [
   { value: "stdio", label: "stdio (本地命令)" },

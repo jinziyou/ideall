@@ -8,8 +8,7 @@ import {
 } from "@/lib/engine-window-target"
 
 export type EngineWindowOpenResult =
-  | { mode: "app-window"; label: string; url: string }
-  | { mode: "browser-tab"; url: string }
+  { mode: "app-window"; label: string; url: string } | { mode: "browser-tab"; url: string }
 
 function randomNonce(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {

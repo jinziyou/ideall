@@ -20,12 +20,11 @@ export const subscribeAgentImportInvalidation = agentImportInvalidations.subscri
 
 const AGENT_CONFIG_SECTION_FILE_REFS: readonly FileRef[] = Object.freeze(
   [...AGENT_PUBLIC_CONFIG_SECTIONS]
-    .map(
-      ({ id }): FileRef =>
-        Object.freeze({
-          fileSystemId: AGENT_CONFIG_FILE_SYSTEM_ID,
-          fileId: `config:${id}`,
-        }),
+    .map(({ id }): FileRef =>
+      Object.freeze({
+        fileSystemId: AGENT_CONFIG_FILE_SYSTEM_ID,
+        fileId: `config:${id}`,
+      }),
     )
     .filter(
       (ref, index, refs) =>

@@ -9,8 +9,7 @@ import type { ResourceSourceAccessContext } from "./types"
 import { ResourceSourceError } from "./types"
 
 export type SaveToMineProjection =
-  | { kind: "subscription"; input: NewSubscription }
-  | { kind: "bookmark"; input: NewBookmark }
+  { kind: "subscription"; input: NewSubscription } | { kind: "bookmark"; input: NewBookmark }
 
 export type SaveToMineResult =
   | {

@@ -367,11 +367,9 @@ test("restoreTrashItem: 用快照恢复笔记、文件 Blob 与对话", async ()
   const restoredFileBlob = await idbGet<{ key: string; blob: Blob }>(STORE_BLOBS, fullFile.id)
   const restoredThread = await idbGet<NodeOfKind<"thread">>(STORE_NODES, fullThread.id)
   const restoredNoteBlock = restoredNote?.content[0] as
-    | { children?: Array<{ text?: string }> }
-    | undefined
+    { children?: Array<{ text?: string }> } | undefined
   const restoredThreadMessage = restoredThread?.content.messages[0] as
-    | { content?: string }
-    | undefined
+    { content?: string } | undefined
 
   assert.equal(restoredNote?.deletedAt, undefined)
   assert.ok((restoredNote?.updatedAt ?? 0) > deletedAt)

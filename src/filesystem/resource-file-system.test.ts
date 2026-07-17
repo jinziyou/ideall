@@ -65,13 +65,11 @@ test("resource filesystem: directory pagination uses strict canonical inputs", a
 
 test("resource filesystem: node place pagination forwards opaque source cursors", async () => {
   const calls: Array<{ limit?: number; cursor?: string; rootOnly?: boolean }> = []
-  const metas = ["first", "second"].map(
-    (id): ResourceMeta => ({
-      ref: { scheme: "node", kind: "note", id },
-      title: id,
-      capabilities: ["open", "read-content"],
-    }),
-  )
+  const metas = ["first", "second"].map((id): ResourceMeta => ({
+    ref: { scheme: "node", kind: "note", id },
+    title: id,
+    capabilities: ["open", "read-content"],
+  }))
   registerResourceSource({
     scheme: "node",
     async list(query) {

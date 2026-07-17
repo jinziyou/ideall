@@ -6,12 +6,7 @@ import { directorySurface } from "../directory-surfaces"
 import { MODULE_META } from "../module-meta"
 
 export type HomePlaceId =
-  | "inbox"
-  | "subscriptions"
-  | "bookmarks"
-  | "resources"
-  | "notes"
-  | "workspace"
+  "inbox" | "subscriptions" | "bookmarks" | "resources" | "notes" | "workspace"
 
 export type HomePlaceStaticChild = {
   id: string

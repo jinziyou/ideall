@@ -93,12 +93,7 @@ export type ResourceSourceProvider = {
 }
 
 export type ResourceSourceErrorCode =
-  | "not-found"
-  | "permission-denied"
-  | "consent-required"
-  | "offline"
-  | "unsupported"
-  | "conflict"
+  "not-found" | "permission-denied" | "consent-required" | "offline" | "unsupported" | "conflict"
 
 export class ResourceSourceError extends Error {
   code: ResourceSourceErrorCode

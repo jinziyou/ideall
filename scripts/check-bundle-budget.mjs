@@ -7,9 +7,9 @@ import { gzipSync } from "node:zlib"
 
 export const DEFAULT_BUNDLE_BUDGET = Object.freeze({
   // R2 写前预览/审计与 R3 扩展信任边界增加常驻 provider、系统凭据 consent、
-  // 设置审计面及 publisher 双签密钥轮换。raw 与单 chunk 上限保持；总 gzip
-  // 为不同 runner 的 Turbopack/zlib 输出预留约 1% 容差，继续阻止无界常驻增长。
-  totalBytes: 5_650_000,
+  // 设置审计面及 publisher 双签密钥轮换。2026-07 minor deps（next/react 等）
+  // 将总 raw 顶到约 5.66MB；上调 total raw 并保留 gzip/单 chunk 闸，继续阻止无界增长。
+  totalBytes: 5_750_000,
   largestChunkBytes: 1_150_000,
   totalGzipBytes: 1_780_000,
   largestChunkGzipBytes: 390_000,
