@@ -11,31 +11,75 @@ export interface AcpTurnState {
 
 export const EMPTY_TURN: AcpTurnState = { text: "", tools: [] }
 
+export const MAX_ACP_TEXT_LENGTH = 256 * 1024
+export const MAX_ACP_TOOL_CALLS = 256
+
+function bounded(value: string, maxLength: number, fallback: string): string {
+  const normalized = value.replace(/[\u0000-\u001f\u007f]+/gu, " ").trim()
+  if (!normalized) return fallback
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized
+}
+
+function toolCallId(value: string): string {
+  return bounded(value, 256, "external-tool")
+}
+
+function toolTitle(value: string | null | undefined): string {
+  return bounded(value ?? "", 160, "外部 Agent 工具")
+}
+
 /** 折叠一条 session/update 进当前轮累积 (不可变; 未识别类型原样返回)。 */
 export function foldAcpUpdate(turn: AcpTurnState, update: SessionUpdate): AcpTurnState {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
       // 仅累积文本块 (图片/音频等 MVP 忽略)。
-      return update.content.type === "text"
-        ? { ...turn, text: turn.text + update.content.text }
-        : turn
+      if (update.content.type !== "text" || turn.text.length >= MAX_ACP_TEXT_LENGTH) return turn
+      const text = turn.text + update.content.text
+      return {
+        ...turn,
+        text:
+          text.length > MAX_ACP_TEXT_LENGTH ? `${text.slice(0, MAX_ACP_TEXT_LENGTH - 1)}…` : text,
+      }
     }
     case "tool_call": {
       const tc = {
-        toolCallId: update.toolCallId,
-        title: update.title,
+        toolCallId: toolCallId(update.toolCallId),
+        title: toolTitle(update.title),
         status: update.status ?? ("pending" as ToolCallStatus),
       }
       const idx = turn.tools.findIndex((t) => t.toolCallId === tc.toolCallId)
-      const tools = idx >= 0 ? turn.tools.map((t, i) => (i === idx ? tc : t)) : [...turn.tools, tc]
+      const tools =
+        idx >= 0
+          ? turn.tools.map((t, i) => (i === idx ? tc : t))
+          : turn.tools.length < MAX_ACP_TOOL_CALLS
+            ? [...turn.tools, tc]
+            : turn.tools
       return { ...turn, tools }
     }
     case "tool_call_update": {
-      const tools = turn.tools.map((t) =>
-        t.toolCallId === update.toolCallId
-          ? { ...t, status: update.status ?? t.status, title: update.title ?? t.title }
-          : t,
-      )
+      const id = toolCallId(update.toolCallId)
+      const index = turn.tools.findIndex((tool) => tool.toolCallId === id)
+      const tools =
+        index >= 0
+          ? turn.tools.map((tool, toolIndex) =>
+              toolIndex === index
+                ? {
+                    ...tool,
+                    status: update.status ?? tool.status,
+                    title: update.title == null ? tool.title : toolTitle(update.title),
+                  }
+                : tool,
+            )
+          : turn.tools.length < MAX_ACP_TOOL_CALLS
+            ? [
+                ...turn.tools,
+                {
+                  toolCallId: id,
+                  title: toolTitle(update.title),
+                  status: update.status ?? ("pending" as ToolCallStatus),
+                },
+              ]
+            : turn.tools
       return { ...turn, tools }
     }
     default:
@@ -61,7 +105,7 @@ export function turnToolEvents(turn: AcpTurnState): AgentToolEvent[] {
   }))
 }
 
-/** 据用户是否允许, 选一个权限选项: allow → 优先 allow_once、否则任一 allow_*、再否则首项; deny → null。 */
+/** 据用户是否允许, 选一个权限选项: allow → 优先 allow_once、否则任一 allow_*；deny/无允许项 → null。 */
 export function pickPermissionOption(
   options: readonly PermissionOption[],
   allow: boolean,
@@ -70,7 +114,6 @@ export function pickPermissionOption(
   return (
     options.find((o) => o.kind === "allow_once") ??
     options.find((o) => o.kind.startsWith("allow")) ??
-    options[0] ??
     null
   )
 }

@@ -110,9 +110,9 @@ test("agent settings: 新旧公开设置同时存在时 canonical 设置胜出",
   assert.equal(mem.get(LEGACY_AGENT_SETTINGS_STORAGE_KEY), undefined)
 })
 
-test("agent settings: Web 降级路径把 API Key 写入 secure-store fallback", () => {
+test("agent settings: Web 降级路径把 API Key 写入 secure-store fallback", async () => {
   mem.clear()
-  setAgentSettings({
+  await setAgentSettings({
     baseURL: "https://api.example.test/v1",
     model: "m",
     apiKey: "sk-test",
@@ -134,9 +134,9 @@ test("agentSettingsSecuritySnapshot: 能识别 localStorage 中的旧明文 key"
   assert.equal(agentSettingsSecuritySnapshot().localApiKeyPresent, true)
 })
 
-test("public settings write: baseURL 脱敏且 API Key 只在同 endpoint 保留", () => {
+test("public settings write: baseURL 脱敏且 API Key 只在同 endpoint 保留", async () => {
   mem.clear()
-  setAgentSettings({
+  await setAgentSettings({
     baseURL: "https://api.example.test/v1",
     model: "m",
     apiKey: "same-origin-key",
@@ -145,7 +145,7 @@ test("public settings write: baseURL 脱敏且 API Key 只在同 endpoint 保留
     approvalPolicy: "confirm",
   })
 
-  writeAgentPublicConfigSection("settings", {
+  await writeAgentPublicConfigSection("settings", {
     baseURL: "https://user:pass@api.example.test/v1?key=query-secret#fragment-secret",
     model: "m2",
     includeHomeContext: false,
@@ -155,7 +155,7 @@ test("public settings write: baseURL 脱敏且 API Key 只在同 endpoint 保留
   assert.equal(getAgentSettings().baseURL, "https://api.example.test/v1")
   assert.equal(getAgentSettings().apiKey, "same-origin-key")
 
-  writeAgentPublicConfigSection("settings", {
+  await writeAgentPublicConfigSection("settings", {
     baseURL: "https://api.example.test/v2",
     model: "m2",
     includeHomeContext: false,
@@ -217,7 +217,7 @@ test("agent settings credential revision: persists monotonically without storing
 
 test("agent settings FileSystem write: endpoint changes clear credentials before public commit", async () => {
   mem.clear()
-  setAgentSettings({
+  await setAgentSettings({
     baseURL: "https://old.example.test/v1",
     model: "old-model",
     apiKey: "",

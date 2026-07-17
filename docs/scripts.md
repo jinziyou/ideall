@@ -45,19 +45,20 @@ pnpm verify:base
 1. `pnpm format:check`
 2. `pnpm lint`
 3. `pnpm lint:actions`
-4. `pnpm lint:deps`
-5. `pnpm lint:docs`
-6. `pnpm version:check`
-7. `pnpm clean:next`
-8. `pnpm typecheck`
-9. `pnpm test:coverage`
-10. `pnpm test:scripts`
-11. `pnpm gen:api:check`
-12. `pnpm build`
-13. `pnpm verify:static-export`
-14. `pnpm verify:bundle`
+4. `pnpm lint:storage`
+5. `pnpm lint:deps`
+6. `pnpm lint:docs`
+7. `pnpm version:check`
+8. `pnpm clean:next`
+9. `pnpm typecheck`
+10. `pnpm test:coverage`
+11. `pnpm test:scripts`
+12. `pnpm gen:api:check`
+13. `pnpm build`
+14. `pnpm verify:static-export`
+15. `pnpm verify:bundle`
 
-前 11 步也可单独运行 `pnpm verify:checks`，供 CI 质量 job 和发布 preflight 复用；其中 `lint:deps` 使用 Knip 检查未使用、多余和未声明依赖。`pnpm clean:next` 只删除 `.next/`，用于清掉 Next 生成类型与缓存，避免脏产物影响 `tsc --noEmit`。后 3 步由 `pnpm app:export` 统一承载：先构建静态导出，再确认关键路由和 `_next` chunk 已生成，最后检查 JavaScript raw/gzip 总量与最大单 chunk 预算。Tauri 打包与 CI build job 都复用同一入口。
+前 12 步也可单独运行 `pnpm verify:checks`，供 CI 质量 job 和发布 preflight 复用；其中 `lint:storage` 禁止在冻结的领域适配器之外直接调用 `localStorage/sessionStorage`，新增配置应使用 `public-config`、`secure-store` 或既有领域 store；`lint:deps` 使用 Knip 检查未使用、多余和未声明依赖。`pnpm clean:next` 只删除 `.next/`，用于清掉 Next 生成类型与缓存，避免脏产物影响 `tsc --noEmit`。后 3 步由 `pnpm app:export` 统一承载：先构建静态导出，再确认关键路由和 `_next` chunk 已生成，最后检查 JavaScript raw/gzip 总量与最大单 chunk 预算。Tauri 打包与 CI build job 都复用同一入口。
 
 已有生产构建时可单独运行：
 

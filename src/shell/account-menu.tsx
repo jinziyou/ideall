@@ -21,10 +21,14 @@ import { openTarget } from "@/workspace/store"
 export default function AccountMenu() {
   const session = React.useSyncExternalStore(subscribeSession, getSession, () => null)
 
-  function logout() {
-    clearSession()
-    toast.success("已退出登录")
-    openTarget(HOME_TARGET)
+  async function logout() {
+    try {
+      await clearSession()
+      toast.success("已退出登录")
+      openTarget(HOME_TARGET)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "退出登录失败")
+    }
   }
 
   return (
@@ -43,7 +47,7 @@ export default function AccountMenu() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => openTarget(HOME_TARGET)}>我的</DropdownMenuItem>
-            <DropdownMenuItem onClick={logout}>退出登录</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void logout()}>退出登录</DropdownMenuItem>
           </>
         ) : (
           <>

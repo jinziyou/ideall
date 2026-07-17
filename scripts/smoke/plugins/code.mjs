@@ -50,35 +50,61 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
     codeText.includes("安全存储") && codeText.includes("迁移/清理敏感值"),
   )
   const legacySecurity = await readSecurityMigrationState(page)
-  record(
-    "Code 插件可识别旧敏感存储",
+  const recognizedLegacySecurity =
     (legacySecurity.legacyAuthToken === LEGACY_AUTH_TOKEN ||
       legacySecurity.fallbackAuthToken === LEGACY_AUTH_TOKEN) &&
-      (legacySecurity.legacySyncCode === LEGACY_SYNC_CODE ||
-        legacySecurity.fallbackSyncCode === LEGACY_SYNC_CODE) &&
-      (legacySecurity.publicAgentApiKey === LEGACY_AGENT_KEY ||
-        legacySecurity.fallbackAgentKey === LEGACY_AGENT_KEY) &&
-      (legacySecurity.publicSecretValue === LEGACY_MCP_SECRET ||
-        legacySecurity.fallbackSecret === LEGACY_MCP_SECRET) &&
-      (legacySecurity.publicWorkspaceDump.includes(LEGACY_WORKSPACE_KEY) ||
-        legacySecurity.fallbackWorkspaceKey === LEGACY_WORKSPACE_KEY),
-  )
+    (legacySecurity.legacySyncCode === LEGACY_SYNC_CODE ||
+      legacySecurity.fallbackSyncCode === LEGACY_SYNC_CODE) &&
+    (legacySecurity.publicAgentApiKey === LEGACY_AGENT_KEY ||
+      legacySecurity.fallbackAgentKey === LEGACY_AGENT_KEY) &&
+    (legacySecurity.publicSecretValue === LEGACY_MCP_SECRET ||
+      legacySecurity.fallbackSecret === LEGACY_MCP_SECRET) &&
+    (legacySecurity.publicWorkspaceDump.includes(LEGACY_WORKSPACE_KEY) ||
+      legacySecurity.fallbackWorkspaceKey === LEGACY_WORKSPACE_KEY)
+  record("Code 插件可识别旧敏感存储", recognizedLegacySecurity)
   await page.getByRole("button", { name: "迁移/清理敏感值", exact: true }).click()
   await page.waitForFunction(
-    ({ authToken, syncCode, agentKey, secret, workspaceKey, workspaceFallbackKey }) =>
-      localStorage.getItem("wonita:auth:token") === null &&
-      localStorage.getItem("wonita:sync:code") === null &&
-      localStorage.getItem("ideall:secure-fallback:ideall:auth:token") === authToken &&
-      localStorage.getItem("ideall:secure-fallback:ideall:sync:code") === syncCode &&
-      localStorage.getItem("ideall:secure-fallback:ideall:agent:settings:apiKey") === agentKey &&
-      localStorage.getItem("ideall:secure-fallback:ideall:agent:secret:SMOKE_SECRET") === secret &&
-      localStorage.getItem(workspaceFallbackKey) === workspaceKey,
+    ({
+      authToken,
+      syncCode,
+      agentKey,
+      secret,
+      workspaceKey,
+      workspaceTarget,
+      workspaceFallbackKey,
+    }) => {
+      const rawWorkspaceCredential = localStorage.getItem(workspaceFallbackKey)
+      let workspaceCredentialMatches = rawWorkspaceCredential === workspaceKey
+      if (!workspaceCredentialMatches && rawWorkspaceCredential !== null) {
+        try {
+          const credential = JSON.parse(rawWorkspaceCredential)
+          workspaceCredentialMatches =
+            credential?.version === 2 &&
+            credential.target === workspaceTarget &&
+            credential.apiKey === workspaceKey &&
+            typeof credential.revision === "string"
+        } catch {
+          workspaceCredentialMatches = false
+        }
+      }
+      return (
+        localStorage.getItem("wonita:auth:token") === null &&
+        localStorage.getItem("wonita:sync:code") === null &&
+        localStorage.getItem("ideall:secure-fallback:ideall:auth:token") === authToken &&
+        localStorage.getItem("ideall:secure-fallback:ideall:sync:code") === syncCode &&
+        localStorage.getItem("ideall:secure-fallback:ideall:agent:settings:apiKey") === agentKey &&
+        localStorage.getItem("ideall:secure-fallback:ideall:agent:secret:SMOKE_SECRET") ===
+          secret &&
+        workspaceCredentialMatches
+      )
+    },
     {
       authToken: LEGACY_AUTH_TOKEN,
       syncCode: LEGACY_SYNC_CODE,
       agentKey: LEGACY_AGENT_KEY,
       secret: LEGACY_MCP_SECRET,
       workspaceKey: LEGACY_WORKSPACE_KEY,
+      workspaceTarget: "https://api.example.test/v1",
       workspaceFallbackKey: `ideall:secure-fallback:ideall:agent:workspace:${LEGACY_WORKSPACE_ID}:apiKey`,
     },
     { timeout: 15000 },

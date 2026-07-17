@@ -12,17 +12,36 @@ import { Panel, SettingRow } from "@/ui/panel"
 import { openTarget } from "@/workspace/store"
 import {
   RuntimeExtensionsPanel,
+  type RuntimeExtensionManagementAction,
   type RuntimeExtensionPanelAction,
 } from "./runtime-extensions-panel"
+import { LocalDataPanel } from "./local-data-panel"
 import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
+  SETTINGS_RUNTIME_AUTHORIZE_ACTION,
+  SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+  SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION,
+  SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION,
   SETTINGS_RUNTIME_RETRY_ACTION,
+  SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION,
+  SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_REVOKE_ACTION,
+  SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_UNINSTALL_ACTION,
   decodeAppearanceSettings,
   decodeConnectionSettings,
+  decodeDataSettings,
   decodeDeviceSettings,
   decodeRuntimeExtensionSettings,
+  decodeRuntimeExtensionPublisherCandidate,
+  decodeRuntimeExtensionPublisherRotationCandidate,
+  decodeRuntimeExtensionUpdateCandidate,
   decodeSettingsMutationResult,
   settingsSectionFileRef,
   type SettingsRuntimeAction,
@@ -30,10 +49,12 @@ import {
 
 const APPEARANCE_REF = settingsSectionFileRef("appearance")
 const DEVICE_REF = settingsSectionFileRef("device")
+const DATA_REF = settingsSectionFileRef("data")
 const CONNECTIONS_REF = settingsSectionFileRef("connections")
 const RUNTIME_EXTENSIONS_REF = settingsSectionFileRef("runtime-extensions")
 
 const RUNTIME_ACTION: Record<RuntimeExtensionPanelAction, SettingsRuntimeAction> = {
+  authorize: SETTINGS_RUNTIME_AUTHORIZE_ACTION,
   retry: SETTINGS_RUNTIME_RETRY_ACTION,
   revoke: SETTINGS_RUNTIME_REVOKE_ACTION,
   uninstall: SETTINGS_RUNTIME_UNINSTALL_ACTION,
@@ -51,6 +72,7 @@ function DocumentFailure({ error }: { error: unknown | null }) {
 export default function SettingsPage() {
   const appearance = useFileDocument(APPEARANCE_REF, decodeAppearanceSettings)
   const device = useFileDocument(DEVICE_REF, decodeDeviceSettings)
+  const data = useFileDocument(DATA_REF, decodeDataSettings)
   const connections = useFileDocument(CONNECTIONS_REF, decodeConnectionSettings)
   const runtimeExtensions = useFileDocument(RUNTIME_EXTENSIONS_REF, decodeRuntimeExtensionSettings)
 
@@ -78,6 +100,44 @@ export default function SettingsPage() {
     [runtimeExtensions],
   )
 
+  const manageRuntimeExtensionHost = React.useCallback(
+    async (action: RuntimeExtensionManagementAction, input?: unknown): Promise<unknown> => {
+      switch (action) {
+        case "install-package":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION)
+        case "refresh-registry":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION)
+        case "prepare-update":
+          return decodeRuntimeExtensionUpdateCandidate(
+            await runtimeExtensions.invoke(SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION, input),
+          )
+        case "apply-update":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_APPLY_UPDATE_ACTION, input)
+        case "discard-update":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION, input)
+        case "inspect-publisher":
+          return decodeRuntimeExtensionPublisherCandidate(
+            await runtimeExtensions.invoke(SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION),
+          )
+        case "inspect-publisher-rotation":
+          return decodeRuntimeExtensionPublisherRotationCandidate(
+            await runtimeExtensions.invoke(SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION),
+          )
+        case "apply-publisher-rotation":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION, input)
+        case "trust-publisher":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION, input)
+        case "revoke-publisher":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION, input)
+        case "import-revocations":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION)
+        case "rollback-package":
+          return runtimeExtensions.invoke(SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION, input)
+      }
+    },
+    [runtimeExtensions],
+  )
+
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div className="space-y-1">
@@ -97,11 +157,15 @@ export default function SettingsPage() {
         <DocumentFailure error={appearance.error} />
       </Panel>
 
+      <LocalDataPanel document={data} />
+      <DocumentFailure error={data.error} />
+
       <Panel>
         {device.data ? (
           <LocalDeviceStatusView
             value={{
               synced: device.data.sync.enabled,
+              lastSync: device.data.sync.lastRun,
               storage: device.data.storage,
               publishingIdentity: device.data.publishingIdentity,
             }}
@@ -126,10 +190,14 @@ export default function SettingsPage() {
       </Panel>
 
       <RuntimeExtensionsPanel
-        extensions={runtimeExtensions.data ?? []}
+        extensions={runtimeExtensions.data?.extensions ?? []}
+        publishers={runtimeExtensions.data?.publishers ?? []}
+        registry={runtimeExtensions.data?.registry}
+        nativeAvailable={runtimeExtensions.data?.nativeAvailable ?? false}
         loading={runtimeExtensions.loading}
         disabled={runtimeExtensions.acting}
         onAction={manageRuntimeExtension}
+        onManagement={manageRuntimeExtensionHost}
       />
       <DocumentFailure error={runtimeExtensions.error} />
     </div>

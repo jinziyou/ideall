@@ -39,7 +39,7 @@ export type AgentTaskWriteAdapter = Readonly<{
   touchTask(id: string): Promise<void>
   setTaskStatus(id: string, status: TaskStatus): Promise<void>
   setTaskStarred(id: string, starred: boolean): Promise<void>
-  deleteTask(id: string): Promise<void>
+  deleteTask(id: string, expectedThreadUpdatedAt?: number): Promise<void>
   deleteTaskOrThread(id: string): Promise<void>
   replaceTasks(tasks: readonly Partial<AgentTask>[]): Promise<void>
 }>
@@ -87,7 +87,8 @@ export function createAgentTaskWriteAdapter(
     touchTask: (id) => mutate(() => deps.touchTask(id)),
     setTaskStatus: (id, status) => mutate(() => deps.setTaskStatus(id, status)),
     setTaskStarred: (id, starred) => mutate(() => deps.setTaskStarred(id, starred)),
-    deleteTask: (id) => mutate(() => deps.deleteTask(id)),
+    deleteTask: (id, expectedThreadUpdatedAt) =>
+      mutate(() => deps.deleteTask(id, expectedThreadUpdatedAt)),
     deleteTaskOrThread: (id) => mutate(() => deps.deleteTaskOrThread(id)),
     replaceTasks: (tasks) => mutate(() => deps.replaceTasks(tasks)),
   })

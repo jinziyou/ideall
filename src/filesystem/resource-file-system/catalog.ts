@@ -58,7 +58,10 @@ const AI_TASKS_PANEL_ID_PREFIX = "ai-tasks:"
 const MAX_PANEL_PARAMETER_LENGTH = 256
 
 export const PANELS: Record<CorePlaceId, readonly PanelFile[]> = {
-  home: [{ id: "home", name: "我的", tabKind: "home-overview", module: "home" }],
+  home: [
+    { id: "home", name: "我的", tabKind: "home-overview", module: "home" },
+    { id: "inbox", name: "收件箱", tabKind: "home-inbox", module: "home" },
+  ],
   subscriptions: [
     {
       id: "subscriptions",
@@ -370,6 +373,9 @@ function resourceIsDirectory(ref: ResourceRef): boolean {
 
 export function fileFromResource(meta: ResourceMeta, record?: ResourceRecord | null): IdeallFile {
   const node = record?.content as Node | undefined
+  const recordMeta =
+    record && resourceKey(record.meta.ref) === resourceKey(meta.ref) ? record.meta : undefined
+  const updatedAt = recordMeta?.updatedAt ?? meta.updatedAt
   const url =
     node?.kind === "bookmark"
       ? node.content.url
@@ -394,8 +400,8 @@ export function fileFromResource(meta: ResourceMeta, record?: ResourceRecord | n
     source: sourceForResource(meta.ref),
     size: node?.kind === "file" ? node.blobRef.size : undefined,
     createdAt: node?.createdAt,
-    updatedAt: meta.updatedAt,
-    version: versionForResource(meta),
+    updatedAt,
+    version: versionForResource({ ...meta, updatedAt }),
     properties: {
       resourceKey: resourceKey(meta.ref),
       resourceScheme: meta.ref.scheme,

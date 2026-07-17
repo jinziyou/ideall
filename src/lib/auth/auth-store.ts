@@ -15,6 +15,7 @@ import {
   secureGetWithLegacy,
   secureSet,
 } from "@/lib/secure-store"
+import { isTauri } from "@/lib/tauri"
 
 export const AUTH_TOKEN_STORAGE_KEY = LEGACY_PUBLIC_STORAGE_KEYS.AUTH_TOKEN
 export const AUTH_TOKEN_SECURE_KEY = SECURE_STORE_KEYS.AUTH_TOKEN
@@ -35,7 +36,7 @@ function notify() {
 }
 
 function readTokenSync(): string | null {
-  return secureFallbackGet(AUTH_TOKEN_SECURE_KEY) ?? cachedTokenRaw
+  return (isTauri() ? null : secureFallbackGet(AUTH_TOKEN_SECURE_KEY)) ?? cachedTokenRaw
 }
 
 export async function hydrateSessionTokenSecure(): Promise<string | null> {
@@ -82,24 +83,24 @@ export function subscribeSession(cb: () => void): () => void {
   }
 }
 
-export function setSession(token: string, user: CurrentUser): void {
+export async function setSession(token: string, user: CurrentUser): Promise<void> {
+  await secureSet(AUTH_TOKEN_SECURE_KEY, token)
   cachedTokenRaw = token
   tokenHydrated = true
   cache = null
   publicStorageSet(AUTH_USER_STORAGE_KEY, JSON.stringify(user))
   publicStorageRemove(LEGACY_AUTH_USER_STORAGE_KEY)
   publicStorageRemove(AUTH_TOKEN_STORAGE_KEY)
-  void secureSet(AUTH_TOKEN_SECURE_KEY, token)
   notify()
 }
 
-export function clearSession(): void {
+export async function clearSession(): Promise<void> {
+  await secureDelete(AUTH_TOKEN_SECURE_KEY)
   cachedTokenRaw = null
   tokenHydrated = true
   cache = null
   publicStorageRemoveWithLegacy(AUTH_USER_STORAGE_KEY, LEGACY_AUTH_USER_STORAGE_KEY)
   publicStorageRemove(AUTH_TOKEN_STORAGE_KEY)
-  void secureDelete(AUTH_TOKEN_SECURE_KEY)
   notify()
 }
 
@@ -134,7 +135,7 @@ if (typeof window !== "undefined") {
         return
       }
       if (e.key === secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)) {
-        cachedTokenRaw = secureFallbackGet(AUTH_TOKEN_SECURE_KEY)
+        cachedTokenRaw = isTauri() ? null : secureFallbackGet(AUTH_TOKEN_SECURE_KEY)
         tokenHydrated = true
         cache = null
         notify()

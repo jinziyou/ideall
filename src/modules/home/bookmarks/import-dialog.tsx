@@ -14,6 +14,9 @@ import {
 import { Button } from "@/ui/button"
 import { Label } from "@/ui/label"
 import { parseBookmarksHtml, ParsedBookmark } from "@/files/bookmark-import"
+import { CAPTURE_INBOX_TAG } from "@/files/web-snapshot"
+import { recordFirstCreatedCapture } from "@/lib/capture-onboarding"
+import { captureOnboardingToastGuide } from "@/shared/feeders/capture-bookmark-feedback"
 import {
   createBookmarkFile,
   createBookmarkFolder,
@@ -95,11 +98,16 @@ export default function ImportDialog({
             title: bookmark.title,
             url: bookmark.url,
             favicon: bookmark.favicon,
+            tags: [CAPTURE_INBOX_TAG],
           },
           folder,
         )
+        recordFirstCreatedCapture()
       }
-      toast.success(`已导入 ${inputs.length} 个书签`)
+      const guide = captureOnboardingToastGuide()
+      toast.success(`已导入 ${inputs.length} 个书签`, {
+        ...(guide.action ? { action: guide.action } : {}),
+      })
       onImported()
       handleOpenChange(false)
     } catch (e) {

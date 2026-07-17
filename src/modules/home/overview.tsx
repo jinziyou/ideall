@@ -25,6 +25,7 @@ const OVERVIEW_ROOTS = ["subscriptions", "bookmarks", "files", "notes", "workspa
 const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
 
 const SECTION_TONE = {
+  inbox: "warn",
   subscriptions: "info",
   bookmarks: "idle",
   resources: "warn",
@@ -90,8 +91,8 @@ export default function Overview() {
 
   const loaded = data !== null
   const totalLocal = data
-    ? Object.values(data.counts).reduce<number>(
-        (sum, count) => sum + (typeof count === "number" ? count : 0),
+    ? Object.entries(data.counts).reduce<number>(
+        (sum, [key, count]) => sum + (key !== "inbox" && typeof count === "number" ? count : 0),
         0,
       )
     : undefined

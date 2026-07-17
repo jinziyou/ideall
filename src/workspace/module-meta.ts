@@ -11,6 +11,7 @@ import {
   GitBranch,
   LayoutDashboard,
   LayoutGrid,
+  Inbox,
   Blocks,
   Map,
   Megaphone,
@@ -37,6 +38,7 @@ export type ModuleMeta = {
 /** 在兼容模块与导航入口中重复出现、需保持一致的模块身份原子。 */
 export const MODULE_META = {
   overview: { label: "我的", icon: LayoutDashboard },
+  inbox: { label: "收件箱", icon: Inbox },
   // 产品区段名是「文件」; 底层 place/kind 仍为 notes/note。
   notes: { label: "文件", icon: FileText },
   subscriptions: { label: "关注", icon: Rss, tintClass: "text-spoke-info" },

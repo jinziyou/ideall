@@ -1,6 +1,7 @@
 import { afterEach, test } from "node:test"
 import assert from "node:assert/strict"
 import type { ResourceMeta, ResourceRecord, ResourceRef } from "@protocol/resource"
+import { CAPTURE_BOOKMARK_ACTION } from "@protocol/capture"
 import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
 import {
   clearResourceSourcesForTest,
@@ -60,6 +61,55 @@ test("resource filesystem: directory pagination uses strict canonical inputs", a
       (error) => error instanceof FileSystemError && error.code === "invalid-input",
     )
   }
+})
+
+test("resource filesystem: node place pagination forwards opaque source cursors", async () => {
+  const calls: Array<{ limit?: number; cursor?: string; rootOnly?: boolean }> = []
+  const metas = ["first", "second"].map(
+    (id): ResourceMeta => ({
+      ref: { scheme: "node", kind: "note", id },
+      title: id,
+      capabilities: ["open", "read-content"],
+    }),
+  )
+  registerResourceSource({
+    scheme: "node",
+    async list(query) {
+      calls.push({ limit: query.limit, cursor: query.cursor, rootOnly: query.rootOnly })
+      return query.cursor
+        ? { items: [metas[1]!], nextCursor: undefined }
+        : { items: [metas[0]!], nextCursor: "source-next" }
+    },
+    async get(ref) {
+      const meta = metas.find((item) => item.ref.id === ref.id)
+      return meta ? { meta, content: null } : null
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      throw new Error("unsupported")
+    },
+  })
+  const fs = createResourceFileSystem()
+  const directoryCtx = { actor: "ui", permissions: [], intent: "directory" } as const
+  const first = await fs.readDirectory(corePlaceRef("notes"), directoryCtx, { limit: 2 })
+  assert.equal(first.entries.length, 2, "hidden management panel and first node share page budget")
+  assert.match(first.nextCursor ?? "", /^node:/)
+
+  const second = await fs.readDirectory(corePlaceRef("notes"), directoryCtx, {
+    limit: 2,
+    cursor: first.nextCursor,
+  })
+  assert.deepEqual(
+    second.entries.map((entry) => entry.name),
+    ["second"],
+  )
+  assert.equal(second.nextCursor, undefined)
+  assert.deepEqual(calls, [
+    { limit: 1, cursor: undefined, rootOnly: true },
+    { limit: 2, cursor: "source-next", rootOnly: true },
+  ])
 })
 
 test("resource filesystem: note roots and child pages are created through resource source actions", async () => {
@@ -335,6 +385,32 @@ test("resource filesystem: management navigation targets real place roots", asyn
     const panel = await fs.stat(panelFileRef(panelId), ctx)
     assert.equal(panel?.properties?.navigationHidden, true, panelId)
   }
+})
+
+test("resource filesystem: bookmarks root advertises a permission-gated capture action", async () => {
+  const fs = createResourceFileSystem()
+  const root = corePlaceRef("bookmarks")
+  const actions = await fs.actions(root, { actor: "ui", permissions: [], intent: "action" })
+  const capture = actions.find((action) => action.id === CAPTURE_BOOKMARK_ACTION)
+  assert.deepEqual(capture, {
+    id: CAPTURE_BOOKMARK_ACTION,
+    label: "保存到我的",
+    requires: ["create"],
+    risk: "safe",
+    idempotent: true,
+    kind: "specialized",
+    reason: "由内容界面提供链接、标题和摘要",
+  })
+
+  await assert.rejects(
+    fs.invoke(
+      root,
+      CAPTURE_BOOKMARK_ACTION,
+      { title: "Blocked", url: "https://example.com" },
+      { actor: "embed", permissions: [], intent: "action" },
+    ),
+    (error) => error instanceof FileSystemError && error.code === "permission-denied",
+  )
 })
 
 test("resource filesystem: AI threads are linked from Home while the legacy workspace root remains", async () => {
@@ -625,6 +701,57 @@ test("resource filesystem: directory entry ids survive provider reordering", asy
     Object.fromEntries(entries.map((entry) => [entry.target.fileId, entry.entryId]))
 
   assert.deepEqual(ids(second.entries), ids(first.entries))
+})
+
+test("resource filesystem: directory entries hydrate versions from full metadata records", async () => {
+  const ref = { scheme: "node", kind: "file", id: "versioned-file" } as const
+  const summary: ResourceMeta = {
+    ref,
+    title: "versioned.txt",
+    capabilities: ["open", "read-blob", "edit", "delete"],
+  }
+  const hydrated: ResourceMeta = { ...summary, updatedAt: 17 }
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [summary] }
+    },
+    async get() {
+      return {
+        meta: hydrated,
+        content: {
+          id: ref.id,
+          kind: "file",
+          parentId: null,
+          sortKey: "a0",
+          title: hydrated.title,
+          tags: [],
+          createdAt: 1,
+          updatedAt: hydrated.updatedAt,
+          blobRef: { store: "blobs", key: ref.id, size: 4, mime: "text/plain" },
+          content: null,
+        },
+      }
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      return null
+    },
+  })
+
+  const fs = createResourceFileSystem()
+  const page = await fs.readDirectory(
+    corePlaceRef("files"),
+    { actor: "ui", permissions: [], intent: "directory" },
+    { limit: 200 },
+  )
+  const entry = page.entries.find((candidate) => candidate.target.fileId.includes(ref.id))
+
+  assert.equal(entry?.file?.updatedAt, 17)
+  assert.equal(entry?.file?.version, "17")
+  assert.equal(entry?.properties?.version, "17")
 })
 
 test("resource filesystem: range reads preserve version and expectedVersion rejects stale writes", async () => {

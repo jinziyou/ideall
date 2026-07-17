@@ -118,6 +118,16 @@ test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:
   }
 })
 
+test("info/community manifests share the same save-to-mine bookmark capability", () => {
+  for (const manifest of [infoEmbedManifest, communityEmbedManifest]) {
+    assert.equal(
+      manifest.permissions.includes("hub.bookmarks:write"),
+      true,
+      `${manifest.id} 应提供统一捕获能力`,
+    )
+  }
+})
+
 // ── §2.1 信任档偏序门 (docs/extension-registry-design.md) ──
 
 test("tierAtLeast: first-party ≥ verified ≥ any-origin 偏序", () => {

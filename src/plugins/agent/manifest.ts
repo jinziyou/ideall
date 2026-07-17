@@ -3,6 +3,7 @@ import {
   AGENT_CONFIG_WRITE_PERMISSION,
   agentConfigFileSystem,
 } from "./agent-config-file-system"
+import { agentAuditFileSystem } from "./agent-audit-file-system"
 import { agentManagementEngineContributions } from "./agent-management-engines"
 import {
   AGENT_DATA_SPEC,
@@ -51,9 +52,9 @@ export const agentManifest = {
   runtimeExtensionFactory: {
     id: "ideall.agent-config",
     label: "AI 智能体配置",
-    version: 1,
+    version: 2,
     source: { kind: "builtin" as const, id: "ideall" },
-    digest: "builtin/ideall.agent-config/v1",
+    digest: "builtin/ideall.agent-config/v2",
     permissionDigest: "builtin/ideall.agent-config/permissions/v1",
     permissions: ["fs:read", AGENT_CONFIG_READ_PERMISSION, AGENT_CONFIG_WRITE_PERMISSION] as const,
     create() {
@@ -66,6 +67,14 @@ export const agentManifest = {
             mount: {
               entryId: "app.agent-config",
               name: "AI 智能体配置",
+              properties: { navigationHidden: true },
+            },
+          },
+          {
+            provider: agentAuditFileSystem,
+            mount: {
+              entryId: "app.agent-write-audit",
+              name: "AI 写入审计",
               properties: { navigationHidden: true },
             },
           },

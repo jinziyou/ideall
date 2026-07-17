@@ -14,6 +14,7 @@ import {
   Hexagon,
   Layers,
   LayoutGrid,
+  PlusCircle,
   RefreshCw,
   SunMoon,
   Terminal,
@@ -72,6 +73,7 @@ import {
 import { createNoteFile } from "@/modules/home/notes/note-file-system"
 import { useShortcutLabel } from "@/lib/shortcuts"
 import { FileTypeIcon } from "@/shared/file-type-icon"
+import { AGENT_CONTEXT_TRAY_LIMIT, addAgentContextSource } from "@/lib/agent-context-tray"
 
 const LOCAL_SEARCH_DEBOUNCE_MS = 160
 const LOCAL_SEARCH_LIMIT_PER_GROUP = 20
@@ -214,6 +216,14 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
         toast.error("新建页面失败", { description: String(e) })
       }
     })()
+  }
+
+  function addSearchResultToContext(item: LocalSearchItem) {
+    if (!item.context) return
+    const result = addAgentContextSource(item.context)
+    if (result === "added") toast.success("已加入 AI 上下文", { description: item.label })
+    if (result === "exists") toast.info("该资料已在 AI 上下文中")
+    if (result === "full") toast.error(`AI 上下文最多选择 ${AGENT_CONTEXT_TRAY_LIMIT} 项资料`)
   }
 
   function checkUpdate() {
@@ -432,7 +442,7 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
             </CommandItem>
           )}
         </CommandGroup>
-        {/* 本机内容 (文件/关注/书签/资源): 仅在输入且非命令模式时展示, 按标题模糊匹配 (cmdk 据 keywords 过滤)。 */}
+        {/* 本机内容：标题优先，并补充正文、网址、描述、标签、关注条件和对话命中。 */}
         {!commandMode && query.trim() && contentQuery === query.trim() && content.length > 0
           ? LOCAL_SEARCH_ORDER.map((g) => {
               const gi = content.filter((i) => i.group === g)
@@ -446,7 +456,7 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
                       <CommandItem
                         key={i.id}
                         value={i.id}
-                        keywords={[i.label]}
+                        keywords={[i.label, i.hint ?? ""]}
                         onSelect={() => {
                           i.run()
                           setOpen(false)
@@ -461,7 +471,29 @@ export default function CommandPalettePanel({ initialOpen = false }: { initialOp
                         ) : (
                           <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                         )}
-                        <span className="truncate">{i.label}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{i.label}</span>
+                          {i.hint ? (
+                            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                              {i.hint}
+                            </span>
+                          ) : null}
+                        </span>
+                        {i.context ? (
+                          <button
+                            type="button"
+                            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                            title="加入 AI 上下文，不打开条目"
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              addSearchResultToContext(i)
+                            }}
+                          >
+                            <PlusCircle className="h-3.5 w-3.5" />
+                            上下文
+                          </button>
+                        ) : null}
                       </CommandItem>
                     ))}
                   </CommandGroup>

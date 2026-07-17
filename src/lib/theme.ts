@@ -5,11 +5,18 @@
  * - 无闪烁: layout 内联脚本在 body 解析时同步打上 .dark 类 (见 THEME_INIT)。
  */
 import { BRAND_INK, WONITA_PATH } from "./brand"
+import {
+  LEGACY_THEME_KEY,
+  THEME_KEY,
+  readPublicConfig,
+  removePublicConfig,
+  writePublicConfig,
+} from "./public-config"
+
+export { LEGACY_THEME_KEY, THEME_KEY } from "./public-config"
 
 export type ThemeChoice = "light" | "dark" | "system"
 
-export const THEME_KEY = "ideall:theme"
-export const LEGACY_THEME_KEY = "wonita-theme"
 const themeChoiceListeners = new Set<() => void>()
 
 function notifyThemeChoice(): void {
@@ -53,15 +60,15 @@ export const THEME_INIT = `(function(){try{var k='${THEME_KEY}',l='${LEGACY_THEM
 
 export function getThemeChoice(): ThemeChoice {
   try {
-    const next = localStorage.getItem(THEME_KEY)
-    const legacy = localStorage.getItem(LEGACY_THEME_KEY)
+    const next = readPublicConfig(THEME_KEY)
+    const legacy = readPublicConfig(LEGACY_THEME_KEY)
     if (next) {
-      if (legacy) localStorage.removeItem(LEGACY_THEME_KEY)
+      if (legacy) removePublicConfig(LEGACY_THEME_KEY)
       if (next === "light" || next === "dark" || next === "system") return next
     }
     if (legacy === "light" || legacy === "dark" || legacy === "system") {
-      localStorage.setItem(THEME_KEY, legacy)
-      localStorage.removeItem(LEGACY_THEME_KEY)
+      writePublicConfig(THEME_KEY, legacy)
+      removePublicConfig(LEGACY_THEME_KEY)
       return legacy
     }
   } catch {
@@ -85,8 +92,8 @@ export function applyTheme(choice: ThemeChoice) {
 
 export function setThemeChoice(choice: ThemeChoice) {
   try {
-    localStorage.setItem(THEME_KEY, choice)
-    localStorage.removeItem(LEGACY_THEME_KEY)
+    writePublicConfig(THEME_KEY, choice)
+    removePublicConfig(LEGACY_THEME_KEY)
   } catch {
     /* 忽略持久化失败 */
   }

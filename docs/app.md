@@ -70,6 +70,8 @@ pnpm verify:static-export
 pnpm verify:smoke:static  # 静态导出生产形态冒烟
 ```
 
+发布前还需在真实桌面进程与系统凭据库上执行 [Tauri App 数据安全验收](app-data-safety-acceptance.md)；设置页的“运行系统凭据库自检”会完成一次性随机值的写入、读回和清理。
+
 脚本入口、参数和新增脚本约定见 [scripts.md](scripts.md)。
 
 ### 指定备用端口启动（5020 被占用时）

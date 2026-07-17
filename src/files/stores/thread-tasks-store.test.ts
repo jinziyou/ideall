@@ -3,12 +3,16 @@ import { beforeEach, test } from "node:test"
 import { FILES_UPDATED, type FilesUpdate } from "@protocol/flowback"
 import { MAX_THREAD_TASK_ITEMS, ThreadTaskConflictError, type ThreadTask } from "@protocol/files"
 import type { NodeOfKind } from "@protocol/node"
-import { StorageSyncConflictError } from "@protocol/storage-sync"
+import { StorageSyncConflictError, type BookmarkSyncNode } from "@protocol/storage-sync"
 import {
   addBookmark,
   addFolder,
+  bulkPutBookmarkNodes,
+  captureBookmark,
   deleteBookmark,
   deleteFolder,
+  listAllBookmarkNodes,
+  listBookmarks,
   moveBookmark,
   moveFolder,
   restoreBookmark,
@@ -48,20 +52,45 @@ import {
   saveThreadAndTouchTaskAtomic,
   updateThreadTask,
 } from "./thread-tasks-store"
+import { listNodeSummaryPage } from "./nodes-store"
 import {
   IDB_DATABASE_NAME,
   IDB_DATABASE_VERSION,
+  INDEX_AGENT_WRITE_AUDIT_UPDATED_AT,
   INDEX_NODES_KIND,
   INDEX_NODES_KIND_SORT_KEY,
+  INDEX_NODES_KIND_SORT_TITLE_ID,
   INDEX_NODES_THREAD_METADATA,
   idbGet,
   idbPut,
   STORE_BLOBS,
   STORE_AGENT_TASKS,
+  STORE_AGENT_WRITE_AUDIT,
   STORE_NODES,
+  STORE_LOCAL_SEARCH_INDEX,
+  STORE_LOCAL_SEMANTIC_INDEX,
   STORE_TRASH_SNAPSHOTS,
 } from "@/lib/idb"
 import { feedNodeId } from "@/files/feed-node"
+import {
+  deleteLocalSearchIndexDocument,
+  localSearchIndexDocumentKey,
+  putLocalSearchIndexDocument,
+  readLocalSearchIndex,
+  replaceLocalSearchIndex,
+  type LocalSearchIndexDocument,
+} from "@/files/local-search-index-store"
+import {
+  createLocalSemanticVector,
+  deleteLocalSemanticVector,
+  putLocalSemanticVector,
+  readLocalSemanticIndex,
+  replaceLocalSemanticIndex,
+} from "@/files/local-semantic-index-store"
+import {
+  LOCAL_SEMANTIC_MODEL_ID,
+  LOCAL_SEMANTIC_VECTOR_DIMENSIONS,
+} from "@/lib/local-semantic-contract"
 
 type FakeStore = {
   keyPath: string
@@ -280,6 +309,20 @@ class FakeIndex {
     return req as IDBRequest<IDBCursor | null>
   }
 
+  openCursor(
+    query?: IDBValidKey | IDBKeyRange,
+    direction: IDBCursorDirection = "next",
+  ): IDBRequest<IDBCursorWithValue | null> {
+    const req = request<IDBCursorWithValue | null>()
+    this.transaction.trackCursor(
+      req as FakeRequest<IDBCursor | null>,
+      () => this.entries(query, direction),
+      () => {},
+      (primaryKey) => cloneValue(this.store.rows.get(primaryKey)),
+    )
+    return req as IDBRequest<IDBCursorWithValue | null>
+  }
+
   private entries(
     query?: IDBValidKey | IDBKeyRange,
     direction: IDBCursorDirection = "next",
@@ -364,6 +407,7 @@ class FakeTransaction {
     req: FakeRequest<IDBCursor | null>,
     readEntries: () => Array<{ key: IDBValidKey; primaryKey: IDBValidKey }>,
     onVisit: () => void = () => {},
+    valueFor?: (primaryKey: IDBValidKey) => unknown,
   ): void {
     this.pending += 1
     this.enqueue(() => {
@@ -385,6 +429,7 @@ class FakeTransaction {
           req.result = {
             key: cloneValue(entry.key),
             primaryKey: cloneValue(entry.primaryKey),
+            ...(valueFor ? { value: valueFor(entry.primaryKey) } : {}),
             continue: () => {
               if (continued) throw new Error("cursor continued twice")
               continued = true
@@ -525,6 +570,9 @@ function setupFakeIndexedDb(): void {
       ): IDBKeyRange {
         return { lower, upper, lowerOpen, upperOpen } as IDBKeyRange
       },
+      only(value: IDBValidKey): IDBKeyRange {
+        return { lower: value, upper: value, lowerOpen: false, upperOpen: false } as IDBKeyRange
+      },
     },
     configurable: true,
   })
@@ -570,6 +618,44 @@ setupFakeIndexedDb()
 
 beforeEach(() => {
   resetFakeIndexedDb()
+})
+
+test("capture bookmark: canonical URL deduplication is atomic and keeps searchable metadata", async () => {
+  const results = await Promise.all([
+    captureBookmark({
+      title: "Research A",
+      url: "https://EXAMPLE.com:443/research#first",
+      description: "Searchable finding",
+      tags: ["收件箱"],
+    }),
+    captureBookmark({
+      title: "Research B",
+      url: "https://example.com/research#second",
+      description: "Duplicate finding",
+      tags: ["收件箱"],
+    }),
+  ])
+
+  assert.equal(results.filter((result) => result.status === "created").length, 1)
+  assert.equal(results.filter((result) => result.status === "existing").length, 1)
+  assert.equal(results[0]?.bookmark.id, results[1]?.bookmark.id)
+  const bookmarks = await listBookmarks()
+  assert.equal(bookmarks.length, 1)
+  assert.deepEqual(bookmarks[0]?.tags, ["收件箱"])
+  assert.equal(bookmarks[0]?.description, "Searchable finding")
+})
+
+test("capture bookmark: rejects unsafe protocols before opening a write transaction", async () => {
+  await assert.rejects(
+    () =>
+      captureBookmark({
+        title: "Unsafe",
+        url: "javascript:alert(1)",
+        tags: ["收件箱"],
+      }),
+    /HTTP\(S\)/,
+  )
+  assert.deepEqual(await listBookmarks(), [])
 })
 
 function threadNode(id: string, deletedAt?: number): NodeOfKind<"thread"> {
@@ -707,17 +793,192 @@ function task(id: string, updatedAt = 20, workspaceId = "workspace-a"): ThreadTa
   }
 }
 
-test("schema/list: v16 adds the kind/sortKey tail index and keeps the task index head", async () => {
+test("schema/list: v20 adds the optional semantic index and keeps existing stores", async () => {
   assert.equal(IDB_DATABASE_NAME, "wonita-home")
-  assert.equal(IDB_DATABASE_VERSION, 16)
+  assert.equal(IDB_DATABASE_VERSION, 20)
   assert.deepEqual(await listThreadTasks(), { revision: 0, tasks: [] })
   assert.deepEqual(await readThreadTaskIndexHead(), { revision: 0, count: 0 })
   assert.ok(fakeDbs.get(IDB_DATABASE_NAME)?.stores.has(STORE_AGENT_TASKS))
   assert.equal(fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_AGENT_TASKS)?.keyPath, "key")
+  assert.equal(fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_LOCAL_SEARCH_INDEX)?.keyPath, "key")
+  assert.equal(
+    fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_LOCAL_SEMANTIC_INDEX)?.keyPath,
+    "key",
+  )
+  assert.equal(fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_AGENT_WRITE_AUDIT)?.keyPath, "id")
+  assert.equal(
+    fakeDbs
+      .get(IDB_DATABASE_NAME)
+      ?.stores.get(STORE_AGENT_WRITE_AUDIT)
+      ?.indexes.get(INDEX_AGENT_WRITE_AUDIT_UPDATED_AT),
+    "updatedAt",
+  )
   assert.deepEqual(
     fakeDbs.get(IDB_DATABASE_NAME)?.stores.get(STORE_NODES)?.indexes.get(INDEX_NODES_KIND_SORT_KEY),
     ["kind", "sortKey"],
   )
+  assert.deepEqual(
+    fakeDbs
+      .get(IDB_DATABASE_NAME)
+      ?.stores.get(STORE_NODES)
+      ?.indexes.get(INDEX_NODES_KIND_SORT_TITLE_ID),
+    ["kind", "sortKey", "title", "id"],
+  )
+})
+
+test("local search index store: rebuild, incremental upsert and delete keep a consistent head", async () => {
+  const document = (id: string, value: string): LocalSearchIndexDocument => {
+    const target = { fileSystemId: "ideall.core", fileId: `resource:node:note:${id}` }
+    return {
+      key: localSearchIndexDocumentKey(target),
+      type: "document",
+      target,
+      group: "文件",
+      kind: "note",
+      label: id,
+      fields: [{ label: "正文", value }],
+      sourceVersion: "1",
+      indexedAt: 1,
+    }
+  }
+  const first = document("first", "alpha")
+  const second = document("second", "beta")
+
+  await replaceLocalSearchIndex([first])
+  assert.deepEqual((await readLocalSearchIndex()).documents, [first])
+
+  await putLocalSearchIndexDocument(second)
+  assert.deepEqual((await readLocalSearchIndex()).documents.map((item) => item.label).sort(), [
+    "first",
+    "second",
+  ])
+
+  await putLocalSearchIndexDocument({ ...second, fields: [{ label: "正文", value: "updated" }] })
+  const updated = await readLocalSearchIndex()
+  assert.equal(updated.ready, true)
+  assert.equal(updated.documents.length, 2)
+  assert.equal(
+    updated.documents.find((item) => item.label === "second")?.fields[0]?.value,
+    "updated",
+  )
+
+  await deleteLocalSearchIndexDocument(first.target)
+  assert.deepEqual(
+    (await readLocalSearchIndex()).documents.map((item) => item.label),
+    ["second"],
+  )
+
+  await idbPut(STORE_LOCAL_SEARCH_INDEX, {
+    ...second,
+    fields: [{ label: "正文", value: 42 }],
+  })
+  assert.equal((await readLocalSearchIndex()).ready, false)
+})
+
+test("local semantic index store: rebuild, upsert, delete and corruption stay bounded", async () => {
+  const vector = (seed: number) =>
+    Float32Array.from(
+      { length: LOCAL_SEMANTIC_VECTOR_DIMENSIONS },
+      (_, index) => seed + index / 1000,
+    )
+  const first = createLocalSemanticVector(
+    "document:first",
+    "1",
+    LOCAL_SEMANTIC_MODEL_ID,
+    vector(1),
+    10,
+  )
+  const second = createLocalSemanticVector(
+    "document:second",
+    "1",
+    LOCAL_SEMANTIC_MODEL_ID,
+    vector(2),
+    20,
+  )
+
+  await replaceLocalSemanticIndex(LOCAL_SEMANTIC_MODEL_ID, [first])
+  assert.deepEqual((await readLocalSemanticIndex()).vectors, [first])
+
+  await putLocalSemanticVector(second)
+  const inserted = await readLocalSemanticIndex()
+  assert.equal(inserted.ready, true)
+  assert.deepEqual(inserted.vectors.map((item) => item.documentKey).sort(), [
+    "document:first",
+    "document:second",
+  ])
+
+  const updatedSecond = createLocalSemanticVector(
+    "document:second",
+    "2",
+    LOCAL_SEMANTIC_MODEL_ID,
+    vector(3),
+    30,
+  )
+  await putLocalSemanticVector(updatedSecond)
+  assert.equal((await readLocalSemanticIndex()).vectors.length, 2)
+  assert.equal(
+    (await readLocalSemanticIndex()).vectors.find((item) => item.documentKey === "document:second")
+      ?.sourceVersion,
+    "2",
+  )
+
+  await deleteLocalSemanticVector("document:first")
+  assert.deepEqual(
+    (await readLocalSemanticIndex()).vectors.map((item) => item.documentKey),
+    ["document:second"],
+  )
+
+  await idbPut(STORE_LOCAL_SEMANTIC_INDEX, {
+    ...updatedSecond,
+    vector: new Float32Array(1),
+  })
+  assert.equal((await readLocalSemanticIndex()).ready, false)
+})
+
+test("node summary paging: index cursor merges kinds without nodes getAll", async () => {
+  const row = (
+    id: string,
+    kind: "note" | "file",
+    sortKey: string,
+    parentId: string | null = null,
+  ) => ({
+    id,
+    kind,
+    title: id,
+    parentId,
+    sortKey,
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    ...(kind === "file"
+      ? { blobRef: { store: "blobs", key: id, size: 1, mime: "text/plain" }, content: null }
+      : { content: [] }),
+  })
+  await idbPut(STORE_NODES, row("note-a", "note", "a0"))
+  await idbPut(STORE_NODES, row("child", "note", "a1", "note-a"))
+  await idbPut(STORE_NODES, row("file-b", "file", "b0"))
+  await idbPut(STORE_NODES, row("note-c", "note", "c0"))
+
+  const first = await listNodeSummaryPage(["note", "file"], { limit: 2, parentId: null })
+  assert.deepEqual(
+    first.items.map((item) => item.id),
+    ["note-a", "file-b"],
+  )
+  assert.equal(first.items[0]?.hasChildren, true)
+  assert.ok(first.nextCursor)
+
+  const second = await listNodeSummaryPage(["note", "file"], {
+    limit: 2,
+    parentId: null,
+    cursor: first.nextCursor,
+  })
+  assert.deepEqual(
+    second.items.map((item) => item.id),
+    ["note-c"],
+  )
+  assert.equal(second.nextCursor, undefined)
+  assert.equal(getAllCalls.get(STORE_NODES) ?? 0, 0)
+  assert.equal(getAllCalls.get(INDEX_NODES_KIND_SORT_TITLE_ID) ?? 0, 0)
 })
 
 test("state compatibility: a v15 row without count is repaired once without an extra revision", async () => {
@@ -1851,6 +2112,114 @@ test("note sync: a remote note id cannot overwrite another node kind", async () 
   assert.equal(await idbGet(STORE_NODES, safe.id), undefined)
 })
 
+test("bookmark sync: folder and bookmark commit atomically and reject a stale local snapshot", async () => {
+  const incoming: BookmarkSyncNode[] = [
+    {
+      id: "sync-folder",
+      kind: "folder",
+      title: "sync folder",
+      parentId: null,
+      sortKey: "a0",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: null,
+    },
+    {
+      id: "sync-bookmark",
+      kind: "bookmark",
+      title: "sync bookmark",
+      parentId: "sync-folder",
+      sortKey: "a0",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: { url: "https://sync.example", description: "", favicon: "" },
+    },
+  ]
+  const committed = await bulkPutBookmarkNodes(incoming, [])
+  assert.deepEqual(committed, incoming)
+  assert.deepEqual(await listAllBookmarkNodes(), incoming)
+
+  await updateNode("bookmark", "sync-bookmark", { title: "local edit" })
+  const locallyEdited = await idbGet<NodeOfKind<"bookmark">>(STORE_NODES, "sync-bookmark")
+  assert.ok(locallyEdited)
+  const remoteOnly: BookmarkSyncNode = {
+    ...incoming[1],
+    id: "remote-only-bookmark",
+    parentId: null,
+  } as BookmarkSyncNode
+  await assert.rejects(
+    () => bulkPutBookmarkNodes([...incoming, remoteOnly], committed),
+    (error) => error instanceof StorageSyncConflictError,
+  )
+  assert.deepEqual(await idbGet(STORE_NODES, "sync-bookmark"), locallyEdited)
+  assert.equal(await idbGet(STORE_NODES, "remote-only-bookmark"), undefined)
+})
+
+test("bookmark sync: a remote bookmark id cannot overwrite another node kind", async () => {
+  const occupied = storedNote("bookmark-cross-kind", null, "a0")
+  await idbPut(STORE_NODES, occupied)
+  const incoming: BookmarkSyncNode[] = [
+    {
+      id: "safe-sync-folder",
+      kind: "folder",
+      title: "safe",
+      parentId: null,
+      sortKey: "a0",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: null,
+    },
+    {
+      id: occupied.id,
+      kind: "bookmark",
+      title: "collision",
+      parentId: null,
+      sortKey: "a1",
+      tags: [],
+      createdAt: 1,
+      updatedAt: 1,
+      content: { url: "https://collision.example", description: "", favicon: "" },
+    },
+  ]
+
+  await assert.rejects(() => bulkPutBookmarkNodes(incoming, []), /duplicate key/)
+
+  assert.deepEqual(await idbGet(STORE_NODES, occupied.id), occupied)
+  assert.equal(await idbGet(STORE_NODES, "safe-sync-folder"), undefined)
+})
+
+test("bookmark sync CAS: rejects orphan bookmarks atomically", async () => {
+  const safeFolder: BookmarkSyncNode = {
+    id: "safe-folder-before-orphan",
+    kind: "folder",
+    title: "safe",
+    parentId: null,
+    sortKey: "a0",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    content: null,
+  }
+  const orphan: BookmarkSyncNode = {
+    id: "orphan-bookmark",
+    kind: "bookmark",
+    title: "orphan",
+    parentId: "missing-folder",
+    sortKey: "a1",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    content: { url: "https://example.com", description: "", favicon: "" },
+  }
+
+  await assert.rejects(() => bulkPutBookmarkNodes([safeFolder, orphan], []), /孤儿书签/)
+  assert.equal(await idbGet(STORE_NODES, safeFolder.id), undefined)
+  assert.equal(await idbGet(STORE_NODES, orphan.id), undefined)
+})
+
 test("note sync CAS: a stale merge cannot overwrite a move committed after listLocal", async () => {
   await idbPut(STORE_NODES, storedNote("old-parent", null, "a0"))
   await idbPut(STORE_NODES, storedNote("new-parent", null, "a1"))
@@ -2409,6 +2778,36 @@ test("delete: snapshot, tombstone and task removal commit together", async () =>
   assert.equal(retry.revision, 2)
   assert.equal(retry.deleted, false)
   assert.deepEqual(await listThreadTasks(), { revision: 2, tasks: [] })
+})
+
+test("delete: stale thread expectation preserves a task that was edited after creation", async () => {
+  const created = await createTaskThread("workspace-a")
+  const saved = await saveThreadAndTouchTaskAtomic({
+    ...created.thread,
+    messages: [{ role: "assistant", content: "continued" }],
+  })
+
+  await assert.rejects(
+    () =>
+      deleteTaskThread(created.thread.id, {
+        kind: "thread",
+        updatedAt: created.thread.updatedAt,
+        deletedAt: null,
+      }),
+    /节点在写入前已变更/,
+  )
+  assert.equal(
+    (await idbGet<NodeOfKind<"thread">>(STORE_NODES, created.thread.id))?.deletedAt,
+    undefined,
+  )
+  assert.equal((await listThreadTasks()).tasks.length, 1)
+
+  const deleted = await deleteTaskThread(created.thread.id, {
+    kind: "thread",
+    updatedAt: saved.thread.updatedAt,
+    deletedAt: null,
+  })
+  assert.equal(deleted.deleted, true)
 })
 
 test("delete: a late node write failure rolls back trash snapshot and task removal", async () => {

@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
 import { PinToolButton } from "@/shared/feeders/pin-tool-button"
+import { CaptureLinkButton } from "@/shared/feeders/capture-link-button"
 
 // 工具·导航视图 (由工作区 registry 作为标签内容渲染; 不再是独立路由页)。
 type Site = { name: string; url: string; desc?: string }
@@ -69,13 +70,19 @@ export default function ToolNavigationPage() {
                     href={site.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group flex flex-col gap-0.5 rounded-xl border p-2.5 pr-7 transition-colors hover:border-spoke-tool/40 hover:bg-spoke-tool/5"
+                    className="group flex flex-col gap-0.5 rounded-xl border p-2.5 pr-12 transition-colors hover:border-spoke-tool/40 hover:bg-spoke-tool/5"
                   >
                     <span className="flex items-center gap-1 text-sm font-medium">
                       {site.name}
                       <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
                     </span>
                   </a>
+                  <CaptureLinkButton
+                    title={site.name}
+                    url={site.url}
+                    description={site.desc}
+                    className="absolute right-6 top-1"
+                  />
                   <PinToolButton
                     name={site.name}
                     url={site.url}

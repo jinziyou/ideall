@@ -1,11 +1,38 @@
 import { isTauri } from "./tauri"
 
-export type SecureStoreBackend = "system-keychain" | "web-localStorage" | "localStorage-fallback"
+export type SecureStoreBackend = "system-keychain" | "web-localStorage" | "unavailable"
 
 export type SecureStoreStatus = {
   backend: SecureStoreBackend
   native: boolean
   error?: string
+}
+
+export type SecureStoreSelfTestResult = {
+  backend: "system-keychain"
+  roundTrip: true
+  cleanedUp: true
+}
+
+export type SecureStoreMigrationResult = {
+  available: boolean
+  migrated: number
+  removedPlaintext: number
+  failed: number
+  remaining: number
+}
+
+export class SecureStoreUnavailableError extends Error {
+  override name = "SecureStoreUnavailableError"
+
+  constructor(operation: "write" | "delete", cause?: unknown) {
+    super(
+      operation === "write"
+        ? "系统凭据库不可用，敏感信息未保存"
+        : "系统凭据库不可用，敏感信息未删除",
+      { cause },
+    )
+  }
 }
 
 export const SECURE_STORE_KEYS = {
@@ -191,25 +218,109 @@ export async function secureStoreStatus(): Promise<SecureStoreStatus> {
   try {
     const status = await invokeTauri<{ backend: string; native: boolean }>("secure_store_status")
     return {
-      backend: status.backend === "system-keychain" ? "system-keychain" : "localStorage-fallback",
-      native: status.native,
+      backend:
+        status.backend === "system-keychain" && status.native ? "system-keychain" : "unavailable",
+      native: status.backend === "system-keychain" && status.native,
     }
   } catch (error) {
     return {
-      backend: "localStorage-fallback",
+      backend: "unavailable",
       native: false,
       error: error instanceof Error ? error.message : String(error),
     }
   }
 }
 
+export async function runSecureStoreSelfTest(): Promise<SecureStoreSelfTestResult> {
+  if (!isTauri()) throw new Error("系统凭据库自检仅可在桌面 App 中运行")
+  const result = await invokeTauri<{
+    backend?: unknown
+    roundTrip?: unknown
+    cleanedUp?: unknown
+  }>("secure_store_self_test")
+  if (
+    result.backend !== "system-keychain" ||
+    result.roundTrip !== true ||
+    result.cleanedUp !== true
+  ) {
+    throw new Error("系统凭据库自检返回了无效结果")
+  }
+  return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
+}
+
+type SecureStoreMigrationInvoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>
+
+/**
+ * 把已登记的旧 fallback/公开凭据迁入系统凭据库。每项必须写后读回成功才删除明文来源；
+ * 原生库已有值时以原生值为真相，仅清理旧副本。返回值只含计数，不暴露 key/value。
+ */
+export async function migrateLegacySecureValues(
+  options: Readonly<{
+    native?: boolean
+    invoke?: SecureStoreMigrationInvoke
+  }> = {},
+): Promise<SecureStoreMigrationResult> {
+  const native = options.native ?? isTauri()
+  const invoke = options.invoke ?? invokeTauri
+  const before = secureStoreSecuritySnapshot()
+  const beforeRemaining = before.fallbackValueCount + before.legacyValueCount
+  if (!native) {
+    return {
+      available: false,
+      migrated: 0,
+      removedPlaintext: 0,
+      failed: 0,
+      remaining: beforeRemaining,
+    }
+  }
+
+  let migrated = 0
+  let removedPlaintext = 0
+  let failed = 0
+  for (const item of SECURE_STORE_KNOWN_ITEMS) {
+    const fallbackValue = secureFallbackGet(item.key)
+    const legacyValue = item.legacyKey ? publicStorageGet(item.legacyKey) : null
+    if (fallbackValue === null && legacyValue === null) continue
+    try {
+      const current = await invoke<string | null>("secure_store_get", { key: item.key })
+      if (current === null) {
+        const source = fallbackValue ?? legacyValue
+        if (source === null) continue
+        await invoke<void>("secure_store_set", { key: item.key, value: source })
+        const verified = await invoke<string | null>("secure_store_get", { key: item.key })
+        if (verified !== source) throw new Error("secure-store migration verification failed")
+        migrated += 1
+      }
+      if (fallbackValue !== null) {
+        storage()?.removeItem(fallbackKey(item.key))
+        removedPlaintext += 1
+      }
+      if (item.legacyKey && legacyValue !== null) {
+        publicStorageRemove(item.legacyKey)
+        removedPlaintext += 1
+      }
+    } catch {
+      failed += 1
+    }
+  }
+  const after = secureStoreSecuritySnapshot()
+  return {
+    available: true,
+    migrated,
+    removedPlaintext,
+    failed,
+    remaining: after.fallbackValueCount + after.legacyValueCount,
+  }
+}
+
 export async function secureGet(key: string): Promise<string | null> {
   if (isTauri()) {
     try {
-      const value = await invokeTauri<string | null>("secure_store_get", { key })
-      if (value !== null) return value
+      return await invokeTauri<string | null>("secure_store_get", { key })
     } catch {
-      return storage()?.getItem(fallbackKey(key)) ?? null
+      // App 形态绝不把旧的明文 fallback 当作凭据来源。状态页会单独报告后端故障，
+      // 读取方只看到“无凭据”，从而 fail closed。
+      return null
     }
   }
   return storage()?.getItem(fallbackKey(key)) ?? null
@@ -221,9 +332,8 @@ export async function secureSet(key: string, value: string): Promise<SecureStore
       await invokeTauri<void>("secure_store_set", { key, value })
       storage()?.removeItem(fallbackKey(key))
       return "system-keychain"
-    } catch {
-      storage()?.setItem(fallbackKey(key), value)
-      return "localStorage-fallback"
+    } catch (error) {
+      throw new SecureStoreUnavailableError("write", error)
     }
   }
   storage()?.setItem(fallbackKey(key), value)
@@ -234,8 +344,8 @@ export async function secureDelete(key: string): Promise<void> {
   if (isTauri()) {
     try {
       await invokeTauri<void>("secure_store_delete", { key })
-    } catch {
-      /* fallback cleanup below */
+    } catch (error) {
+      throw new SecureStoreUnavailableError("delete", error)
     }
   }
   storage()?.removeItem(fallbackKey(key))

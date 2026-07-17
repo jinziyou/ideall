@@ -319,17 +319,18 @@ export function createFileSystemFilesPort(
     kind: NodeKind,
     id: string,
     patch: FsWritePatch,
+    expectedVersion?: string,
   ): Promise<Node | undefined> {
     const ref = nodeFileRef(kind, id)
     if (!(await gateway.stat(ref, access("metadata")))) return undefined
-    await gateway.write(ref, { data: patch }, access("write"))
+    await gateway.write(ref, { data: patch, expectedVersion }, access("write"))
     return readNode(ref)
   }
 
-  async function deleteNode(kind: NodeKind, id: string): Promise<void> {
+  async function deleteNode(kind: NodeKind, id: string, expectedVersion?: string): Promise<void> {
     const ref = nodeFileRef(kind, id)
     if (!(await gateway.stat(ref, access("metadata")))) return
-    await gateway.invoke(ref, "delete", undefined, access("action"))
+    await gateway.invoke(ref, "delete", undefined, access("action"), { expectedVersion })
   }
 
   async function listNotesWithEffectiveParents(): Promise<Note[]> {
@@ -535,8 +536,8 @@ export function createFileSystemFilesPort(
     async updateThreadTask(id, patch) {
       return requireThreadTasks().updateThreadTask(id, patch)
     },
-    async deleteTaskThread(id) {
-      return requireThreadTasks().deleteTaskThread(id)
+    async deleteTaskThread(id, expected) {
+      return requireThreadTasks().deleteTaskThread(id, expected)
     },
     async replaceThreadTasks(tasks, expectedRevision) {
       return requireThreadTasks().replaceThreadTasks(tasks, expectedRevision)
@@ -553,10 +554,12 @@ export function createFileSystemFilesPort(
       return createNodeAtPlace(place, input)
     },
     fsUpdateNode: updateNode,
-    async fsMoveNode(kind, id, parentId, afterSortKey) {
+    async fsMoveNode(kind, id, parentId, afterSortKey, expectedVersion) {
       const ref = nodeFileRef(kind, id)
       if (!(await gateway.stat(ref, access("metadata")))) return undefined
-      await gateway.invoke(ref, "move", { parentId, afterSortKey }, access("action"))
+      await gateway.invoke(ref, "move", { parentId, afterSortKey }, access("action"), {
+        expectedVersion,
+      })
       return readNode(ref)
     },
     fsDeleteNode: deleteNode,

@@ -1,15 +1,17 @@
-// 跨域同步编排 XState 状态机 —— 并发同步关注 + 笔记, 聚合 SyncResult; 任一失败则 failed。
+// 跨域同步编排 XState 状态机 —— 并发同步关注 + 笔记 + 书签, 聚合 SyncResult。
 import { setup, assign, fromPromise } from "xstate"
 import type { SyncResult } from "@protocol/sync"
 import { runDomainSync } from "./sync-domain-machine"
 import { subscriptionsSyncConfig } from "./subscription-sync"
 import { notesSyncConfig } from "./notes-sync"
+import { bookmarksSyncConfig } from "./bookmarks-sync"
 import { runActorWithProgress, syncProgressFromSnapshot } from "@/lib/xstate-progress"
 
 type OrchestratorContext = {
   code: string
   subsResult?: SyncResult
   notesResult?: SyncResult
+  bookmarksResult?: SyncResult
   error?: string
 }
 
@@ -25,6 +27,9 @@ const syncOrchestratorMachine = setup({
     ),
     syncNotes: fromPromise(async ({ input }: { input: { code: string } }) =>
       runDomainSync(input.code, notesSyncConfig),
+    ),
+    syncBookmarks: fromPromise(async ({ input }: { input: { code: string } }) =>
+      runDomainSync(input.code, bookmarksSyncConfig),
     ),
   },
 }).createMachine({
@@ -93,6 +98,35 @@ const syncOrchestratorMachine = setup({
             err: { type: "final" },
           },
         },
+        bookmarks: {
+          initial: "run",
+          states: {
+            run: {
+              invoke: {
+                src: "syncBookmarks",
+                input: ({ context }) => ({ code: context.code }),
+                onDone: {
+                  target: "ok",
+                  actions: assign({
+                    bookmarksResult: ({ event }) => event.output,
+                  }),
+                },
+                onError: {
+                  target: "err",
+                  actions: assign({
+                    error: ({ context, event }) => {
+                      const msg =
+                        event.error instanceof Error ? event.error.message : String(event.error)
+                      return context.error ? `${context.error}；${msg}` : msg
+                    },
+                  }),
+                },
+              },
+            },
+            ok: { type: "final" },
+            err: { type: "final" },
+          },
+        },
       },
       onDone: [
         {
@@ -106,12 +140,18 @@ const syncOrchestratorMachine = setup({
     failed: { type: "final" },
   },
   output: ({ context }) => ({
-    total: (context.subsResult?.total ?? 0) + (context.notesResult?.total ?? 0),
-    added: (context.subsResult?.added ?? 0) + (context.notesResult?.added ?? 0),
+    total:
+      (context.subsResult?.total ?? 0) +
+      (context.notesResult?.total ?? 0) +
+      (context.bookmarksResult?.total ?? 0),
+    added:
+      (context.subsResult?.added ?? 0) +
+      (context.notesResult?.added ?? 0) +
+      (context.bookmarksResult?.added ?? 0),
   }),
 })
 
-/** SyncPort.syncNow 入口 —— 经 XState 并发编排两域。 */
+/** SyncPort.syncNow 入口 —— 经 XState 并发编排三个独立加密域。 */
 export async function runSyncOrchestrator(code: string): Promise<SyncResult> {
   return runActorWithProgress(
     syncOrchestratorMachine,

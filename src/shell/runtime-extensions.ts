@@ -4,6 +4,8 @@
 export type {
   RuntimeEngineContribution,
   RuntimeExtensionConsentAuthority,
+  RuntimeExtensionConsentBinding,
+  RuntimeExtensionConsentReference,
   RuntimeExtensionConsentReceipt,
   RuntimeExtensionContribution,
   RuntimeExtensionDescriptor,
@@ -16,6 +18,8 @@ export type {
   RuntimeExtensionVerifier,
   RuntimeFileSystemContribution,
 } from "./runtime-extensions/types"
+
+export type { RuntimeExtensionTrustHost } from "./runtime-extensions/trust-host"
 
 export {
   RUNTIME_EXTENSION_INSTALLS_STORAGE_KEY,
@@ -36,4 +40,14 @@ export {
   type RuntimeExtensionHealth,
 } from "./runtime-extensions/catalog"
 
-export { runtimeExtensionCatalog, runtimeExtensionRegistry } from "./runtime-extensions/browser"
+export {
+  runtimeExtensionPackageRejections,
+  subscribeRuntimeExtensionPackageRejections,
+  type RuntimeExtensionPackageRejection,
+} from "./runtime-extensions/discovery-diagnostics"
+
+export {
+  configureRuntimeExtensionTrustHost,
+  runtimeExtensionCatalog,
+  runtimeExtensionRegistry,
+} from "./runtime-extensions/browser"

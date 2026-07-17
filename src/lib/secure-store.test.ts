@@ -3,7 +3,9 @@ import assert from "node:assert/strict"
 import {
   LEGACY_PUBLIC_STORAGE_KEYS,
   SECURE_STORE_KEYS,
+  SecureStoreUnavailableError,
   isSecureFallbackKey,
+  migrateLegacySecureValues,
   publicStorageGet,
   publicStorageGetWithLegacy,
   secureDelete,
@@ -37,6 +39,32 @@ test("secure-store: Web 形态使用命名 fallback key", async () => {
   assert.equal(await secureGet("ideall:test"), "secret")
   await secureDelete("ideall:test")
   assert.equal(await secureGet("ideall:test"), null)
+})
+
+test("secure-store: App 凭据库故障时 fail closed 且不读写明文 fallback", async () => {
+  mem.clear()
+  ;(globalThis as unknown as { window?: Window }).window = {
+    __TAURI_INTERNALS__: {},
+  } as unknown as Window
+  const key = "ideall:test:desktop"
+  const fallback = secureFallbackStorageKey(key)
+  mem.set(fallback, "old-plaintext-secret")
+
+  try {
+    const status = await secureStoreStatus()
+    assert.equal(status.backend, "unavailable")
+    assert.equal(status.native, false)
+    assert.equal(await secureGet(key), null)
+    await assert.rejects(
+      secureSet(key, "new-secret"),
+      (error) => error instanceof SecureStoreUnavailableError,
+    )
+    assert.equal(mem.get(fallback), "old-plaintext-secret")
+    await assert.rejects(secureDelete(key), (error) => error instanceof SecureStoreUnavailableError)
+    assert.equal(mem.get(fallback), "old-plaintext-secret")
+  } finally {
+    delete (globalThis as unknown as { window?: Window }).window
+  }
 })
 
 test("secure-store: 旧公开键可迁移到统一 fallback key", async () => {
@@ -100,4 +128,49 @@ test("secure-store: 安全快照识别 fallback 与旧公开键", async () => {
   assert.equal(snapshot.legacyValueCount, 1)
   assert.equal(snapshot.items.find((item) => item.id === "auth.token")?.fallbackPresent, true)
   assert.equal(snapshot.items.find((item) => item.id === "sync.code")?.legacyPresent, true)
+})
+
+test("secure-store: App 验证写入后迁移遗留明文且不覆盖原生真值", async () => {
+  mem.clear()
+  mem.set(secureFallbackStorageKey(SECURE_STORE_KEYS.AUTH_TOKEN), "fallback-token")
+  mem.set(LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE, "legacy-sync")
+  const native = new Map<string, string>([[SECURE_STORE_KEYS.AUTH_TOKEN, "native-token"]])
+  const invoke = async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
+    const key = String(args?.key)
+    if (command === "secure_store_get") return (native.get(key) ?? null) as T
+    if (command === "secure_store_set") {
+      native.set(key, String(args?.value))
+      return undefined as T
+    }
+    throw new Error("unexpected command")
+  }
+
+  const result = await migrateLegacySecureValues({ native: true, invoke })
+
+  assert.deepEqual(result, {
+    available: true,
+    migrated: 1,
+    removedPlaintext: 2,
+    failed: 0,
+    remaining: 0,
+  })
+  assert.equal(native.get(SECURE_STORE_KEYS.AUTH_TOKEN), "native-token")
+  assert.equal(native.get(SECURE_STORE_KEYS.SYNC_CODE), "legacy-sync")
+  assert.equal(mem.size, 0)
+})
+
+test("secure-store: 迁移读回失败时保留明文来源供重试", async () => {
+  mem.clear()
+  mem.set(secureFallbackStorageKey(SECURE_STORE_KEYS.SYNC_CODE), "keep-me")
+  const result = await migrateLegacySecureValues({
+    native: true,
+    invoke: async <T>(command: string): Promise<T> => {
+      if (command === "secure_store_get") return null as T
+      return undefined as T
+    },
+  })
+
+  assert.equal(result.failed, 1)
+  assert.equal(result.remaining, 1)
+  assert.equal(mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.SYNC_CODE)), "keep-me")
 })

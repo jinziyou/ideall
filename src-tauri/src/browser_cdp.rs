@@ -383,6 +383,7 @@ pub async fn get_content(state: &BrowserCdpState) -> Result<BrowserPageContent, 
         url,
         title: v["title"].as_str().unwrap_or(&title).to_string(),
         text: v["text"].as_str().unwrap_or("").to_string(),
+        selection: v["selection"].as_str().unwrap_or("").to_string(),
     })
 }
 

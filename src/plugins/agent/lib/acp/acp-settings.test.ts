@@ -35,7 +35,19 @@ test("部分字段与默认合并", () => {
     allowEditorConnect: true,
     listenPort: 0,
     externalAgent: { program: "", args: "", cwd: "" },
+    executionBackend: "model",
   })
+})
+
+test("执行后端只接受已知值，旧设置默认使用模型", () => {
+  assert.equal(
+    parseAcpSettings(JSON.stringify({ executionBackend: "external-acp" })).executionBackend,
+    "external-acp",
+  )
+  assert.equal(
+    parseAcpSettings(JSON.stringify({ executionBackend: "shell" })).executionBackend,
+    "model",
+  )
 })
 
 test("externalAgent 字段强制字符串并与默认合并", () => {
@@ -69,10 +81,11 @@ test("ACP settings: 旧公开设置迁移到 ideall 命名空间并删除旧键"
     listenPort: 3210,
     externalAgent: { program: "npx", args: "acp --stdio", cwd: "/tmp/legacy" },
   }
+  const normalized = { ...legacySettings, executionBackend: "model" }
   mem.set(LEGACY_ACP_SETTINGS_STORAGE_KEY, JSON.stringify(legacySettings))
 
-  assert.deepEqual(getAcpSettings(), legacySettings)
-  assert.equal(mem.get(ACP_SETTINGS_STORAGE_KEY), JSON.stringify(legacySettings))
+  assert.deepEqual(getAcpSettings(), normalized)
+  assert.equal(mem.get(ACP_SETTINGS_STORAGE_KEY), JSON.stringify(normalized))
   assert.equal(mem.get(LEGACY_ACP_SETTINGS_STORAGE_KEY), undefined)
 })
 
@@ -82,6 +95,7 @@ test("ACP settings: 新旧公开设置同时存在时 canonical 设置胜出", (
     allowEditorConnect: false,
     listenPort: 9876,
     externalAgent: { program: "canonical-acp", args: "--serve", cwd: "/tmp/canonical" },
+    executionBackend: "external-acp" as const,
   }
   const legacySettings = {
     allowEditorConnect: true,

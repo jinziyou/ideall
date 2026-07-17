@@ -224,6 +224,12 @@ function makeNotesHub(initial: Note[]) {
       store.push(...structuredClone(desired))
       return structuredClone(store)
     },
+    async listAllBookmarkNodes() {
+      throw new Error("notes test hub does not implement bookmarks")
+    },
+    async bulkPutBookmarkNodes() {
+      throw new Error("notes test hub does not implement bookmarks")
+    },
   }
   registerStorageSyncPort(port)
   return { store, bulkCalls }

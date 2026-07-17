@@ -167,6 +167,18 @@ export async function readSecurityMigrationState(page) {
           return null
         }
       }
+      const readWorkspaceCredential = (key) => {
+        const raw = localStorage.getItem(key)
+        if (raw === null) return null
+        try {
+          const credential = JSON.parse(raw)
+          return credential?.version === 2 && typeof credential.apiKey === "string"
+            ? credential.apiKey
+            : raw
+        } catch {
+          return raw
+        }
+      }
       const settings = readJson(agentSettingsKey, "{}")
       const canonicalSettings = readJson(agentSettingsCanonicalKey, "{}")
       const secrets = readJson(agentSecretsKey, "[]")
@@ -178,7 +190,7 @@ export async function readSecurityMigrationState(page) {
         fallbackSyncCode: localStorage.getItem(fallbackKey(syncSecureKey)),
         fallbackAgentKey: localStorage.getItem(fallbackKey(agentSecureKey)),
         fallbackSecret: localStorage.getItem(fallbackKey(secretSecureKey)),
-        fallbackWorkspaceKey: localStorage.getItem(fallbackKey(workspaceSecureKey)),
+        fallbackWorkspaceKey: readWorkspaceCredential(fallbackKey(workspaceSecureKey)),
         // 诊断读取会先把 wonita 旧键规范化成 ideall 键，再由显式迁移动作写入
         // secure-store；三个阶段都代表“已识别”，冒烟不能只观察首尾两态。
         publicAgentApiKey: settings?.apiKey ?? canonicalSettings?.apiKey,

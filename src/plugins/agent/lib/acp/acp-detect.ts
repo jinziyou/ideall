@@ -87,7 +87,7 @@ export async function detectAgents(): Promise<DetectedAgent[]> {
         id: "echo",
         label: "内置回显 Agent（测试）",
         note: "无需凭证，验证连通",
-        config: { program: "node", args: echo, cwd: "" },
+        config: { program: "node", args: JSON.stringify(echo), cwd: "" },
       })
     }
   } catch {

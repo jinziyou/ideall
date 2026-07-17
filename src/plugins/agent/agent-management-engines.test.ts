@@ -4,6 +4,8 @@ import { isValidElement, type ReactElement } from "react"
 import type { FileRef, IdeallFile } from "@protocol/file-system"
 import { matchEngineDescriptor } from "@/engines/matcher"
 import {
+  AGENT_AUDIT_FILE_REF,
+  AGENT_AUDIT_MEDIA_TYPE,
   AGENT_SETTINGS_FILE_REF,
   AGENT_SETTINGS_MEDIA_TYPE,
   AGENT_TASKS_FILE_REF,
@@ -14,13 +16,14 @@ import {
 import { agentManifest } from "./manifest"
 import {
   agentManagementEngineContributions,
+  agentAuditEngineContribution,
   agentSettingsEngineContribution,
   agentSpacesEngineContribution,
   agentTasksEngineContribution,
   type AgentEngineContribution,
 } from "./agent-management-engines"
 
-type Surface = "settings" | "spaces" | "tasks"
+type Surface = "settings" | "spaces" | "tasks" | "audit"
 
 function managementFile(ref: IdeallFile["ref"], mediaType: string, surface: Surface): IdeallFile {
   return {
@@ -35,6 +38,12 @@ function managementFile(ref: IdeallFile["ref"], mediaType: string, surface: Surf
 }
 
 const cases = [
+  {
+    contribution: agentAuditEngineContribution,
+    ref: AGENT_AUDIT_FILE_REF,
+    mediaType: AGENT_AUDIT_MEDIA_TYPE,
+    surface: "audit",
+  },
   {
     contribution: agentSettingsEngineContribution,
     ref: AGENT_SETTINGS_FILE_REF,
@@ -104,5 +113,6 @@ test("agent manifest declares the provider-side Engine/Display contributions tog
     "ideall.agent-settings",
     "ideall.agent-spaces",
     "ideall.agent-tasks",
+    "ideall.agent-write-audit",
   ])
 })

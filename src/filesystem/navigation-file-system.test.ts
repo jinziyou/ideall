@@ -2,13 +2,14 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { sameFileRef, type FileRef } from "@protocol/file-system"
 import {
+  AGENT_AUDIT_FILE_REF,
   AGENT_SETTINGS_FILE_REF,
   AGENT_TASKS_FILE_REF,
   AGENT_WORKSPACES_FILE_REF,
   INSTALLED_APPS_ROOT_REF,
   SETTINGS_ROOT_REF,
 } from "./builtin-app-roots"
-import { corePlaceRef, resourceFileRef } from "./resource-file-system"
+import { corePlaceRef, panelFileRef, resourceFileRef } from "./resource-file-system"
 import {
   NAVIGATION_FILE_SYSTEM_ID,
   NAVIGATION_SECTIONS,
@@ -22,6 +23,8 @@ import { FileSystemError, type FileSystemAccessContext } from "./types"
 const ctx: FileSystemAccessContext = { actor: "ui", permissions: [] }
 
 const expectedTargets: Readonly<Record<string, FileRef>> = {
+  audit: AGENT_AUDIT_FILE_REF,
+  inbox: panelFileRef("inbox"),
   following: corePlaceRef("subscriptions"),
   bookmarks: corePlaceRef("bookmarks"),
   resources: corePlaceRef("files"),
@@ -95,6 +98,7 @@ test("navigation filesystem: section directories project the existing UX targets
   assert.deepEqual(
     home.entries.map((entry) => [entry.entryId, entry.properties?.preferredEngine]),
     [
+      ["inbox", "ideall.panel"],
       ["following", "ideall.subscriptions"],
       ["bookmarks", "ideall.bookmarks"],
       ["resources", "ideall.resources"],
@@ -114,6 +118,7 @@ test("navigation filesystem: section directories project the existing UX targets
       entry.properties?.targetKind,
     ]),
     [
+      ["audit", "ideall.agent-write-audit", "file"],
       ["spaces", "ideall.agent-spaces", "file"],
       ["tasks", "ideall.agent-tasks", "file"],
       ["deleted", "ideall.trash", "directory"],

@@ -1,5 +1,5 @@
 import { isFileRef, sameFileRef, type DirectoryEntry, type IdeallFile } from "@protocol/file-system"
-import type { NoteMeta } from "@protocol/files"
+import type { NewNote, NoteMeta } from "@protocol/files"
 import type { NodeOfKind } from "@protocol/node"
 import { invokeFileAction, readFile } from "@/filesystem/registry"
 import { walkFileDirectory } from "@/filesystem/directory-walk"
@@ -78,11 +78,29 @@ function createdFile(value: unknown): IdeallFile {
   return file as IdeallFile
 }
 
-export async function createNoteFile(parentId: string | null): Promise<IdeallFile> {
+export type CreateNoteFileInput = Pick<NewNote, "title" | "content" | "tags">
+
+export async function createNoteFile(
+  parentId: string | null,
+  input: CreateNoteFileInput = {},
+): Promise<IdeallFile> {
   const parent = parentId
     ? resourceFileRef({ scheme: "node", kind: "note", id: parentId })
     : corePlaceRef("notes")
-  return createdFile(await invokeFileAction(parent, "create", {}, ACTION_CONTEXT))
+  return createdFile(await invokeFileAction(parent, "create", input, ACTION_CONTEXT))
+}
+
+export function updateNoteFileTags(
+  note: Pick<FileNote, "id" | "version">,
+  tags: string[],
+): Promise<unknown> {
+  return invokeFileAction(
+    resourceFileRef({ scheme: "node", kind: "note", id: note.id }),
+    "edit",
+    { tags },
+    ACTION_CONTEXT,
+    { expectedVersion: note.version },
+  )
 }
 
 export function moveNoteFile(

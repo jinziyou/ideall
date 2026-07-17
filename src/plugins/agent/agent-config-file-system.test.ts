@@ -4,6 +4,8 @@ import { FileSystemError } from "@/filesystem/types"
 import { withFileWriteLock } from "@/filesystem/write-lock"
 import { resourceFileRef } from "@/filesystem/resource-file-system"
 import {
+  AGENT_AUDIT_FILE_REF,
+  AGENT_AUDIT_FILE_SYSTEM_ID,
   AGENT_CONFIG_ROOT_MEDIA_TYPE,
   AGENT_CONFIG_ROOT_REF,
   AGENT_SETTINGS_FILE_REF,
@@ -13,6 +15,7 @@ import {
   AGENT_WORKSPACES_FILE_REF,
   AGENT_WORKSPACES_MEDIA_TYPE,
 } from "@/filesystem/builtin-app-roots"
+import { agentAuditFileSystem } from "./agent-audit-file-system"
 import {
   AgentWorkspaceNotFoundError,
   sanitizeAgentPublicConfigSection,
@@ -26,9 +29,14 @@ import {
   type AgentWorkspaceCreateResult,
 } from "./agent-management-file-contract"
 import {
+  AGENT_SETTINGS_ACP_DETECT_ACTION,
+  AGENT_SETTINGS_ACP_PROBE_ACTION,
+  AGENT_SETTINGS_ACP_READ_ACTION,
+  AGENT_SETTINGS_ACP_WRITE_ACTION,
   AGENT_SETTINGS_CLEAR_API_KEY_ACTION,
   AGENT_SETTINGS_CREDENTIAL_STATUS_ACTION,
   AGENT_SETTINGS_SET_API_KEY_ACTION,
+  DEFAULT_AGENT_ACP_SETTINGS,
   MAX_AGENT_SETTINGS_API_KEY_LENGTH,
 } from "./agent-settings-file-contract"
 import { agentManifest } from "./manifest"
@@ -559,6 +567,80 @@ test("agent config filesystem: settings credential state and opaque version inde
 
   credentialVersion = "0"
   assert.equal((await fs.read(ref, UI_CONTENT)).version, initial.version)
+})
+
+test("agent config filesystem: ACP device settings, discovery, and probe stay behind specialized actions", async () => {
+  const fixture = fakeDeps()
+  let acpSettings = DEFAULT_AGENT_ACP_SETTINGS
+  const acpListeners = new Set<() => void>()
+  const fs = createAgentConfigFileSystem({
+    ...fixture.deps,
+    readAcpSettings: () => acpSettings,
+    writeAcpSettings(next) {
+      acpSettings = next
+      for (const listener of acpListeners) listener()
+    },
+    subscribeAcpSettings(listener) {
+      acpListeners.add(listener)
+      return () => acpListeners.delete(listener)
+    },
+    detectAcpAgents: () => [
+      {
+        id: "echo",
+        label: "回显 Agent",
+        config: { program: "node", args: '"/safe/echo agent.mjs"', cwd: "/safe" },
+      },
+    ],
+    probeAcpAgent(config) {
+      assert.equal(config.program, "node")
+      return { latencyMs: 12, protocolVersion: 1 }
+    },
+  })
+  const ref = agentConfigFileRef("settings")
+  const initial = await fs.read(ref, UI_CONTENT)
+  assert.equal(JSON.stringify(initial.data).includes("externalAgent"), false)
+  assert.deepEqual(
+    await fs.invoke(ref, AGENT_SETTINGS_ACP_READ_ACTION, undefined, UI_ACTION),
+    DEFAULT_AGENT_ACP_SETTINGS,
+  )
+
+  const next = {
+    ...DEFAULT_AGENT_ACP_SETTINGS,
+    executionBackend: "external-acp" as const,
+    externalAgent: { program: "node", args: '"/safe/echo agent.mjs"', cwd: "/safe" },
+  }
+  const written = await fs.invoke(ref, AGENT_SETTINGS_ACP_WRITE_ACTION, next, UI_ACTION, {
+    expectedVersion: initial.version,
+  })
+  assert.deepEqual(written, next)
+  const revised = await fs.read(ref, UI_CONTENT)
+  assert.notEqual(revised.version, initial.version)
+  assert.equal(JSON.stringify(revised.data).includes("/safe/echo"), false)
+
+  assert.deepEqual(await fs.invoke(ref, AGENT_SETTINGS_ACP_DETECT_ACTION, undefined, UI_ACTION), [
+    {
+      id: "echo",
+      label: "回显 Agent",
+      config: { program: "node", args: '"/safe/echo agent.mjs"', cwd: "/safe" },
+    },
+  ])
+  assert.deepEqual(
+    await fs.invoke(
+      ref,
+      AGENT_SETTINGS_ACP_PROBE_ACTION,
+      { externalAgent: next.externalAgent },
+      UI_ACTION,
+    ),
+    { latencyMs: 12, protocolVersion: 1 },
+  )
+
+  await assert.rejects(
+    fs.invoke(ref, AGENT_SETTINGS_ACP_WRITE_ACTION, DEFAULT_AGENT_ACP_SETTINGS, UI_ACTION, {
+      expectedVersion: initial.version,
+    }),
+    (error) => error instanceof FileSystemError && error.code === "conflict",
+  )
+  assert.deepEqual(acpSettings, next)
 })
 
 test("agent config filesystem: settings hydration rejects stale write and action CAS before backends", async () => {
@@ -1113,6 +1195,45 @@ test("agent config filesystem: MCP probe action resolves private config behind t
     error: "连接失败，请检查本机配置和服务状态",
   })
   assert.equal(JSON.stringify(safeResult).includes("private-result-secret"), false)
+
+  const classified = createAgentConfigFileSystem({
+    ...fixture.deps,
+    probeMcpServer: async () => ({
+      ok: false,
+      transport: "stdio",
+      checkedAt: 100,
+      durationMs: 25,
+      error: "raw text must not decide the public message",
+      errorKind: "unavailable",
+      errorCode: "service-unavailable",
+    }),
+  })
+  assert.deepEqual(
+    await classified.invoke(ref, AGENT_MCP_PROBE_ACTION, { serverId: "mcp-1" }, UI_ACTION),
+    {
+      ok: false,
+      transport: "stdio",
+      checkedAt: 100,
+      durationMs: 25,
+      error: "无法启动或连接本地 MCP 服务",
+      errorKind: "unavailable",
+      errorCode: "service-unavailable",
+    },
+  )
+
+  const mismatchedClassification = createAgentConfigFileSystem({
+    ...fixture.deps,
+    probeMcpServer: async () => ({
+      ok: false,
+      error: "private",
+      errorKind: "authentication",
+      errorCode: "service-unavailable",
+    }),
+  })
+  await assert.rejects(
+    mismatchedClassification.invoke(ref, AGENT_MCP_PROBE_ACTION, { serverId: "mcp-1" }, UI_ACTION),
+    (error) => error instanceof FileSystemError && error.code === "unavailable",
+  )
 })
 
 test("agent config filesystem: mutating actions validate fresh section versions before backends", async () => {
@@ -1564,6 +1685,10 @@ test("agent config filesystem: credential actions are discoverable, permissioned
       AGENT_SETTINGS_CREDENTIAL_STATUS_ACTION,
       AGENT_SETTINGS_SET_API_KEY_ACTION,
       AGENT_SETTINGS_CLEAR_API_KEY_ACTION,
+      AGENT_SETTINGS_ACP_READ_ACTION,
+      AGENT_SETTINGS_ACP_WRITE_ACTION,
+      AGENT_SETTINGS_ACP_DETECT_ACTION,
+      AGENT_SETTINGS_ACP_PROBE_ACTION,
     ],
   )
   assert.deepEqual(byId.get(AGENT_SETTINGS_CREDENTIAL_STATUS_ACTION)?.requires, [
@@ -1571,6 +1696,8 @@ test("agent config filesystem: credential actions are discoverable, permissioned
   ])
   assert.deepEqual(byId.get(AGENT_SETTINGS_SET_API_KEY_ACTION)?.requires, ["agent.config:write"])
   assert.deepEqual(byId.get(AGENT_SETTINGS_CLEAR_API_KEY_ACTION)?.requires, ["agent.config:write"])
+  assert.deepEqual(byId.get(AGENT_SETTINGS_ACP_READ_ACTION)?.requires, ["agent.config:read"])
+  assert.deepEqual(byId.get(AGENT_SETTINGS_ACP_WRITE_ACTION)?.requires, ["agent.config:write"])
 
   await assert.rejects(
     fs.invoke(ref, AGENT_SETTINGS_CREDENTIAL_STATUS_ACTION, undefined, {
@@ -2198,15 +2325,23 @@ test("agent config filesystem: task writes enforce the Display batch bound befor
 test("agent manifest: contributes its provider, mount and semantic Engines atomically", () => {
   const extension = agentManifest.runtimeExtensionFactory.create()
 
-  assert.equal(extension.fileSystems?.length, 1)
+  assert.equal(extension.fileSystems?.length, 2)
   assert.equal(extension.fileSystems?.[0]?.provider, agentConfigFileSystem)
   assert.equal(extension.fileSystems?.[0]?.mount.entryId, AGENT_CONFIG_FILE_SYSTEM_ID)
   assert.deepEqual(extension.fileSystems?.[0]?.provider.descriptor.root, {
     fileSystemId: AGENT_CONFIG_FILE_SYSTEM_ID,
     fileId: "root",
   })
+  assert.equal(extension.fileSystems?.[1]?.provider, agentAuditFileSystem)
+  assert.equal(extension.fileSystems?.[1]?.mount.entryId, AGENT_AUDIT_FILE_SYSTEM_ID)
+  assert.deepEqual(extension.fileSystems?.[1]?.provider.descriptor.root, AGENT_AUDIT_FILE_REF)
   assert.deepEqual(
     extension.engines?.map(({ descriptor }) => descriptor.engineId),
-    ["ideall.agent-settings", "ideall.agent-spaces", "ideall.agent-tasks"],
+    [
+      "ideall.agent-settings",
+      "ideall.agent-spaces",
+      "ideall.agent-tasks",
+      "ideall.agent-write-audit",
+    ],
   )
 })

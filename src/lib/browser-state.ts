@@ -2,11 +2,17 @@
 
 let currentUrl: string | null = null
 let backendMode: "cdp" | "webkit" | "webview" | null = null
+const listeners = new Set<() => void>()
+
+function notify(): void {
+  for (const listener of listeners) listener()
+}
 
 /** 更新浏览器后端模式 (BrowserView 专用)。 */
 export function setBrowserBackend(mode: "cdp" | "webkit" | "webview" | null): void {
   if (mode === backendMode) return
   backendMode = mode
+  notify()
 }
 
 /** 当前浏览器后端模式。 */
@@ -19,9 +25,15 @@ export function setBrowserUrl(url: string): void {
   const u = url.trim()
   if (!u || u === currentUrl) return
   currentUrl = u
+  notify()
 }
 
 /** 当前浏览器 URL; 未打开浏览器标签或未导航过时为 null。 */
 export function getBrowserUrl(): string | null {
   return currentUrl
+}
+
+export function subscribeBrowserState(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }

@@ -28,7 +28,7 @@ export default function AuthForm() {
     try {
       const { runAuthFlow } = await import("@/lib/auth/auth-flow-machine")
       const { token, user } = await runAuthFlow({ mode, email, password })
-      setSession(token, user)
+      await setSession(token, user)
       toast.success(mode === "login" ? "已登录" : "注册成功，已登录")
       router.push("/home")
     } catch (err) {

@@ -8,6 +8,13 @@ import * as React from "react"
 import { Bot, Maximize2, Plus, Settings, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/lib/use-media-query"
+import { isTauri } from "@/lib/tauri"
+import {
+  nodeAgentContextSource,
+  urlAgentContextSource,
+  type AgentContextSource,
+} from "@/lib/agent-context-tray"
+import { getBrowserUrl, subscribeBrowserState } from "@/lib/browser-state"
 import AgentPanel, { type AgentPanelHandle } from "@/plugins/agent/views/agent-panel"
 import { resolveWorkspaceRun } from "@/plugins/agent/lib/agent-resolve"
 import { resolveSkills } from "@/plugins/agent/lib/agent-skills"
@@ -24,9 +31,15 @@ import {
   isConfigured,
   subscribeAgentSettings,
 } from "@/plugins/agent/lib/agent-settings"
+import {
+  getAcpSettings,
+  isExternalAcpConfigured,
+  subscribeAcpSettings,
+} from "@/plugins/agent/lib/acp/acp-settings"
 import { SurfacePanel } from "@/ui/panel"
 import { IconButton } from "@/ui/icon-button"
-import { useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings } from "./store"
+import { useRightPanelOpen, setRightPanel, openAiTasks, openAiSettings, useTabs } from "./store"
+import { isBrowserResourceTab, nodeResourceRefForTab } from "./resource-tab"
 
 export default function RightAiPanel() {
   const open = useRightPanelOpen()
@@ -39,38 +52,71 @@ export default function RightAiPanel() {
     getAgentSettings,
     getAgentSettings,
   )
+  const acpSettings = React.useSyncExternalStore(
+    subscribeAcpSettings,
+    getAcpSettings,
+    getAcpSettings,
+  )
+  const tabs = useTabs()
+  const browserUrl = React.useSyncExternalStore(subscribeBrowserState, getBrowserUrl, () => null)
+  const contextCandidates = React.useMemo(() => {
+    const candidates = new Map<string, AgentContextSource>()
+    for (const tab of tabs) {
+      const node = nodeResourceRefForTab(tab)
+      const source = node ? nodeAgentContextSource(node.kind, node.id, tab.title) : null
+      if (source) candidates.set(source.key, source)
+    }
+    if (browserUrl && tabs.some(isBrowserResourceTab)) {
+      const source = urlAgentContextSource(browserUrl, "浏览器当前页")
+      if (source) candidates.set(source.key, source)
+    }
+    return [...candidates.values()]
+  }, [browserUrl, tabs])
   const wsState = React.useSyncExternalStore(
     subscribeWorkspaces,
     getWorkspacesState,
     getServerWorkspacesState,
   )
   const configured = isConfigured(settings)
+  const externalAcpSelected = acpSettings.executionBackend === "external-acp"
+  const externalAcpRuntimeAvailable = isTauri()
   const panelWorkspace =
     wsState.workspaces.find((workspace) => workspace.id === wsState.activeId) ??
     wsState.workspaces[0] ??
     null
   const activeModel = panelWorkspace ? resolveModel(panelWorkspace) : null
-  const panelConfigured = panelWorkspace ? isWorkspaceConfigured(panelWorkspace) : configured
-  const panelModelLabel = panelWorkspace
-    ? panelWorkspace.model.useGlobal
-      ? `${activeModel?.model ?? ""}（全局）`
-      : (activeModel?.model ?? "")
-    : settings.model
+  const panelConfigured = externalAcpSelected
+    ? externalAcpRuntimeAvailable && isExternalAcpConfigured(acpSettings)
+    : panelWorkspace
+      ? isWorkspaceConfigured(panelWorkspace)
+      : configured
+  const panelModelLabel = externalAcpSelected
+    ? `外部 · ${acpSettings.externalAgent.program.trim()}`
+    : panelWorkspace
+      ? panelWorkspace.model.useGlobal
+        ? `${activeModel?.model ?? ""}（全局）`
+        : (activeModel?.model ?? "")
+      : settings.model
   const panelSkills = React.useMemo(
     () => (panelWorkspace ? resolveSkills(panelWorkspace.capabilities.skillIds) : undefined),
     [panelWorkspace],
   )
 
   const resolveRun = React.useCallback(
-    async (useAgent: boolean) => {
+    async (useAgent: boolean, selectedContext: string) => {
       if (!panelWorkspace) return null
       const ws = getWorkspace(panelWorkspace.id)
-      return ws ? resolveWorkspaceRun(ws, useAgent) : null
+      return ws ? resolveWorkspaceRun(ws, useAgent, selectedContext) : null
     },
     [panelWorkspace],
   )
 
   const openPanelSettings = React.useCallback(() => {
+    if (externalAcpSelected) {
+      openAiSettings()
+      setRightPanel(false)
+      return
+    }
     if (panelWorkspace && !panelWorkspace.model.useGlobal) {
       openAiTasks(panelWorkspace.id, panelWorkspace.name)
       setRightPanel(false)
@@ -78,7 +124,7 @@ export default function RightAiPanel() {
     }
     openAiSettings()
     setRightPanel(false)
-  }, [panelWorkspace])
+  }, [externalAcpSelected, panelWorkspace])
 
   const [everOpened, setEverOpened] = React.useState(false)
   React.useEffect(() => {
@@ -175,7 +221,13 @@ export default function RightAiPanel() {
                   AI 智能体
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {panelConfigured ? panelModelLabel : "未配置模型"}
+                  {panelConfigured
+                    ? panelModelLabel
+                    : externalAcpSelected
+                      ? externalAcpRuntimeAvailable
+                        ? "未配置外部 Agent"
+                        : "外部 Agent 仅桌面可用"
+                      : "未配置模型"}
                 </span>
               </span>
             </span>
@@ -220,6 +272,7 @@ export default function RightAiPanel() {
               skills={panelSkills}
               onOpenSettings={openPanelSettings}
               defaultAgentMode={settings.defaultAgentMode}
+              contextCandidates={contextCandidates}
             />
           </div>
         </SurfacePanel>

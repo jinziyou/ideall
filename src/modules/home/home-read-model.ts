@@ -2,6 +2,7 @@ import type { DirectoryEntry } from "@protocol/file-system"
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import { walkFileDirectory } from "@/filesystem/directory-walk"
 import type { IdeallPath } from "@/filesystem/path"
+import { CAPTURE_INBOX_TAG } from "@/files/web-snapshot"
 import {
   corePlaceRef,
   resourceRefForFile,
@@ -27,9 +28,9 @@ export type HomeOverviewData = {
   activity: HomeActivityItem[]
 }
 
-type BookmarkFlowInput = { id: string; title: string; createdAt: number }
-type FileFlowInput = { id: string; name: string; type: string; createdAt: number }
-type NoteFlowInput = { id: string; title: string; createdAt: number }
+type BookmarkFlowInput = { id: string; title: string; tags: string[]; createdAt: number }
+type FileFlowInput = { id: string; name: string; type: string; tags: string[]; createdAt: number }
+type NoteFlowInput = { id: string; title: string; tags: string[]; createdAt: number }
 
 export type HomeOverviewInput = {
   subs: Subscription[]
@@ -94,6 +95,10 @@ export function buildHomeActivity({
 export function createHomeOverviewData(input: HomeOverviewInput): HomeOverviewData {
   return {
     counts: {
+      inbox:
+        input.bookmarks.filter((bookmark) => bookmark.tags.includes(CAPTURE_INBOX_TAG)).length +
+        input.notes.filter((note) => note.tags.includes(CAPTURE_INBOX_TAG)).length +
+        input.files.filter((file) => file.tags.includes(CAPTURE_INBOX_TAG)).length,
       subscriptions: input.subs.filter((s) => s.type !== "tool").length,
       bookmarks: input.bookmarks.length,
       resources: input.files.length,
@@ -110,6 +115,11 @@ const SUBSCRIPTION_TYPES: SubscriptionType[] = ["publisher", "entity", "tool", "
 function timestamp(entry: DirectoryEntry, key: "createdAt" | "updatedAt"): number {
   const value = entry.properties?.[key]
   return typeof value === "number" ? value : 0
+}
+
+function tags(entry: DirectoryEntry): string[] {
+  const value = entry.properties?.tags
+  return Array.isArray(value) && value.every((tag) => typeof tag === "string") ? value : []
 }
 
 async function nodeEntries(
@@ -163,7 +173,14 @@ export async function loadHomeOverviewData(): Promise<HomeOverviewData> {
   const bookmarks = bookmarkEntries.flatMap((entry) => {
     const resource = resourceRefForFile(entry.target)
     return resource?.scheme === "node" && resource.kind === "bookmark"
-      ? [{ id: resource.id, title: entry.name, createdAt: timestamp(entry, "createdAt") }]
+      ? [
+          {
+            id: resource.id,
+            title: entry.name,
+            tags: tags(entry),
+            createdAt: timestamp(entry, "createdAt"),
+          },
+        ]
       : []
   })
   const files = fileEntries.flatMap((entry) => {
@@ -177,6 +194,7 @@ export async function loadHomeOverviewData(): Promise<HomeOverviewData> {
               typeof entry.properties?.mediaType === "string"
                 ? entry.properties.mediaType
                 : "application/octet-stream",
+            tags: tags(entry),
             createdAt: timestamp(entry, "createdAt"),
           },
         ]
@@ -185,7 +203,14 @@ export async function loadHomeOverviewData(): Promise<HomeOverviewData> {
   const notes = noteEntries.flatMap((entry) => {
     const resource = resourceRefForFile(entry.target)
     return resource?.scheme === "node" && resource.kind === "note"
-      ? [{ id: resource.id, title: entry.name, createdAt: timestamp(entry, "createdAt") }]
+      ? [
+          {
+            id: resource.id,
+            title: entry.name,
+            tags: tags(entry),
+            createdAt: timestamp(entry, "createdAt"),
+          },
+        ]
       : []
   })
   const threads = threadEntries.filter((entry) => {

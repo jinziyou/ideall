@@ -5,7 +5,7 @@ import type { ThreadTaskStoragePort } from "@protocol/files"
 import {
   attachThreadTask,
   createTaskThread,
-  deleteTaskThread,
+  deleteTaskThread as deleteTaskThreadAtomic,
   listThreadTasks,
   migrateLegacyThreadTasks,
   readThreadTaskIndexHead,
@@ -20,7 +20,13 @@ const threadTasks = {
   createTaskThread,
   attachThreadTask,
   updateThreadTask,
-  deleteTaskThread,
+  deleteTaskThread: (id: string, expected?: { updatedAt: number }) =>
+    deleteTaskThreadAtomic(
+      id,
+      expected === undefined
+        ? undefined
+        : { kind: "thread", updatedAt: expected.updatedAt, deletedAt: null },
+    ),
   replaceThreadTasks,
 } satisfies ThreadTaskStoragePort
 

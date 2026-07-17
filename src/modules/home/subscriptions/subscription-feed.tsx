@@ -17,6 +17,7 @@ import { watchFile } from "@/filesystem/registry"
 import { undoableToast } from "@/lib/undo-toast"
 import { EmptyState } from "@/ui/empty-state"
 import { useTabActive } from "@/workspace/tab-active-context"
+import { CaptureLinkButton } from "@/shared/feeders/capture-link-button"
 import {
   SUBSCRIPTIONS_ROOT,
   deleteSubscriptionFile,
@@ -314,18 +315,27 @@ export default function SubscriptionFeed({
                       {items.map((it) => (
                         <li key={it.key} className="flex flex-col gap-0.5">
                           {/* it.url 来自其他社区用户的发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
-                          {safeHref(it.url) ? (
-                            <a
-                              href={safeHref(it.url)}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              className="line-clamp-2 text-sm hover:underline"
-                            >
-                              {it.title}
-                            </a>
-                          ) : (
-                            <span className="line-clamp-2 text-sm">{it.title}</span>
-                          )}
+                          <div className="flex items-start gap-1">
+                            {safeHref(it.url) ? (
+                              <a
+                                href={safeHref(it.url)}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="line-clamp-2 min-w-0 flex-1 text-sm hover:underline"
+                              >
+                                {it.title}
+                              </a>
+                            ) : (
+                              <span className="line-clamp-2 min-w-0 flex-1 text-sm">
+                                {it.title}
+                              </span>
+                            )}
+                            <CaptureLinkButton
+                              title={it.title}
+                              url={it.url ?? ""}
+                              description={it.body}
+                            />
+                          </div>
                           {it.body ? (
                             <span className="line-clamp-2 text-xs text-muted-foreground">
                               {it.body}

@@ -2,6 +2,8 @@ import * as React from "react"
 import type { EngineDescriptor } from "@protocol/engine"
 import { sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import {
+  AGENT_AUDIT_FILE_REF,
+  AGENT_AUDIT_MEDIA_TYPE,
   AGENT_SETTINGS_FILE_REF,
   AGENT_SETTINGS_MEDIA_TYPE,
   AGENT_TASKS_FILE_REF,
@@ -27,6 +29,7 @@ type AgentManagementDisplayProps = Readonly<{ fileRef: FileRef }>
 const AiSettings = React.lazy(() => import("./views/ai-settings"))
 const AgentSpaces = React.lazy(() => import("./views/agent-spaces"))
 const AgentTaskList = React.lazy(() => import("./views/agent-task-list"))
+const AgentWriteAudit = React.lazy(() => import("./views/agent-write-audit"))
 
 function exactFileRenderer(
   expected: FileRef,
@@ -88,6 +91,21 @@ export const agentTasksEngineDescriptor = {
   iconHint: "sparkles",
 } as const satisfies EngineDescriptor
 
+export const agentAuditEngineDescriptor = {
+  engineId: "ideall.agent-write-audit",
+  label: "AI 写入审计",
+  match: {
+    kinds: ["file"],
+    mediaTypes: [AGENT_AUDIT_MEDIA_TYPE],
+    properties: { agentManagementSurface: "audit" },
+  },
+  priority: 940,
+  layout: "padded",
+  access: "read-only",
+  supportsStandaloneWindow: false,
+  iconHint: "shield-check",
+} as const satisfies EngineDescriptor
+
 export const agentSettingsEngineContribution = {
   descriptor: agentSettingsEngineDescriptor,
   renderer: exactFileRenderer(AGENT_SETTINGS_FILE_REF, AiSettings),
@@ -103,8 +121,14 @@ export const agentTasksEngineContribution = {
   renderer: exactFileRenderer(AGENT_TASKS_FILE_REF, AgentTaskList),
 } as const satisfies AgentEngineContribution
 
+export const agentAuditEngineContribution = {
+  descriptor: agentAuditEngineDescriptor,
+  renderer: exactFileRenderer(AGENT_AUDIT_FILE_REF, AgentWriteAudit),
+} as const satisfies AgentEngineContribution
+
 export const agentManagementEngineContributions = [
   agentSettingsEngineContribution,
   agentSpacesEngineContribution,
   agentTasksEngineContribution,
+  agentAuditEngineContribution,
 ] as const satisfies readonly AgentEngineContribution[]

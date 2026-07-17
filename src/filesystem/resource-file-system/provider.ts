@@ -10,8 +10,18 @@ import {
   type IdeallFile,
 } from "@protocol/file-system"
 import type { ResourceRecord, ResourceRef } from "@protocol/resource"
+import {
+  CAPTURE_BOOKMARK_ACTION,
+  CAPTURE_BOOKMARK_DESCRIPTION_LIMIT,
+  CAPTURE_BOOKMARK_FAVICON_LIMIT,
+  CAPTURE_BOOKMARK_TITLE_LIMIT,
+  CAPTURE_BOOKMARK_URL_LIMIT,
+  CAPTURE_INBOX_TAG,
+} from "@protocol/capture"
 import { countTrashItems } from "@/files/stores/trash-store"
+import { captureBookmark as captureBookmarkStore } from "@/files/stores/bookmarks-store"
 import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
+import { canonicalHttpUrl } from "@/lib/canonical-http-url"
 import {
   createResource,
   getResources,
@@ -39,6 +49,7 @@ import type {
   FileSystemWatchEvent,
   FileSystemWatchHandle,
   FileWriteInput,
+  ReadDirectoryOptions,
 } from "../types"
 import { FileSystemError } from "../types"
 import { withFileWriteLock } from "../write-lock"
@@ -72,6 +83,44 @@ import {
   versionForResource,
   type PlaceResourceQuery,
 } from "./policy"
+
+function boundedCaptureText(value: unknown, limit: number): string {
+  if (typeof value !== "string") return ""
+  const normalized = value.replace(/\s+/g, " ").trim()
+  if (normalized.length <= limit) return normalized
+  return `${normalized.slice(0, Math.max(1, limit - 1)).trimEnd()}…`
+}
+
+function captureBookmarkInput(value: unknown): {
+  title: string
+  url: string
+  description?: string
+  favicon?: string
+  tags: string[]
+} {
+  const raw =
+    value != null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {}
+  const url = typeof raw.url === "string" ? raw.url.trim() : ""
+  if (!url || url.length > CAPTURE_BOOKMARK_URL_LIMIT || !canonicalHttpUrl(url)) {
+    throw new FileSystemError("unsupported", "捕获只支持有界 HTTP(S) 链接")
+  }
+  const title = boundedCaptureText(raw.title, CAPTURE_BOOKMARK_TITLE_LIMIT)
+  const description = boundedCaptureText(raw.description, CAPTURE_BOOKMARK_DESCRIPTION_LIMIT)
+  const faviconRaw =
+    typeof raw.favicon === "string" && raw.favicon.length <= CAPTURE_BOOKMARK_FAVICON_LIMIT
+      ? raw.favicon.trim()
+      : ""
+  const favicon = faviconRaw && canonicalHttpUrl(faviconRaw) ? faviconRaw : undefined
+  return {
+    title: title || new URL(url).hostname.replace(/^www\./i, "") || url,
+    url,
+    ...(description ? { description } : {}),
+    ...(favicon ? { favicon } : {}),
+    tags: [CAPTURE_INBOX_TAG],
+  }
+}
 
 function sourceContext(
   ctx: FileSystemAccessContext,
@@ -205,13 +254,20 @@ async function listPlaceFiles(
 async function listResourceChildren(
   resource: ResourceRef,
   ctx: FileSystemAccessContext,
-): Promise<IdeallFile[]> {
+  options: ReadDirectoryOptions = {},
+): Promise<{ files: IdeallFile[]; nextCursor?: string }> {
   if (resource.scheme !== "node" || (resource.kind !== "folder" && resource.kind !== "note")) {
     throw new FileSystemError("unsupported", "File is not a directory", resourceFileRef(resource))
   }
   const kinds = resource.kind === "note" ? ["note"] : ["folder", "bookmark"]
   const result = await listResources(
-    { scheme: "node", kinds, parent: resource },
+    {
+      scheme: "node",
+      kinds,
+      parent: resource,
+      ...(options.limit === undefined ? {} : { limit: options.limit }),
+      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+    },
     sourceContext(ctx, resourceFileRef(resource), "directory"),
   )
   // 精确授权到父目录的 Engine 只能取得 list 已返回的安全摘要，不能借批量 metadata
@@ -223,7 +279,87 @@ async function listResourceChildren(
           result.items.map((meta) => meta.ref),
           sourceContext(ctx, resourceFileRef(resource), "metadata"),
         )
-  return result.items.map((meta, index) => fileFromResource(meta, records[index] ?? null))
+  return {
+    files: result.items.map((meta, index) => fileFromResource(meta, records[index] ?? null)),
+    ...(result.nextCursor === undefined ? {} : { nextCursor: result.nextCursor }),
+  }
+}
+
+const PAGED_NODE_PLACES = new Set<CorePlaceId>([
+  "subscriptions",
+  "bookmarks",
+  "files",
+  "notes",
+  "browser",
+])
+const NODE_PLACE_CURSOR_PREFIX = "node:"
+
+function decodeNodePlaceCursor(ref: FileRef, cursor: string | undefined): string | undefined {
+  if (cursor === undefined) return undefined
+  if (!cursor.startsWith(NODE_PLACE_CURSOR_PREFIX)) {
+    throw new FileSystemError("invalid-input", `Invalid node place cursor: ${cursor}`, ref)
+  }
+  const encoded = cursor.slice(NODE_PLACE_CURSOR_PREFIX.length)
+  if (encoded === "start") return undefined
+  try {
+    return decodeURIComponent(encoded)
+  } catch {
+    throw new FileSystemError("invalid-input", `Invalid node place cursor: ${cursor}`, ref)
+  }
+}
+
+function encodeNodePlaceCursor(cursor: string | undefined): string {
+  return `${NODE_PLACE_CURSOR_PREFIX}${cursor === undefined ? "start" : encodeURIComponent(cursor)}`
+}
+
+async function listPagedNodePlace(
+  place: CorePlaceId,
+  ref: FileRef,
+  ctx: FileSystemAccessContext,
+  options: ReadDirectoryOptions,
+): Promise<{ files: IdeallFile[]; nextCursor?: string } | null> {
+  if (options.limit === undefined || options.recursive === true || !PAGED_NODE_PLACES.has(place)) {
+    return null
+  }
+  if (!Number.isSafeInteger(options.limit) || options.limit < 1) {
+    throw new FileSystemError("invalid-input", "Directory limit must be positive", ref)
+  }
+  const queries = PLACE_RESOURCE_QUERIES[place] ?? []
+  const query = queries.length === 1 && queries[0]?.scheme === "node" ? queries[0] : null
+  if (!query) return null
+
+  const sourceCursor = decodeNodePlaceCursor(ref, options.cursor)
+  const staticFiles = options.cursor === undefined ? PANELS[place].map(fileFromPanel) : []
+  const sourceLimit = options.limit - staticFiles.length
+  if (sourceLimit <= 0) {
+    return {
+      files: staticFiles.slice(0, options.limit),
+      nextCursor: encodeNodePlaceCursor(undefined),
+    }
+  }
+  const result = await listResources(
+    {
+      scheme: "node",
+      kinds: query.kinds,
+      ...(query.rootOnly ? { rootOnly: true } : {}),
+      limit: sourceLimit,
+      ...(sourceCursor === undefined ? {} : { cursor: sourceCursor }),
+    },
+    sourceContext(ctx, null, "directory"),
+  )
+  const records = await getResources(
+    result.items.map((meta) => meta.ref),
+    sourceContext(ctx, null, "metadata"),
+  )
+  return {
+    files: [
+      ...staticFiles,
+      ...result.items.map((meta, index) => fileFromResource(meta, records[index] ?? null)),
+    ],
+    ...(result.nextCursor === undefined
+      ? {}
+      : { nextCursor: encodeNodePlaceCursor(result.nextCursor) }),
+  }
 }
 
 function recordReadResult(
@@ -391,13 +527,25 @@ export function createResourceFileSystem(): FileSystemProvider {
         files = CORE_PLACE_IDS.map(placeFile)
       } else {
         const place = placeForFile(ref)
-        if (place) files = await listPlaceFiles(place, ctx, options.recursive === true)
-        else {
+        if (place) {
+          const paged = await listPagedNodePlace(place, ref, ctx, options)
+          if (paged) {
+            return {
+              entries: paged.files.map((file, index) => entry(ref, file, index)),
+              nextCursor: paged.nextCursor,
+            }
+          }
+          files = await listPlaceFiles(place, ctx, options.recursive === true)
+        } else {
           const resource = resourceRefForFile(ref)
           if (!resource) {
             throw new FileSystemError("not-found", `Directory not found: ${fileRefKey(ref)}`, ref)
           }
-          files = await listResourceChildren(resource, ctx)
+          const page = await listResourceChildren(resource, ctx, options)
+          return {
+            entries: page.files.map((file, index) => entry(ref, file, index)),
+            nextCursor: page.nextCursor,
+          }
         }
       }
       const result = paginateDirectoryItems(ref, files, options)
@@ -544,31 +692,46 @@ export function createResourceFileSystem(): FileSystemProvider {
       assertCanListActions(ref, ctx)
       if (!resource) {
         const place = placeForFile(ref)
-        return place === "home" ||
+        if (
+          place === "home" ||
           place === "subscriptions" ||
           place === "notes" ||
           place === "bookmarks" ||
           place === "files"
-          ? [
-              { id: "open", label: "打开", kind: "display" },
-              {
-                id: "create",
-                label:
-                  place === "home"
-                    ? "新建对话"
-                    : place === "subscriptions"
-                      ? "新增关注"
-                      : place === "notes"
-                        ? "新建页面"
-                        : place === "bookmarks"
-                          ? "新增书签"
-                          : "添加文件",
-                requires: ["create"],
-                kind: "specialized",
-                reason: "需由对应内容界面收集创建参数",
-              },
-            ]
-          : [{ id: "open", label: "打开", kind: "display" }]
+        ) {
+          const actions: FileAction[] = [
+            { id: "open", label: "打开", kind: "display" },
+            {
+              id: "create",
+              label:
+                place === "home"
+                  ? "新建对话"
+                  : place === "subscriptions"
+                    ? "新增关注"
+                    : place === "notes"
+                      ? "新建页面"
+                      : place === "bookmarks"
+                        ? "新增书签"
+                        : "添加文件",
+              requires: ["create"],
+              kind: "specialized",
+              reason: "需由对应内容界面收集创建参数",
+            },
+          ]
+          if (place === "bookmarks") {
+            actions.push({
+              id: CAPTURE_BOOKMARK_ACTION,
+              label: "保存到我的",
+              requires: ["create"],
+              risk: "safe",
+              idempotent: true,
+              kind: "specialized",
+              reason: "由内容界面提供链接、标题和摘要",
+            })
+          }
+          return actions
+        }
+        return [{ id: "open", label: "打开", kind: "display" }]
       }
       try {
         const actions = await resourceActions(resource, sourceContext(ctx, ref, "action"))
@@ -600,6 +763,14 @@ export function createResourceFileSystem(): FileSystemProvider {
         return { panel }
       }
       const place = placeForFile(ref)
+      if (place === "bookmarks" && action === CAPTURE_BOOKMARK_ACTION) {
+        assertCanInvoke(ref, action, ctx)
+        try {
+          return await captureBookmarkStore(captureBookmarkInput(input))
+        } catch (error) {
+          rethrowFileSystemError(error, ref)
+        }
+      }
       if (place && placeFile(place).capabilities.includes("create") && action === "create") {
         assertCanInvoke(ref, action, ctx)
         try {

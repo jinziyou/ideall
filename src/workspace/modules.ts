@@ -47,6 +47,11 @@ const homeEntries: SidebarEntry[] = [
     descriptor: tabDescriptor("home-overview"),
   },
   {
+    label: MODULE_META.inbox.label,
+    icon: MODULE_META.inbox.icon,
+    descriptor: tabDescriptor("home-inbox"),
+  },
+  {
     label: MODULE_META.notes.label,
     icon: MODULE_META.notes.icon,
     descriptor: tabDescriptor("home-notes"),

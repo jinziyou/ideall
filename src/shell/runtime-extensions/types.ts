@@ -86,6 +86,16 @@ export type RuntimeExtensionConsentReceipt = Readonly<{
   grantedAt: number
 }>
 
+export type RuntimeExtensionConsentBinding = Readonly<{
+  id: string
+  version: number
+  digest: string
+  permissionDigest: string
+}>
+
+export type RuntimeExtensionConsentReference = RuntimeExtensionConsentBinding &
+  Readonly<{ receiptId: string }>
+
 /** 外部 package 的 verifier 必须由桌面宿主注入；缺省即 fail closed。 */
 export type RuntimeExtensionVerifier = Readonly<{
   verify(
@@ -93,7 +103,7 @@ export type RuntimeExtensionVerifier = Readonly<{
   ): MaybePromise<RuntimeExtensionVerificationReceipt | null>
 }>
 
-/** Consent receipt 的签发和恢复同样由宿主注入；localStorage 中的字符串本身从不被信任。 */
+/** Consent authority 必须来自可信宿主或系统凭据库；localStorage 中的字符串本身从不被信任。 */
 export type RuntimeExtensionConsentAuthority = Readonly<{
   request(
     descriptor: RuntimeExtensionDescriptor,
@@ -105,6 +115,8 @@ export type RuntimeExtensionConsentAuthority = Readonly<{
     persistedReceiptId: string,
   ): MaybePromise<RuntimeExtensionConsentReceipt | null>
   revoke?(receipt: RuntimeExtensionConsentReceipt): MaybePromise<void>
+  /** descriptor 已升级、无法恢复旧 receipt 时，authority 仍可按 opaque id 删除旧凭据。 */
+  revokePersisted?(reference: RuntimeExtensionConsentReference): MaybePromise<void>
 }>
 
 export type RuntimeExtensionHost = Readonly<{

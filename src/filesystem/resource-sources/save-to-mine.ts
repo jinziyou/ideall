@@ -1,8 +1,9 @@
 import type { Bookmark, NewBookmark } from "@protocol/files"
 import type { ResourceRef } from "@protocol/resource"
+import type { CaptureBookmarkInput, CaptureBookmarkResult } from "@protocol/capture"
 import type { NewSubscription, Subscription, SubscriptionType } from "@protocol/subscription"
-import { addBookmark, listBookmarks } from "@/files/stores/bookmarks-store"
 import { addSubscription, isSubscribed } from "@/files/stores/subscriptions-store"
+import { captureBookmarkToMine } from "@/filesystem/capture-bookmark"
 import { splitConnectedResourcePair } from "@/lib/connected-resource"
 import type { ResourceSourceAccessContext } from "./types"
 import { ResourceSourceError } from "./types"
@@ -28,15 +29,22 @@ export type SaveToMineResult =
 export type SaveToMineDeps = {
   isSubscribed: (type: SubscriptionType, key: string) => Promise<boolean>
   addSubscription: (input: NewSubscription) => Promise<Subscription>
-  listBookmarks: () => Promise<Bookmark[]>
-  addBookmark: (input: NewBookmark) => Promise<Bookmark>
+  captureBookmark: (
+    input: CaptureBookmarkInput,
+    ctx: ResourceSourceAccessContext,
+  ) => Promise<CaptureBookmarkResult>
 }
 
 const defaultDeps: SaveToMineDeps = {
   isSubscribed,
   addSubscription,
-  listBookmarks,
-  addBookmark,
+  captureBookmark(input, ctx) {
+    return captureBookmarkToMine(input, {
+      actor: ctx.actor,
+      permissions: ctx.permissions,
+      intent: "action",
+    })
+  },
 }
 
 function objectInput(input: unknown): Record<string, unknown> {
@@ -177,16 +185,19 @@ export async function saveResourceToMine(
     return { kind: "subscription", subscription, existed, navigationPath: "/home/following" }
   }
 
-  const url = projection.input.url.trim()
-  const existing = (await deps.listBookmarks()).find((bookmark) => bookmark.url === url)
-  if (existing) {
-    return {
-      kind: "bookmark",
-      bookmark: existing,
-      existed: true,
-      navigationPath: "/home/bookmarks",
-    }
+  const captured = await deps.captureBookmark(
+    {
+      title: projection.input.title,
+      url: projection.input.url,
+      description: projection.input.description,
+      favicon: projection.input.favicon,
+    },
+    ctx,
+  )
+  return {
+    kind: "bookmark",
+    bookmark: captured.bookmark,
+    existed: captured.status === "existing",
+    navigationPath: "/home/bookmarks",
   }
-  const bookmark = await deps.addBookmark({ ...projection.input, url })
-  return { kind: "bookmark", bookmark, existed: false, navigationPath: "/home/bookmarks" }
 }

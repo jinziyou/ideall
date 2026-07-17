@@ -4,7 +4,7 @@
 // /v1/sync/{id} 服务端 (乐观并发, {data} 包络) + 真实 sync-crypto 加解密, 端到端驱动编排各分支。
 import { test, afterEach } from "node:test"
 import assert from "node:assert/strict"
-import { syncNow } from "./subscription-sync"
+import { subscriptionsSyncConfig, syncNow } from "./subscription-sync"
 import {
   registerStorageSyncPort,
   StorageSyncConflictError,
@@ -14,6 +14,7 @@ import type { Subscription } from "@protocol/subscription"
 import { recordsEqual, type SyncBlob } from "@protocol/sync"
 import { deriveKeys, encryptJson, decryptJson } from "@/lib/sync-crypto"
 import { SYNC_MAX_ATTEMPTS } from "./sync-domain-runner"
+import { runDomainSync } from "./sync-domain-machine"
 
 const CODE = "0123456789abcdef0123456789abcdef" // 32 hex = 合法同步码
 
@@ -139,6 +140,12 @@ function makeHub(initial: Subscription[]) {
     async bulkPutNotes() {
       throw new Error("subscription test hub does not implement notes")
     },
+    async listAllBookmarkNodes() {
+      throw new Error("subscription test hub does not implement bookmarks")
+    },
+    async bulkPutBookmarkNodes() {
+      throw new Error("subscription test hub does not implement bookmarks")
+    },
   }
   registerStorageSyncPort(port)
   return { store, bulkCalls, controls }
@@ -157,6 +164,34 @@ test("syncNow: 空服务端 → 上传本地, 统计正确", async () => {
   assert.equal(res.total, 1)
   assert.equal(res.added, 0) // 本地已有, 非新增
   assert.ok(server.blob, "服务端应已写入密文")
+})
+
+test("domain sync: 本地记录数与远端密文在处理前受单块预算限制", async () => {
+  makeServer()
+  const budget = {
+    maxRecords: 1,
+    maxPlaintextBytes: 1_024,
+    maxCiphertextBase64Chars: 1_388,
+  }
+  const localConfig = {
+    ...subscriptionsSyncConfig,
+    budget,
+    listLocal: async () => [sub("publisher:a", 1), sub("publisher:b", 1)],
+  }
+  await assert.rejects(runDomainSync(CODE, localConfig), /本地同步记录超过单块上限/)
+
+  const remoteServer = makeServer({
+    iv: "AAAAAAAAAAAAAAAA",
+    ciphertext: "A".repeat(1_392),
+    updated_at: 1,
+  })
+  const remoteConfig = {
+    ...subscriptionsSyncConfig,
+    budget,
+    listLocal: async () => [],
+  }
+  await assert.rejects(runDomainSync(CODE, remoteConfig), /密文格式无效或超过单块上限/)
+  assert.equal(remoteServer.putCount, 0)
 })
 
 test("syncNow: 跨端并集合并 (LWW) —— 拉到对端关注并落地本地", async () => {

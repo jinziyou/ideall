@@ -37,12 +37,18 @@ export interface ScopedFiles {
   readGated(id: string, kind: NodeKind): Promise<Node | "gated" | null>
   /** 写后回读自动净化 (无 notes-read 剥 note/thread 正文; 写 ≠ 可读)。 */
   createNode(input: FsCreateInput): Promise<Node>
-  updateNode(kind: NodeKind, id: string, patch: FsWritePatch): Promise<Node | undefined>
+  updateNode(
+    kind: NodeKind,
+    id: string,
+    patch: FsWritePatch,
+    expectedVersion?: string,
+  ): Promise<Node | undefined>
   moveNode(
     kind: NodeKind,
     id: string,
     parentId: string | null,
     afterSortKey?: string | null,
+    expectedVersion?: string,
   ): Promise<Node | undefined>
 }
 
@@ -80,12 +86,12 @@ export function makeScopedFiles(
     async createNode(input) {
       return sanitize(await port.fsCreateNode(input))
     },
-    async updateNode(kind, id, patch) {
-      const n = await port.fsUpdateNode(kind, id, patch)
+    async updateNode(kind, id, patch, expectedVersion) {
+      const n = await port.fsUpdateNode(kind, id, patch, expectedVersion)
       return n ? sanitize(n) : undefined
     },
-    async moveNode(kind, id, parentId, afterSortKey) {
-      const n = await port.fsMoveNode(kind, id, parentId, afterSortKey)
+    async moveNode(kind, id, parentId, afterSortKey, expectedVersion) {
+      const n = await port.fsMoveNode(kind, id, parentId, afterSortKey, expectedVersion)
       return n ? sanitize(n) : undefined
     },
   }

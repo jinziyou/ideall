@@ -2,7 +2,12 @@
 // 合并 (§7): 整篇删除 node 级 LWW; 正文块级 mergeNoteContent。编排由 sync-domain-machine (XState) 驱动。
 import type { Note } from "@protocol/files"
 import { getStorageSyncPort } from "@protocol/storage-sync"
-import { isSaneSyncTimestamp, pruneExpiredTombstones, type SyncResult } from "@protocol/sync"
+import {
+  isSaneSyncTimestamp,
+  pruneExpiredTombstones,
+  SYNC_BLOCK_BUDGETS,
+  type SyncResult,
+} from "@protocol/sync"
 import { mergeNoteContent, pruneBlockTombstones, type Block } from "@protocol/note-merge"
 import type { DomainSyncConfig } from "./sync-domain-runner"
 import { runDomainSync } from "./sync-domain-machine"
@@ -83,6 +88,7 @@ export function isValidRemoteNote(s: unknown, now: number = Date.now()): s is No
 /** 笔记域同步配置 (供 XState domain machine / orchestrator 复用)。 */
 export const notesSyncConfig: DomainSyncConfig<Note> = {
   keyScope: "notes",
+  budget: SYNC_BLOCK_BUDGETS.notes,
   listLocal: () => getStorageSyncPort().listAllNotes(),
   merge: mergeNotes,
   gc: gcNotes,

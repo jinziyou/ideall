@@ -3,12 +3,14 @@
 //   - 书签节点: folderId→parentId, url/description/favicon 收进 content, title/tags 留顶层;
 //   - 收藏夹节点: name→title, 根级 (parentId=null);
 //   - 删除走软删标记 (deletedAt, 与笔记/关注一致), 读路径过滤删除标记 —— 当前用于撤销跨刷新稳健, 并为后续同步就绪。
-// 本切片不开同步 (维持现状未同步); sortKey/updatedAt 已补齐, 删除标记 GC 随 bookmark-sync 落地 (与笔记同纪律)。
+// 收藏夹与书签作为同一个加密域同步；完整快照 CAS、墓碑 GC 与恢复快照在同一事务落地。
 import { Bookmark, BookmarkFolder } from "@protocol/files"
 import type { Node, NodeKind, NodeOfKind } from "@protocol/node"
+import { StorageSyncConflictError, type BookmarkSyncNode } from "@protocol/storage-sync"
 import { faviconForUrl } from "@/lib/favicon"
 import { genId } from "@/lib/id"
-import { isLive } from "@protocol/sync"
+import { canonicalHttpUrl } from "@/lib/canonical-http-url"
+import { expiredTombstoneIdsToDelete, isLive, recordsEqual } from "@protocol/sync"
 import { cmpSibling, computeSiblingSortKey, type InsertPos } from "@/files/notes-tree-util"
 import {
   idbGetAllFromIndex,
@@ -126,6 +128,109 @@ async function allFolderNodes(): Promise<FolderNode[]> {
     "folder",
   )
   return all.filter((n): n is FolderNode => n.kind === "folder")
+}
+
+// ---- 跨端同步钩子 (仅由 core StorageSyncPort adapter 暴露给 sync 插件) ----
+
+/** 收藏夹与书签必须作为同一快照读取，避免同步只观察到父或子的一半。 */
+export async function listAllBookmarkNodes(): Promise<BookmarkSyncNode[]> {
+  return idbRunTransaction<BookmarkSyncNode[]>(
+    [STORE_NODES],
+    "readonly",
+    (transaction, setResult, abort) => {
+      readBookmarkTreeSnapshot(
+        transaction.objectStore(STORE_NODES),
+        ({ folders, bookmarks }) => setResult([...folders, ...bookmarks]),
+        abort,
+      )
+    },
+  )
+}
+
+/** 仅当本地仍匹配同步读取快照时，原子写入收藏夹、书签与墓碑 GC。 */
+export async function bulkPutBookmarkNodes(
+  nodes: BookmarkSyncNode[],
+  expectedLocal: BookmarkSyncNode[],
+): Promise<BookmarkSyncNode[]> {
+  const outcome = await idbRunTransaction<{ items: BookmarkSyncNode[]; changed: boolean }>(
+    [STORE_NODES, STORE_TRASH_SNAPSHOTS],
+    "readwrite",
+    (transaction, setResult, abort) => {
+      const store = transaction.objectStore(STORE_NODES)
+      const trashStore = transaction.objectStore(STORE_TRASH_SNAPSHOTS)
+      readBookmarkTreeSnapshot(
+        store,
+        ({ folders, bookmarks }) => {
+          const actual: BookmarkSyncNode[] = [...folders, ...bookmarks]
+          const batchIds = new Set<string>()
+          for (const node of nodes) {
+            if (batchIds.has(node.id)) throw new Error(`书签同步批次包含重复 id: ${node.id}`)
+            batchIds.add(node.id)
+          }
+          const activeFolderIds = new Set(
+            nodes.filter((node) => node.kind === "folder" && isLive(node)).map((node) => node.id),
+          )
+          for (const node of nodes) {
+            if (node.kind === "folder" && node.parentId !== null) {
+              throw new Error(`书签同步收藏夹不能嵌套: ${node.id}`)
+            }
+            if (
+              node.kind === "bookmark" &&
+              isLive(node) &&
+              node.parentId !== null &&
+              !activeFolderIds.has(node.parentId)
+            ) {
+              throw new Error(`书签同步批次包含孤儿书签: ${node.id}`)
+            }
+          }
+          if (recordsEqual(actual, nodes)) {
+            for (const node of nodes) {
+              if (isLive(node)) trashStore.delete(node.id)
+            }
+            setResult({ items: actual, changed: false })
+            return
+          }
+          if (!recordsEqual(actual, expectedLocal)) {
+            throw new StorageSyncConflictError("书签")
+          }
+
+          const existingById = new Map(actual.map((node) => [node.id, node]))
+          const keepIds = new Set(nodes.map((node) => node.id))
+          const now = Date.now()
+          const toDelete = expiredTombstoneIdsToDelete(actual, keepIds, now)
+          for (const node of nodes) {
+            const current = existingById.get(node.id)
+            if (current && current.kind !== node.kind) {
+              throw new Error(`书签同步不能改变节点 kind: ${node.id}`)
+            }
+            if (isLive(node)) {
+              trashStore.delete(node.id)
+            } else if (current && isLive(current)) {
+              trashStore.put({
+                id: current.id,
+                node: current,
+                capturedAt: now,
+              } satisfies TrashSnapshot)
+            }
+            // 新 id 使用 add，若撞到 note/file 等其它 kind，事务以 ConstraintError 整批回滚。
+            if (current) store.put(node)
+            else store.add(node)
+          }
+          for (const id of toDelete) {
+            store.delete(id)
+            trashStore.delete(id)
+          }
+          setResult({ items: nodes, changed: true })
+        },
+        abort,
+      )
+    },
+  )
+  if (outcome.changed) {
+    notifyFilesUpdated({ kind: "folder" })
+    notifyFilesUpdated({ kind: "bookmark" })
+  }
+  return outcome.items
 }
 
 // ---- 收藏夹 ----
@@ -342,6 +447,78 @@ export async function addBookmarkWithNode(input: NewBookmark): Promise<BookmarkN
 /** 兼容既有 FilesPort DTO；创建真相由 addBookmarkWithNode 返回。 */
 export async function addBookmark(input: NewBookmark): Promise<Bookmark> {
   return nodeToBookmark(await addBookmarkWithNode(input))
+}
+
+export type CaptureBookmarkStoreResult = Readonly<{
+  status: "created" | "existing"
+  bookmark: Bookmark
+}>
+
+/**
+ * 把外部内容幂等捕获为根级书签。
+ *
+ * canonical URL 检查与创建位于同一个 IndexedDB readwrite 事务内，因此新闻、社区、
+ * 浏览器或多个窗口同时捕获同一链接时只会提交一个对象。页面锚点不参与资产身份，
+ * query 仍保留；已归档对象只返回 existing，不会被静默重新放回收件箱。
+ */
+export async function captureBookmark(
+  input: Omit<NewBookmark, "folderId">,
+): Promise<CaptureBookmarkStoreResult> {
+  const url = input.url.trim()
+  const canonical = canonicalHttpUrl(url)
+  if (!canonical) throw new Error("只能捕获 HTTP(S) 链接")
+
+  const now = Date.now()
+  const id = genId("bm")
+  const outcome = await idbRunTransaction<{
+    status: "created" | "existing"
+    node: BookmarkNode
+  }>([STORE_NODES], "readwrite", (transaction, setResult, abort) => {
+    const store = transaction.objectStore(STORE_NODES)
+    const request = store.index(INDEX_NODES_KIND).getAll("bookmark")
+    request.onerror = () => abort(request.error ?? new Error("读取书签失败"))
+    request.onsuccess = () => {
+      try {
+        const existing = (request.result as Node[]).find((candidate): candidate is BookmarkNode => {
+          if (candidate.kind !== "bookmark" || !isLive(candidate)) return false
+          return canonicalHttpUrl(candidate.content.url) === canonical
+        })
+        if (existing) {
+          setResult({ status: "existing", node: existing })
+          return
+        }
+
+        addNodeAtKindTail(
+          store,
+          { kind: "bookmark", parentId: null },
+          (sortKey) => ({
+            id,
+            kind: "bookmark",
+            title: input.title.trim() || url,
+            parentId: null,
+            sortKey,
+            tags: [...new Set(input.tags ?? [])],
+            createdAt: now,
+            updatedAt: now,
+            content: {
+              url,
+              description: input.description?.trim() ?? "",
+              favicon: input.favicon || faviconForUrl(url),
+            },
+          }),
+          (node) => setResult({ status: "created", node }),
+          abort,
+        )
+      } catch (error) {
+        abort(error)
+      }
+    }
+  })
+
+  if (outcome.status === "created") {
+    notifyFilesUpdated({ kind: "bookmark", id: outcome.node.id })
+  }
+  return { status: outcome.status, bookmark: nodeToBookmark(outcome.node) }
 }
 
 export async function updateBookmark(

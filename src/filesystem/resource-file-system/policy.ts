@@ -1,4 +1,5 @@
 import { sameFileRef, type FileRef } from "@protocol/file-system"
+import { CAPTURE_BOOKMARK_ACTION } from "@protocol/capture"
 import type { ResourceMeta, ResourceRef, ResourceScheme } from "@protocol/resource"
 import { getResourceSource } from "@/filesystem/resource-sources/registry"
 import { ResourceSourceError } from "@/filesystem/resource-sources/types"
@@ -82,7 +83,7 @@ export function assertCanInvoke(ref: FileRef, action: string, ctx: FileSystemAcc
     ctx.actor === "engine" && ctx.activeFile != null && sameFileRef(ref, ctx.activeFile)
   if (["open", "preview", "navigate"].includes(action)) {
     if (activeEngine || hasPermission(ctx, "fs:read")) return
-  } else if (action === "save-to-mine") {
+  } else if (action === "save-to-mine" || action === CAPTURE_BOOKMARK_ACTION) {
     if (
       hasPermission(ctx, "hub.bookmarks:write") ||
       hasPermission(ctx, "hub.subscriptions:write")

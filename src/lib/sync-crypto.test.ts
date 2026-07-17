@@ -9,6 +9,7 @@ import {
   decryptJson,
   isValidSyncCode,
   generateSyncCode,
+  isValidSyncPartition,
 } from "./sync-crypto"
 
 const CODE = "1234567890abcdef1234567890abcdef" // 32 hex = 16 字节
@@ -29,6 +30,31 @@ test("deriveKeys: 同码(含分隔符/大小写规范化)派生同 storageId, �
   // 不同码派生不同 storageId
   const other = await deriveKeys("ffffffffffffffffffffffffffffffff")
   assert.notEqual(other.storageId, a.storageId)
+})
+
+test("deriveKeys: notes 与 bookmarks 使用彼此独立且区别于关注的加密域", async () => {
+  const subscriptions = await deriveKeys(CODE)
+  const notes = await deriveKeys(CODE, "notes")
+  const bookmarks = await deriveKeys(CODE, "bookmarks")
+  assert.notEqual(notes.storageId, subscriptions.storageId)
+  assert.notEqual(bookmarks.storageId, subscriptions.storageId)
+  assert.notEqual(bookmarks.storageId, notes.storageId)
+})
+
+test("deriveKeys: partition 0 固定历史 storageId，非零分片稳定隔离", async () => {
+  assert.equal((await deriveKeys(CODE, "subs", 0)).storageId, "75a52b96c853c64a6b7b4ec05a746f75")
+  assert.equal((await deriveKeys(CODE, "notes", 0)).storageId, "24fec3f048b3d9fae5fef9b958083a14")
+  assert.equal(
+    (await deriveKeys(CODE, "bookmarks", 0)).storageId,
+    "9efcc4f5f21da54a375dae7af8702f0f",
+  )
+  assert.notEqual(
+    (await deriveKeys(CODE, "notes", 1)).storageId,
+    (await deriveKeys(CODE, "notes", 0)).storageId,
+  )
+  assert.equal(isValidSyncPartition(1_023), true)
+  assert.equal(isValidSyncPartition(1_024), false)
+  await assert.rejects(deriveKeys(CODE, "notes", -1), /同步分片编号无效/)
 })
 
 test("encryptJson/decryptJson: 往返还原明文, 密文不含明文", async () => {
@@ -64,4 +90,18 @@ test("encryptJson: 同明文两次加密的 IV 必须不同 (nonce 唯一性)", 
   // AES-GCM 在相同 key 下复用 nonce 会灾难性泄密, 故每次必须新随机 IV
   assert.notEqual(a.iv, b.iv)
   assert.notEqual(a.ciphertext, b.ciphertext)
+})
+
+test("encryptJson/decryptJson: 在分配和解析前执行同步块预算", async () => {
+  const { key } = await deriveKeys(CODE)
+  const budget = {
+    maxRecords: 1,
+    maxPlaintextBytes: 16,
+    maxCiphertextBase64Chars: 44,
+  }
+  await assert.rejects(encryptJson(key, { value: "payload too large" }, budget), /单块上限/)
+  await assert.rejects(
+    decryptJson(key, "AAAAAAAAAAAAAAAA", "A".repeat(48), budget),
+    /格式无效或超过单块上限/,
+  )
 })

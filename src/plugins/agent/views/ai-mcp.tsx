@@ -25,6 +25,14 @@ import {
   type McpRunStatus,
 } from "../lib/agent-mcp-registry"
 import {
+  diagnosticForMcpServer,
+  getMcpDiagnostics,
+  getServerMcpDiagnostics,
+  subscribeMcpDiagnostics,
+  type McpConnectionDiagnostic,
+  type McpDiagnosticStatus,
+} from "../lib/agent-mcp-diagnostics"
+import {
   AGENT_MCP_CREATE_ACTION,
   AGENT_MCP_PROBE_ACTION,
   agentConfigFileRef,
@@ -69,6 +77,7 @@ import {
 const STATUS_TONE: Record<McpRunStatus, Tone> = {
   connected: "ok",
   connecting: "warn",
+  degraded: "warn",
   error: "error",
   disabled: "idle",
   pending: "idle",
@@ -90,6 +99,11 @@ function transportLabel(transport: McpTransport): string {
 
 export default function AiMcp() {
   const document = useFileDocument(MCP_FILE_REF, decodeAgentMcpServers)
+  const diagnostics = React.useSyncExternalStore(
+    subscribeMcpDiagnostics,
+    getMcpDiagnostics,
+    getServerMcpDiagnostics,
+  )
   const updateServers = document.update
   const servers = document.data ?? []
 
@@ -212,6 +226,7 @@ export default function AiMcp() {
                 active={selected?.id === server.id}
                 onSelect={() => setSelectedId(server.id)}
                 onUpdate={(updater) => updateServer(server.id, updater)}
+                diagnostic={diagnosticForMcpServer(server.id, server.updatedAt, diagnostics)}
               />
             ))}
           </div>
@@ -223,6 +238,7 @@ export default function AiMcp() {
               server={selected}
               onUpdate={(updater) => updateServer(selected.id, updater)}
               onDelete={() => void remove(selected.id)}
+              diagnostic={diagnosticForMcpServer(selected.id, selected.updatedAt, diagnostics)}
               onProbe={(serverId) =>
                 document.invoke<AgentMcpProbeResult>(AGENT_MCP_PROBE_ACTION, { serverId })
               }
@@ -367,7 +383,11 @@ function SecretsDialog({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 shrink-0"
-                  onClick={() => deleteSecret(s.id)}
+                  onClick={() => {
+                    void deleteSecret(s.id).catch((error) =>
+                      toast.error(error instanceof Error ? error.message : "删除密钥失败"),
+                    )
+                  }}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -393,9 +413,14 @@ function SecretsDialog({
               size="sm"
               disabled={!isValidSecretName(name)}
               onClick={() => {
-                setSecret(name, value)
-                setName("")
-                setValue("")
+                void setSecret(name, value)
+                  .then(() => {
+                    setName("")
+                    setValue("")
+                  })
+                  .catch((error) =>
+                    toast.error(error instanceof Error ? error.message : "保存密钥失败"),
+                  )
               }}
             >
               存
@@ -413,11 +438,13 @@ function ServerRow({
   active,
   onSelect,
   onUpdate,
+  diagnostic,
 }: {
   server: McpServer
   active: boolean
   onSelect: () => void
   onUpdate: UpdateMcpServer
+  diagnostic?: McpConnectionDiagnostic
 }) {
   const isLoopback = server.transport === "loopback"
   const subtitle = isLoopback
@@ -426,7 +453,7 @@ function ServerRow({
 
   return (
     <ListRow
-      leading={<StatusDot tone={STATUS_TONE[runStatusOf(server)]} />}
+      leading={<StatusDot tone={STATUS_TONE[runStatusOf(server, diagnostic)]} />}
       title={server.name}
       subtitle={subtitle}
       active={active}
@@ -453,11 +480,13 @@ function ServerDetail({
   onUpdate,
   onDelete,
   onProbe,
+  diagnostic,
 }: {
   server: McpServer
   onUpdate: UpdateMcpServer
   onDelete: () => void
   onProbe: (serverId: string) => Promise<AgentMcpProbeResult>
+  diagnostic?: McpConnectionDiagnostic
 }) {
   return server.transport === "loopback" ? (
     <LoopbackDetail />
@@ -467,6 +496,7 @@ function ServerDetail({
       onUpdate={onUpdate}
       onDelete={onDelete}
       onProbe={onProbe}
+      diagnostic={diagnostic}
     />
   )
 }
@@ -496,11 +526,13 @@ function ExternalServerDetail({
   onUpdate,
   onDelete,
   onProbe,
+  diagnostic,
 }: {
   server: McpServer
   onUpdate: UpdateMcpServer
   onDelete: () => void
   onProbe: (serverId: string) => Promise<AgentMcpProbeResult>
+  diagnostic?: McpConnectionDiagnostic
 }) {
   const isStdio = server.transport === "stdio"
   const [probing, setProbing] = React.useState(false)
@@ -646,6 +678,8 @@ function ExternalServerDetail({
           </SettingRow>
         )}
       </div>
+
+      <McpDiagnosticSummary diagnostic={diagnostic} />
 
       {/* 请求头 (sse/http 认证: 如 Authorization: Bearer <token>); 仅存本机 */}
       {!isStdio && (
@@ -801,10 +835,87 @@ function ExternalServerDetail({
           )}
         >
           {probe.ok
-            ? `连接成功 · 列出 ${probe.toolCount} 个工具${probe.tools?.length ? `：${probe.tools.join("、")}` : ""}`
-            : `连接失败：${probe.error}`}
+            ? `连接成功 · ${probe.durationMs ?? 0} ms · 列出 ${probe.toolCount} 个工具${probe.tools?.length ? `：${probe.tools.join("、")}` : ""}`
+            : `连接失败${probe.errorCode ? `（${probe.errorCode}）` : ""}：${probe.error}`}
         </div>
       )}
     </Panel>
+  )
+}
+
+const DIAGNOSTIC_STATUS: Record<
+  McpDiagnosticStatus,
+  Readonly<{ label: string; tone: "neutral" | "info" | "warn" | "error" | "ok" }>
+> = {
+  unknown: { label: "尚未检测", tone: "neutral" },
+  checking: { label: "检测中", tone: "info" },
+  healthy: { label: "最近检测正常", tone: "ok" },
+  connected: { label: "会话已连接", tone: "ok" },
+  degraded: { label: "连接已降级", tone: "warn" },
+  error: { label: "连接不可用", tone: "error" },
+}
+
+function diagnosticTime(value: number | null): string {
+  if (value === null) return "尚无"
+  try {
+    return new Date(value).toLocaleString()
+  } catch {
+    return "时间不可用"
+  }
+}
+
+export function McpDiagnosticSummary({ diagnostic }: { diagnostic?: McpConnectionDiagnostic }) {
+  const status = DIAGNOSTIC_STATUS[diagnostic?.status ?? "unknown"]
+  const lastCall = diagnostic?.lastCall
+  return (
+    <div className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-4 text-[13px]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium">运行诊断</span>
+        <Chip tone={status.tone}>{status.label}</Chip>
+      </div>
+      <dl className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <dt className="text-muted-foreground">最近检测</dt>
+          <dd>{diagnosticTime(diagnostic?.checkedAt ?? null)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">连接耗时</dt>
+          <dd>
+            {diagnostic?.durationMs === null || diagnostic === undefined
+              ? "尚无"
+              : `${diagnostic.durationMs} ms`}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">工具数量</dt>
+          <dd>{diagnostic?.toolCount ?? "尚无"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">活动会话</dt>
+          <dd>{diagnostic?.activeSessions ?? 0}</dd>
+        </div>
+      </dl>
+      {diagnostic?.failure ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-destructive">
+          {diagnostic.failure.message}（{diagnostic.failure.code}）
+        </div>
+      ) : null}
+      {lastCall ? (
+        <div className="border-t pt-3 text-muted-foreground">
+          最近调用：<span className="font-mono text-foreground">{lastCall.toolName}</span> ·{" "}
+          {lastCall.status === "success"
+            ? "成功"
+            : lastCall.status === "tool-error"
+              ? "工具返回失败"
+              : "传输失败"}{" "}
+          · {lastCall.durationMs} ms · {diagnosticTime(lastCall.finishedAt)}
+        </div>
+      ) : (
+        <p className="border-t pt-3 text-muted-foreground">尚无工具调用记录</p>
+      )}
+      <p className="text-[12px] text-muted-foreground">
+        仅记录状态、耗时、工具名与稳定错误码；不记录 URL、命令参数、请求头、工具参数或返回正文。
+      </p>
+    </div>
   )
 }

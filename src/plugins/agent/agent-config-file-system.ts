@@ -66,13 +66,26 @@ import {
   type AgentWorkspaceCreateResult,
 } from "./agent-management-file-contract"
 import {
+  AGENT_SETTINGS_ACP_DETECT_ACTION,
+  AGENT_SETTINGS_ACP_PROBE_ACTION,
+  AGENT_SETTINGS_ACP_READ_ACTION,
+  AGENT_SETTINGS_ACP_WRITE_ACTION,
   AGENT_SETTINGS_CLEAR_API_KEY_ACTION,
   AGENT_SETTINGS_CREDENTIAL_STATUS_ACTION,
   AGENT_SETTINGS_SET_API_KEY_ACTION,
+  decodeAgentAcpProbeInput,
+  decodeAgentAcpProbeResult,
+  decodeAgentAcpSettings,
+  decodeAgentDetectedAcpAgents,
   decodeAgentSettingsSetApiKeyInput,
+  type AgentAcpProbeResult,
+  type AgentAcpSettings,
+  type AgentDetectedAcpAgent,
+  type AgentExternalAcpConfig,
   type AgentSettingsCredentialStatus,
 } from "./agent-settings-file-contract"
 import { decodeAgentMcpServers, decodeAgentTasks } from "./lib/agent-config-codecs"
+import type { ExternalMcpTransport, McpFailureKind } from "./lib/agent-mcp-diagnostics"
 import {
   createMcpServer as createRegisteredMcpServer,
   getMcpServers,
@@ -82,6 +95,7 @@ import {
   subscribeAgentImportInvalidation,
   withAgentSettingsFileWriteLock,
 } from "./agent-settings-write-adapter"
+import { getAcpSettings, setAcpSettings, subscribeAcpSettings } from "./lib/acp/acp-settings"
 
 export const AGENT_CONFIG_FILE_SYSTEM_ID = BUILTIN_AGENT_CONFIG_FILE_SYSTEM_ID
 export const AGENT_CONFIG_MEDIA_TYPE = "application/json"
@@ -94,14 +108,37 @@ export const AGENT_MCP_PROBE_ACTION = "mcp.probe"
 export type AgentMcpCreateResult = Readonly<{ serverId: string }>
 export type AgentMcpProbeResult = Readonly<{
   ok: boolean
+  transport?: ExternalMcpTransport
+  checkedAt?: number
+  durationMs?: number
   toolCount?: number
   tools?: string[]
   error?: string
+  errorKind?: McpFailureKind
+  errorCode?: string
 }>
 
-const SAFE_MCP_PROBE_ERRORS = new Set([
-  "OAuth 未授权：请先在上方完成「授权」",
-  "配置不完整（缺 URL 或命令）",
+const SAFE_MCP_PROBE_FAILURES: Readonly<
+  Record<string, Readonly<{ kind: McpFailureKind; message: string }>>
+> = {
+  "authentication-required": { kind: "authentication", message: "认证失败或尚未授权" },
+  "operation-timeout": { kind: "timeout", message: "MCP 连接或调用超时" },
+  "transport-unsupported": { kind: "unsupported", message: "当前平台不支持该 MCP 传输" },
+  "invalid-configuration": { kind: "configuration", message: "MCP 连接配置无效" },
+  "protocol-error": { kind: "protocol", message: "服务响应不符合 MCP 协议" },
+  "service-unavailable": { kind: "unavailable", message: "MCP 服务不可达" },
+  "transport-error": { kind: "transport", message: "MCP 传输失败" },
+  "unknown-error": { kind: "unknown", message: "MCP 操作失败" },
+}
+const MCP_FAILURE_KINDS = new Set<McpFailureKind>([
+  "configuration",
+  "authentication",
+  "timeout",
+  "unsupported",
+  "protocol",
+  "unavailable",
+  "transport",
+  "unknown",
 ])
 
 export const agentConfigRootRef: FileRef = AGENT_CONFIG_ROOT_REF
@@ -158,6 +195,11 @@ export type AgentConfigFileSystemDeps = {
   readSettingsCredentialConfigured?(): boolean | Promise<boolean>
   writeSettingsApiKey?(apiKey: string): void | Promise<void>
   deleteSettingsApiKey?(): void | Promise<void>
+  readAcpSettings?(): AgentAcpSettings
+  writeAcpSettings?(settings: AgentAcpSettings): void | Promise<void>
+  subscribeAcpSettings?(listener: () => void): () => void
+  detectAcpAgents?(): AgentDetectedAcpAgent[] | Promise<AgentDetectedAcpAgent[]>
+  probeAcpAgent?(config: AgentExternalAcpConfig): AgentAcpProbeResult | Promise<AgentAcpProbeResult>
   createWorkspace?(name?: string): AgentWorkspaceCreateResult | Promise<AgentWorkspaceCreateResult>
   activateWorkspace?(
     workspaceId: string,
@@ -179,6 +221,17 @@ const defaultDeps: AgentConfigFileSystemDeps = {
   readSettingsCredentialConfigured: readAgentSettingsCredentialConfigured,
   writeSettingsApiKey: writeAgentSettingsApiKey,
   deleteSettingsApiKey: deleteAgentSettingsApiKey,
+  readAcpSettings: getAcpSettings,
+  writeAcpSettings: setAcpSettings,
+  subscribeAcpSettings,
+  async detectAcpAgents() {
+    const { detectAgents } = await import("./lib/acp/acp-detect")
+    return detectAgents()
+  },
+  async probeAcpAgent(config) {
+    const { probeExternalAcpAgent } = await import("./lib/acp/acp-client")
+    return probeExternalAcpAgent(config)
+  },
   createWorkspace: createAgentWorkspace,
   activateWorkspace: activateAgentWorkspace,
   createMcpServer: createRegisteredMcpServer,
@@ -420,6 +473,11 @@ async function snapshot(
       section === "settings" && deps.settingsCredentialConfigured?.() === true,
     settingsCredentialVersion:
       section === "settings" ? (deps.settingsCredentialRevision?.() ?? "0") : null,
+    // ACP 命令属于设备运行配置，不进入 settings.json 正文；其语义仍参与版本/CAS 与 watch。
+    settingsAcp:
+      section === "settings" && deps.readAcpSettings
+        ? decodeAgentAcpSettings(deps.readAcpSettings())
+        : null,
     // 公开正文未变化的隐藏凭据变更和 ABA 也必须使旧 workspace CAS 失效。
     workspaceVersion: section === "workspaces" ? (deps.workspaceRevision?.() ?? "0") : null,
   })
@@ -566,6 +624,22 @@ function settingsApiKeyInput(ref: FileRef, input: unknown): string {
   }
 }
 
+function acpSettingsInput(ref: FileRef, input: unknown): AgentAcpSettings {
+  try {
+    return decodeAgentAcpSettings(input)
+  } catch {
+    throw new FileSystemError("invalid-input", "Invalid ACP settings input", ref)
+  }
+}
+
+function acpProbeInput(ref: FileRef, input: unknown): AgentExternalAcpConfig {
+  try {
+    return decodeAgentAcpProbeInput(input).externalAgent
+  } catch {
+    throw new FileSystemError("invalid-input", "Invalid ACP probe input", ref)
+  }
+}
+
 function workspaceCreateName(ref: FileRef, input: unknown): string | undefined {
   try {
     return decodeAgentWorkspaceCreateInput(input).name
@@ -643,11 +717,36 @@ function mcpProbeResult(ref: FileRef, value: unknown): AgentMcpProbeResult {
   try {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid()
     const result = value as Record<string, unknown>
-    const allowed = new Set(["ok", "toolCount", "tools", "error"])
+    const allowed = new Set([
+      "ok",
+      "transport",
+      "checkedAt",
+      "durationMs",
+      "toolCount",
+      "tools",
+      "error",
+      "errorKind",
+      "errorCode",
+    ])
     for (const key of Object.keys(result)) {
       if (!allowed.has(key)) throw invalid()
     }
     if (typeof result.ok !== "boolean") throw invalid()
+    const transport = result.transport
+    if (
+      transport !== undefined &&
+      transport !== "stdio" &&
+      transport !== "sse" &&
+      transport !== "http"
+    ) {
+      throw invalid()
+    }
+    for (const field of ["checkedAt", "durationMs"] as const) {
+      const item = result[field]
+      if (item !== undefined && (!Number.isSafeInteger(item) || (item as number) < 0)) {
+        throw invalid()
+      }
+    }
     if (
       result.toolCount !== undefined &&
       (typeof result.toolCount !== "number" ||
@@ -662,28 +761,70 @@ function mcpProbeResult(ref: FileRef, value: unknown): AgentMcpProbeResult {
     ) {
       throw invalid()
     }
+    if (
+      result.errorKind !== undefined &&
+      (typeof result.errorKind !== "string" ||
+        !MCP_FAILURE_KINDS.has(result.errorKind as McpFailureKind))
+    ) {
+      throw invalid()
+    }
+    if (
+      result.errorCode !== undefined &&
+      (typeof result.errorCode !== "string" || !/^[a-z][a-z0-9-]{0,127}$/.test(result.errorCode))
+    ) {
+      throw invalid()
+    }
+    if (
+      result.error === undefined &&
+      (result.errorKind !== undefined || result.errorCode !== undefined)
+    ) {
+      throw invalid()
+    }
     let tools: string[] | undefined
     if (result.tools !== undefined) {
-      if (!Array.isArray(result.tools) || result.tools.length > 1_000) throw invalid()
+      if (!Array.isArray(result.tools) || result.tools.length > 64) throw invalid()
       tools = []
       for (let index = 0; index < result.tools.length; index += 1) {
         if (!Object.prototype.hasOwnProperty.call(result.tools, index)) throw invalid()
         const tool = result.tools[index]
         if (typeof tool !== "string" || tool.length > 512) throw invalid()
-        tools.push(tool)
+        const cleaned = tool
+          .replace(/[\u0000-\u001f\u007f]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+        tools.push(
+          cleaned
+            ? cleaned.length > 128
+              ? `${cleaned.slice(0, 127)}…`
+              : cleaned
+            : "external-tool",
+        )
       }
     }
+    const failure =
+      typeof result.errorCode === "string" ? SAFE_MCP_PROBE_FAILURES[result.errorCode] : undefined
+    if (failure && result.errorKind !== undefined && failure.kind !== result.errorKind)
+      throw invalid()
+    const failureMessage =
+      result.errorCode === "service-unavailable" && transport === "stdio"
+        ? "无法启动或连接本地 MCP 服务"
+        : failure?.message
     return {
       ok: result.ok,
+      ...(transport === undefined ? {} : { transport }),
+      ...(result.checkedAt === undefined ? {} : { checkedAt: result.checkedAt as number }),
+      ...(result.durationMs === undefined ? {} : { durationMs: result.durationMs as number }),
       ...(result.toolCount === undefined ? {} : { toolCount: result.toolCount as number }),
       ...(tools === undefined ? {} : { tools }),
       ...(result.error === undefined
         ? {}
-        : {
-            error: SAFE_MCP_PROBE_ERRORS.has(result.error as string)
-              ? (result.error as string)
-              : "连接失败，请检查本机配置和服务状态",
-          }),
+        : failure
+          ? {
+              error: failureMessage!,
+              errorKind: failure.kind,
+              errorCode: result.errorCode as string,
+            }
+          : { error: "连接失败，请检查本机配置和服务状态" }),
     }
   } catch (error) {
     if (error instanceof FileSystemError) throw error
@@ -756,6 +897,36 @@ function sectionActions(section: AgentPublicConfigSectionId): FileAction[] {
         requires: [AGENT_CONFIG_WRITE_PERMISSION],
         risk: "destructive",
         reason: "清除本机安全存储中的凭据",
+      },
+      {
+        id: AGENT_SETTINGS_ACP_READ_ACTION,
+        label: "读取 ACP 设备设置",
+        kind: "specialized",
+        requires: [AGENT_CONFIG_READ_PERMISSION],
+        reason: "ACP 命令配置只经 provider 返回给可信设置 Display",
+      },
+      {
+        id: AGENT_SETTINGS_ACP_WRITE_ACTION,
+        label: "保存 ACP 设备设置",
+        kind: "specialized",
+        requires: [AGENT_CONFIG_WRITE_PERMISSION],
+        risk: "caution",
+        reason: "外部进程命令只写入本机配置",
+      },
+      {
+        id: AGENT_SETTINGS_ACP_DETECT_ACTION,
+        label: "检测本机 ACP Agent",
+        kind: "specialized",
+        requires: [AGENT_CONFIG_READ_PERMISSION],
+        reason: "只返回检测到的程序与建议参数",
+      },
+      {
+        id: AGENT_SETTINGS_ACP_PROBE_ACTION,
+        label: "诊断 ACP Agent 连接",
+        kind: "specialized",
+        requires: [AGENT_CONFIG_WRITE_PERMISSION],
+        risk: "caution",
+        reason: "会启动用户配置的本机进程，但不发送真实对话",
       },
     )
   }
@@ -997,6 +1168,70 @@ export function createAgentConfigFileSystem(
         assertNoActionInput(ref, input, "Open")
         return { ref }
       }
+      if (section === "settings" && action === AGENT_SETTINGS_ACP_READ_ACTION) {
+        assertAccess(ref, ctx, "action", AGENT_CONFIG_READ_PERMISSION)
+        assertNoActionInput(ref, input, "Read ACP settings")
+        if (!deps.readAcpSettings) {
+          throw new FileSystemError("unsupported", "ACP settings are unavailable", ref)
+        }
+        try {
+          return decodeAgentAcpSettings(deps.readAcpSettings())
+        } catch {
+          throw new FileSystemError("unavailable", "Unable to read ACP settings", ref)
+        }
+      }
+      if (section === "settings" && action === AGENT_SETTINGS_ACP_WRITE_ACTION) {
+        assertAccess(ref, ctx, "action", AGENT_CONFIG_WRITE_PERMISSION)
+        const next = acpSettingsInput(ref, input)
+        if (!deps.writeAcpSettings || !deps.readAcpSettings) {
+          throw new FileSystemError("unsupported", "ACP settings writes are unavailable", ref)
+        }
+        return withAgentSettingsFileWriteLock(async () => {
+          await deps.prepare?.(section)
+          assertExpectedVersion(
+            ref,
+            options?.expectedVersion,
+            (await snapshot(section, deps)).version,
+          )
+          try {
+            await deps.writeAcpSettings!(next)
+            return decodeAgentAcpSettings(deps.readAcpSettings!())
+          } catch (error) {
+            if (error instanceof FileSystemError) throw error
+            throw new FileSystemError("unavailable", "Unable to persist ACP settings", ref)
+          }
+        })
+      }
+      if (section === "settings" && action === AGENT_SETTINGS_ACP_DETECT_ACTION) {
+        assertAccess(ref, ctx, "action", AGENT_CONFIG_READ_PERMISSION)
+        assertNoActionInput(ref, input, "Detect ACP agents")
+        if (!deps.detectAcpAgents) {
+          throw new FileSystemError("unsupported", "ACP agent detection is unavailable", ref)
+        }
+        try {
+          return decodeAgentDetectedAcpAgents(await deps.detectAcpAgents())
+        } catch {
+          // 原生探测错误可能携带本机路径；provider 边界不回显。
+          throw new FileSystemError("unavailable", "ACP agent detection failed", ref)
+        }
+      }
+      if (section === "settings" && action === AGENT_SETTINGS_ACP_PROBE_ACTION) {
+        assertAccess(ref, ctx, "action", AGENT_CONFIG_WRITE_PERMISSION)
+        const config = acpProbeInput(ref, input)
+        if (!deps.probeAcpAgent) {
+          throw new FileSystemError(
+            "unsupported",
+            "ACP connection diagnostics are unavailable",
+            ref,
+          )
+        }
+        try {
+          return decodeAgentAcpProbeResult(await deps.probeAcpAgent(config))
+        } catch {
+          // spawn / SDK 错误可能携带程序和工作目录；公开面只返回稳定错误。
+          throw new FileSystemError("unavailable", "ACP connection diagnostics failed", ref)
+        }
+      }
       if (section === "settings" && action === AGENT_SETTINGS_CREDENTIAL_STATUS_ACTION) {
         assertAccess(ref, ctx, "action", AGENT_CONFIG_READ_PERMISSION)
         assertNoActionInput(ref, input, "Credential status")
@@ -1212,6 +1447,9 @@ export function createAgentConfigFileSystem(
       try {
         for (const section of watchedSections) {
           subscribeChange(section, section)
+        }
+        if (watchedSections.includes("settings") && deps.subscribeAcpSettings) {
+          disposers.push(deps.subscribeAcpSettings(() => notifyChange("settings")))
         }
         if (watchedSections.includes("workspaces")) {
           // workspaces 的 taskCount 与乐观版本依赖 tasks，必须共享同一失效通路。

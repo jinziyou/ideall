@@ -66,8 +66,12 @@ function mutationDeps(events: string[]): AgentTaskWriteAdapterDeps {
     async setTaskStarred(id, starred) {
       events.push(`starred:${id}:${starred}`)
     },
-    async deleteTask(id) {
-      events.push(`delete:${id}`)
+    async deleteTask(id, expectedThreadUpdatedAt) {
+      events.push(
+        expectedThreadUpdatedAt === undefined
+          ? `delete:${id}`
+          : `delete:${id}:${expectedThreadUpdatedAt}`,
+      )
     },
     async deleteTaskOrThread(id) {
       events.push(`delete-thread:${id}`)
@@ -99,6 +103,7 @@ test("agent task write adapter: every runtime mutation refreshes under the canon
     ["status:thread-1:done", () => adapter.setTaskStatus("thread-1", "done")],
     ["starred:thread-1:true", () => adapter.setTaskStarred("thread-1", true)],
     ["delete:thread-1", () => adapter.deleteTask("thread-1")],
+    ["delete:thread-1:9", () => adapter.deleteTask("thread-1", 9)],
     ["delete-thread:thread-1", () => adapter.deleteTaskOrThread("thread-1")],
     ["replace:1", () => adapter.replaceTasks([TASK])],
   ]

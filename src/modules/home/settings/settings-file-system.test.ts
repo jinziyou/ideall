@@ -4,10 +4,29 @@ import { FileSystemError } from "@/filesystem/types"
 import { setThemeChoice } from "@/lib/theme"
 import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
+  SETTINGS_DATA_EXPORT_ACTION,
+  SETTINGS_DATA_IMPORT_ACTION,
+  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
+  SETTINGS_DATA_PERSIST_ACTION,
+  SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+  SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
   SETTINGS_READ_PERMISSION,
   SETTINGS_ROOT_MEDIA_TYPE,
+  SETTINGS_RUNTIME_AUTHORIZE_ACTION,
+  SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+  SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION,
+  SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION,
+  SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION,
+  SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION,
   SETTINGS_RUNTIME_RETRY_ACTION,
+  SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION,
+  SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_REVOKE_ACTION,
+  SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION,
+  SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION,
   SETTINGS_RUNTIME_UNINSTALL_ACTION,
   SETTINGS_SECTION_IDS,
   SETTINGS_WRITE_PERMISSION,
@@ -28,14 +47,44 @@ function createFixture(
     writeAppearance?: () => void
     revokeConnection?: (id: string) => boolean
     manageRuntimeExtension?: (action: SettingsRuntimeAction, id: string) => boolean
+    importWorkspaceArchive?: () => void
   } = {},
 ) {
   const state: Record<SettingsSectionId, unknown> = {
     appearance: { choice: "light", effectiveColorScheme: "light" },
     device: {
-      sync: { enabled: true },
+      sync: { enabled: true, lastRun: null },
       storage: { usage: 10, quota: 100 },
       publishingIdentity: { signedIn: false, user: null },
+    },
+    data: {
+      archive: {
+        kind: "ideall.workspace-archive",
+        version: 2,
+        includesSecrets: false,
+        importMode: "replace",
+      },
+      secureStore: {
+        backend: "system-keychain",
+        native: true,
+        fallbackValueCount: 0,
+        legacyValueCount: 0,
+        error: null,
+      },
+      database: {
+        name: "wonita-home",
+        version: 17,
+        status: "healthy",
+        counts: {
+          nodes: 2,
+          blobs: 1,
+          trashSnapshots: 0,
+          agentTasks: 1,
+          agentWriteAudits: 0,
+        },
+        error: null,
+      },
+      storage: { persistenceAvailable: true, persisted: false },
     },
     connections: [
       {
@@ -54,6 +103,8 @@ function createFixture(
   const writes: string[] = []
   const connectionRevocations: string[] = []
   const runtimeActions: Array<{ action: SettingsRuntimeAction; id: string }> = []
+  const runtimeHostActions: Array<{ action: string; input?: unknown }> = []
+  const archiveImports: Array<{ content: string; filename?: string; passphrase?: string }> = []
   const listeners = new Map<SettingsSectionId, Set<() => void>>()
   const subscriptions = new Map<SettingsSectionId, number>()
   const deps: SettingsFileSystemDeps = {
@@ -66,6 +117,52 @@ function createFixture(
       writes.push(choice)
       state.appearance = { choice, effectiveColorScheme: choice }
     },
+    exportWorkspaceArchive() {
+      return {
+        filename: "workspace.json",
+        content: '{"kind":"ideall.workspace-archive"}',
+        encrypted: false,
+      }
+    },
+    previewWorkspaceArchive(content, filename) {
+      return {
+        ok: content.includes("ideall.workspace-archive"),
+        encrypted: false,
+        requiresPassphrase: false,
+        filename: filename ?? null,
+        error: null,
+        package: { kind: "ideall.workspace-archive", version: 1, exportedAt: "2026-01-01" },
+        archive: {
+          nodeCount: 2,
+          blobCount: 1,
+          trashSnapshotCount: 0,
+          pluginCount: 3,
+          tabCount: 1,
+        },
+      }
+    },
+    importWorkspaceArchive(content, filename, passphrase) {
+      archiveImports.push({
+        content,
+        ...(filename ? { filename } : {}),
+        ...(passphrase ? { passphrase } : {}),
+      })
+      options.importWorkspaceArchive?.()
+      return {
+        changed: true,
+        reloadRequired: true,
+        imported: { nodes: 2, blobs: 1, trash: 0, plugins: 3 },
+      }
+    },
+    requestPersistentStorage() {
+      return { available: true, granted: true }
+    },
+    selfTestSecureStore() {
+      return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
+    },
+    migrateSecureStore() {
+      return { available: true, migrated: 1, removedPlaintext: 1, failed: 0, remaining: 0 }
+    },
     revokeConnection(id) {
       connectionRevocations.push(id)
       return options.revokeConnection?.(id) ?? true
@@ -73,6 +170,104 @@ function createFixture(
     manageRuntimeExtension(action, id) {
       runtimeActions.push({ action, id })
       return options.manageRuntimeExtension?.(action, id) ?? true
+    },
+    inspectRuntimeExtensionPublisher() {
+      runtimeHostActions.push({ action: "inspect-publisher" })
+      return {
+        publisher: "acme.tools",
+        label: "Acme Tools",
+        publicKey: "RWfixture",
+        fingerprint: `sha256:${"A".repeat(43)}`,
+      }
+    },
+    inspectRuntimeExtensionPublisherRotation() {
+      runtimeHostActions.push({ action: "inspect-publisher-rotation" })
+      return {
+        publisher: "acme.tools",
+        label: "Acme Tools",
+        sequence: 2,
+        issuedAt: 100,
+        currentFingerprint: `sha256:${"A".repeat(43)}`,
+        nextFingerprint: `sha256:${"B".repeat(43)}`,
+        payload: '{"schemaVersion":1}',
+        currentSignature: "current\nsignature",
+        nextSignature: "next\nsignature",
+      }
+    },
+    applyRuntimeExtensionPublisherRotation(candidate) {
+      runtimeHostActions.push({ action: "apply-publisher-rotation", input: candidate })
+      return {
+        changed: true,
+        publisher: candidate.publisher,
+        sequence: candidate.sequence,
+        previousFingerprint: candidate.currentFingerprint,
+        fingerprint: candidate.nextFingerprint,
+        rotatedAt: 200,
+        retiredKeyCount: 1,
+      }
+    },
+    trustRuntimeExtensionPublisher(candidate) {
+      runtimeHostActions.push({ action: "trust-publisher", input: candidate })
+      return true
+    },
+    revokeRuntimeExtensionPublisher(publisher, fingerprint) {
+      runtimeHostActions.push({ action: "revoke-publisher", input: { publisher, fingerprint } })
+      return true
+    },
+    importRuntimeExtensionRevocations() {
+      runtimeHostActions.push({ action: "import-revocations" })
+      return { changed: true, cancelled: false, publisher: "acme.tools", sequence: 2 }
+    },
+    installRuntimeExtensionPackage() {
+      runtimeHostActions.push({ action: "install-package" })
+      return { changed: true, cancelled: false, operation: "installed" }
+    },
+    prepareRuntimeExtensionUpdate(id) {
+      const candidate = {
+        token: "123e4567-e89b-42d3-a456-426614174000",
+        registrySequence: 2,
+        registryExpiresAt: 300,
+        id,
+        label: "Extension update",
+        currentVersion: 1,
+        nextVersion: 2,
+        publisher: "acme.tools",
+        publisherFingerprint: `sha256:${"A".repeat(43)}`,
+        currentPermissions: ["resources:read"] as const,
+        nextPermissions: ["resources:read", "tools:invoke"] as const,
+        addedPermissions: ["tools:invoke"] as const,
+        removedPermissions: [],
+        digest: `sha256:${"B".repeat(43)}`,
+        packageSha256: "a".repeat(64),
+        publishedAt: 100,
+      }
+      runtimeHostActions.push({ action: "prepare-update", input: { id } })
+      return candidate
+    },
+    applyRuntimeExtensionUpdate(candidate) {
+      runtimeHostActions.push({ action: "apply-update", input: candidate })
+      return { changed: true, cancelled: false, operation: "updated" }
+    },
+    discardRuntimeExtensionUpdate(token) {
+      runtimeHostActions.push({ action: "discard-update", input: { token } })
+      return true
+    },
+    rollbackRuntimeExtensionPackage(id) {
+      runtimeHostActions.push({ action: "rollback-package", input: { id } })
+      return { changed: true, cancelled: false, operation: "rolled-back" }
+    },
+    refreshRuntimeExtensionRegistry() {
+      runtimeHostActions.push({ action: "refresh-registry" })
+      return {
+        source: "network" as const,
+        stale: false,
+        fetchedAt: 200,
+        generatedAt: 100,
+        expiresAt: 300,
+        sequence: 2,
+        failureCode: null,
+        entries: [],
+      }
     },
     subscribe(section, listener) {
       let current = listeners.get(section)
@@ -95,6 +290,8 @@ function createFixture(
     writes,
     connectionRevocations,
     runtimeActions,
+    runtimeHostActions,
+    archiveImports,
     subscriptions,
     emit(section: SettingsSectionId) {
       for (const listener of listeners.get(section) ?? []) listener()
@@ -109,7 +306,7 @@ const UI_WRITE = { actor: "ui", permissions: [], intent: "write" } as const
 const UI_ACTION = { actor: "ui", permissions: [], intent: "action" } as const
 const UI_WATCH = { actor: "ui", permissions: [], intent: "watch" } as const
 
-test("settings filesystem: semantic root projects four stable snapshot files without reading them", async () => {
+test("settings filesystem: semantic root projects five stable snapshot files without reading them", async () => {
   const fixture = createFixture()
   const root = await fixture.fs.stat(settingsRootRef, UI_METADATA)
 
@@ -122,7 +319,7 @@ test("settings filesystem: semantic root projects four stable snapshot files wit
   const first = await fixture.fs.readDirectory(settingsRootRef, UI_DIRECTORY, { limit: 2 })
   const second = await fixture.fs.readDirectory(settingsRootRef, UI_DIRECTORY, {
     cursor: first.nextCursor,
-    limit: 2,
+    limit: 3,
   })
   const entries = [...first.entries, ...second.entries]
   assert.deepEqual(
@@ -131,7 +328,7 @@ test("settings filesystem: semantic root projects four stable snapshot files wit
   )
   assert.deepEqual(
     entries.map((entry) => entry.pathName),
-    ["appearance.json", "device.json", "connections.json", "runtime-extensions.json"],
+    ["appearance.json", "device.json", "data.json", "connections.json", "runtime-extensions.json"],
   )
   assert.deepEqual(
     entries.map((entry) => entry.target),
@@ -296,12 +493,77 @@ test("settings filesystem: mutation actions are specialized, validated and requi
     runtimeActions.slice(1).map(({ id, kind, requires }) => ({ id, kind, requires })),
     [
       {
+        id: SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_AUTHORIZE_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
         id: SETTINGS_RUNTIME_RETRY_ACTION,
         kind: "specialized",
         requires: [SETTINGS_WRITE_PERMISSION],
       },
       {
         id: SETTINGS_RUNTIME_REVOKE_ACTION,
+        kind: "specialized",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION,
         kind: "specialized",
         requires: [SETTINGS_WRITE_PERMISSION],
       },
@@ -315,6 +577,24 @@ test("settings filesystem: mutation actions are specialized, validated and requi
 
   assert.deepEqual(
     await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_REFRESH_REGISTRY_ACTION,
+      undefined,
+      UI_ACTION,
+    ),
+    {
+      source: "network",
+      stale: false,
+      fetchedAt: 200,
+      generatedAt: 100,
+      expiresAt: 300,
+      sequence: 2,
+      failureCode: null,
+      entries: [],
+    },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
       connections,
       SETTINGS_CONNECTION_REVOKE_ACTION,
       { id: "connection-1" },
@@ -323,6 +603,7 @@ test("settings filesystem: mutation actions are specialized, validated and requi
     { changed: true },
   )
   for (const action of [
+    SETTINGS_RUNTIME_AUTHORIZE_ACTION,
     SETTINGS_RUNTIME_RETRY_ACTION,
     SETTINGS_RUNTIME_REVOKE_ACTION,
     SETTINGS_RUNTIME_UNINSTALL_ACTION,
@@ -333,6 +614,7 @@ test("settings filesystem: mutation actions are specialized, validated and requi
   }
   assert.deepEqual(fixture.connectionRevocations, ["connection-1"])
   assert.deepEqual(fixture.runtimeActions, [
+    { action: SETTINGS_RUNTIME_AUTHORIZE_ACTION, id: "extension-1" },
     { action: SETTINGS_RUNTIME_RETRY_ACTION, id: "extension-1" },
     { action: SETTINGS_RUNTIME_REVOKE_ACTION, id: "extension-1" },
     { action: SETTINGS_RUNTIME_UNINSTALL_ACTION, id: "extension-1" },
@@ -372,6 +654,282 @@ test("settings filesystem: mutation actions are specialized, validated and requi
   await assert.rejects(
     fixture.fs.invoke(connections, SETTINGS_RUNTIME_RETRY_ACTION, { id: "extension-1" }, UI_ACTION),
     (error) => error instanceof FileSystemError && error.code === "unsupported",
+  )
+})
+
+test("settings filesystem: native extension management validates trust and package action inputs", async () => {
+  const fixture = createFixture()
+  const runtime = settingsSectionFileRef("runtime-extensions")
+  const fingerprint = `sha256:${"A".repeat(43)}`
+  const candidate = {
+    publisher: "acme.tools",
+    label: "Acme Tools",
+    publicKey: "RWfixture",
+    fingerprint,
+  }
+  const rotationCandidate = {
+    publisher: "acme.tools",
+    label: "Acme Tools",
+    sequence: 2,
+    issuedAt: 100,
+    currentFingerprint: fingerprint,
+    nextFingerprint: `sha256:${"B".repeat(43)}`,
+    payload: '{"schemaVersion":1}',
+    currentSignature: "current\nsignature",
+    nextSignature: "next\nsignature",
+  }
+
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_INSPECT_PUBLISHER_ACTION,
+      undefined,
+      UI_ACTION,
+    ),
+    candidate,
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_INSPECT_PUBLISHER_ROTATION_ACTION,
+      undefined,
+      UI_ACTION,
+    ),
+    rotationCandidate,
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+      rotationCandidate,
+      UI_ACTION,
+    ),
+    {
+      changed: true,
+      publisher: "acme.tools",
+      sequence: 2,
+      previousFingerprint: fingerprint,
+      fingerprint: `sha256:${"B".repeat(43)}`,
+      rotatedAt: 200,
+      retiredKeyCount: 1,
+    },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(runtime, SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION, candidate, UI_ACTION),
+    { changed: true },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_REVOKE_PUBLISHER_ACTION,
+      { publisher: candidate.publisher, fingerprint },
+      UI_ACTION,
+    ),
+    { changed: true },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(runtime, SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION, undefined, UI_ACTION),
+    { changed: true, cancelled: false, operation: "installed" },
+  )
+  const updateCandidate = (await fixture.fs.invoke(
+    runtime,
+    SETTINGS_RUNTIME_PREPARE_UPDATE_ACTION,
+    { id: "extension-1" },
+    UI_ACTION,
+  )) as Record<string, unknown>
+  assert.equal(updateCandidate.nextVersion, 2)
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+      updateCandidate,
+      UI_ACTION,
+    ),
+    { changed: true, cancelled: false, operation: "updated" },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_DISCARD_UPDATE_ACTION,
+      { token: updateCandidate.token },
+      UI_ACTION,
+    ),
+    { changed: true },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_IMPORT_REVOCATIONS_ACTION,
+      undefined,
+      UI_ACTION,
+    ),
+    { changed: true, cancelled: false, publisher: "acme.tools", sequence: 2 },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_ROLLBACK_PACKAGE_ACTION,
+      { id: "extension-1" },
+      UI_ACTION,
+    ),
+    { changed: true, cancelled: false, operation: "rolled-back" },
+  )
+  assert.deepEqual(
+    fixture.runtimeHostActions.map((item) => item.action),
+    [
+      "inspect-publisher",
+      "inspect-publisher-rotation",
+      "apply-publisher-rotation",
+      "trust-publisher",
+      "revoke-publisher",
+      "install-package",
+      "prepare-update",
+      "apply-update",
+      "discard-update",
+      "import-revocations",
+      "rollback-package",
+    ],
+  )
+
+  await assert.rejects(
+    fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_TRUST_PUBLISHER_ACTION,
+      { ...candidate, fingerprint: "sha256:short" },
+      UI_ACTION,
+    ),
+    (error) => error instanceof FileSystemError && error.code === "invalid-input",
+  )
+  await assert.rejects(
+    fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_APPLY_PUBLISHER_ROTATION_ACTION,
+      { ...rotationCandidate, nextSignature: "" },
+      UI_ACTION,
+    ),
+    (error) => error instanceof FileSystemError && error.code === "invalid-input",
+  )
+  await assert.rejects(
+    fixture.fs.invoke(runtime, SETTINGS_RUNTIME_INSTALL_PACKAGE_ACTION, {}, UI_ACTION),
+    (error) => error instanceof FileSystemError && error.code === "invalid-input",
+  )
+  await assert.rejects(
+    fixture.fs.invoke(
+      runtime,
+      SETTINGS_RUNTIME_APPLY_UPDATE_ACTION,
+      { ...updateCandidate, addedPermissions: [] },
+      UI_ACTION,
+    ),
+    (error) => error instanceof FileSystemError && error.code === "invalid-input",
+  )
+})
+
+test("settings filesystem: local data archive actions separate preview/export from destructive import", async () => {
+  const fixture = createFixture()
+  const data = settingsSectionFileRef("data")
+  const actions = await fixture.fs.actions(data, UI_ACTION)
+
+  assert.deepEqual(
+    actions.slice(1).map(({ id, risk, requires }) => ({ id, risk, requires })),
+    [
+      {
+        id: SETTINGS_DATA_EXPORT_ACTION,
+        risk: "safe",
+        requires: [SETTINGS_READ_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+        risk: "safe",
+        requires: [SETTINGS_READ_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_IMPORT_ACTION,
+        risk: "destructive",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_PERSIST_ACTION,
+        risk: "caution",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
+        risk: "caution",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+      {
+        id: SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
+        risk: "caution",
+        requires: [SETTINGS_WRITE_PERMISSION],
+      },
+    ],
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_EXPORT_ACTION, undefined, UI_ACTION),
+    {
+      filename: "workspace.json",
+      content: '{"kind":"ideall.workspace-archive"}',
+      encrypted: false,
+    },
+  )
+  const input = {
+    filename: "workspace.json",
+    content: '{"kind":"ideall.workspace-archive"}',
+  }
+  assert.equal(
+    (
+      (await fixture.fs.invoke(data, SETTINGS_DATA_PREVIEW_IMPORT_ACTION, input, UI_ACTION)) as {
+        ok: boolean
+      }
+    ).ok,
+    true,
+  )
+  const before = await fixture.fs.read(data, UI_CONTENT)
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_IMPORT_ACTION, input, UI_ACTION, {
+      expectedVersion: before.version,
+    }),
+    {
+      changed: true,
+      reloadRequired: true,
+      imported: { nodes: 2, blobs: 1, trash: 0, plugins: 3 },
+    },
+  )
+  assert.deepEqual(fixture.archiveImports, [input])
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_PERSIST_ACTION, undefined, UI_ACTION),
+    { available: true, granted: true },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(
+      data,
+      SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
+      undefined,
+      UI_ACTION,
+    ),
+    { backend: "system-keychain", roundTrip: true, cleanedUp: true },
+  )
+  assert.deepEqual(
+    await fixture.fs.invoke(data, SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION, undefined, UI_ACTION),
+    { available: true, migrated: 1, removedPlaintext: 1, failed: 0, remaining: 0 },
+  )
+
+  await assert.rejects(
+    fixture.fs.invoke(
+      data,
+      SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
+      { content: "{}", extra: true },
+      UI_ACTION,
+    ),
+    (error) => error instanceof FileSystemError && error.code === "invalid-input",
+  )
+  await assert.rejects(
+    fixture.fs.invoke(data, SETTINGS_DATA_IMPORT_ACTION, input, {
+      actor: "system",
+      permissions: [SETTINGS_READ_PERMISSION],
+      intent: "action",
+    }),
+    (error) => error instanceof FileSystemError && error.code === "permission-denied",
   )
 })
 
@@ -484,7 +1042,7 @@ test("settings filesystem: root watch coalesces source events and tears down all
   assert.ok(handle)
   assert.deepEqual(
     SETTINGS_SECTION_IDS.map((section) => fixture.subscriptions.get(section)),
-    [1, 1, 1, 1],
+    [1, 1, 1, 1, 1],
   )
 
   fixture.emit("connections")
@@ -503,7 +1061,7 @@ test("settings filesystem: root watch coalesces source events and tears down all
   handle.dispose()
   assert.deepEqual(
     SETTINGS_SECTION_IDS.map((section) => fixture.subscriptions.get(section)),
-    [0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
   )
   fixture.emit("device")
   await Promise.resolve()
@@ -605,6 +1163,8 @@ test("settings filesystem: runtime diagnostics are bounded and redact nested sec
     permissions: ["fs:read"],
     digest: "digest",
     permissionDigest: "permission-digest",
+    verification: { verifierId: "host-verifier", verifiedAt: 10 },
+    grantedAt: 11,
     consentReceipt: "CONSENTSECRET",
     desired: true,
     health: "degraded",

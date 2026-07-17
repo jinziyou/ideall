@@ -2,8 +2,13 @@
 
 import * as React from "react"
 import { fileRefKey, type FileRef, type IdeallFile } from "@protocol/file-system"
+import {
+  FILE_TREE_EXPANDED_STORAGE_KEY,
+  readPublicConfig,
+  writePublicConfig,
+} from "@/lib/public-config"
 
-export const FILE_TREE_EXPANDED_STORAGE_KEY = "ideall:file-system-tree:expanded"
+export { FILE_TREE_EXPANDED_STORAGE_KEY } from "@/lib/public-config"
 
 /** 目录若明确声明没有子项，就按普通页面处理；未知时保留可展开能力。 */
 export function fileCanExpand(
@@ -28,7 +33,7 @@ export function updateExpandedFileKeys(
 function readExpandedFileKeys(): Set<string> {
   if (typeof window === "undefined") return new Set()
   try {
-    const raw = window.localStorage.getItem(FILE_TREE_EXPANDED_STORAGE_KEY)
+    const raw = readPublicConfig(FILE_TREE_EXPANDED_STORAGE_KEY)
     if (!raw) return new Set()
     const value = JSON.parse(raw) as unknown
     return Array.isArray(value)
@@ -50,7 +55,7 @@ export function useFileTreeExpansion() {
 
   React.useEffect(() => {
     try {
-      window.localStorage.setItem(FILE_TREE_EXPANDED_STORAGE_KEY, JSON.stringify([...expanded]))
+      writePublicConfig(FILE_TREE_EXPANDED_STORAGE_KEY, JSON.stringify([...expanded]))
     } catch {
       /* storage unavailable */
     }

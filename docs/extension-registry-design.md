@@ -5,7 +5,7 @@
 >
 > **本稿经三视角对抗式红队审查（安全/信任 · 同步/迁移/类型安全 · 可行性/自洽）修正。** 方向（复用既有原语、最小解冻、分期）经审查成立；但初稿把多处**尚未实现的净新机制**误述为「已有不变量」，并有数处对代码的事实性误判。下文已纠正，并在 §0 汇总红队结论，让「已成立 / 须新建 / 事实纠错」一目了然。
 >
-> **状态更新（2026-07）**：① tier 门已落地：`grant.ts` 的 `TIER_RANK`/`tierAtLeast`/`PERMISSION_MIN_TIER`/`effectivePermissions` 已在能力创建时执行；② kind 单源已落地：`node.ts` 的 `NODE_KINDS` 是唯一真相源；③五层模型的可信运行时组合注册已落地：package 走宿主注入的 `discover -> verify -> consent/restore -> activate`，Catalog 用一次性内存 permit 调用 Registry，严格 v2 receipt 记录不承载代码；激活、撤销、卸载、在途中止、隔离与清理重试均有状态和设置 UI；④外部 MCP client 已支持 stdio、SSE 与 Streamable HTTP，但本文提出的通用三方能力注册与逐能力 T2 consent 不因此自动成立。实际包发现、平台签名/来源验证、consent authority 与 connector 进程仍由发行/宿主提供，缺省 fail closed。下文“现状”、路线阶段和 `文件:行号` 均是红队审查时的历史快照，以本段及现行代码为准。
+> **状态更新（2026-07）**：① tier 门已落地：`grant.ts` 的 `TIER_RANK`/`tierAtLeast`/`PERMISSION_MIN_TIER`/`effectivePermissions` 已在能力创建时执行；② kind 单源已落地：`protocol/node.ts` 是唯一真相源；③五层模型的可信运行时组合注册已落地：package 走宿主注入的 `discover -> verify -> consent/restore -> activate`，Catalog 用一次性内存 permit 调用 Registry，严格 v2 receipt 不承载代码；桌面 consent 进入系统凭据库且不向 Web 明文降级；④桌面多 publisher 签名宿主已落地：固定目录、严格 manifest、官方内置/第三方指纹确认根、单调累积签名撤销清单、当前/下一密钥双签名计划轮换、永久退役指纹、原子安装更新、单版本回滚、物理卸载，以及 discover/verify/spawn 三处 Minisign 与 connector SHA-256 复验；⑤联网扩展目录与用户触发更新事务已落地：Rust 逐页验证固定官方 Registry 的 Minisign 信封并原子缓存原始签名页；已安装扩展的更高版本通过 DNS 全局地址检查/IP 钉连、包 SHA、publisher、manifest 和权限复验后进入临时槽，用户确认权限差异才停止旧版本并原子安装。生产签名 feed 尚待服务端发布；⑥已授权 connector 已按权限映射为独立 FileSystem、搜索资源和受确认/审计的工具动作；⑦外部 MCP client 已支持 stdio、SSE 与 Streamable HTTP。现行发行协议详见 [runtime-extension-packages.md](runtime-extension-packages.md)。本文其余“现状”、路线阶段和 `文件:行号` 是红队审查时的历史快照，以本段及现行代码为准；独立离线密钥恢复仍未落地。
 
 ## 0. 红队结论速览（先看这条）
 

@@ -3,6 +3,7 @@ import { test } from "node:test"
 import { SECURE_STORE_KEYS } from "@/lib/secure-store"
 import { createWorkspace, updateWorkspace } from "../agent-workspace-write-adapter"
 import { AGENT_SETTINGS_STORAGE_KEY } from "./agent-settings"
+import { ACP_SETTINGS_STORAGE_KEY } from "./acp/acp-settings"
 import { resolveWorkspaceRun } from "./agent-resolve"
 
 function memoryStorage(): Storage {
@@ -52,12 +53,23 @@ test("agent resolve: secure hydration rebinds a stale render snapshot by workspa
     const resolved = await resolveWorkspaceRun(stale, true)
 
     assert.ok(resolved)
+    assert.equal(resolved.backend, "model")
     assert.equal(resolved.baseURL, "https://fresh.example.test/v1")
     assert.equal(resolved.model, "fresh-model")
     assert.equal(resolved.apiKey, "fresh-key")
     assert.equal(resolved.system, "fresh system prompt")
     assert.deepEqual(resolved.mcp?.permissions, ["fs:read"])
     assert.deepEqual(resolved.mcp?.toolAllowlist, ["files.list"])
+
+    const withTray = await resolveWorkspaceRun(
+      stale,
+      true,
+      "[来源 node:note:n1] Research\nSelected evidence",
+    )
+    assert.equal(withTray?.backend, "model")
+    assert.match(withTray?.system ?? "", /^fresh system prompt/)
+    assert.match(withTray?.system ?? "", /明确加入上下文托盘/)
+    assert.match(withTray?.system ?? "", /Selected evidence/)
   } finally {
     if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage)
     else Reflect.deleteProperty(globalThis, "localStorage")
@@ -123,6 +135,7 @@ test("agent resolve: global model waits for native secure credential hydration",
     releaseCredential()
     const resolved = await pending
     assert.ok(resolved)
+    assert.equal(resolved.backend, "model")
     assert.equal(resolved.baseURL, "https://global.example.test/v1")
     assert.equal(resolved.model, "global-model")
     assert.equal(resolved.apiKey, "sk-native-global")
@@ -131,6 +144,40 @@ test("agent resolve: global model waits for native secure credential hydration",
     releaseCredential()
     if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow)
     else Reflect.deleteProperty(globalThis, "window")
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage)
+    else Reflect.deleteProperty(globalThis, "localStorage")
+  }
+})
+
+test("agent resolve: selected external ACP backend does not require a model credential", async () => {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage")
+  const storage = memoryStorage()
+  storage.setItem(
+    ACP_SETTINGS_STORAGE_KEY,
+    JSON.stringify({
+      allowEditorConnect: false,
+      listenPort: 0,
+      executionBackend: "external-acp",
+      externalAgent: { program: "echo-agent", args: "--stdio", cwd: "/tmp" },
+    }),
+  )
+  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true })
+
+  try {
+    const workspace = await createWorkspace("External workspace")
+    await updateWorkspace(workspace.id, (current) => ({
+      ...current,
+      prompt: { ...current.prompt, precise: true, override: "external system prompt" },
+      model: { useGlobal: false, baseURL: "", model: "", apiKey: "" },
+    }))
+
+    const resolved = await resolveWorkspaceRun(workspace, true)
+    assert.ok(resolved)
+    assert.equal(resolved.backend, "external-acp")
+    assert.equal(resolved.externalAgent.program, "echo-agent")
+    assert.equal(resolved.system, "external system prompt")
+    assert.equal("mcp" in resolved, false)
+  } finally {
     if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage)
     else Reflect.deleteProperty(globalThis, "localStorage")
   }

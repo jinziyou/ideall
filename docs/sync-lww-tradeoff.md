@@ -1,7 +1,7 @@
 # 跨端同步合并策略：LWW 取舍 + 删除传播（决策记录）
 
 > **状态：已落地。** 对应审计项 **Low-6**（跨端 LWW 取舍 + 删除不传播）。
-> 实现：`@protocol/sync`（纯合并/GC 逻辑 + 单测）、`@protocol/storage-sync`（本地快照 CAS）、`src/files/stores/subscriptions-store.ts`（软删除/复活/读路径过滤/GC 落地）、`src/plugins/sync/lib/sync-domain-runner.ts`（关注/笔记共用编排）。
+> 实现：`@protocol/sync`（纯合并/GC 逻辑 + 单测）、`@protocol/storage-sync`（本地快照 CAS）、各领域 store（软删除/恢复快照/GC 落地）、`src/plugins/sync/lib/sync-domain-runner.ts`（关注/笔记/书签共用编排）。
 
 ## 背景
 
@@ -64,9 +64,15 @@
 - `localAll` 是同步开始时的不可变统计基线；
 - `localSnapshot` 是下一次本地提交的期望快照，每次成功落地后推进为 Storage 返回的实际规范化快照。
 
-`bulkPutSubscriptions` / `bulkPutNotes` 在同一个 IndexedDB readwrite 事务内 fresh 读取当前 kind，只有当前逻辑快照仍等于 `expectedLocal` 时才写入合并结果与 tombstone GC。当前状态已经等于目标时允许幂等成功；真实不一致则抛 `StorageSyncConflictError`，整批不写、也不发送远端 PUT，用户重试后会从新的本地快照重新合并。远端 PUT 返回 409 时，下一轮同时携带上次实际提交快照作为 `merged` 和本地 CAS 基线，不把调用方猜测的输入当作已提交状态。
+`bulkPutSubscriptions` / `bulkPutNotes` / `bulkPutBookmarkNodes` 在同一个 IndexedDB readwrite 事务内 fresh 读取当前领域，只有当前逻辑快照仍等于 `expectedLocal` 时才写入合并结果与 tombstone GC。收藏夹与书签共享一个快照和提交事务，避免父子关系部分落地。当前状态已经等于目标时允许幂等成功；真实不一致则抛 `StorageSyncConflictError`，整批不写、也不发送远端 PUT。远端 PUT 返回 409 时，下一轮携带上次实际提交快照继续合并。
 
-关注和笔记的 live↔tombstone 转换、GC 与本机 `trash_snapshots` 在同一跨 store 事务提交；新同步 id 使用 `add`，不会覆盖同主键的其它 Node kind。关注入站还要求规范 `type/key/id`、安全 tool URL 与严格 sort key，损坏数据 fail closed。
+关注、笔记、书签与收藏夹的 live↔tombstone 转换、GC 与本机 `trash_snapshots` 在同一跨 store 事务提交；新同步 id 使用 `add`，不会覆盖同主键的其它 Node kind。关注入站要求规范 `type/key/id` 与安全 tool URL；书签入站拒绝坏 Node 结构和 `javascript:` 等伪协议。活跃书签若指向缺失或已删除收藏夹，会以确定性版本时间移动到根级；Storage CAS 再次拒绝嵌套收藏夹或孤儿书签，避免关系不完整的快照落库。三个领域由同一同步码派生互不相同的 storageId 和 AES-GCM 密钥。
+
+## 决策四：单块预算与兼容分片边界
+
+JSON/Base64/AES-GCM 会同时占用字符串和二进制缓冲，客户端因此在 Base64 解码、JSON 解析、本地 CAS 和上传前实施记录数、明文字节与密文字符硬上限：关注 4 MiB、笔记 32 MiB、书签 16 MiB。超限会以稳定的 `block-limit` 分类失败，不会先覆盖本地或继续上传。
+
+当前服务端协议仍是一域一个不透明 `SyncBlob`，本轮没有假定或修改仓库外服务端。密钥派生新增 `partition` 边界：分片 0 的 HKDF info 与历史 storageId 由回归常量锁定；未来只有分片 1..1023 会增加稳定后缀，派生独立 storageId/密钥。真正启用多分片前仍需服务端容量、发现清单、跨分片提交与迁移协议，不能仅在客户端循环 PUT。
 
 ## 已知局限（接受 / 留待）
 
@@ -75,10 +81,11 @@
 2. **90 天内频繁删/关注累积墓碑**：体积影响对「十～百」量级关注可忽略；不优化。
 3. **同毫秒并发改**：按决策一「本地优先」任选其一，接受。
 4. **同步往返窗口内的并发本地写**：若本轮需要落地远端变化，本地快照 CAS 会拒绝覆盖并发 add/edit/move/remove，用户需重试同步；若合并结果无需写本地，窗口内的新本地变化不会丢失，但可能要到下一轮才上传。这是“安全失败 / 最终补传”的取舍，不自动吞冲突继续合并。
+5. **尚未启用真正分片**：partition 派生只冻结兼容边界；当前三个域仍各使用分片 0 的单块协议。
 
 ## 验证
 
-`src/protocol/sync.test.ts` 覆盖删除收敛与 GC；`subscription-sync.test.ts` 覆盖真实远端推进后的 409、提交快照规范化、本地 CAS 冲突不 PUT 与重试上限；store 测试覆盖跨 kind 碰撞、事务回滚和 tombstone/恢复/GC 快照生命周期。
+`src/protocol/sync.test.ts` 覆盖删除收敛与 GC；各 domain sync 测试覆盖真实加解密、远端推进、提交快照与入站校验；store 测试覆盖跨 kind 碰撞、本地 CAS、事务回滚和 tombstone/恢复/GC 快照生命周期。
 
 ## 关联
 

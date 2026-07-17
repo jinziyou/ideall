@@ -28,7 +28,7 @@ export function authProgressFromSnapshot(
   return null
 }
 
-/** 并行 sync 编排: 根据 subscriptions / notes 子状态拼进度文案。 */
+/** 并行 sync 编排: 根据三个独立加密域的子状态拼进度文案。 */
 export function syncProgressFromSnapshot(
   snapshot: SnapshotFrom<AnyStateMachine>,
 ): FlowProgress | null {
@@ -38,13 +38,13 @@ export function syncProgressFromSnapshot(
   if (typeof v === "object" && v !== null && "syncing" in v) {
     const par = (v as { syncing: Record<string, string> }).syncing
     if (par.subscriptions === "run") parts.push("关注")
-    if (par.notes === "run") parts.push("文件")
+    if (par.notes === "run") parts.push("笔记")
+    if (par.bookmarks === "run") parts.push("书签")
   }
   return {
     kind: "sync",
     phase: "syncing",
-    label:
-      parts.length === 2 ? "同步关注与笔记…" : parts.length === 1 ? `同步${parts[0]}…` : "同步中…",
+    label: parts.length ? `同步${parts.join("、")}…` : "同步中…",
     detail: parts.length ? parts.join("、") : undefined,
   }
 }

@@ -5,9 +5,10 @@ import { HOME_PLACES, homePlaceById, homePlaceForNodeKind } from "./home-places"
 test("home places: 锁定「我的」区段顺序与规范默认 path", () => {
   assert.deepEqual(
     HOME_PLACES.map((place) => place.id),
-    ["subscriptions", "bookmarks", "resources", "notes", "workspace"],
+    ["inbox", "subscriptions", "bookmarks", "resources", "notes", "workspace"],
   )
 
+  assert.equal(homePlaceById("inbox")?.defaultPath, "/home/inbox")
   const subscriptions = homePlaceById("subscriptions")
   assert.equal(subscriptions?.defaultPath, "/home/following")
   assert.equal(homePlaceById("bookmarks")?.defaultPath, "/home/bookmarks")

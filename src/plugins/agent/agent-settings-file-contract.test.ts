@@ -1,15 +1,55 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
+  DEFAULT_AGENT_ACP_SETTINGS,
   DEFAULT_AGENT_SETTINGS_DOCUMENT,
   MAX_AGENT_SETTINGS_API_KEY_LENGTH,
   MAX_AGENT_SETTINGS_BASE_URL_LENGTH,
   MAX_AGENT_SETTINGS_MODEL_LENGTH,
+  decodeAgentAcpProbeInput,
+  decodeAgentAcpProbeResult,
+  decodeAgentAcpSettings,
+  decodeAgentDetectedAcpAgents,
   decodeAgentSettingsCredentialStatus,
   decodeAgentSettingsDocument,
   decodeAgentSettingsSetApiKeyInput,
   isAgentSettingsDocumentConfigured,
 } from "./agent-settings-file-contract"
+
+test("agent settings file contract: ACP device settings and diagnostics are strict and bounded", () => {
+  const settings = {
+    ...DEFAULT_AGENT_ACP_SETTINGS,
+    executionBackend: "external-acp" as const,
+    externalAgent: { program: "node", args: '"/safe/echo agent.mjs"', cwd: "/safe" },
+  }
+  assert.deepEqual(decodeAgentAcpSettings(settings), settings)
+  assert.deepEqual(decodeAgentAcpProbeInput({ externalAgent: settings.externalAgent }), {
+    externalAgent: settings.externalAgent,
+  })
+  assert.deepEqual(decodeAgentAcpProbeResult({ latencyMs: 12, protocolVersion: 1 }), {
+    latencyMs: 12,
+    protocolVersion: 1,
+  })
+  assert.deepEqual(
+    decodeAgentDetectedAcpAgents([
+      { id: "echo", label: "回显", note: "测试", config: settings.externalAgent },
+    ]),
+    [{ id: "echo", label: "回显", note: "测试", config: settings.externalAgent }],
+  )
+  assert.throws(() => decodeAgentAcpSettings({ ...settings, executionBackend: "shell" }))
+  assert.throws(() =>
+    decodeAgentAcpSettings({
+      ...settings,
+      externalAgent: { ...settings.externalAgent, args: "bad\narg" },
+    }),
+  )
+  assert.throws(() => decodeAgentAcpProbeResult({ latencyMs: -1, protocolVersion: 1 }))
+  assert.throws(() =>
+    decodeAgentDetectedAcpAgents([
+      { id: "echo", label: "回显", config: settings.externalAgent, secret: "no" },
+    ]),
+  )
+})
 
 test("agent settings file contract: decodes only the complete public document", () => {
   assert.deepEqual(decodeAgentSettingsDocument(DEFAULT_AGENT_SETTINGS_DOCUMENT), {

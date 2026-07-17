@@ -17,7 +17,7 @@ export default function TopSearch() {
       className="flex h-7 w-full max-w-md items-center gap-2 rounded-shell border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
       <Search className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate">搜索本地内容或执行命令…</span>
+      <span className="truncate">搜索内容或执行命令…</span>
       <kbd className="ml-auto shrink-0 rounded border bg-muted px-1 font-mono text-[10px]">
         {kbd}
       </kbd>

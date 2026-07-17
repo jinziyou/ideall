@@ -23,12 +23,17 @@ mod browser_linux;
 mod browser_scripts;
 #[cfg(all(desktop, target_os = "windows"))]
 mod browser_win;
+mod capture_share;
+#[cfg(desktop)]
+mod extension_registry;
 #[cfg(desktop)]
 mod guarded_fs;
 #[cfg(desktop)]
 mod installed_apps;
 #[cfg(desktop)]
 mod oauth_callback;
+#[cfg(desktop)]
+mod runtime_extensions;
 #[cfg(desktop)]
 mod secure_store;
 #[cfg(desktop)]
@@ -340,6 +345,7 @@ pub(crate) struct BrowserPageContent {
     url: String,
     title: String,
     text: String,
+    selection: String,
 }
 
 #[cfg(all(desktop, not(target_os = "linux")))]
@@ -361,6 +367,7 @@ pub(crate) fn parse_browser_page_json(
         url,
         title: v["title"].as_str().unwrap_or("").to_string(),
         text: v["text"].as_str().unwrap_or("").to_string(),
+        selection: v["selection"].as_str().unwrap_or("").to_string(),
     })
 }
 
@@ -1411,7 +1418,22 @@ pub fn run() {
 
     let context = tauri::generate_context!();
 
-    let builder = tauri::Builder::default()
+    let builder = tauri::Builder::default().manage(capture_share::CaptureShareState::default());
+
+    // Linux/Windows 的深链接和“打开方式”会启动第二进程；单实例插件必须是首个注册插件，
+    // 将参数投递给已运行主窗口并聚焦，而不是生成两个各自持有本地状态的窗口。
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        capture_share::enqueue_args(app.clone(), &args, std::path::Path::new(&cwd));
+        if let Some(window) = app.get_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }));
+
+    let builder = builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         // HTTP: App 内 fetch 经 Rust 侧发出, 绕过 webview CORS (agent 直连任意 LLM 端点)。
         .plugin(tauri_plugin_http::init())
@@ -1420,27 +1442,57 @@ pub fn run() {
         // Dialog: Git 仓库授权只能由 Rust 侧原生目录选择器创建。
         .plugin(tauri_plugin_dialog::init());
 
-    // 多显示器: 未在 tauri.conf 指定 x/y 时, 等窗口尺寸就绪后居中到主屏 (见 window_placement.rs)。
-    #[cfg(desktop)]
+    // 深链接两端通用；桌面同时初始化文件参数入口、授权文件系统和窗口位置。
     let builder = builder.setup(|app| {
-        app.manage(guarded_fs::init_state(app.handle()));
-        let conf = app
-            .config()
-            .app
-            .windows
-            .iter()
-            .find(|w| w.label == "main")
-            .or_else(|| app.config().app.windows.first())
-            .cloned();
-        if conf
-            .as_ref()
-            .is_some_and(|w| w.x.is_none() && w.y.is_none())
+        use tauri_plugin_deep_link::DeepLinkExt;
+
+        if let Some(urls) = app.deep_link().get_current()? {
+            capture_share::enqueue_deep_links(app.handle(), &urls);
+        }
+        let deep_link_handle = app.handle().clone();
+        app.deep_link().on_open_url(move |event| {
+            capture_share::enqueue_deep_links(&deep_link_handle, event.urls());
+        });
+
+        #[cfg(any(target_os = "linux", windows))]
+        app.deep_link().register_all()?;
+
+        #[cfg(desktop)]
         {
-            if let Some(window) = app.get_window("main") {
-                window_placement::schedule_initial_placement(&window, conf.unwrap());
+            let args = std::env::args().collect::<Vec<_>>();
+            let cwd = std::env::current_dir().unwrap_or_default();
+            capture_share::enqueue_args(app.handle().clone(), &args, &cwd);
+            app.manage(guarded_fs::init_state(app.handle()));
+
+            // 多显示器: 未在 tauri.conf 指定 x/y 时, 等窗口尺寸就绪后居中到主屏。
+            let conf = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .or_else(|| app.config().app.windows.first())
+                .cloned();
+            if conf
+                .as_ref()
+                .is_some_and(|w| w.x.is_none() && w.y.is_none())
+            {
+                if let Some(window) = app.get_window("main") {
+                    window_placement::schedule_initial_placement(&window, conf.unwrap());
+                }
             }
         }
         Ok(())
+    });
+
+    #[cfg(desktop)]
+    let builder = builder.on_window_event(|window, event| {
+        if window.label() != "main" {
+            return;
+        }
+        if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+            capture_share::enqueue_file_paths(window.app_handle().clone(), paths.clone(), true);
+        }
     });
 
     // agent 出站守卫命令两端通用; 内嵌浏览器命令仅桌面 (Window::add_child = desktop + unstable feature)。
@@ -1490,6 +1542,24 @@ pub fn run() {
         acp_transport::acp_run_once,
         oauth_callback::oauth_callback_start,
         oauth_callback::oauth_callback_stop,
+        runtime_extensions::runtime_extension_discover,
+        runtime_extensions::runtime_extension_verify,
+        runtime_extensions::runtime_extension_spawn,
+        runtime_extensions::runtime_extension_publisher_list,
+        runtime_extensions::runtime_extension_publisher_inspect,
+        runtime_extensions::runtime_extension_publisher_trust,
+        runtime_extensions::runtime_extension_publisher_rotation_inspect,
+        runtime_extensions::runtime_extension_publisher_rotation_apply,
+        runtime_extensions::runtime_extension_publisher_revoke,
+        runtime_extensions::runtime_extension_revocation_import,
+        runtime_extensions::runtime_extension_update_prepare,
+        runtime_extensions::runtime_extension_update_apply,
+        runtime_extensions::runtime_extension_update_discard,
+        runtime_extensions::runtime_extension_install,
+        runtime_extensions::runtime_extension_rollback,
+        runtime_extensions::runtime_extension_uninstall,
+        extension_registry::runtime_extension_registry_snapshot,
+        extension_registry::runtime_extension_registry_refresh,
         installed_apps::list_installed_apps,
         installed_apps::launch_installed_app,
         installed_apps::read_app_icon_data_url,
@@ -1504,6 +1574,8 @@ pub fn run() {
         secure_store::secure_store_get,
         secure_store::secure_store_set,
         secure_store::secure_store_delete,
+        secure_store::secure_store_self_test,
+        capture_share::capture_take_pending,
         window_minimize,
         window_close,
         window_toggle_maximize,
@@ -1511,7 +1583,10 @@ pub fn run() {
         open_engine_window,
     ]);
     #[cfg(not(desktop))]
-    let builder = builder.invoke_handler(tauri::generate_handler![agent_guarded_fetch]);
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        agent_guarded_fetch,
+        capture_share::capture_take_pending
+    ]);
 
     // 自动更新仅桌面: 移动端经应用商店分发。
     // 仅当 tauri.conf.json 配了 `plugins.updater` (endpoints + pubkey) 时才挂 updater 插件 ——
@@ -1524,9 +1599,15 @@ pub fn run() {
         builder
     };
 
-    builder
-        .run(context)
-        .expect("error while running tauri application");
+    let app = builder
+        .build(context)
+        .expect("error while building tauri application");
+    app.run(|_app, _event| {
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+        if let tauri::RunEvent::Opened { urls } = _event {
+            capture_share::enqueue_opened_files(_app.clone(), &urls);
+        }
+    });
 }
 
 // agent 出站守卫的 IP 全局性判定单测 (离线, 无网络)。镜像 JS 侧 web-search.ts 的拦截集 —— 两侧任一漂移即此处/JS 测失败。

@@ -29,7 +29,10 @@ function secureKey(id: string): string {
 function materialized(secret: Secret): Secret {
   return {
     ...secret,
-    value: secretCache.get(secret.id) ?? secureFallbackGet(secureKey(secret.id)) ?? "",
+    value:
+      secretCache.get(secret.id) ??
+      (isTauri() ? null : secureFallbackGet(secureKey(secret.id))) ??
+      "",
   }
 }
 
@@ -48,18 +51,18 @@ export function isValidSecretName(name: string): boolean {
   return /^\w+$/.test(name.trim())
 }
 
-export function setSecret(name: string, value: string): void {
+export async function setSecret(name: string, value: string): Promise<void> {
   const id = name.trim()
   if (!isValidSecretName(id)) return
+  await secureSet(secureKey(id), value)
   secretCache.set(id, value)
   store.upsert({ id, value: "", secure: true })
-  void secureSet(secureKey(id), value)
 }
 
-export function deleteSecret(name: string): void {
+export async function deleteSecret(name: string): Promise<void> {
+  await secureDelete(secureKey(name))
   secretCache.delete(name)
   store.remove(name)
-  void secureDelete(secureKey(name))
 }
 
 // 安全: 密钥仅在 buildHeaders 解析后发往用户自己配置的 server URL; 当前无配置导入/分享路径,
@@ -72,7 +75,7 @@ export function resolveSecrets(text: string): string {
     /\$\{(\w+)\}/g,
     (m, name: string) =>
       secretCache.get(name) ??
-      secureFallbackGet(secureKey(name)) ??
+      (isTauri() ? null : secureFallbackGet(secureKey(name))) ??
       (isTauri() ? undefined : store.byId(name)?.value) ??
       m,
   )

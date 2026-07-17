@@ -7,6 +7,13 @@ import { PopoverClose } from "@/ui/popover"
 
 export type LocalDeviceStatusValue = Readonly<{
   synced: boolean
+  lastSync: Readonly<{
+    status: "success" | "failure"
+    finishedAt: number
+    durationMs: number
+    total: number | null
+    failureCode: string | null
+  }> | null
   storage: Readonly<{ usage: number; quota: number }> | null
   publishingIdentity:
     | Readonly<{ signedIn: true; user: Readonly<{ email: string; name: string }> }>
@@ -38,6 +45,14 @@ export function LocalDeviceStatusView({
         <Lock className="h-4 w-4" />
         本机
       </div>
+      {value.lastSync ? (
+        <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+          最近同步：{value.lastSync.status === "success" ? "成功" : "失败"} ·{" "}
+          {new Date(value.lastSync.finishedAt).toLocaleString()} · {value.lastSync.durationMs} ms
+          {value.lastSync.total !== null ? ` · ${value.lastSync.total} 项` : ""}
+          {value.lastSync.failureCode ? ` · ${value.lastSync.failureCode}` : ""}
+        </p>
+      ) : null}
       <div className="mt-3 flex items-center justify-between rounded-md border bg-muted/40 px-2.5 py-2">
         <span className="text-xs">跨端同步</span>
         <span

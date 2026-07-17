@@ -33,6 +33,7 @@ import {
   resourceRefForFile,
 } from "@/filesystem/resource-file-system"
 import { openInBrowserTab } from "@/workspace/browser-open"
+import { captureBookmarkToMine } from "@/filesystem/capture-bookmark"
 import { infoManifest } from "@/modules/info/manifest"
 import { communityManifest } from "@/modules/community/manifest"
 import { syncManifest } from "@/plugins/sync/manifest"
@@ -50,6 +51,7 @@ import {
   activateBundledRuntimeExtensions,
   discoverBundledRuntimeExtensions,
 } from "./boot-runtime-extensions"
+import { assertShellBootContract } from "./boot-contract"
 
 let bootState: "idle" | "registering" | "ready" = "idle"
 
@@ -88,6 +90,7 @@ export function registerAll(): void {
             ),
           closeTab: (kind, id) => closeNodeTabs({ kind, id }),
           openExternal: (url) => openInBrowserTab(url),
+          captureBookmark: (input) => captureBookmarkToMine(input),
           openAiSettings,
           openAiSection,
           openAiTasks,
@@ -127,6 +130,10 @@ export function registerAll(): void {
       () => discoverBundledRuntimeExtensions(runtimeExtensionCatalog),
       // 持久化快照只重放可信 factory id，不承载可执行代码。
       () => runtimeExtensionCatalog.hydrate(),
+      () => {
+        assertShellBootContract()
+        return () => {}
+      },
     ])
     bootState = "ready"
   } catch (error) {
@@ -143,6 +150,19 @@ export function registerAll(): void {
  * 与 registerAll (同步纯注册) 分开: 这里做异步、仅 App 的副作用。
  */
 export function bootClientEffects(): void {
+  if (isTauri()) {
+    void import("./runtime-extensions/desktop-host")
+      .then(({ installDesktopRuntimeExtensions }) => installDesktopRuntimeExtensions())
+      .catch(() => {})
+  }
+  // 可重建的搜索投影在启动后后台补齐；源节点事件只触发精确重读或整索引失效。
+  void import("@/workspace/local-search-items")
+    .then(({ installLocalSearchIndex }) => installLocalSearchIndex())
+    .catch(() => {})
+  void import("@/modules/home/inbox/share-receiver")
+    .then(({ installCaptureShareReceiver }) => installCaptureShareReceiver())
+    .catch(() => {})
+
   // XState Inspector 由内嵌 XStateInspectorPanel 挂载 iframe 后初始化 (避免 Tauri 弹窗被拦 / 错误 URL)。
   // ACP 暴露自启动: 仅桌面 + 用户已开启时才动态加载 agent 暴露链路并启动监听 ——
   // 关闭时不加载 agent 内核 (acp-settings 轻量, 先查; acp-expose 重, 仅按需 import), 不拖累初始包。

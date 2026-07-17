@@ -31,7 +31,9 @@ export function parseBookmarksHtml(html: string): ParsedBookmark[] {
       if (h3) {
         // 文件夹: 紧随其后的 DL 是其内容
         const name = (h3.textContent ?? "").trim() || "未命名"
-        const childDl = dt.querySelector(":scope > dl")
+        const nestedDl = dt.querySelector(":scope > dl")
+        const siblingDl = dt.nextElementSibling?.tagName === "DL" ? dt.nextElementSibling : null
+        const childDl = nestedDl ?? siblingDl
         if (childDl) walk(childDl, [...path, name])
       } else if (anchor) {
         const url = anchor.getAttribute("href") ?? ""
