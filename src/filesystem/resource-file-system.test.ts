@@ -703,6 +703,57 @@ test("resource filesystem: directory entry ids survive provider reordering", asy
   assert.deepEqual(ids(second.entries), ids(first.entries))
 })
 
+test("resource filesystem: directory entries hydrate versions from full metadata records", async () => {
+  const ref = { scheme: "node", kind: "file", id: "versioned-file" } as const
+  const summary: ResourceMeta = {
+    ref,
+    title: "versioned.txt",
+    capabilities: ["open", "read-blob", "edit", "delete"],
+  }
+  const hydrated: ResourceMeta = { ...summary, updatedAt: 17 }
+  registerResourceSource({
+    scheme: "node",
+    async list() {
+      return { items: [summary] }
+    },
+    async get() {
+      return {
+        meta: hydrated,
+        content: {
+          id: ref.id,
+          kind: "file",
+          parentId: null,
+          sortKey: "a0",
+          title: hydrated.title,
+          tags: [],
+          createdAt: 1,
+          updatedAt: hydrated.updatedAt,
+          blobRef: { store: "blobs", key: ref.id, size: 4, mime: "text/plain" },
+          content: null,
+        },
+      }
+    },
+    async actions() {
+      return []
+    },
+    async invoke() {
+      return null
+    },
+  })
+
+  const fs = createResourceFileSystem()
+  const page = await fs.readDirectory(
+    corePlaceRef("files"),
+    { actor: "ui", permissions: [], intent: "directory" },
+    { limit: 200 },
+  )
+  const entry = page.entries.find((candidate) => candidate.target.fileId.includes(ref.id))
+
+  assert.equal(entry?.file?.updatedAt, 17)
+  assert.equal(entry?.file?.version, "17")
+  assert.equal(entry?.properties?.version, "17")
+})
+
 test("resource filesystem: range reads preserve version and expectedVersion rejects stale writes", async () => {
   let meta: ResourceMeta = {
     ref: { scheme: "node", kind: "file", id: "bytes" },
