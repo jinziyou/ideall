@@ -226,6 +226,7 @@ DirectoryEntry
 
 | 规范路径 | 真实 FileRef | Preferred Engine | Storage / 来源 |
 | --- | --- | --- | --- |
+| `/home/inbox` | `ideall.core / panel:inbox` | `ideall.panel` | `nodes` 中带捕获收件箱标签的 `bookmark`/`note`/`file` |
 | `/home/following` | `ideall.core / place:subscriptions` | `ideall.subscriptions` | `wonita-home/nodes` 中的 `feed`；内容可来自远端 |
 | `/home/bookmarks` | `ideall.core / place:bookmarks` | `ideall.bookmarks` | `nodes` 中的 `folder`、`bookmark` |
 | `/home/resources` | `ideall.core / place:files` | `ideall.resources` | `nodes` 中的 `file` + `blobs` |

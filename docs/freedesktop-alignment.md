@@ -1,8 +1,8 @@
 # freedesktop 对齐设计：数据、文件与显示的组织
 
-> **状态：S0 设计定稿；S1 / S2 / S3 / S4 均为设计（未落码），S5 停放。**
-> **S1（设计）**：`LocalDataSchema.storageClass` + IndexedDB 逐 store 分类（`src/plugins/shared/local-data-schema.ts`、各 manifest 注册点）。
-> **S2（设计）**：MIME subclass 表与父链上溯（`src/engines/media-type-tree.ts`、`matcher.ts`、`registry.ts`、`preferences.ts`）。
+> **状态：S1 / S2 已落地，S3 / S4 为设计，S5 停放。**
+> **S1（已实现，commit `8cf0307`）**：`LocalDataSchema.storageClass` + IndexedDB 逐 store 分类（`src/plugins/shared/local-data-schema.ts`、各 manifest 注册点）。
+> **S2（已实现，commit `8d94420`）**：MIME subclass 表与父链上溯（`src/engines/media-type-tree.ts`、`matcher.ts`、`registry.ts`、`preferences.ts`）。
 > **S3（Engine 关联文件化）与 S4（Engine 描述符只读投影）仍未排期**，下文未标注完成的部分均为设计。
 >
 > 缘起：ideall 的设计思想是「一切皆文件，一切皆标签页」（[file-system-engine-architecture.md](file-system-engine-architecture.md)）。freedesktop 标准族（XDG Base Directory、shared-mime-info、mimeapps.list、Desktop Entry、Icon Naming、recently-used 等）正是 Linux 桌面二十多年对「数据、文件、显示如何组织」的答案。本文逐条对照：哪些 ideall 已经同构、哪些值得补、哪些明确不借。
@@ -30,7 +30,7 @@
 
 另有一个结构性巧合：五分区导航本身就是一张 XDG 投影——**我的 ≈ data、活动 ≈ state（审计/任务正是 state 类）、应用 ≈ applications、设置 ≈ config**；cache / runtime / secrets 三类**正确地不出现在导航里**。本文 §2 把这张隐含映射显式化。
 
-## 2. S1：XDG Base Directory 分类法 → 每个存储点都有「存储类」（设计）
+## 2. S1：XDG Base Directory 分类法 → 每个存储点都有「存储类」（已落地）
 
 ### 2.1 问题
 
@@ -77,7 +77,7 @@ export type LocalDataStorageClass =
 2. secure-store 动态键（`agent:secret:*`、`agent:oauth:*` 等）不在 `SECURE_STORE_KNOWN_ITEMS`，安全快照统计不到（属 secrets 类的登记缺口）；
 3. 主 webview 与内嵌浏览器子 webview 的站点数据物理落点未在仓库钉死（Tauri/WebKit 默认目录），Linux 上按惯例在 `$XDG_DATA_HOME/org.wonita.ideall`，需实测写入文档。
 
-## 3. S2：shared-mime-info subclassing → Engine 匹配沿父链上溯（设计）
+## 3. S2：shared-mime-info subclassing → Engine 匹配沿父链上溯（已落地）
 
 ### 3.1 问题
 
@@ -212,8 +212,8 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 
 | 切片 | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
-| **S1a** | schema 加 `storageClass`（+`storeClasses`）+ 全部既有注册归类 + 构造期不变量 + 测试；`app-data-navigation.md` 加存储类列 | `pnpm typecheck && pnpm lint && pnpm test` 全绿；新增不变量单测 | 设计 |
-| **S2** | `media-type-tree.ts` + matcher 父链折损计分 + 偏好查找上溯 + 测试（语料保全 / 新类型降级 / 偏好继承 / vnd 隔离） | 全绿 + 语料保全真项断言 | 设计 |
+| **S1a** | schema 加 `storageClass`（+`storeClasses`）+ 全部既有注册归类 + 构造期不变量 + 测试；`app-data-navigation.md` 加存储类列 | `pnpm typecheck && pnpm lint && pnpm test` 全绿；新增不变量单测 | 已落地（`8cf0307`） |
+| **S2** | `media-type-tree.ts` + matcher 父链折损计分 + 偏好查找上溯 + 测试（语料保全 / 新类型降级 / 偏好继承 / vnd 隔离） | 全绿 + 语料保全真项断言 | 已落地（`8d94420`） |
 | S1b | 5 个未注册键补登记（validate/repair 从简）+ secrets 动态键登记进安全快照 | 健康视图可见 | 设计 |
 | S3 | `app.display` provider（engines.json 投影 + CAS + watch）+ 偏好格式 v2（`removed`）+ EnginePicker 屏蔽菜单 | 全绿 + CAS/守卫/迁移测试 | 设计 |
 | S4 | `app.engines` 只读投影 + `ideall.display` extension 批次 + 投影一致性测试 | 全绿 | 设计 |
@@ -235,7 +235,7 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 
 ## 11. 文档关系
 
-- 现行五层契约权威：[file-system-engine-architecture.md](file-system-engine-architecture.md)；S2 落地后需在其「Engine 与 Display」节补 subclass 语义，S3/S4 落地后需再回写。
-- 存储落点权威：[app-data-navigation.md](app-data-navigation.md)；S1 落地后其存储表需加存储类列。
+- 现行五层契约权威：[file-system-engine-architecture.md](file-system-engine-architecture.md)；S2 的 subclass 语义已回写其「Engine 与 Display」节（`8d94420`），S3/S4 落地后需再回写。
+- 存储落点权威：[app-data-navigation.md](app-data-navigation.md)；S1 的存储类列已回写其存储表（`8cf0307`）。
 - 历史设计方法样板：[design/archive/ai-native-redesign.md](design/archive/ai-native-redesign.md)。
-- 侦察副产（不在本设计范围，待另行处理）：`file-system-engine-architecture.md` 的「我的」二级入口清单漏了收件箱（实际五项，`navigation-file-system.ts:86-94`）、`panel:inbox` 例外未声明、规范 URL 清单缺 `/home/inbox`；`overview.tsx` 两处注释陈旧。
+- 侦察副产（已另行修复）：`file-system-engine-architecture.md` 与 `app-data-navigation.md` 的「我的」二级入口清单曾漏收件箱（实际五项，`navigation-file-system.ts:86-94`）、`panel:inbox` 例外未声明、规范 URL 清单缺 `/home/inbox`——已在本轮文档修正中补齐；`overview.tsx` 两处陈旧注释仍待顺带清理。
