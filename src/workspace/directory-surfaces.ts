@@ -6,11 +6,7 @@ import { trashRootRef } from "@/filesystem/trash-file-system"
 import type { ModuleId } from "./types"
 
 export type DirectorySurfaceId =
-  | "subscriptions"
-  | "bookmarks"
-  | "resources"
-  | "trash"
-  | "installed-apps"
+  "subscriptions" | "bookmarks" | "resources" | "trash" | "installed-apps"
 
 export type DirectorySurface = Readonly<{
   id: DirectorySurfaceId

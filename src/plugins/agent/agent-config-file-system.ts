@@ -530,9 +530,7 @@ function hasPermission(
   ref: FileRef,
   ctx: FileSystemAccessContext,
   permission:
-    | "fs:read"
-    | typeof AGENT_CONFIG_READ_PERMISSION
-    | typeof AGENT_CONFIG_WRITE_PERMISSION,
+    "fs:read" | typeof AGENT_CONFIG_READ_PERMISSION | typeof AGENT_CONFIG_WRITE_PERMISSION,
 ): boolean {
   return (
     ctx.actor === "ui" ||
@@ -546,9 +544,7 @@ function assertAccess(
   ctx: FileSystemAccessContext,
   intent: "metadata" | "directory" | "content" | "write" | "action" | "watch",
   permission:
-    | "fs:read"
-    | typeof AGENT_CONFIG_READ_PERMISSION
-    | typeof AGENT_CONFIG_WRITE_PERMISSION,
+    "fs:read" | typeof AGENT_CONFIG_READ_PERMISSION | typeof AGENT_CONFIG_WRITE_PERMISSION,
 ): void {
   if (ctx.intent !== intent) {
     throw new FileSystemError(

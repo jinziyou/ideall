@@ -13,8 +13,7 @@
 import { resolveFetch } from "@/lib/tauri"
 
 export type ApiResult<T> =
-  | { ok: true; data: T | null }
-  | { ok: false; message: string; status?: number }
+  { ok: true; data: T | null } | { ok: false; message: string; status?: number }
 
 export interface ApiFetchOptions extends RequestInit {
   defaultErrorMessage?: string

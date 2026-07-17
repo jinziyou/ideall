@@ -16,10 +16,7 @@ export type RuntimeEngineContribution = Readonly<{
 }>
 
 export type RuntimeExtensionDisposeReason =
-  | "uninstall"
-  | "revoke"
-  | "factory-removed"
-  | "activation-rollback"
+  "uninstall" | "revoke" | "factory-removed" | "activation-rollback"
 
 export type RuntimeExtensionDisposeContext = Readonly<{
   /** dispose 被调用前一定已经 abort；connector 应让 socket/process/watch 同时监听该 signal。 */

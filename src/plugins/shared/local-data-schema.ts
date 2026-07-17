@@ -40,8 +40,7 @@ export type LocalDataSchema = {
 }
 
 export type LocalDataSchemaRepairPatch =
-  | { action: "remove"; detail: string }
-  | { action: "write"; value: unknown; detail: string }
+  { action: "remove"; detail: string } | { action: "write"; value: unknown; detail: string }
 
 export type LocalDataSchemaInspection = {
   id: string

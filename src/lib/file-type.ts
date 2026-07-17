@@ -24,14 +24,7 @@ export type FilePreviewKind =
 export type FileKind = "image" | "video" | "audio" | "pdf" | "text" | "archive" | "other"
 
 export type FileTypeTone =
-  | "sky"
-  | "violet"
-  | "emerald"
-  | "amber"
-  | "rose"
-  | "cyan"
-  | "slate"
-  | "zinc"
+  "sky" | "violet" | "emerald" | "amber" | "rose" | "cyan" | "slate" | "zinc"
 
 export type FileTypeInfo = {
   ext: string

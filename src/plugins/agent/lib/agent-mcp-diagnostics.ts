@@ -1,11 +1,6 @@
 export type ExternalMcpTransport = "stdio" | "sse" | "http"
 export type McpDiagnosticStatus =
-  | "unknown"
-  | "checking"
-  | "healthy"
-  | "connected"
-  | "degraded"
-  | "error"
+  "unknown" | "checking" | "healthy" | "connected" | "degraded" | "error"
 export type McpFailureKind =
   | "configuration"
   | "authentication"
