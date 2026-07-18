@@ -36,7 +36,7 @@
 | [extension-registry-design.md](extension-registry-design.md) | 历史红队设计基线；运行时 FileSystem + Engine 注册已落地，部分能力/端口扩展仍是方向 |
 | [extension-registry-operations.md](extension-registry-operations.md) | 签名 Registry 的目录真相源、原子发布、服务代理与事故处置 |
 | [local-data-provider.md](local-data-provider.md) | P1 已落地；运行期连接查看/断开已实现，持久 consent 与外部 transport 停放 |
-| [freedesktop-alignment.md](freedesktop-alignment.md) | S1（XDG 存储分类）与 S2（MIME subclassing）已落地；S3/S4（Engine 关联与描述符文件化）为设计，S5 停放 |
+| [freedesktop-alignment.md](freedesktop-alignment.md) | S1（XDG 存储分类）、S2（MIME subclassing）、S3（Engine 关联文件化）、S4（Engine 描述符投影）已落地；S5 停放 |
 
 ## 历史归档
 

@@ -1,9 +1,11 @@
 # freedesktop 对齐设计：数据、文件与显示的组织
 
-> **状态：S1 / S2 已落地，S3 / S4 为设计，S5 停放。**
+> **状态：S1 / S2 / S3 / S4 已落地，S5 停放。**
 > **S1（已实现，commit `8cf0307`）**：`LocalDataSchema.storageClass` + IndexedDB 逐 store 分类（`src/plugins/shared/local-data-schema.ts`、各 manifest 注册点）。
 > **S2（已实现，commit `8d94420`）**：MIME subclass 表与父链上溯（`src/engines/media-type-tree.ts`、`matcher.ts`、`registry.ts`、`preferences.ts`）。
-> **S3（Engine 关联文件化）与 S4（Engine 描述符只读投影）仍未排期**，下文未标注完成的部分均为设计。
+> **S3（已实现，commit `a9909cf`）**：Engine 关联文件化 `app.display/engines.json` + 偏好 v2 Removed Associations（`src/workspace/display/*`、`src/engines/preferences.ts`、`registry.ts`、`src/workspace/registry.tsx`）。
+> **S4（已实现，commit `9186849`）**：Engine 描述符只读投影 `app.engines`（`src/workspace/display/engine-descriptors-file-system.ts`）。
+> **S5（recently-used 落盘 / 缩略图缓存）停放**，下文未标注完成的部分均为设计。
 >
 > 缘起：ideall 的设计思想是「一切皆文件，一切皆标签页」（[file-system-engine-architecture.md](file-system-engine-architecture.md)）。freedesktop 标准族（XDG Base Directory、shared-mime-info、mimeapps.list、Desktop Entry、Icon Naming、recently-used 等）正是 Linux 桌面二十多年对「数据、文件、显示如何组织」的答案。本文逐条对照：哪些 ideall 已经同构、哪些值得补、哪些明确不借。
 
@@ -123,7 +125,7 @@ score = directScore - SUBCLASS_DISTANCE_PENALTY * distance   // PENALTY = 150，
 - 新增能力只对**未来/第三方类型**生效：`application/yaml` → code（经 `text/plain` 距离 1，得分 55）、`application/ld+json` → code（经 `application/json` 距离 1，得分 250）；
 - `vnd.ideall.panel.*+json` 等语义类型无父类，`builtin.test.ts:94` 原样通过。
 
-## 4. S3：mimeapps.list → Engine 关联成为 config 类文件（设计）
+## 4. S3：mimeapps.list → Engine 关联成为 config 类文件（已落地）
 
 ### 4.1 问题
 
@@ -161,7 +163,7 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 - `app.display` 经新的随包 runtime extension factory `ideall.display` 注册（与 S4 同一批次），`navigationHidden` 挂载；dep 接线以**值传递** `window.localStorage`（与 `navigation.ts:188` 同形），不触发 `lint:storage` 冻结清单扩张。
 - 旧三个 localStorage 键保留为物理存储（不迁数据）；`local-data-schema` 三条 engine-preferences 条目维持登记，`storageClass: "config"` 已由 S1 落地。
 
-## 5. S4：Desktop Entry → Engine 描述符自托管为只读文件（设计）
+## 5. S4：Desktop Entry → Engine 描述符自托管为只读文件（已落地）
 
 ### 5.1 问题
 
@@ -215,8 +217,8 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 | **S1a** | schema 加 `storageClass`（+`storeClasses`）+ 全部既有注册归类 + 构造期不变量 + 测试；`app-data-navigation.md` 加存储类列 | `pnpm typecheck && pnpm lint && pnpm test` 全绿；新增不变量单测 | 已落地（`8cf0307`） |
 | **S2** | `media-type-tree.ts` + matcher 父链折损计分 + 偏好查找上溯 + 测试（语料保全 / 新类型降级 / 偏好继承 / vnd 隔离） | 全绿 + 语料保全真项断言 | 已落地（`8d94420`） |
 | S1b | 5 个未注册键补登记（validate/repair 从简）+ secrets 动态键登记进安全快照 | 健康视图可见 | 设计 |
-| S3 | `app.display` provider（engines.json 投影 + CAS + watch）+ 偏好格式 v2（`removed`）+ EnginePicker 屏蔽菜单 | 全绿 + CAS/守卫/迁移测试 | 设计 |
-| S4 | `app.engines` 只读投影 + `ideall.display` extension 批次 + 投影一致性测试 | 全绿 | 设计 |
+| S3 | `app.display` provider（engines.json 投影 + CAS + watch）+ 偏好格式 v2（`removed`）+ EnginePicker 屏蔽菜单 | 全绿 + CAS/守卫/迁移测试 | 已落地（`a9909cf`） |
+| S4 | `app.engines` 只读投影 + `ideall.display` extension 批次 + 投影一致性测试 | 全绿 | 已落地（`9186849`） |
 | S5 | recently-used（隐私决策先行）/ 缩略图缓存 | — | 停放 |
 
 每切片独立提交（Conventional Commits + `Co-Authored-By`），门禁 `pnpm verify:checks`（构建在沙箱外补跑）。
@@ -235,7 +237,7 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 
 ## 11. 文档关系
 
-- 现行五层契约权威：[file-system-engine-architecture.md](file-system-engine-architecture.md)；S2 的 subclass 语义已回写其「Engine 与 Display」节（`8d94420`），S3/S4 落地后需再回写。
+- 现行五层契约权威：[file-system-engine-architecture.md](file-system-engine-architecture.md)；S2 的 subclass 语义已回写其「Engine 与 Display」节（`8d94420`），S3/S4 的关联投影与描述符投影已回写其「当前文件系统」节（`a9909cf`/`9186849`）。
 - 存储落点权威：[app-data-navigation.md](app-data-navigation.md)；S1 的存储类列已回写其存储表（`8cf0307`）。
 - 历史设计方法样板：[design/archive/ai-native-redesign.md](design/archive/ai-native-redesign.md)。
 - 侦察副产（已另行修复）：`file-system-engine-architecture.md` 与 `app-data-navigation.md` 的「我的」二级入口清单曾漏收件箱（实际五项，`navigation-file-system.ts:86-94`）、`panel:inbox` 例外未声明、规范 URL 清单缺 `/home/inbox`——已在本轮文档修正中补齐；`overview.tsx` 两处陈旧注释仍待顺带清理。
