@@ -191,7 +191,7 @@ test("storage classes: 全部已注册 schema 均带合法 XDG 存储类", () =>
   const dispose = registerTestSchemas()
   try {
     const schemas = listLocalDataSchemas()
-    assert.equal(schemas.length, 28)
+    assert.equal(schemas.length, 31)
     for (const schema of schemas) {
       assert.ok(
         LOCAL_DATA_STORAGE_CLASSES.includes(schema.storageClass),
@@ -210,6 +210,9 @@ test("storage classes: 全部已注册 schema 均带合法 XDG 存储类", () =>
     assert.equal(byId.get("shell.runtime-extensions")?.storageClass, "config")
     assert.equal(byId.get("agent.oauth")?.storageClass, "state")
     assert.equal(byId.get("agent.oauth")?.sensitive, true)
+    assert.equal(byId.get("display.recently-used")?.storageClass, "state")
+    assert.equal(byId.get("display.recently-used.enabled")?.storageClass, "config")
+    assert.equal(byId.get("display.recently-used.paused")?.storageClass, "state")
     assert.equal(byId.get("agent.tasks")?.storageClass, "data")
     assert.equal(byId.get("agent.tasks")?.storeClasses?.["local_search_index"], "cache")
     assert.equal(byId.get("agent.tasks")?.storeClasses?.["local_semantic_index"], "cache")

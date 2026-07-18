@@ -39,6 +39,7 @@ import { aiTasksPanelFileRef, panelFileRef } from "@/filesystem/resource-file-sy
 import { engineRegistry } from "@/engines/builtin"
 import { filterRemovedEngineAssociations } from "@/engines/registry"
 import { enginePreferencesStorageKey, readEnginePreferences } from "@/engines/preferences"
+import { recordFileOpen } from "@/workspace/recently-used"
 import { openEngineWindow } from "@/lib/engine-window"
 import { fileRefKey, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
 import { activateAgentWorkspaceBeforeOpen } from "../agent-workspace-navigation"
@@ -208,6 +209,7 @@ async function openFileTarget(
     if (target.display === "window") {
       if (!canOpenStandaloneWindow(file, resolved.descriptor)) return false
       await openEngineWindow(fileRefKey(file.ref), engineId)
+      recordFileOpen(file, engineId)
       return true
     }
 
@@ -228,6 +230,7 @@ async function openFileTarget(
       source,
       { transient: target.transient },
     )
+    recordFileOpen(file, engineId)
     if (rootId) {
       patchWorkspace({ activeRootId: rootId })
     }

@@ -20,6 +20,7 @@ export const ALLOWED_DIRECT_STORAGE_ACCESS = Object.freeze({
   "src/workspace/store/persistence.ts": "工作区布局读取适配器",
   "src/workspace/viewers/file-draft.ts": "session-only 文件草稿 store",
   "src/workspace/workspace-persist.ts": "工作区布局写入适配器",
+  "src/workspace/recently-used.ts": "最近使用领域 store（显式开关的访问记录）",
 })
 
 const DIRECT_STORAGE_CALL =

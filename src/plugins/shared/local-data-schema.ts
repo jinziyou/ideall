@@ -419,6 +419,46 @@ const coreSchemas: readonly LocalDataSchema[] = [
     repair: repairRuntimeExtensionInstalls,
   },
   {
+    id: "display.recently-used",
+    label: "最近打开记录",
+    owner: "display",
+    storage: "localStorage",
+    key: "ideall:recently-used:v1",
+    currentVersion: 1,
+    storageClass: "state",
+    parseAs: "json",
+    validate: (value) =>
+      isLocalDataRecord(value) && Array.isArray(value.entries) ? [] : ["应为含 entries 数组的对象"],
+    repair: (value) =>
+      isLocalDataRecord(value) && Array.isArray(value.entries)
+        ? null
+        : { action: "remove", detail: "已移除损坏的最近打开记录" },
+  },
+  {
+    id: "display.recently-used.enabled",
+    label: "最近打开启用开关",
+    owner: "display",
+    storage: "localStorage",
+    key: "ideall:recently-used:enabled",
+    currentVersion: 1,
+    storageClass: "config",
+    parseAs: "text",
+    validate: (_value, raw) => (raw === "1" || raw === "0" ? [] : ['应为 "1" 或 "0"']),
+    repair: () => ({ action: "remove", detail: "已恢复默认关闭最近打开" }),
+  },
+  {
+    id: "display.recently-used.paused",
+    label: "最近打开隐身暂停",
+    owner: "display",
+    storage: "localStorage",
+    key: "ideall:recently-used:paused",
+    currentVersion: 1,
+    storageClass: "state",
+    parseAs: "text",
+    validate: (_value, raw) => (raw === "1" || raw === "0" ? [] : ['应为 "1" 或 "0"']),
+    repair: () => ({ action: "remove", detail: "已恢复默认非暂停状态" }),
+  },
+  {
     id: "auth.token",
     label: "登录令牌",
     owner: "auth",

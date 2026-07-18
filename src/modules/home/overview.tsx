@@ -18,6 +18,7 @@ import { Panel } from "@/ui/panel"
 import { StatusDot } from "@/ui/status-dot"
 import { loadHomeOverviewData, type HomeOverviewData } from "./home-read-model"
 import { RecentActivity } from "./recent-activity"
+import { RecentlyOpenedPanel } from "./recently-opened"
 
 const OVERVIEW_ROOTS = ["subscriptions", "bookmarks", "files", "notes", "workspace"].map((place) =>
   corePlaceRef(place as Parameters<typeof corePlaceRef>[0]),
@@ -265,6 +266,8 @@ export default function Overview() {
               </div>
             </div>
           </Panel>
+
+          <RecentlyOpenedPanel />
         </div>
       </section>
     </div>
