@@ -5,9 +5,11 @@ import {
   SECURE_STORE_KEYS,
   SecureStoreUnavailableError,
   isSecureFallbackKey,
+  listSecureStoreKnownItems,
   migrateLegacySecureValues,
   publicStorageGet,
   publicStorageGetWithLegacy,
+  registerSecureStoreDynamicItems,
   secureDelete,
   secureFallbackStorageKey,
   secureGet,
@@ -173,4 +175,77 @@ test("secure-store: 迁移读回失败时保留明文来源供重试", async () 
   assert.equal(result.failed, 1)
   assert.equal(result.remaining, 1)
   assert.equal(mem.get(secureFallbackStorageKey(SECURE_STORE_KEYS.SYNC_CODE)), "keep-me")
+})
+
+test("secure-store: 动态登记项进入安全快照并按 key 去重", () => {
+  mem.clear()
+  mem.set(secureFallbackStorageKey("ideall:agent:secret:TOK"), "fallback-secret")
+  const dispose = registerSecureStoreDynamicItems(() => [
+    {
+      id: "agent.secret.TOK",
+      label: "MCP 密钥 TOK",
+      owner: "agent",
+      key: "ideall:agent:secret:TOK",
+    },
+    { id: "agent.secret.DUP", label: "重复键", owner: "agent", key: SECURE_STORE_KEYS.AUTH_TOKEN },
+  ])
+  try {
+    const snapshot = secureStoreSecuritySnapshot()
+    const dynamic = snapshot.items.find((item) => item.key === "ideall:agent:secret:TOK")
+    assert.ok(dynamic)
+    assert.equal(dynamic.fallbackPresent, true)
+    // 与静态项同 key 的动态项被去重，不重复计数。
+    assert.equal(
+      snapshot.items.filter((item) => item.key === SECURE_STORE_KEYS.AUTH_TOKEN).length,
+      1,
+    )
+    assert.equal(snapshot.fallbackValueCount, 1)
+    assert.ok(listSecureStoreKnownItems().some((item) => item.key === "ideall:agent:secret:TOK"))
+  } finally {
+    dispose()
+  }
+  assert.equal(
+    listSecureStoreKnownItems().some((item) => item.key === "ideall:agent:secret:TOK"),
+    false,
+    "注销后动态项撤出快照",
+  )
+})
+
+test("secure-store: 动态登记项的 fallback 明文一并迁移", async () => {
+  mem.clear()
+  mem.set(secureFallbackStorageKey("ideall:agent:oauth:server-a:tokens"), "legacy-oauth")
+  const native = new Map<string, string>()
+  const dispose = registerSecureStoreDynamicItems(() => [
+    {
+      id: "agent.oauth.server-a.tokens",
+      label: "MCP OAuth 令牌",
+      owner: "agent",
+      key: "ideall:agent:oauth:server-a:tokens",
+    },
+  ])
+  try {
+    const result = await migrateLegacySecureValues({
+      native: true,
+      invoke: async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
+        const key = String(args?.key)
+        if (command === "secure_store_get") return (native.get(key) ?? null) as T
+        if (command === "secure_store_set") {
+          native.set(key, String(args?.value))
+          return undefined as T
+        }
+        throw new Error("unexpected command")
+      },
+    })
+    assert.deepEqual(result, {
+      available: true,
+      migrated: 1,
+      removedPlaintext: 1,
+      failed: 0,
+      remaining: 0,
+    })
+    assert.equal(native.get("ideall:agent:oauth:server-a:tokens"), "legacy-oauth")
+    assert.equal(mem.size, 0)
+  } finally {
+    dispose()
+  }
 })

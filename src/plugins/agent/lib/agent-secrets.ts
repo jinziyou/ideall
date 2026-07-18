@@ -4,6 +4,7 @@
 // 纯 store + subscribe/get (复用 agent-collection)。
 
 import { secureDelete, secureFallbackGet, secureGet, secureSet } from "@/lib/secure-store"
+import { registerSecureStoreDynamicItems } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
 import { createCollection } from "./agent-collection"
 
@@ -132,3 +133,13 @@ export function agentSecretsSecuritySnapshot(): {
     secureHydrated: hydrated,
   }
 }
+
+// 每条密钥的 secure key 都是动态家族成员（ideall:agent:secret:{id}），纳入安全快照统计。
+registerSecureStoreDynamicItems(() =>
+  store.get().map((secret) => ({
+    id: `agent.secret.${secret.id}`,
+    label: `MCP 密钥「${secret.id}」`,
+    owner: "agent",
+    key: secureKey(secret.id),
+  })),
+)

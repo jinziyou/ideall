@@ -1,5 +1,6 @@
 import { isTauri } from "@/lib/tauri"
 import { secureDelete, secureGet, secureSet, type SecureStoreBackend } from "@/lib/secure-store"
+import { registerSecureStoreDynamicItems, secureFallbackStorageKey } from "@/lib/secure-store"
 import type {
   RuntimeExtensionConsentAuthority,
   RuntimeExtensionConsentReference,
@@ -7,7 +8,11 @@ import type {
   RuntimeExtensionDescriptor,
   RuntimeExtensionVerificationReceipt,
 } from "./types"
-import { validConsentReceipt } from "./persistence"
+import {
+  RUNTIME_EXTENSION_INSTALLS_STORAGE_KEY,
+  parseInstallSnapshot,
+  validConsentReceipt,
+} from "./persistence"
 
 const CONSENT_KEY_PREFIX = "ideall:runtime-extension-consent:"
 const SECURE_RECEIPT_ID =
@@ -124,3 +129,39 @@ export function createSecureRuntimeExtensionConsentAuthority(
     },
   })
 }
+
+/** 枚举当前安装记录引用的授权回执 id（含 fallback 扫描兜底，异常输入一律按 SECURE_RECEIPT_ID 过滤）。 */
+function enumerateConsentReceiptIds(): readonly string[] {
+  const receiptIds = new Set<string>()
+  try {
+    const storage = typeof localStorage === "undefined" ? undefined : localStorage
+    if (storage) {
+      const raw = storage.getItem(RUNTIME_EXTENSION_INSTALLS_STORAGE_KEY)
+      const snapshot = raw ? parseInstallSnapshot(raw) : null
+      for (const record of snapshot?.records ?? []) {
+        if (SECURE_RECEIPT_ID.test(record.consentReceipt)) receiptIds.add(record.consentReceipt)
+      }
+      const fallbackPrefix = secureFallbackStorageKey(CONSENT_KEY_PREFIX)
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index)
+        if (key?.startsWith(fallbackPrefix)) {
+          const receiptId = key.slice(fallbackPrefix.length)
+          if (SECURE_RECEIPT_ID.test(receiptId)) receiptIds.add(receiptId)
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return [...receiptIds]
+}
+
+// 每个已授权扩展的 consent 回执 secure key 都是动态家族成员，纳入安全快照统计。
+registerSecureStoreDynamicItems(() =>
+  enumerateConsentReceiptIds().map((receiptId) => ({
+    id: `runtime-extension.consent.${receiptId}`,
+    label: "扩展授权回执",
+    owner: "shell",
+    key: `${CONSENT_KEY_PREFIX}${receiptId}`,
+  })),
+)

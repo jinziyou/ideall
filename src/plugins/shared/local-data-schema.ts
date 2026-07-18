@@ -42,6 +42,11 @@ export type LocalDataSchema = {
   storageClass: LocalDataStorageClass
   /** 仅 indexedDB：库内各 object store 的存储类（库内策略混合时必填，如索引 cache / 审计 state）。 */
   storeClasses?: Readonly<Record<string, LocalDataStorageClass>>
+  /**
+   * 动态键家族（如 `ideall:agent:oauth:{serverId}`）：枚举当前实际键，`key` 字段作家族标签。
+   * inspect 按枚举行逐项展开；动态家族为 validate-only（不得携带 repair）。
+   */
+  dynamicKeys?: Readonly<{ enumerate(): readonly string[] }>
   sensitive?: boolean
   portable?: boolean
   parseAs?: "json" | "text"
@@ -126,6 +131,52 @@ export function repairJsonArray(value: unknown): LocalDataSchemaRepairPatch {
   return Array.isArray(value)
     ? { action: "write", value, detail: "已规范化 JSON 数组" }
     : { action: "write", value: [], detail: "已重置为空数组" }
+}
+
+// —— 运行时扩展安装记录（ideall:runtime-extensions:v2）的形状校验与修复 ——
+// 与 src/shell/runtime-extensions/persistence.ts 的记录形状对齐，但保持共享层自包含
+// （plugins/shared 不反向依赖 shell 层实现）。
+
+const RUNTIME_EXTENSION_MAX_INSTALL_RECORDS = 64
+
+function isRuntimeExtensionInstallRecord(value: unknown): boolean {
+  if (!isLocalDataRecord(value)) return false
+  return (
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    Number.isSafeInteger(value.version) &&
+    (value.version as number) >= 1 &&
+    typeof value.digest === "string" &&
+    value.digest.length > 0 &&
+    typeof value.permissionDigest === "string" &&
+    value.permissionDigest.length > 0 &&
+    typeof value.consentReceipt === "string"
+  )
+}
+
+function runtimeExtensionInstallsIssues(value: unknown): string[] {
+  if (!isLocalDataRecord(value)) return ["应为 JSON 对象"]
+  if (value.version !== 2) return ["安装记录版本应为 2"]
+  if (!Array.isArray(value.records)) return ["安装记录应为数组"]
+  if (value.records.length > RUNTIME_EXTENSION_MAX_INSTALL_RECORDS) {
+    return [`安装记录超出 ${RUNTIME_EXTENSION_MAX_INSTALL_RECORDS} 条上限`]
+  }
+  const invalid = value.records.filter((record) => !isRuntimeExtensionInstallRecord(record)).length
+  return invalid ? [`${invalid} 条安装记录形状无效`] : []
+}
+
+function repairRuntimeExtensionInstalls(value: unknown): LocalDataSchemaRepairPatch {
+  if (!isLocalDataRecord(value) || value.version !== 2 || !Array.isArray(value.records)) {
+    return { action: "remove", detail: "已移除损坏的运行时扩展安装记录（扩展需重新安装）" }
+  }
+  const records = value.records
+    .filter(isRuntimeExtensionInstallRecord)
+    .slice(0, RUNTIME_EXTENSION_MAX_INSTALL_RECORDS)
+  return {
+    action: "write",
+    value: { version: 2, records },
+    detail: "已剔除形状无效的运行时扩展安装记录",
+  }
 }
 
 /**
@@ -267,6 +318,63 @@ const coreSchemas: readonly LocalDataSchema[] = [
     repair: () => ({ action: "remove", detail: "已恢复默认 Home 启动界面" }),
   },
   {
+    id: "search.semantic-enabled",
+    label: "本地语义混排开关",
+    owner: "search",
+    storage: "localStorage",
+    key: "ideall:semantic-search:v1",
+    currentVersion: 1,
+    storageClass: "config",
+    parseAs: "text",
+    validate: (_value, raw) => (raw === "1" || raw === "0" ? [] : ['应为 "1" 或 "0"']),
+    repair: () => ({ action: "remove", detail: "已恢复默认关闭语义混排" }),
+  },
+  {
+    id: "home.device-id",
+    label: "本设备标识",
+    owner: "home",
+    storage: "localStorage",
+    key: "ideall:device:v1",
+    currentVersion: 1,
+    storageClass: "state",
+    parseAs: "text",
+    validate: (_value, raw) => (raw.trim() ? [] : ["设备标识不能为空"]),
+    repair: () => ({ action: "remove", detail: "已重置本设备标识（下次使用时重新生成）" }),
+  },
+  {
+    id: "tool.search-history",
+    label: "聚合搜索历史",
+    owner: "tool",
+    storage: "localStorage",
+    key: "tool:search:history",
+    currentVersion: 1,
+    storageClass: "state",
+    parseAs: "json",
+    validate: (value) =>
+      Array.isArray(value) && value.every((item) => typeof item === "string")
+        ? []
+        : ["应为字符串数组"],
+    repair: (value) => ({
+      action: "write",
+      value: Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string").slice(0, 10)
+        : [],
+      detail: "已移除无效的搜索历史项",
+    }),
+  },
+  {
+    id: "shell.runtime-extensions",
+    label: "运行时扩展安装记录",
+    owner: "shell",
+    storage: "localStorage",
+    key: "ideall:runtime-extensions:v2",
+    currentVersion: 2,
+    storageClass: "config",
+    parseAs: "json",
+    validate: runtimeExtensionInstallsIssues,
+    repair: repairRuntimeExtensionInstalls,
+  },
+  {
     id: "auth.token",
     label: "登录令牌",
     owner: "auth",
@@ -318,6 +426,14 @@ function assertLocalDataSchema(schema: LocalDataSchema): void {
       if (!store.trim() || !LOCAL_DATA_STORAGE_CLASSES.includes(storeClass)) {
         throw new TypeError(`Local data schema ${schema.id}: invalid storeClasses entry`)
       }
+    }
+  }
+  if (schema.dynamicKeys !== undefined) {
+    if (schema.storage === "indexedDB") {
+      throw new TypeError(`Local data schema ${schema.id}: dynamicKeys forbids indexedDB storage`)
+    }
+    if (schema.repair !== undefined) {
+      throw new TypeError(`Local data schema ${schema.id}: dynamic key families are validate-only`)
     }
   }
 }
@@ -527,13 +643,32 @@ async function inspectIndexedDbSchema(
 export async function inspectLocalDataSchemas(
   input: LocalDataSchemaInspectInput = {},
 ): Promise<LocalDataSchemaInspection[]> {
-  return Promise.all(
-    listLocalDataSchemas().map((schema) =>
-      schema.storage === "indexedDB"
-        ? inspectIndexedDbSchema(schema, input)
-        : inspectStorageSchema(schema, input),
-    ),
-  )
+  const inspections: Array<Promise<LocalDataSchemaInspection> | LocalDataSchemaInspection> = []
+  for (const schema of listLocalDataSchemas()) {
+    if (schema.storage === "indexedDB") {
+      inspections.push(inspectIndexedDbSchema(schema, input))
+      continue
+    }
+    if (schema.dynamicKeys) {
+      let keys: readonly string[] = []
+      try {
+        keys = schema.dynamicKeys.enumerate()
+      } catch {
+        keys = []
+      }
+      if (keys.length === 0) {
+        // 家族当前无实际键：以家族标签键给出一行 missing 占位。
+        inspections.push(inspectStorageSchema(schema, input))
+      } else {
+        for (const key of keys) {
+          inspections.push(inspectStorageSchema({ ...schema, key }, input))
+        }
+      }
+      continue
+    }
+    inspections.push(inspectStorageSchema(schema, input))
+  }
+  return Promise.all(inspections)
 }
 
 export type LocalDataSchemaRepairInput = {

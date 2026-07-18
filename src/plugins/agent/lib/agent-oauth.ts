@@ -20,6 +20,7 @@ import type {
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 import { randomId } from "@/lib/id"
 import { secureDelete, secureGet, secureSet } from "@/lib/secure-store"
+import { registerSecureStoreDynamicItems, secureFallbackStorageKey } from "@/lib/secure-store"
 import { isTauri, resolveFetch } from "@/lib/tauri"
 
 const CALLBACK_PORT = 7843
@@ -424,3 +425,75 @@ export async function revokeMcpAuth(serverId: string, serverUrl: string): Promis
     clearMcpAuth(serverId)
   }
 }
+
+const OAUTH_PUBLIC_PREFIX = "ideall:agent:oauth:"
+
+/**
+ * 枚举本机 OAuth 公开状态键（ideall:agent:oauth:{serverId}，不含 secure 后缀）。
+ * 供健康视图动态家族登记与 secure 快照枚举；可注入 Storage 供测试。
+ */
+export function enumerateOAuthPublicKeys(
+  storage: Pick<Storage, "key" | "length"> | undefined = typeof localStorage === "undefined"
+    ? undefined
+    : localStorage,
+): readonly string[] {
+  if (!storage) return []
+  try {
+    const keys: string[] = []
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index)
+      if (
+        key &&
+        key.startsWith(OAUTH_PUBLIC_PREFIX) &&
+        !key.endsWith(":tokens") &&
+        !key.endsWith(":codeVerifier")
+      ) {
+        keys.push(key)
+      }
+    }
+    return keys
+  } catch {
+    return []
+  }
+}
+
+function enumerateOAuthServerIds(): readonly string[] {
+  const ids = new Set<string>()
+  for (const key of enumerateOAuthPublicKeys()) {
+    ids.add(key.slice(OAUTH_PUBLIC_PREFIX.length))
+  }
+  const fallbackPrefix = secureFallbackStorageKey(OAUTH_PUBLIC_PREFIX)
+  try {
+    const storage = typeof localStorage === "undefined" ? undefined : localStorage
+    if (storage) {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index)
+        if (key?.startsWith(fallbackPrefix)) {
+          ids.add(key.slice(fallbackPrefix.length).replace(/:(?:tokens|codeVerifier)$/u, ""))
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  ids.delete("")
+  return [...ids]
+}
+
+// 每个 server 的 token/verifier secure key 都是动态家族成员，纳入安全快照统计。
+registerSecureStoreDynamicItems(() =>
+  enumerateOAuthServerIds().flatMap((serverId) => [
+    {
+      id: `agent.oauth.${serverId}.tokens`,
+      label: `MCP OAuth 令牌（${serverId}）`,
+      owner: "agent",
+      key: secureTokensKey(serverId),
+    },
+    {
+      id: `agent.oauth.${serverId}.codeVerifier`,
+      label: `MCP OAuth 校验器（${serverId}）`,
+      owner: "agent",
+      key: secureVerifierKey(serverId),
+    },
+  ]),
+)

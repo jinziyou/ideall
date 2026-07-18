@@ -22,6 +22,7 @@ import { syncManifest } from "@/plugins/sync/manifest"
 import {
   LOCAL_DATA_STORAGE_CLASSES,
   inspectLocalDataSchemas,
+  isLocalDataRecord,
   listLocalDataSchemas,
   registerLocalDataSchemas,
   repairLocalDataSchema,
@@ -190,7 +191,7 @@ test("storage classes: 全部已注册 schema 均带合法 XDG 存储类", () =>
   const dispose = registerTestSchemas()
   try {
     const schemas = listLocalDataSchemas()
-    assert.equal(schemas.length, 23)
+    assert.equal(schemas.length, 28)
     for (const schema of schemas) {
       assert.ok(
         LOCAL_DATA_STORAGE_CLASSES.includes(schema.storageClass),
@@ -203,6 +204,12 @@ test("storage classes: 全部已注册 schema 均带合法 XDG 存储类", () =>
     assert.equal(byId.get("workspace.session")?.storageClass, "runtime")
     assert.equal(byId.get("workspace.local")?.storageClass, "state")
     assert.equal(byId.get("display.engine-preferences")?.storageClass, "config")
+    assert.equal(byId.get("search.semantic-enabled")?.storageClass, "config")
+    assert.equal(byId.get("home.device-id")?.storageClass, "state")
+    assert.equal(byId.get("tool.search-history")?.storageClass, "state")
+    assert.equal(byId.get("shell.runtime-extensions")?.storageClass, "config")
+    assert.equal(byId.get("agent.oauth")?.storageClass, "state")
+    assert.equal(byId.get("agent.oauth")?.sensitive, true)
     assert.equal(byId.get("agent.tasks")?.storageClass, "data")
     assert.equal(byId.get("agent.tasks")?.storeClasses?.["local_search_index"], "cache")
     assert.equal(byId.get("agent.tasks")?.storeClasses?.["local_semantic_index"], "cache")
@@ -299,4 +306,117 @@ test("storage classes: storeClasses 仅允许 indexedDB 且取值合法", () => 
     }),
   ])
   dispose()
+})
+
+test("storage classes: dynamicKeys 家族禁 indexedDB 且 validate-only", () => {
+  assert.throws(
+    () =>
+      registerLocalDataSchemas([
+        storageClassProbe({
+          storage: "indexedDB",
+          dynamicKeys: { enumerate: () => [] },
+        }),
+      ]),
+    /dynamicKeys forbids indexedDB/,
+  )
+  assert.throws(
+    () =>
+      registerLocalDataSchemas([
+        storageClassProbe({
+          dynamicKeys: { enumerate: () => [] },
+          repair: () => null,
+        }),
+      ]),
+    /validate-only/,
+  )
+  const dispose = registerLocalDataSchemas([
+    storageClassProbe({ id: "test.storage-class-dynamic", dynamicKeys: { enumerate: () => [] } }),
+  ])
+  dispose()
+})
+
+test("S1b 补登记: 语义开关/设备标识/搜索历史/扩展安装记录的校验与修复", async () => {
+  const dispose = registerTestSchemas()
+  const data: Record<string, string> = {
+    "ideall:semantic-search:v1": "yes",
+    "ideall:device:v1": "  ",
+    "tool:search:history": JSON.stringify(["ok", 42, "fine", null]),
+    "ideall:runtime-extensions:v2": JSON.stringify({
+      version: 2,
+      records: [
+        { id: "a", version: 1, digest: "d", permissionDigest: "p", consentReceipt: "c" },
+        { id: "", version: 1 },
+      ],
+    }),
+  }
+  const localStorage = mutableMemoryStorage(data)
+  try {
+    const rows = await inspectLocalDataSchemas({ localStorage })
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    assert.equal(byId.get("search.semantic-enabled")?.status, "warning")
+    assert.equal(byId.get("home.device-id")?.status, "warning")
+    assert.equal(byId.get("tool.search-history")?.status, "warning")
+    assert.equal(byId.get("shell.runtime-extensions")?.status, "warning")
+
+    assert.equal(
+      (await repairLocalDataSchema("search.semantic-enabled", { localStorage })).ok,
+      true,
+    )
+    assert.equal(data["ideall:semantic-search:v1"], undefined)
+    assert.equal((await repairLocalDataSchema("home.device-id", { localStorage })).ok, true)
+    assert.equal(data["ideall:device:v1"], undefined)
+    assert.equal((await repairLocalDataSchema("tool.search-history", { localStorage })).ok, true)
+    assert.deepEqual(JSON.parse(data["tool:search:history"]!), ["ok", "fine"])
+    const repaired = await repairLocalDataSchema("shell.runtime-extensions", { localStorage })
+    assert.equal(repaired.ok, true)
+    const installs = JSON.parse(data["ideall:runtime-extensions:v2"]!)
+    assert.equal(installs.records.length, 1)
+    assert.equal(installs.records[0].id, "a")
+  } finally {
+    dispose()
+  }
+})
+
+test("S1b 补登记: OAuth 动态家族按实际键逐项展开,明文残留标警告", async () => {
+  const dispose = registerTestSchemas()
+  try {
+    // 生产 agent.oauth 枚举读全局 localStorage（node 测试环境无）→ 家族无实际键时给一行 missing 占位。
+    const empty = await inspectLocalDataSchemas({ localStorage: memoryStorage({}) })
+    const emptyRows = empty.filter((row) => row.id === "agent.oauth")
+    assert.equal(emptyRows.length, 1)
+    assert.equal(emptyRows[0]?.status, "missing")
+  } finally {
+    dispose()
+  }
+})
+
+test("dynamicKeys 家族: inspect 按枚举键逐项展开并保留 validate", async () => {
+  const dispose = registerLocalDataSchemas([
+    storageClassProbe({
+      id: "test.dynamic-family",
+      storageClass: "state",
+      parseAs: "json",
+      dynamicKeys: { enumerate: () => ["test:dyn:a", "test:dyn:b"] },
+      validate: (value) =>
+        isLocalDataRecord(value) && (value as { bad?: unknown }).bad === true
+          ? ["含 bad 标记"]
+          : [],
+    }),
+  ])
+  try {
+    const rows = await inspectLocalDataSchemas({
+      localStorage: memoryStorage({
+        "test:dyn:a": JSON.stringify({ ok: true }),
+        "test:dyn:b": JSON.stringify({ bad: true }),
+      }),
+    })
+    const family = rows.filter((row) => row.id === "test.dynamic-family")
+    assert.equal(family.length, 2)
+    const byKey = new Map(family.map((row) => [row.key, row]))
+    assert.equal(byKey.get("test:dyn:a")?.status, "ok")
+    assert.equal(byKey.get("test:dyn:b")?.status, "warning")
+    assert.equal(byKey.get("test:dyn:b")?.repairable, false)
+  } finally {
+    dispose()
+  }
 })

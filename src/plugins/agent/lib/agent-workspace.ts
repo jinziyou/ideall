@@ -6,6 +6,7 @@ import { AGENT_TASKS_FILE_REF, AGENT_WORKSPACES_FILE_REF } from "@/filesystem/bu
 import { withFileWriteLock } from "@/filesystem/write-lock"
 import { genId } from "@/lib/id"
 import { secureDelete, secureFallbackGet, secureGet, secureSet } from "@/lib/secure-store"
+import { registerSecureStoreDynamicItems } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
 import type { Permission } from "@/plugins/embed/protocol"
 import { AGENT_CONFIGURABLE_PERMISSIONS, AGENT_PERMISSIONS } from "@/plugins/embed/grant"
@@ -1379,3 +1380,13 @@ export function homeSelectionOf(workspace: AgentWorkspace): HomeSelection | unde
 export function workspaceRulesText(workspace: AgentWorkspace): string {
   return activeRulesText(workspace.rules.ruleIds)
 }
+
+// 每个工作区的模型覆盖 Key 都是动态 secure key（ideall:agent:workspace:{id}:apiKey），纳入安全快照统计。
+registerSecureStoreDynamicItems(() =>
+  getWorkspacesState().workspaces.map((workspace) => ({
+    id: `agent.workspace.${workspace.id}.apiKey`,
+    label: `AI 工作区「${workspace.name}」模型 Key`,
+    owner: "agent",
+    key: workspaceApiKeySecureKey(workspace.id),
+  })),
+)

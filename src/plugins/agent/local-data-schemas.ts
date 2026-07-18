@@ -7,6 +7,7 @@ import {
   type LocalDataSchema,
   type LocalDataSchemaRepairPatch,
 } from "@/plugins/shared/local-data-schema"
+import { enumerateOAuthPublicKeys } from "./lib/agent-oauth"
 import {
   IDB_DATABASE_NAME,
   IDB_DATABASE_VERSION,
@@ -275,5 +276,25 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     parseAs: "json",
     validate: jsonObjectIssues,
     repair: repairJsonObject,
+  },
+  {
+    id: "agent.oauth",
+    label: "MCP OAuth 公开状态",
+    owner: "agent",
+    storage: "localStorage",
+    key: "ideall:agent:oauth:",
+    currentVersion: 1,
+    storageClass: "state",
+    sensitive: true,
+    parseAs: "json",
+    // 动态键家族（每 server 一键），validate-only：公开状态的明文残留由
+    // agent-oauth 的 stripPublicSecrets 读时自清，损坏即重新授权。
+    dynamicKeys: { enumerate: () => enumerateOAuthPublicKeys() },
+    validate: (value) => {
+      if (!isLocalDataRecord(value)) return ["应为 JSON 对象"]
+      return Object.hasOwn(value, "tokens") || Object.hasOwn(value, "codeVerifier")
+        ? ["仍含明文 token/verifier（读取时会自动清除）"]
+        : []
+    },
   },
 ]

@@ -60,7 +60,10 @@ export function SchemaPanel({
             </div>
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {entries.map((entry) => (
-                <div key={entry.id} className="rounded-md border border-border/60 p-3">
+                <div
+                  key={`${entry.id}:${entry.key}`}
+                  className="rounded-md border border-border/60 p-3"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">

@@ -54,6 +54,13 @@ type SecureStoreKnownItem = {
   legacyKey?: string
 }
 
+export type SecureStoreDynamicItem = Readonly<{
+  id: string
+  label: string
+  owner: string
+  key: string
+}>
+
 const SECURE_STORE_KNOWN_ITEMS: SecureStoreKnownItem[] = [
   {
     id: "auth.token",
@@ -76,6 +83,42 @@ const SECURE_STORE_KNOWN_ITEMS: SecureStoreKnownItem[] = [
     key: SECURE_STORE_KEYS.AGENT_SETTINGS_API_KEY,
   },
 ]
+
+const dynamicItemSources = new Set<() => readonly SecureStoreDynamicItem[]>()
+
+/**
+ * Owner 注册其动态 secure key 家族（如 `ideall:agent:secret:{id}`、
+ * `ideall:agent:oauth:{serverId}:tokens`）。安全快照与遗留明文迁移据此纳入统计——
+ * 未注册的动态键会脱离安全快照（fallback/明文残留不可见）。
+ */
+export function registerSecureStoreDynamicItems(
+  source: () => readonly SecureStoreDynamicItem[],
+): () => void {
+  dynamicItemSources.add(source)
+  return () => {
+    dynamicItemSources.delete(source)
+  }
+}
+
+/** 静态登记项 + 各 owner 动态枚举项（按 key 去重；枚举异常不影响其余来源）。 */
+export function listSecureStoreKnownItems(): readonly SecureStoreKnownItem[] {
+  const items: SecureStoreKnownItem[] = [...SECURE_STORE_KNOWN_ITEMS]
+  const seen = new Set(items.map((item) => item.key))
+  for (const source of dynamicItemSources) {
+    let dynamic: readonly SecureStoreDynamicItem[]
+    try {
+      dynamic = source()
+    } catch {
+      continue
+    }
+    for (const item of dynamic) {
+      if (seen.has(item.key)) continue
+      seen.add(item.key)
+      items.push({ ...item })
+    }
+  }
+  return items
+}
 
 export type SecureStoreSecuritySnapshot = {
   registeredCount: number
@@ -188,7 +231,7 @@ export async function secureGetWithLegacy(key: string, legacyKey: string): Promi
 }
 
 export function secureStoreSecuritySnapshot(
-  items = SECURE_STORE_KNOWN_ITEMS,
+  items: readonly SecureStoreKnownItem[] = listSecureStoreKnownItems(),
 ): SecureStoreSecuritySnapshot {
   const inspected = items.map((item) => {
     const fallbackStorageKey = fallbackKey(item.key)
@@ -277,7 +320,7 @@ export async function migrateLegacySecureValues(
   let migrated = 0
   let removedPlaintext = 0
   let failed = 0
-  for (const item of SECURE_STORE_KNOWN_ITEMS) {
+  for (const item of listSecureStoreKnownItems()) {
     const fallbackValue = secureFallbackGet(item.key)
     const legacyValue = item.legacyKey ? publicStorageGet(item.legacyKey) : null
     if (fallbackValue === null && legacyValue === null) continue
