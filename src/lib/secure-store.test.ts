@@ -249,3 +249,59 @@ test("secure-store: 动态登记项的 fallback 明文一并迁移", async () =>
     dispose()
   }
 })
+
+test("secure-store: 迁移与并发 secureSet 互斥（同一叶子锁，后写胜出）", async () => {
+  mem.clear()
+  mem.set(secureFallbackStorageKey("ideall:agent:oauth:server-a:tokens"), "legacy-oauth")
+  const dispose = registerSecureStoreDynamicItems(() => [
+    {
+      id: "agent.oauth.server-a.tokens",
+      label: "MCP OAuth 令牌",
+      owner: "agent",
+      key: "ideall:agent:oauth:server-a:tokens",
+    },
+  ])
+  const native = new Map<string, string>()
+  let releaseSlowGet: (() => void) | null = null
+  try {
+    const migration = migrateLegacySecureValues({
+      native: true,
+      invoke: async <T>(command: string, args?: Record<string, unknown>): Promise<T> => {
+        const key = String(args?.key)
+        if (command === "secure_store_get") {
+          if (native.has(key)) return native.get(key) as T
+          await new Promise<void>((resolve) => {
+            releaseSlowGet = resolve
+          })
+          return null as T
+        }
+        if (command === "secure_store_set") {
+          native.set(key, String(args?.value))
+          return undefined as T
+        }
+        throw new Error("unexpected command")
+      },
+    })
+    let setResolved = false
+    const concurrentSet = secureSet("ideall:agent:oauth:server-a:tokens", "new-rotated").then(
+      (backend) => {
+        setResolved = true
+        return backend
+      },
+    )
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    assert.equal(setResolved, false, "迁移持锁期间并发写必须等待")
+    releaseSlowGet!()
+    await migration
+    await concurrentSet
+    assert.equal(setResolved, true)
+    // 互斥后的确定性结果：迁移先完成（迁走旧 fallback），并发写后落地且不被旧值覆盖。
+    assert.equal(
+      mem.get(secureFallbackStorageKey("ideall:agent:oauth:server-a:tokens")),
+      "new-rotated",
+    )
+    assert.equal(native.get("ideall:agent:oauth:server-a:tokens"), "legacy-oauth")
+  } finally {
+    dispose()
+  }
+})

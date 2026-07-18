@@ -292,9 +292,18 @@ export const agentLocalDataSchemas: readonly LocalDataSchema[] = [
     dynamicKeys: { enumerate: () => enumerateOAuthPublicKeys() },
     validate: (value) => {
       if (!isLocalDataRecord(value)) return ["应为 JSON 对象"]
-      return Object.hasOwn(value, "tokens") || Object.hasOwn(value, "codeVerifier")
-        ? ["仍含明文 token/verifier（读取时会自动清除）"]
-        : []
+      const issues: string[] = []
+      if (Object.hasOwn(value, "tokens") || Object.hasOwn(value, "codeVerifier")) {
+        issues.push("仍含明文 token/verifier（读取时会自动清除）")
+      }
+      if (
+        isLocalDataRecord(value.clientInfo) &&
+        typeof value.clientInfo.client_secret === "string" &&
+        value.clientInfo.client_secret.trim() !== ""
+      ) {
+        issues.push("clientInfo 含明文 client_secret（公开存储）")
+      }
+      return issues
     },
   },
 ]

@@ -1,5 +1,132 @@
 import { isTauri } from "./tauri"
 
+/**
+ * 迁移与全部 secure 写/删共用的读写互斥：迁移取**写者**（独占），secureSet/secureDelete
+ * 取**读者**（彼此共享）。防迁移的 check-then-set 与并发 revoke/凭据轮转交错
+ * （复活已撤销 token / 用旧 fallback 覆盖新提交）。
+ * 读者彼此不互斥——单个 secure 写/删本身是原子的，且 Web 形态读操作保持既有的
+ * 同步生效语义（clearMcpAuth 等 fire-and-forget 调用方依赖即时生效）；
+ * 迁移持写者锁时，读者的并发操作一律排在其后（后写胜出，结果确定）。
+ */
+
+const SECURE_RW_LOCK_NAME = "ideall:secure-store-migration"
+
+class ReadWriteMutex {
+  #activeReaders = 0
+  #activeWriter = false
+  #queue: Array<{ shared: boolean; grant: () => void }> = []
+
+  /** 同步快路径：无写者且无排队写者时读者立即共享；无读者且无排队时写者立即独占。 */
+  tryAcquire(shared: boolean): (() => void) | null {
+    if (shared && !this.#activeWriter && this.#queue.every((request) => request.shared)) {
+      return this.#grantShared()
+    }
+    if (!shared && !this.#activeWriter && this.#activeReaders === 0 && this.#queue.length === 0) {
+      return this.#grantExclusive()
+    }
+    return null
+  }
+
+  queue(shared: boolean): Promise<() => void> {
+    return new Promise((resolve) => {
+      this.#queue.push({
+        shared,
+        grant: () => resolve(shared ? this.#grantShared() : this.#grantExclusive()),
+      })
+    })
+  }
+
+  #grantShared(): () => void {
+    this.#activeReaders += 1
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.#activeReaders -= 1
+      this.#drain()
+    }
+  }
+
+  #grantExclusive(): () => void {
+    this.#activeWriter = true
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.#activeWriter = false
+      this.#drain()
+    }
+  }
+
+  /** 写者优先：队首写者在没有活跃读者时授予；连续读者批量授予。 */
+  #drain(): void {
+    while (this.#queue.length > 0) {
+      const head = this.#queue[0]
+      if (head.shared) {
+        if (this.#activeWriter) return
+        this.#queue.shift()
+        head.grant()
+        continue
+      }
+      if (this.#activeWriter || this.#activeReaders > 0) return
+      this.#queue.shift()
+      head.grant()
+    }
+  }
+}
+
+const localRwMutex = new ReadWriteMutex()
+
+type WebLockManagerLike = {
+  request(
+    name: string,
+    options: { mode: "shared" | "exclusive" },
+    callback: () => Promise<unknown>,
+  ): Promise<unknown>
+}
+
+function webLockManager(): WebLockManagerLike | null {
+  if (typeof navigator === "undefined") return null
+  try {
+    const locks = (navigator as Navigator & { locks?: WebLockManagerLike }).locks
+    return locks && typeof locks.request === "function" ? locks : null
+  } catch {
+    return null
+  }
+}
+
+async function withSecureRwLock<T>(shared: boolean, operation: () => T | Promise<T>): Promise<T> {
+  const manager = webLockManager()
+  if (manager) {
+    try {
+      return (await manager.request(
+        SECURE_RW_LOCK_NAME,
+        { mode: shared ? "shared" : "exclusive" },
+        async () => operation(),
+      )) as T
+    } catch (error) {
+      // Web Locks 授权前失败可安全回退本地互斥；授权后失败不能重放（操作可能已生效）。
+      if (error instanceof Error && /abort/i.test(error.message)) throw error
+    }
+  }
+  // 同步快路径：读者在锁空闲时不进微任务——Web 形态的 secure 写/删保持既有即时生效语义
+  // （clearMcpAuth 等 fire-and-forget 调用方依赖调用返回时副作用已发生）。
+  const fastRelease = localRwMutex.tryAcquire(shared)
+  if (fastRelease) {
+    try {
+      return await operation()
+    } finally {
+      fastRelease()
+    }
+  }
+  const release = await localRwMutex.queue(shared)
+  try {
+    return await operation()
+  } finally {
+    release()
+  }
+}
+
 export type SecureStoreBackend = "system-keychain" | "web-localStorage" | "unavailable"
 
 export type SecureStoreStatus = {
@@ -303,57 +430,60 @@ export async function migrateLegacySecureValues(
     invoke?: SecureStoreMigrationInvoke
   }> = {},
 ): Promise<SecureStoreMigrationResult> {
-  const native = options.native ?? isTauri()
-  const invoke = options.invoke ?? invokeTauri
-  const before = secureStoreSecuritySnapshot()
-  const beforeRemaining = before.fallbackValueCount + before.legacyValueCount
-  if (!native) {
-    return {
-      available: false,
-      migrated: 0,
-      removedPlaintext: 0,
-      failed: 0,
-      remaining: beforeRemaining,
+  // 整段迁移持**写者**锁执行，与全部 secure 写/删互斥（含并发 revoke/凭据轮转）。
+  return withSecureRwLock(false, async () => {
+    const native = options.native ?? isTauri()
+    const invoke = options.invoke ?? invokeTauri
+    const before = secureStoreSecuritySnapshot()
+    const beforeRemaining = before.fallbackValueCount + before.legacyValueCount
+    if (!native) {
+      return {
+        available: false,
+        migrated: 0,
+        removedPlaintext: 0,
+        failed: 0,
+        remaining: beforeRemaining,
+      }
     }
-  }
 
-  let migrated = 0
-  let removedPlaintext = 0
-  let failed = 0
-  for (const item of listSecureStoreKnownItems()) {
-    const fallbackValue = secureFallbackGet(item.key)
-    const legacyValue = item.legacyKey ? publicStorageGet(item.legacyKey) : null
-    if (fallbackValue === null && legacyValue === null) continue
-    try {
-      const current = await invoke<string | null>("secure_store_get", { key: item.key })
-      if (current === null) {
-        const source = fallbackValue ?? legacyValue
-        if (source === null) continue
-        await invoke<void>("secure_store_set", { key: item.key, value: source })
-        const verified = await invoke<string | null>("secure_store_get", { key: item.key })
-        if (verified !== source) throw new Error("secure-store migration verification failed")
-        migrated += 1
+    let migrated = 0
+    let removedPlaintext = 0
+    let failed = 0
+    for (const item of listSecureStoreKnownItems()) {
+      const fallbackValue = secureFallbackGet(item.key)
+      const legacyValue = item.legacyKey ? publicStorageGet(item.legacyKey) : null
+      if (fallbackValue === null && legacyValue === null) continue
+      try {
+        const current = await invoke<string | null>("secure_store_get", { key: item.key })
+        if (current === null) {
+          const source = fallbackValue ?? legacyValue
+          if (source === null) continue
+          await invoke<void>("secure_store_set", { key: item.key, value: source })
+          const verified = await invoke<string | null>("secure_store_get", { key: item.key })
+          if (verified !== source) throw new Error("secure-store migration verification failed")
+          migrated += 1
+        }
+        if (fallbackValue !== null) {
+          storage()?.removeItem(fallbackKey(item.key))
+          removedPlaintext += 1
+        }
+        if (item.legacyKey && legacyValue !== null) {
+          publicStorageRemove(item.legacyKey)
+          removedPlaintext += 1
+        }
+      } catch {
+        failed += 1
       }
-      if (fallbackValue !== null) {
-        storage()?.removeItem(fallbackKey(item.key))
-        removedPlaintext += 1
-      }
-      if (item.legacyKey && legacyValue !== null) {
-        publicStorageRemove(item.legacyKey)
-        removedPlaintext += 1
-      }
-    } catch {
-      failed += 1
     }
-  }
-  const after = secureStoreSecuritySnapshot()
-  return {
-    available: true,
-    migrated,
-    removedPlaintext,
-    failed,
-    remaining: after.fallbackValueCount + after.legacyValueCount,
-  }
+    const after = secureStoreSecuritySnapshot()
+    return {
+      available: true,
+      migrated,
+      removedPlaintext,
+      failed,
+      remaining: after.fallbackValueCount + after.legacyValueCount,
+    }
+  })
 }
 
 export async function secureGet(key: string): Promise<string | null> {
@@ -370,26 +500,31 @@ export async function secureGet(key: string): Promise<string | null> {
 }
 
 export async function secureSet(key: string, value: string): Promise<SecureStoreBackend> {
-  if (isTauri()) {
-    try {
-      await invokeTauri<void>("secure_store_set", { key, value })
-      storage()?.removeItem(fallbackKey(key))
-      return "system-keychain"
-    } catch (error) {
-      throw new SecureStoreUnavailableError("write", error)
+  // 读者锁：与其它 secure 写/删共享、与迁移互斥；Web 形态保持同步生效语义。
+  return withSecureRwLock(true, async () => {
+    if (isTauri()) {
+      try {
+        await invokeTauri<void>("secure_store_set", { key, value })
+        storage()?.removeItem(fallbackKey(key))
+        return "system-keychain"
+      } catch (error) {
+        throw new SecureStoreUnavailableError("write", error)
+      }
     }
-  }
-  storage()?.setItem(fallbackKey(key), value)
-  return "web-localStorage"
+    storage()?.setItem(fallbackKey(key), value)
+    return "web-localStorage"
+  })
 }
 
 export async function secureDelete(key: string): Promise<void> {
-  if (isTauri()) {
-    try {
-      await invokeTauri<void>("secure_store_delete", { key })
-    } catch (error) {
-      throw new SecureStoreUnavailableError("delete", error)
+  return withSecureRwLock(true, async () => {
+    if (isTauri()) {
+      try {
+        await invokeTauri<void>("secure_store_delete", { key })
+      } catch (error) {
+        throw new SecureStoreUnavailableError("delete", error)
+      }
     }
-  }
-  storage()?.removeItem(fallbackKey(key))
+    storage()?.removeItem(fallbackKey(key))
+  })
 }

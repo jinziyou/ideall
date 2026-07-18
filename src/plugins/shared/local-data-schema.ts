@@ -134,49 +134,93 @@ export function repairJsonArray(value: unknown): LocalDataSchemaRepairPatch {
 }
 
 // —— 运行时扩展安装记录（ideall:runtime-extensions:v2）的形状校验与修复 ——
-// 与 src/shell/runtime-extensions/persistence.ts 的记录形状对齐，但保持共享层自包含
-// （plugins/shared 不反向依赖 shell 层实现）。
+// 与 src/shell/runtime-extensions/{validation,persistence}.ts 的生产规则逐项对齐：
+// exactKeys、validExtensionId 正则、validBoundedText（非空/去首尾空白/禁控制字符/上限）、
+// 重复 id 拒绝、64 条与 64KB 上限。共享层自包含（plugins/shared 不反向依赖 shell 层实现）；
+// 修改生产规则时必须同步此处——parity 由 src/shell/runtime-extensions/ 侧测试锁定。
 
 const RUNTIME_EXTENSION_MAX_INSTALL_RECORDS = 64
+const RUNTIME_EXTENSION_MAX_SNAPSHOT_BYTES = 64 * 1024
+const RUNTIME_EXTENSION_MAX_ID_LENGTH = 128
+const RUNTIME_EXTENSION_MAX_DIGEST_LENGTH = 512
+const RUNTIME_EXTENSION_MAX_RECEIPT_LENGTH = 1024
+const RUNTIME_EXTENSION_ID_PATTERN = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/
 
-function isRuntimeExtensionInstallRecord(value: unknown): boolean {
-  if (!isLocalDataRecord(value)) return false
+function exactInstallKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const expected = [...keys].sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function validInstallBoundedText(value: unknown, maxLength: number): value is string {
   return (
-    typeof value.id === "string" &&
-    value.id.length > 0 &&
-    Number.isSafeInteger(value.version) &&
-    (value.version as number) >= 1 &&
-    typeof value.digest === "string" &&
-    value.digest.length > 0 &&
-    typeof value.permissionDigest === "string" &&
-    value.permissionDigest.length > 0 &&
-    typeof value.consentReceipt === "string"
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    value === value.trim() &&
+    !/[\u0000-\u001f\u007f]/.test(value)
   )
 }
 
-function runtimeExtensionInstallsIssues(value: unknown): string[] {
-  if (!isLocalDataRecord(value)) return ["应为 JSON 对象"]
+function isRuntimeExtensionInstallRecord(value: unknown): value is Record<string, unknown> {
+  if (!isLocalDataRecord(value)) return false
+  if (!exactInstallKeys(value, ["id", "version", "digest", "permissionDigest", "consentReceipt"])) {
+    return false
+  }
+  return (
+    typeof value.id === "string" &&
+    value.id.length <= RUNTIME_EXTENSION_MAX_ID_LENGTH &&
+    RUNTIME_EXTENSION_ID_PATTERN.test(value.id) &&
+    Number.isSafeInteger(value.version) &&
+    (value.version as number) >= 1 &&
+    validInstallBoundedText(value.digest, RUNTIME_EXTENSION_MAX_DIGEST_LENGTH) &&
+    validInstallBoundedText(value.permissionDigest, RUNTIME_EXTENSION_MAX_DIGEST_LENGTH) &&
+    validInstallBoundedText(value.consentReceipt, RUNTIME_EXTENSION_MAX_RECEIPT_LENGTH)
+  )
+}
+
+function runtimeExtensionInstallsIssues(value: unknown, raw: string): string[] {
+  if (new TextEncoder().encode(raw).byteLength > RUNTIME_EXTENSION_MAX_SNAPSHOT_BYTES) {
+    return ["安装记录超出 64KB 上限"]
+  }
+  if (!isLocalDataRecord(value) || !exactInstallKeys(value, ["version", "records"])) {
+    return ["应为 {version, records} 安装记录对象"]
+  }
   if (value.version !== 2) return ["安装记录版本应为 2"]
   if (!Array.isArray(value.records)) return ["安装记录应为数组"]
   if (value.records.length > RUNTIME_EXTENSION_MAX_INSTALL_RECORDS) {
     return [`安装记录超出 ${RUNTIME_EXTENSION_MAX_INSTALL_RECORDS} 条上限`]
   }
   const invalid = value.records.filter((record) => !isRuntimeExtensionInstallRecord(record)).length
-  return invalid ? [`${invalid} 条安装记录形状无效`] : []
+  if (invalid) return [`${invalid} 条安装记录形状无效`]
+  const ids = value.records.map((record) => (record as { id: string }).id)
+  if (new Set(ids).size !== ids.length) return ["安装记录 id 重复"]
+  return []
 }
 
 function repairRuntimeExtensionInstalls(value: unknown): LocalDataSchemaRepairPatch {
+  // 与生产 loader 的 all-or-nothing 语义对齐：只写回生产解析器仍接受的数据，否则移除，
+  // 绝不报「修复成功」却留下 loader 仍拒绝的字节（损坏即重新安装）。
   if (!isLocalDataRecord(value) || value.version !== 2 || !Array.isArray(value.records)) {
     return { action: "remove", detail: "已移除损坏的运行时扩展安装记录（扩展需重新安装）" }
   }
-  const records = value.records
-    .filter(isRuntimeExtensionInstallRecord)
-    .slice(0, RUNTIME_EXTENSION_MAX_INSTALL_RECORDS)
-  return {
-    action: "write",
-    value: { version: 2, records },
-    detail: "已剔除形状无效的运行时扩展安装记录",
+  const seen = new Set<string>()
+  const records = value.records.filter(isRuntimeExtensionInstallRecord).filter((record) => {
+    const id = (record as { id: string }).id
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+  if (records.length === 0) {
+    return { action: "remove", detail: "安装记录无有效条目，已移除（扩展需重新安装）" }
   }
+  const next = { version: 2, records }
+  if (
+    new TextEncoder().encode(JSON.stringify(next)).byteLength > RUNTIME_EXTENSION_MAX_SNAPSHOT_BYTES
+  ) {
+    return { action: "remove", detail: "安装记录超出体积上限，已移除（扩展需重新安装）" }
+  }
+  return { action: "write", value: next, detail: "已剔除形状无效或重复的运行时扩展安装记录" }
 }
 
 /**
