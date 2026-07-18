@@ -1,5 +1,6 @@
 import type { FileRef } from "@protocol/file-system"
-import { fileRefKey } from "@protocol/file-system"
+import { fileRefKey, parseFileRefKey } from "@protocol/file-system"
+import { normalizeMediaType } from "@/engines/media-type-tree"
 import {
   enginePreferencesStorageKey,
   type EnginePreferenceScope,
@@ -130,16 +131,10 @@ export function decodeSetFileDefaultInput(
 ): { scope: EnginePreferenceScope; ref: FileRef; engineId: string | null } | null {
   if (!isRecord(value) || !isScope(value.scope) || typeof value.fileRef !== "string") return null
   if (!isEngineIdOrNull(value.engineId)) return null
-  const separator = value.fileRef.indexOf(":")
-  if (separator <= 0 || separator === value.fileRef.length - 1) return null
-  return {
-    scope: value.scope,
-    ref: {
-      fileSystemId: decodeURIComponent(value.fileRef.slice(0, separator)),
-      fileId: decodeURIComponent(value.fileRef.slice(separator + 1)),
-    },
-    engineId: value.engineId,
-  }
+  // parseFileRefKey 自带非法百分号编码/形状校验（返回 null 而非抛 URIError）。
+  const ref = parseFileRefKey(value.fileRef)
+  if (!ref) return null
+  return { scope: value.scope, ref, engineId: value.engineId }
 }
 
 /** preferences.setMediaTypeDefault / removeAssociation / restoreAssociation 输入。 */
@@ -153,7 +148,8 @@ export function decodeMediaTypeActionInput(value: unknown): {
     !isScope(value.scope) ||
     typeof value.mediaType !== "string" ||
     value.mediaType.trim() !== value.mediaType ||
-    value.mediaType.length === 0
+    // 归一化（去参数/空白/小写）后必须非空——否则下游 with* 会抛原生 TypeError。
+    !normalizeMediaType(value.mediaType)
   ) {
     return null
   }

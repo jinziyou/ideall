@@ -213,6 +213,39 @@ test("display engines fs: specialized actions 单 scope 提交并返回新版本
     fs.invoke(DISPLAY_ENGINES_FILE_REF, "preferences.nope", {}, ctx(UI, "action")),
     /Unknown display engines action/,
   )
+  // 错误契约：非法百分号编码与归一化为空的 mediaType 一律 FileSystemError(invalid-input)，
+  // 不得让原生 URIError/TypeError 逃出 invoke。
+  await assert.rejects(
+    fs.invoke(
+      DISPLAY_ENGINES_FILE_REF,
+      DISPLAY_ENGINES_SET_FILE_DEFAULT_ACTION,
+      { scope: "files", fileRef: "local:%zz", engineId: "x" },
+      ctx(UI, "action"),
+    ),
+    (error: unknown) =>
+      error instanceof FileSystemError && error.message.includes("Invalid setFileDefault input"),
+  )
+  await assert.rejects(
+    fs.invoke(
+      DISPLAY_ENGINES_FILE_REF,
+      DISPLAY_ENGINES_SET_MEDIA_TYPE_DEFAULT_ACTION,
+      { scope: "files", mediaType: ";", engineId: "x" },
+      ctx(UI, "action"),
+    ),
+    (error: unknown) =>
+      error instanceof FileSystemError &&
+      error.message.includes("Invalid setMediaTypeDefault input"),
+  )
+  await assert.rejects(
+    fs.invoke(
+      DISPLAY_ENGINES_FILE_REF,
+      DISPLAY_ENGINES_REMOVE_ASSOCIATION_ACTION,
+      { scope: "files", mediaType: ";;", engineId: "x" },
+      ctx(UI, "action"),
+    ),
+    (error: unknown) =>
+      error instanceof FileSystemError && error.message.includes("Invalid removeAssociation input"),
+  )
   await assert.rejects(
     fs.invoke(
       DISPLAY_ENGINES_FILE_REF,

@@ -3,6 +3,8 @@ import { isPersistedCaptureOnboarding } from "@/lib/capture-onboarding"
 import { secureFallbackStorageKey } from "@/lib/secure-store"
 import { STARTUP_TARGET_STORAGE_KEY, WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 import { ENGINE_PREFERENCES_STORAGE_KEY, enginePreferencesStorageKey } from "@/engines/preferences"
+import { DISPLAY_ENGINES_FILE_REF } from "@/filesystem/builtin-app-roots"
+import { withFileWriteLock } from "@/filesystem/write-lock"
 import {
   CAPTURE_ONBOARDING_STORAGE_KEY,
   FILE_TREE_EXPANDED_STORAGE_KEY,
@@ -126,6 +128,14 @@ export function repairJsonArray(value: unknown): LocalDataSchemaRepairPatch {
     : { action: "write", value: [], detail: "已重置为空数组" }
 }
 
+/**
+ * engine 偏好三条 schema 的修复与 `app.display` provider 写共用同一把 FileRef 锁——
+ * 防止修复直写与 engines.json CAS 写跨窗口互相覆盖（docs/freedesktop-alignment.md §4.2）。
+ */
+function withDisplayEnginesRepairLock<T>(operation: () => Promise<T>): Promise<T> {
+  return withFileWriteLock(DISPLAY_ENGINES_FILE_REF, operation)
+}
+
 const coreSchemas: readonly LocalDataSchema[] = [
   {
     id: "appearance.theme",
@@ -207,12 +217,13 @@ const coreSchemas: readonly LocalDataSchema[] = [
     owner: "display",
     storage: "localStorage",
     key: ENGINE_PREFERENCES_STORAGE_KEY,
-    currentVersion: 1,
+    currentVersion: 2,
     storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonObjectIssues,
     repair: repairJsonObject,
+    repairMutation: (operation) => withDisplayEnginesRepairLock(operation),
   },
   {
     id: "display.engine-preferences.audio",
@@ -220,12 +231,13 @@ const coreSchemas: readonly LocalDataSchema[] = [
     owner: "display",
     storage: "localStorage",
     key: enginePreferencesStorageKey("audio"),
-    currentVersion: 1,
+    currentVersion: 2,
     storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonObjectIssues,
     repair: repairJsonObject,
+    repairMutation: (operation) => withDisplayEnginesRepairLock(operation),
   },
   {
     id: "display.engine-preferences.development",
@@ -233,12 +245,13 @@ const coreSchemas: readonly LocalDataSchema[] = [
     owner: "display",
     storage: "localStorage",
     key: enginePreferencesStorageKey("development"),
-    currentVersion: 1,
+    currentVersion: 2,
     storageClass: "config",
     portable: true,
     parseAs: "json",
     validate: jsonObjectIssues,
     repair: repairJsonObject,
+    repairMutation: (operation) => withDisplayEnginesRepairLock(operation),
   },
   {
     id: "display.startup-target",

@@ -37,6 +37,7 @@ import { directoryEntryPreferredEngine } from "@/filesystem/directory-entry"
 import { ideallPathSegments, resolveIdeallPath, type IdeallPath } from "@/filesystem/path"
 import { aiTasksPanelFileRef, panelFileRef } from "@/filesystem/resource-file-system"
 import { engineRegistry } from "@/engines/builtin"
+import { filterRemovedEngineAssociations } from "@/engines/registry"
 import { enginePreferencesStorageKey, readEnginePreferences } from "@/engines/preferences"
 import { openEngineWindow } from "@/lib/engine-window"
 import { fileRefKey, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
@@ -181,14 +182,17 @@ async function openFileTarget(
 
     // stat 期间工作区可能切换；无显式 Engine 时按当前场景重新解析。
     const workspaceKind = workspaceState().workspaceKind
-    const candidates = engineRegistry.matching(file)
+    const matching = engineRegistry.matching(file)
     const requested = target.engineId
-      ? candidates.find((candidate) => candidate.descriptor.engineId === target.engineId)
+      ? matching.find((candidate) => candidate.descriptor.engineId === target.engineId)
       : undefined
     const preferences = readEnginePreferences(
       typeof window === "undefined" ? undefined : window.localStorage,
       enginePreferencesStorageKey(workspaceKind),
     )
+    // 工作区替换与默认解析、EnginePicker 候选共用同一 removed 过滤（兜底守卫在 filter 内）；
+    // 未过滤列表仅保留给显式 target.engineId 的逐次显式选择（与单文件偏好同级优先）。
+    const candidates = filterRemovedEngineAssociations(matching, preferences, file.mediaType)
     const resolved =
       requested ??
       resolveWorkspaceEngine(
