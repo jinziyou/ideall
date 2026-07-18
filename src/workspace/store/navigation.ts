@@ -125,6 +125,7 @@ async function openFileTarget(
   source: ActiveSource,
   shouldCommit?: () => boolean,
   preservePathRequest = false,
+  record = true,
 ): Promise<boolean> {
   if (!preservePathRequest) pathOpenRequests.invalidate()
   const legacyDirectorySurface = directorySurfaceForLegacyPanel(target.ref)
@@ -209,7 +210,7 @@ async function openFileTarget(
     if (target.display === "window") {
       if (!canOpenStandaloneWindow(file, resolved.descriptor)) return false
       await openEngineWindow(fileRefKey(file.ref), engineId)
-      recordFileOpen(file, engineId)
+      if (record) recordFileOpen(file, engineId)
       return true
     }
 
@@ -230,7 +231,7 @@ async function openFileTarget(
       source,
       { transient: target.transient },
     )
-    recordFileOpen(file, engineId)
+    if (record) recordFileOpen(file, engineId)
     if (rootId) {
       patchWorkspace({ activeRootId: rootId })
     }
@@ -312,7 +313,16 @@ export async function openStartupTarget(transient = false): Promise<boolean> {
   if (configured.rootId) {
     patchWorkspace({ activeRootId: normalizeNavigationRootId(configured.rootId) })
   }
-  if (await openFileTarget({ type: "file", ...configured, transient }, "user")) return true
+  if (
+    await openFileTarget(
+      { type: "file", ...configured, transient },
+      "user",
+      undefined,
+      false,
+      false,
+    )
+  )
+    return true
   if (
     configured.ref.fileSystemId === DEFAULT_STARTUP_TARGET.ref.fileSystemId &&
     configured.ref.fileId === DEFAULT_STARTUP_TARGET.ref.fileId &&
@@ -324,6 +334,9 @@ export async function openStartupTarget(transient = false): Promise<boolean> {
   return openFileTarget(
     { type: "file", ...DEFAULT_STARTUP_TARGET, transient, rootId: "home" },
     "user",
+    undefined,
+    false,
+    false,
   )
 }
 
@@ -457,6 +470,9 @@ export function setWorkspaceKind(workspaceKind: WorkspaceKind): void {
       request.isCurrent() &&
       workspaceState().workspaceKind === workspaceKind &&
       workspaceState().activeId === currentTab.id,
+    false,
+    // 工作区切换不是用户主动打开：保留最近打开记录的真实性（S5a 审查确认）。
+    false,
   )
 }
 

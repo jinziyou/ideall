@@ -4,6 +4,7 @@ import type { FileRef } from "@protocol/file-system"
 import {
   THUMBNAIL_MAX_ENTRIES,
   clearThumbnailCache,
+  defaultThumbnailDecoder,
   getThumbnail,
   thumbnailCacheKey,
   thumbnailCacheSize,
@@ -127,4 +128,12 @@ test("thumbnail cache: LRU 容量封顶,最旧条目被淘汰且命中可续命"
   assert.equal(reloads, 0)
   await getThumbnail({ fileSystemId: "fs", fileId: "f-1" }, "v1", reloadOf("f-1"), decode)
   assert.equal(reloads, 1)
+})
+
+test("thumbnail cache: GIF 短路返回 null（走原图回退，不降采样为静态图）", async () => {
+  // GIF guard 在 createImageBitmap 之前触发，node 无 canvas 也可验证。
+  assert.equal(
+    await defaultThumbnailDecoder(new Blob(["GIF89a"], { type: "image/gif" }), 320),
+    null,
+  )
 })

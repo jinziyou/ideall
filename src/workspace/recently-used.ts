@@ -1,4 +1,6 @@
 import { fileRefKey, type IdeallFile } from "@protocol/file-system"
+import { CORE_FILE_SYSTEM_ID } from "@/filesystem/resource-file-system/catalog"
+import { resourceRefForFile } from "@/filesystem/resource-file-system"
 
 /**
  * 最近使用记录（recently-used.xbel 类比，docs/freedesktop-alignment.md §6 S5a）。
@@ -33,6 +35,8 @@ type RecentlyUsedDocument = Readonly<{ version: 1; entries: readonly RecentlyUse
 
 const listeners = new Set<() => void>()
 let cache: { raw: string | null; document: RecentlyUsedDocument } | null = null
+/** 持久化写入失败（配额满/隐私模式）时，内存缓存升格为本会话权威（兑现「会话内一致」）。 */
+let memoryOnly = false
 
 function storage(): Storage | undefined {
   try {
@@ -78,6 +82,7 @@ function sanitizeEntry(value: unknown): RecentlyUsedEntry | null {
 }
 
 function readDocument(): RecentlyUsedDocument {
+  if (memoryOnly && cache) return cache.document
   let raw: string | null = null
   try {
     raw = storage()?.getItem(RECENTLY_USED_STORAGE_KEY) ?? null
@@ -116,8 +121,10 @@ function writeDocument(entries: readonly RecentlyUsedEntry[]): void {
   const raw = JSON.stringify(document)
   try {
     storage()?.setItem(RECENTLY_USED_STORAGE_KEY, raw)
+    memoryOnly = false
   } catch {
-    // 隐私模式 / 配额满：仅更新内存缓存，本会话内一致。
+    // 隐私模式 / 配额满：内存缓存升格为本会话权威，后续读/改/清空在会话内一致。
+    memoryOnly = true
   }
   cache = { raw, document }
   notify()
@@ -161,6 +168,13 @@ export function setRecentlyUsedPaused(paused: boolean): void {
 export function recordFileOpen(file: IdeallFile, engineId: string, openedAt = Date.now()): void {
   try {
     if (file.kind !== "file" || !isRecentlyUsedEnabled() || isRecentlyUsedPaused()) return
+    // 收集面收窄到「用户内容文件」：ideall.core 只记录 node 资源（笔记/书签/文件/关注/对话），
+    // 排除 panel/place 等应用 Chrome 与 browser/info/community/tool 等外链资源页——外链 ref
+    // 的 name 是完整 URL（可含搜索词），超出「本机打开过的文件」的最小收集语义。
+    if (file.ref.fileSystemId === CORE_FILE_SYSTEM_ID) {
+      const resource = resourceRefForFile(file.ref)
+      if (!resource || resource.scheme !== "node") return
+    }
     const refKey = fileRefKey(file.ref)
     const entries = readDocument().entries
     const previous = entries.find((entry) => entry.refKey === refKey)

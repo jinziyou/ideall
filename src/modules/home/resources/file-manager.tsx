@@ -35,7 +35,7 @@ import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"
 import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
-import { downloadStoredFile, readStoredNodeFile } from "./file-preview"
+import { downloadStoredFile, readStoredNodeFile, storedNodeFileRef } from "./file-preview"
 import { getThumbnail } from "@/lib/thumbnail-cache"
 import { openTarget } from "@/workspace/store"
 import { useTabActive } from "@/workspace/tab-active-context"
@@ -100,18 +100,26 @@ function ActiveThumbnail({ file }: { file: ManagedFile }) {
 
   React.useEffect(() => {
     if (!visible) return
+    // ref 由稳定 id 派生（而非依赖每次列表刷新都重建的 file.ref 对象），
+    // 避免无关目录变更令全部缩略图 effect 重跑。
+    const ref = storedNodeFileRef(file.id)
     let url: string | null = null
     let alive = true
-    const loadBlob = async () => (await readStoredNodeFile(file.id))?.file.blob ?? null
+    let loadedBlob: Blob | null = null
+    const loadBlob = async () => {
+      loadedBlob = (await readStoredNodeFile(file.id))?.file.blob ?? null
+      return loadedBlob
+    }
     void (async () => {
-      const dataUrl = await getThumbnail(file.ref, file.version, loadBlob)
+      const dataUrl = await getThumbnail(ref, file.version, loadBlob)
       if (!alive) return
       if (dataUrl) {
         setSrc(dataUrl)
         return
       }
       try {
-        const blob = await loadBlob()
+        // 解码失败：复用刚读出的 Blob 建原图 ObjectURL（不再二次 stat+read）。
+        const blob = loadedBlob ?? (await loadBlob())
         if (!alive || !blob) return
         url = URL.createObjectURL(blob)
         setSrc(url)
@@ -123,7 +131,7 @@ function ActiveThumbnail({ file }: { file: ManagedFile }) {
       alive = false
       if (url) URL.revokeObjectURL(url)
     }
-  }, [file.id, file.ref, file.version, visible])
+  }, [file.id, file.version, visible])
 
   if (!src)
     return (

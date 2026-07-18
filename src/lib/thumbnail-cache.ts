@@ -18,7 +18,12 @@ export type ThumbnailLoader = () => Promise<Blob | null>
 export type ThumbnailDecoder = (blob: Blob, maxDimension: number) => Promise<string | null>
 
 /** createImageBitmap + canvas 降采样 → dataURL；失败返回 null（调用方回退原图路径）。 */
-async function defaultDecode(blob: Blob, maxDimension: number): Promise<string | null> {
+export async function defaultThumbnailDecoder(
+  blob: Blob,
+  maxDimension: number,
+): Promise<string | null> {
+  // 动图降采样丢失动画，且 GIF 经 JPEG 会把透明区域合成黑色——返回 null 让调用方走原图回退。
+  if (blob.type === "image/gif") return null
   try {
     const bitmap = await createImageBitmap(blob)
     try {
@@ -31,9 +36,8 @@ async function defaultDecode(blob: Blob, maxDimension: number): Promise<string |
       const context = canvas.getContext("2d")
       if (!context) return null
       context.drawImage(bitmap, 0, 0, width, height)
-      const mime =
-        blob.type === "image/png" || blob.type === "image/webp" ? blob.type : "image/jpeg"
-      return canvas.toDataURL(mime, 0.82)
+      // 统一 PNG 输出：保留 alpha（AVIF/ICO/TIFF 等带透明通道的格式不会被 JPEG 黑底化）。
+      return canvas.toDataURL("image/png")
     } finally {
       bitmap.close()
     }
@@ -64,7 +68,7 @@ export function getThumbnail(
   ref: FileRef,
   version: string | null,
   load: ThumbnailLoader,
-  decode: ThumbnailDecoder = defaultDecode,
+  decode: ThumbnailDecoder = defaultThumbnailDecoder,
 ): Promise<string | null> {
   const key = thumbnailCacheKey(ref, version)
   const cached = entries.get(key)
