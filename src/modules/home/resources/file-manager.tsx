@@ -36,6 +36,7 @@ import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"
 import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
 import { downloadStoredFile, readStoredNodeFile } from "./file-preview"
+import { getThumbnail } from "@/lib/thumbnail-cache"
 import { openTarget } from "@/workspace/store"
 import { useTabActive } from "@/workspace/tab-active-context"
 import { loadManagedFiles, type ManagedFile } from "./file-manager-data"
@@ -70,10 +71,11 @@ function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
 type ViewMode = "grid" | "list"
 
 /**
- * 图片缩略图: 仅在缩略图滚入视口后才读取自身 Blob 并建 ObjectURL, 卸载时释放。
- * 懒加载避免列表里所有图片文件在挂载即一次性 getFile + createObjectURL (本地优先场景可达上千个)。
+ * 图片缩略图: 滚入视口后先查缩略图缓存（key=(ref,version)，降采样 dataURL）；
+ * 缓存未命中/解码失败时回退原图 ObjectURL。懒加载避免列表里所有图片文件在挂载即
+ * 一次性 getFile + createObjectURL (本地优先场景可达上千个)。
  */
-function ActiveThumbnail({ id }: { id: string }) {
+function ActiveThumbnail({ file }: { file: ManagedFile }) {
   const [src, setSrc] = React.useState<string | null>(null)
   const [visible, setVisible] = React.useState(false)
   const placeholderRef = React.useRef<HTMLDivElement | null>(null)
@@ -100,18 +102,28 @@ function ActiveThumbnail({ id }: { id: string }) {
     if (!visible) return
     let url: string | null = null
     let alive = true
-    readStoredNodeFile(id)
-      .then((loaded) => {
-        if (!alive || !loaded) return
-        url = URL.createObjectURL(loaded.file.blob)
+    const loadBlob = async () => (await readStoredNodeFile(file.id))?.file.blob ?? null
+    void (async () => {
+      const dataUrl = await getThumbnail(file.ref, file.version, loadBlob)
+      if (!alive) return
+      if (dataUrl) {
+        setSrc(dataUrl)
+        return
+      }
+      try {
+        const blob = await loadBlob()
+        if (!alive || !blob) return
+        url = URL.createObjectURL(blob)
         setSrc(url)
-      })
-      .catch(() => {})
+      } catch {
+        // 保持占位图标
+      }
+    })()
     return () => {
       alive = false
       if (url) URL.revokeObjectURL(url)
     }
-  }, [id, visible])
+  }, [file.id, file.ref, file.version, visible])
 
   if (!src)
     return (
@@ -123,7 +135,7 @@ function ActiveThumbnail({ id }: { id: string }) {
   return <img src={src} alt="" className="h-full w-full object-cover" />
 }
 
-function Thumbnail({ id }: { id: string }) {
+function Thumbnail({ file }: { file: ManagedFile }) {
   const active = useTabActive()
   if (!active) {
     return (
@@ -132,7 +144,7 @@ function Thumbnail({ id }: { id: string }) {
       </div>
     )
   }
-  return <ActiveThumbnail id={id} />
+  return <ActiveThumbnail file={file} />
 }
 
 export default function FileManager() {
@@ -520,7 +532,7 @@ function FileMenu({ onPreview, onDownload, onRename, onDelete }: FileActions) {
   )
 }
 
-function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
+function FileGridCard({ file, ...actions }: { file: ManagedFile } & FileActions) {
   const type = fileTypeInfo(file.name, file.type)
   return (
     <div className="group flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground transition-colors hover:border-foreground/20">
@@ -530,7 +542,7 @@ function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
         className="flex aspect-video items-center justify-center overflow-hidden bg-muted"
       >
         {type.kind === "image" ? (
-          <Thumbnail id={file.id} />
+          <Thumbnail file={file} />
         ) : (
           <FileTypeIcon name={file.name} type={file.type} className="h-10 w-10" />
         )}
@@ -557,7 +569,7 @@ function FileListRow({
   file,
   first,
   ...actions
-}: { file: FileMeta; first: boolean } & FileActions) {
+}: { file: ManagedFile; first: boolean } & FileActions) {
   const type = fileTypeInfo(file.name, file.type)
   return (
     <div
@@ -572,7 +584,7 @@ function FileListRow({
         className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-muted"
       >
         {type.kind === "image" ? (
-          <Thumbnail id={file.id} />
+          <Thumbnail file={file} />
         ) : (
           <FileTypeIcon name={file.name} type={file.type} className="h-5 w-5" />
         )}
