@@ -4,7 +4,8 @@
  * 关键约束：
  * - subclass 关系只来自下面的显式表，**不做任何隐式 suffix（+xml/+json）推导**；
  * - `application/vnd.ideall.*` 语义类型不进表、无父类——语义引擎隔离性不被层级穿透；
- * - 不引入 freedesktop 的默认父类规则（未登记类型一律 subclass application/octet-stream）：
+ * - 不引入 freedesktop 的默认父类规则（spec §2.11 隐式全称规则：text/* → text/plain；
+ *   除 inode/* 外一切 streamable 类型 → application/octet-stream）：
  *   引擎面里没有任何引擎声明 octet-stream，text/* 通配已直接覆盖 text 类型，默认规则无匹配增益。
  */
 

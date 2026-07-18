@@ -25,10 +25,10 @@
 | Icon Naming（标准图标名间接层） | 导航 `iconHint` → Lucide 静态映射，Engine descriptor 独立 `iconHint` 体系 | `src/workspace/navigation-sections.ts:67-96`、`src/engines/builtin.ts` |
 | Trash（info 旁存 + 恢复） | 墓碑 + `trash_snapshots` + 事务 CAS 恢复（强于 spec 的路径记录） | `src/filesystem/trash-file-system.ts` |
 | XDG Menu（菜单由数据派生） | 五分区固定，二级入口由 `ideall.navigation` **数据**生成，React 只留图标装饰 | `src/filesystem/navigation-file-system.ts:79-256` |
-| xdg-user-dirs（well-known 目录、显示名可本地化） | 关注/书签/资源/文件为稳定 key 的 place 根；`pathName` 只是 link 名，重命名不伤身份 | `src/filesystem/navigation-file-system.ts` |
+| xdg-user-dirs（well-known 目录：user-dirs.dirs 以 XDG_*_DIR key→路径映射；目录名本身按 locale 翻译创建） | 关注/书签/资源/文件为稳定 key 的 place 根；`pathName` 只是 link 名，重命名不伤身份（严格强于 xdg-user-dirs 的物理改名——物理改名会断硬编码路径引用） | `src/filesystem/navigation-file-system.ts` |
 | Secret Service（凭据独立后端） | OS keyring + Web 版本化 fallback，桌面 fail closed | `src/lib/secure-store.ts`、`src-tauri/src/secure_store.rs` |
 
-另有一个结构性巧合：五分区导航本身就是一张 XDG 投影——**我的 ≈ data、活动 ≈ state（审计/任务正是 state 类）、应用 ≈ applications、设置 ≈ config**；cache / runtime / secrets 三类**正确地不出现在导航里**。本文 §2 把这张隐含映射显式化。
+另有一个结构性巧合：五分区导航本身就是一张 XDG 投影——**我的 ≈ data、活动 ≈ 混合类（审计 = state、空间 = config、任务/删除 = data）、应用 ≈ applications、设置 ≈ config**；cache / runtime / secrets 三类**正确地不出现在导航里**。本文 §2 把这张隐含映射显式化。
 
 ## 2. S1：XDG Base Directory 分类法 → 每个存储点都有「存储类」（已落地）
 
@@ -83,9 +83,9 @@ export type LocalDataStorageClass =
 
 `matchMediaTypePattern` 只有精确/类型通配/片段通配（`src/engines/matcher.ts:36-48`），**没有类型层级**。后果：第三方来源（MCP connector 资源、用户上传）带来未登记类型（如 `application/yaml`、`application/ld+json`）时，没有任何语义/编辑引擎声明它们，只能落到兜底的通用预览（priority -1000，只读文件卡片 + 下载，无高亮无编辑，`src/engines/builtin.ts:267-277`、`src/workspace/viewers/generic-preview-engine.tsx`），体验等同不可打开；shared-mime-info 的答案是 `<sub-class-of>`——`application/json` 是 `text/plain` 的子类，父类型声明的引擎应能打开子类型文件。
 
-### 3.2 关键约束：不引入隐式 suffix subclass 规则
+### 3.2 关键约束：不引入任何 suffix 推导规则
 
-freedesktop shared-mime-info spec 对 `+xml` suffix 有明文的隐式 subclass 规则（任何 `*+xml` 类型隐式是 `application/xml` 的子类）；`+json` 方向 spec 无明文，仅数据层对具体类型（如 `application/ld+json`）逐条显式声明的惯例。**本文明确不借任何隐式 suffix 规则**：`builtin.test.ts:94` 锁死「语义 panel JSON 不被 code 引擎捕获」——ideall 的 `application/vnd.ideall.*+json` 语义类型若隐式成为 `application/json` 子类，code 引擎（声明 `application/json`）将捕获全部语义 JSON 文件。因此：
+freedesktop shared-mime-info spec（§2.11 Subclassing）的隐式 subclass 规则只有两条——所有 `text/*` 类型是 `text/plain` 的子类、所有 streamable 类型（除 `inode/*` 外）是 `application/octet-stream` 的子类；spec 对 `+xml` 与 `+json` suffix **均无明文推导规则**，现实中 `image/svg+xml → application/xml`、`application/ld+json → application/json` 这类父类关系全部来自数据库里逐条显式 `<sub-class-of>` 声明。**本文与 spec 一致：subclass 关系只来自显式表**——真正要防的是「自行发明」suffix 推导：`builtin.test.ts:94` 锁死「语义 panel JSON 不被 code 引擎捕获」——ideall 的 `application/vnd.ideall.*+json` 语义类型一旦被任何 suffix 推导挂上 `application/json` 父类，code 引擎（声明 `application/json`）将捕获全部语义 JSON 文件。因此：
 
 - subclass 关系**只来自显式表**，不做任何 suffix 推导；
 - `application/vnd.ideall.*` 语义类型**不进表、无父类**，隔离性保持不变。
@@ -105,7 +105,7 @@ export const MEDIA_TYPE_PARENTS: Readonly<Record<string, readonly string[]>>
 export function mediaTypeAncestors(mediaType: string): readonly string[]
 ```
 
-表只覆盖**标准内容类型**（仓库实际产出 + MCP/上传高频第三方类型）。不引入 freedesktop 的默认父类规则（未登记 `text/*` → `text/plain`、其余 → `application/octet-stream`）：ideall 引擎面里没有任何引擎声明 `application/octet-stream`，而 `text/*` 通配已直接覆盖全部 text 类型，默认规则无匹配增益，只会扩大匹配面。
+表只覆盖**标准内容类型**（仓库实际产出 + MCP/上传高频第三方类型）。不引入 freedesktop 的默认父类规则（spec §2.11 的两条隐式全称规则：所有 `text/*` 皆为 `text/plain` 子类；所有 streamable 类型——即除 `inode/*` 外的一切——皆为 `application/octet-stream` 子类，与显式声明叠加、不以未登记为条件）：ideall 引擎面里没有任何引擎声明 `application/octet-stream`，而 `text/*` 通配已直接覆盖全部 text 类型，ideall 自采用的 `inode/directory` 恰是 spec 明文排除的类型——默认规则对 ideall 无匹配增益，只会扩大匹配面。
 
 匹配计分（`matcher.ts`）：直接命中保持原分值（精确 400 / 片段 300+len / 类型通配 200+len / 全通配 1；len = `matcher.ts:46` 的 literalLength，含斜杠，如 `text/*` → 205、`audio/*` → 206）；直接未命中时沿父链找**折损后最高**的命中：
 
@@ -115,7 +115,7 @@ score = directScore - SUBCLASS_DISTANCE_PENALTY * distance   // PENALTY = 150，
 
 - 距离 1 的精确父类命中（250）低于任何直接精确（400）；与直接类型通配（205-206）相比，父链精确更高——这是**有意**的：语义上更近的父类比顶层通配更贴切。父链的类型通配（≈55+）仅高于全通配（1）；类型通配的字面量是有界的（顶层类型名），距离 ≥2 时折损恒为负 → 不匹配。**效果：父链只提供「兜底可打开」，抢不过任何直接精确声明；priority 主导排序的事实不变。**
 - 候选排序仍是 priority → specificity → engineId（`registry.ts:28-34`），语义引擎 priority 远高于 code/preview，父链匹配不改变现有文件的默认引擎。
-- 默认解析的 media type 偏好查找同样沿父链上溯（近亲优先，GIO 语义）：用户为 `text/plain` 设置的默认引擎对 `text/markdown` 生效，除非该类型另有偏好。失效偏好静默下落的既有语义不变。
+- 默认解析的 media type 偏好查找同样沿父链上溯（近亲优先——与 mime-apps spec §4 的默认应用解析同语义：沿类型层级「most specific to least specific」回退，GIO `g_app_info_get_default_for_type` 同此行为）：用户为 `text/plain` 设置的默认引擎对 `text/markdown` 生效，除非该类型另有偏好。失效偏好静默下落的既有语义不变。
 
 ### 3.4 行为保全论证（测试锁死）
 
@@ -185,12 +185,12 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 ## 7. 明确不借鉴
 
 1. **路径即身份**：Trash info 记原路径、Thumbnail 按 URI key——ideall 的 `FileRef` 身份 + link 投影严格更好；只借形状。
-2. **隐式 suffix subclass**：spec 明文的 `+xml` 隐式规则与 `+json` 的数据层惯例都不借——破坏 `vnd.ideall.*` 语义类型隔离（§3.2）。
+2. **suffix 推导 subclass**：spec 本无此类规则（隐式规则仅 `text/*`→`text/plain` 与 streamable→`application/octet-stream` 两条，§3.2），本文亦不自行发明任何 suffix 推导——subclass 关系只来自显式表，以保 `vnd.ideall.*` 语义类型隔离。
 3. **DBus / activation / FileManager1**：ideall 已有 Grant→MCP 能力链路与 FileSystem registry，不引入第二套 IPC。
 4. **`.desktop` 的 `Exec`**：renderer（代码）注册留在签名 runtime-extension 管线（§5.2）。
 5. **freedesktop 的宽松一致性**：spec 普遍 best-effort 扫描；ideall 的事务 CAS 不变量更强，绝不为对齐放松。
 6. **字面物理布局**：不把 IndexedDB/localStorage 拆成 `~/.local/share` 目录树——映射是**分类策略**，不是物理路径（Rust 侧 `app_data_dir` 本已落在 XDG 目录，天然合规）。
-7. **默认父类规则**（未登记类型一律 subclass `application/octet-stream`）：无匹配增益，只扩大匹配面（§3.3）。
+7. **默认父类规则**（所有 `text/*` 隐式 subclass `text/plain`；除 `inode/*` 外一切 streamable 类型隐式 subclass `application/octet-stream`）：无匹配增益，只扩大匹配面（§3.3）。
 
 ## 8. 不变量保全表（对照 [architecture.md](architecture.md) §6）
 
@@ -226,7 +226,7 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 | 决策 | 结论 | 备选（为何否决） |
 | --- | --- | --- |
 | 分类挂在哪 | `LocalDataSchema.storageClass` + IndexedDB `storeClasses` | 拆库按 store 分 IndexedDB（迁移成本与事务原子性破坏，否决） |
-| subclass 关系来源 | 仅显式表 | 隐式 suffix（§3.2）、默认父类规则（§3.3）、完整导入 shared-mime-info XML 数据库（几千类型对引擎面无增益，否决） |
+| subclass 关系来源 | 仅显式表 | suffix 推导（§3.2）、默认父类规则（§3.3）、完整导入 shared-mime-info XML 数据库（几千类型对引擎面无增益，否决） |
 | 折损计分 | 线性 `−150×distance`，≤0 不匹配 | 分级档位（不可解释）、不降分（父类抢直接声明，否决） |
 | S3 物理存储 | localStorage 保持真相，文件为投影 | 迁移到 IndexedDB/文件为真相（同步读路径全部要改异步，时序风险大，否决） |
 | S3 归属 | 新 `app.display` FS（与 S4 同 extension） | 塞进 `app.settings` 第六 section（SettingsPage 五 section 结构与本机数据语义被打乱，否决） |
