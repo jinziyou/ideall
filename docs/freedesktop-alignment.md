@@ -1,12 +1,12 @@
 # freedesktop 对齐设计：数据、文件与显示的组织
 
-> **状态：S1 / S1b / S2 / S3 / S4 已落地，S5 停放。**
+> **状态：S1 / S1b / S2 / S3 / S4 / S5 全部落地。**
 > **S1（已实现，commit `8cf0307`）**：`LocalDataSchema.storageClass` + IndexedDB 逐 store 分类（`src/plugins/shared/local-data-schema.ts`、各 manifest 注册点）。
 > **S1b（已实现，commit `6192216`）**：5 个未注册键补登记 + `dynamicKeys` 动态家族 + secure 动态键入安全快照与遗留迁移（`src/lib/secure-store.ts`、各 owner 注册点）。
 > **S2（已实现，commit `8d94420`）**：MIME subclass 表与父链上溯（`src/engines/media-type-tree.ts`、`matcher.ts`、`registry.ts`、`preferences.ts`）。
 > **S3（已实现，commit `a9909cf`）**：Engine 关联文件化 `app.display/engines.json` + 偏好 v2 Removed Associations（`src/workspace/display/*`、`src/engines/preferences.ts`、`registry.ts`、`src/workspace/registry.tsx`）。
 > **S4（已实现，commit `9186849`）**：Engine 描述符只读投影 `app.engines`（`src/workspace/display/engine-descriptors-file-system.ts`）。
-> **S5（recently-used 落盘 / 缩略图缓存）停放**，下文未标注完成的部分均为设计。
+> **S5（已实现，commits `f51c386` / `31bb223`）**：S5a recently-used 访问记录与「最近打开」面板（`src/workspace/recently-used.ts`、`src/modules/home/recently-opened.tsx`）；S5b 缩略图缓存（`src/lib/thumbnail-cache.ts`）。
 >
 > 缘起：ideall 的设计思想是「一切皆文件，一切皆标签页」（[file-system-engine-architecture.md](file-system-engine-architecture.md)）。freedesktop 标准族（XDG Base Directory、shared-mime-info、mimeapps.list、Desktop Entry、Icon Naming、recently-used 等）正是 Linux 桌面二十多年对「数据、文件、显示如何组织」的答案。本文逐条对照：哪些 ideall 已经同构、哪些值得补、哪些明确不借。
 
@@ -62,7 +62,7 @@ export type LocalDataStorageClass =
 - `LocalDataSchema` 增加必填 `storageClass`；`LocalDataSchemaInspection` 透传（`src/plugins/shared/local-data-schema.ts`）。
 - IndexedDB 条目增加可选 `storeClasses: Readonly<Record<string, LocalDataStorageClass>>` 逐 store 分类。`wonita-home`（agent.tasks 条目承载）：`nodes/blobs/trash_snapshots/agent_tasks = data`，`agent_write_audit = state`，`local_search_index/local_semantic_index = cache`；`ideall:audio`：`tracks = data`、`state = state`（播放状态）；`ideall:database`：`tables/rows = data`。
 - 构造期硬不变量（`assertLocalDataSchema` fail-closed）：`cache` / `runtime` / `secrets` 不得 `portable: true`；`secrets` 必须同时 `sensitive: true`。现有全部注册条目天然满足，不变量以类型 + 测试锁死。
-- 既有 23 条 schema 归类（core 10 + agent 9 + audio/database/git/sync 各 1）：config 13 = theme、engine-preferences×3、startup-target、agent.settings、agent.acp、mcp、rules、skills、secrets 索引、workspaces、git.repos；state 4 = file-tree-expanded、capture.onboarding、workspace.local、credential-revision；runtime 1 = workspace.session；secrets 2 = auth.token、sync.code（secure fallback）；data 3 = agent.tasks、audio.db、database.db。
+- 既有 schema 归类（S1 落地时 23 条：core 10 + agent 9 + audio/database/git/sync 各 1；S1b 与 S5a 后现共 31 条）：config = theme、engine-preferences×3、startup-target、agent.settings、agent.acp、mcp、rules、skills、secrets 索引、workspaces、git.repos、semantic-search 开关、runtime-extensions 安装记录、recently-used 启用开关；state = file-tree-expanded、capture.onboarding、workspace.local、credential-revision、device id、tool 搜索历史、agent.oauth 动态家族、recently-used 记录与暂停标记；runtime = workspace.session；secrets = auth.token、sync.code（secure fallback）；data = agent.tasks、audio.db、database.db。
 - 文档回写：[app-data-navigation.md](app-data-navigation.md) 的存储表增加存储类列。
 
 ### 2.4 策略派生（描述性，不新增行为）
@@ -180,10 +180,10 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 - 权限：读 = `ui` / `fs:read` / engine activeFile 精确匹配（descriptor 是无敏感元数据）；agent 经普通 `fs:read` 即可枚举引擎面，符合「AI 经文件系统认识环境」的定位。
 - 与 S3 合并为一个 `ideall.display` 随包 runtime extension：`fileSystems: [app.display, app.engines]` 同批挂载，失败整体回滚。
 
-## 6. S5：显示层两处补齐（停放）
+## 6. S5：显示层两处补齐（已落地，经用户拍板解除停放）
 
-- **recently-used.xbel → 最近动态形式化**：当前「最近动态」是从各 place 的 `createdAt` **实时派生**（`src/modules/home/home-read-model.ts:92`），不落盘访问史。freedesktop 的 recently-used 是**落盘的访问日志**（含 `private` 隐身标志）。这是一个新数据收集决策（隐私敏感），默认停放；若启用，文件归 `state` 类、显式开关、可清空、不进同步。
-- **Thumbnail spec → 缩略图缓存**：当前图片缩略图每次滚入视口都重读完整 Blob 建 ObjectURL（`src/modules/home/resources/file-manager.tsx:82-113`），无缩放、无共享缓存。借 Thumbnail spec 的**形状**：`cache` 类存储、key = `(FileRef, version)`（**不借** spec 的 `file://` URI + mtime——FileRef+version 是更强的失效语义）。停放原因：增量分页已防卡顿，收益边际。
+- **recently-used.xbel → 最近打开记录（S5a，`f51c386`）**：打开路径（`openFileTarget`）在成功解析后记录 `{refKey, name, mediaType, engineId, openedAt}`，去重置顶、100 条封顶。隐私契约按设计执行：**默认关闭**（Home 概览「最近打开」面板给发现式启用入口）、隐身暂停、可清空、逐条移除、逐条 XBEL private 标记（保留文件但不展示）；`state` 存储类、不进同步；水合恢复的标签不经 `openFileTarget`，不会被误记。实现：`src/workspace/recently-used.ts`（领域 store）+ `src/modules/home/recently-opened.tsx`（面板）+ 打开路径钩子（`navigation.ts`）。
+- **Thumbnail spec → 缩略图缓存（S5b，`31bb223`）**：借 spec 的「key = 身份 + 失效版本」形状，**不借** `file://` URI + mtime——key = `(FileRef, version)`。`createImageBitmap` + canvas 降采样（最长边 320）→ dataURL 内存 LRU（200 条、在途去重、失败不缓存）；会话级 `cache` 语义，不进持久层/同步/归档。实现：`src/lib/thumbnail-cache.ts`；`ActiveThumbnail` 先查缓存、解码失败回退原图 ObjectURL。
 
 ## 7. 明确不借鉴
 
@@ -220,7 +220,8 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 | S1b | 5 个未注册键补登记 + `dynamicKeys` 动态家族 + secrets 动态键登记进安全快照与迁移 | 健康视图可见 + 快照/迁移含动态键 | 已落地（`6192216`） |
 | S3 | `app.display` provider（engines.json 投影 + CAS + watch）+ 偏好格式 v2（`removed`）+ EnginePicker 屏蔽菜单 | 全绿 + CAS/守卫/迁移测试 | 已落地（`a9909cf`） |
 | S4 | `app.engines` 只读投影 + `ideall.display` extension 批次 + 投影一致性测试 | 全绿 | 已落地（`9186849`） |
-| S5 | recently-used（隐私决策先行）/ 缩略图缓存 | — | 停放 |
+| S5a | recently-used 访问记录（显式开关默认关、隐身暂停、可清空、XBEL private）+ 「最近打开」面板 | 全绿 + store/schema 测试 | 已落地（`f51c386`） |
+| S5b | 缩略图缓存（key=(FileRef,version)、降采样、内存 LRU）+ ActiveThumbnail 接入 | 全绿 + 缓存行为测试 | 已落地（`31bb223`） |
 
 每切片独立提交（Conventional Commits + `Co-Authored-By`），门禁 `pnpm verify:checks`（构建在沙箱外补跑）。
 
