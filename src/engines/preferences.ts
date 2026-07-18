@@ -3,7 +3,7 @@ import { fileRefKey } from "@protocol/file-system"
 import { mediaTypeAncestors } from "./media-type-tree"
 import { normalizeMediaType } from "./matcher"
 
-export const ENGINE_PREFERENCES_VERSION = 1 as const
+export const ENGINE_PREFERENCES_VERSION = 2 as const
 export const ENGINE_PREFERENCES_STORAGE_KEY = "ideall:engine-preferences"
 export type EnginePreferenceScope = "files" | "audio" | "development"
 
@@ -17,6 +17,11 @@ export type EnginePreferences = Readonly<{
   version: typeof ENGINE_PREFERENCES_VERSION
   files: Readonly<Record<string, string>>
   mediaTypes: Readonly<Record<string, string>>
+  /**
+   * Removed Associations（mimeapps.list 语义）：按归一化 mediaType 屏蔽引擎。
+   * 解析时沿 subclass 父链生效；屏蔽不得清空候选（registry 侧守卫）。
+   */
+  removed: Readonly<Record<string, readonly string[]>>
 }>
 
 export type EnginePreferenceStorage = {
@@ -28,16 +33,18 @@ export type EnginePreferenceStorage = {
 function frozenPreferences(
   files: Record<string, string>,
   mediaTypes: Record<string, string>,
+  removed: Record<string, readonly string[]>,
 ): EnginePreferences {
   return Object.freeze({
     version: ENGINE_PREFERENCES_VERSION,
     files: Object.freeze(files),
     mediaTypes: Object.freeze(mediaTypes),
+    removed: Object.freeze(removed),
   })
 }
 
 export function emptyEnginePreferences(): EnginePreferences {
-  return frozenPreferences({}, {})
+  return frozenPreferences({}, {}, {})
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -65,14 +72,31 @@ function sanitizeMediaTypeMap(value: unknown): Record<string, string> {
   return Object.fromEntries(entries)
 }
 
+function sanitizeRemovedMap(value: unknown): Record<string, readonly string[]> {
+  const record = asRecord(value)
+  if (!record) return {}
+  const removed: Record<string, readonly string[]> = {}
+  for (const [rawType, rawEngineIds] of Object.entries(record)) {
+    const mediaType = normalizeMediaType(rawType)
+    if (!mediaType || !Array.isArray(rawEngineIds)) continue
+    const engineIds = [...new Set(rawEngineIds.filter(validEngineId))]
+    if (engineIds.length > 0) removed[mediaType] = Object.freeze(engineIds)
+  }
+  return removed
+}
+
 export function parseEnginePreferences(raw: string | null | undefined): EnginePreferences {
   if (!raw) return emptyEnginePreferences()
   try {
     const value = asRecord(JSON.parse(raw))
-    if (!value || value.version !== ENGINE_PREFERENCES_VERSION) return emptyEnginePreferences()
+    // v1（无 removed）读取时升级为空屏蔽表；写出一律 v2。
+    if (!value || (value.version !== 1 && value.version !== ENGINE_PREFERENCES_VERSION)) {
+      return emptyEnginePreferences()
+    }
     return frozenPreferences(
       sanitizePreferenceMap(value.files),
       sanitizeMediaTypeMap(value.mediaTypes),
+      sanitizeRemovedMap(value.removed),
     )
   } catch {
     return emptyEnginePreferences()
@@ -141,7 +165,7 @@ export function withFileEnginePreference(
   const files = { ...preferences.files }
   if (engineId === null) delete files[fileRefKey(ref)]
   else files[fileRefKey(ref)] = engineId
-  return frozenPreferences(files, { ...preferences.mediaTypes })
+  return frozenPreferences(files, { ...preferences.mediaTypes }, { ...preferences.removed })
 }
 
 export function withMediaTypeEnginePreference(
@@ -156,7 +180,80 @@ export function withMediaTypeEnginePreference(
   const mediaTypes = { ...preferences.mediaTypes }
   if (engineId === null) delete mediaTypes[normalizedType]
   else mediaTypes[normalizedType] = engineId
-  return frozenPreferences({ ...preferences.files }, mediaTypes)
+  // 「设为默认」自动解除同类型同引擎的屏蔽（显式默认优先于 Removed Associations）。
+  const removed = { ...preferences.removed }
+  if (engineId !== null) {
+    const current = removed[normalizedType]
+    if (current?.includes(engineId)) {
+      const next = current.filter((id) => id !== engineId)
+      if (next.length > 0) removed[normalizedType] = Object.freeze(next)
+      else delete removed[normalizedType]
+    }
+  }
+  return frozenPreferences({ ...preferences.files }, mediaTypes, removed)
+}
+
+/** 屏蔽引擎对指定 mediaType 的关联（Removed Associations 新增）。 */
+export function withEngineAssociationRemoved(
+  preferences: EnginePreferences,
+  mediaType: string,
+  engineId: string,
+): EnginePreferences {
+  const normalizedType = normalizeMediaType(mediaType)
+  if (!normalizedType) throw new TypeError("mediaType must not be empty")
+  if (!validEngineId(engineId)) throw new TypeError("engineId must not be empty")
+  const removed = { ...preferences.removed }
+  const current = removed[normalizedType] ?? []
+  if (!current.includes(engineId)) {
+    removed[normalizedType] = Object.freeze([...current, engineId])
+  }
+  return frozenPreferences({ ...preferences.files }, { ...preferences.mediaTypes }, removed)
+}
+
+/** 解除屏蔽；该类型不再有屏蔽项时删除键。 */
+export function withEngineAssociationRestored(
+  preferences: EnginePreferences,
+  mediaType: string,
+  engineId: string,
+): EnginePreferences {
+  const normalizedType = normalizeMediaType(mediaType)
+  if (!normalizedType) throw new TypeError("mediaType must not be empty")
+  if (!validEngineId(engineId)) throw new TypeError("engineId must not be empty")
+  const removed = { ...preferences.removed }
+  const current = removed[normalizedType]
+  if (current) {
+    const next = current.filter((id) => id !== engineId)
+    if (next.length > 0) removed[normalizedType] = Object.freeze(next)
+    else delete removed[normalizedType]
+  }
+  return frozenPreferences({ ...preferences.files }, { ...preferences.mediaTypes }, removed)
+}
+
+/**
+ * 引擎对指定 mediaType 是否被屏蔽：先查精确类型，再沿 subclass 父链上溯
+ * （与默认引擎偏好查找同一遍历；近亲级别的屏蔽对子类型同样生效）。
+ */
+export function isEngineAssociationRemoved(
+  preferences: EnginePreferences,
+  mediaType: string,
+  engineId: string,
+): boolean {
+  const key = normalizeMediaType(mediaType)
+  if (!key) return false
+  if (preferences.removed[key]?.includes(engineId)) return true
+  for (const ancestor of mediaTypeAncestors(key)) {
+    if (preferences.removed[ancestor]?.includes(engineId)) return true
+  }
+  return false
+}
+
+/** 精确类型级别已屏蔽的引擎清单（Display 管理 UI 用；不含父链继承项）。 */
+export function getRemovedEngineAssociations(
+  preferences: EnginePreferences,
+  mediaType: string,
+): readonly string[] {
+  const key = normalizeMediaType(mediaType)
+  return key ? (preferences.removed[key] ?? []) : []
 }
 
 /** 小型同步 store；存储后端由调用方注入，SSR/测试可传 undefined。 */
@@ -186,6 +283,16 @@ export class EnginePreferenceStore {
 
   setMediaType(mediaType: string, engineId: string | null): boolean {
     this.#preferences = withMediaTypeEnginePreference(this.#preferences, mediaType, engineId)
+    return writeEnginePreferences(this.storage, this.#preferences, this.storageKey)
+  }
+
+  removeAssociation(mediaType: string, engineId: string): boolean {
+    this.#preferences = withEngineAssociationRemoved(this.#preferences, mediaType, engineId)
+    return writeEnginePreferences(this.storage, this.#preferences, this.storageKey)
+  }
+
+  restoreAssociation(mediaType: string, engineId: string): boolean {
+    this.#preferences = withEngineAssociationRestored(this.#preferences, mediaType, engineId)
     return writeEnginePreferences(this.storage, this.#preferences, this.storageKey)
   }
 

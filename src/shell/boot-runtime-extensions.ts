@@ -2,11 +2,13 @@ import type { RuntimeExtensionCatalog, RuntimeExtensionFactory } from "./runtime
 import { appsManifest } from "@/modules/apps/manifest"
 import { settingsManifest } from "@/modules/home/settings/manifest"
 import { agentManifest } from "@/plugins/agent/manifest"
+import { displayManifest } from "@/workspace/display/manifest"
 
 export const bundledRuntimeExtensionFactories = [
   appsManifest.runtimeExtensionFactory,
   settingsManifest.runtimeExtensionFactory,
   agentManifest.runtimeExtensionFactory,
+  displayManifest.runtimeExtensionFactory,
 ] as const satisfies readonly RuntimeExtensionFactory[]
 
 type BundledRuntimeExtensionCatalog = Pick<

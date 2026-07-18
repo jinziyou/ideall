@@ -40,7 +40,7 @@ function failingBuiltinFactory(): RuntimeExtensionFactory {
 test("boot runtime extensions discover and activate apps, settings and agent", async () => {
   assert.deepEqual(
     bundledRuntimeExtensionFactories.map(({ id }) => id),
-    ["ideall.installed-apps", "ideall.settings", "ideall.agent-config"],
+    ["ideall.installed-apps", "ideall.settings", "ideall.agent-config", "ideall.display"],
   )
 
   const registry = new RuntimeExtensionRegistry(memoryRuntimeHost())
@@ -55,7 +55,7 @@ test("boot runtime extensions discover and activate apps, settings and agent", a
   )
   assert.deepEqual(
     registry.list().map(({ id }) => id),
-    ["ideall.agent-config", "ideall.installed-apps", "ideall.settings"],
+    ["ideall.agent-config", "ideall.display", "ideall.installed-apps", "ideall.settings"],
   )
   for (const factory of bundledRuntimeExtensionFactories) {
     assert.equal(catalog.state(factory.id)?.health, "active")

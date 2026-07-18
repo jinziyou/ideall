@@ -3,13 +3,18 @@ import { test } from "node:test"
 import type { FileRef } from "@protocol/file-system"
 import {
   ENGINE_PREFERENCES_STORAGE_KEY,
+  ENGINE_PREFERENCES_VERSION,
   EnginePreferenceStore,
   enginePreferencesStorageKey,
   emptyEnginePreferences,
   getFileEnginePreference,
   getMediaTypeEnginePreference,
+  getRemovedEngineAssociations,
+  isEngineAssociationRemoved,
   parseEnginePreferences,
   readEnginePreferences,
+  withEngineAssociationRemoved,
+  withEngineAssociationRestored,
   withFileEnginePreference,
   withMediaTypeEnginePreference,
   writeEnginePreferences,
@@ -70,6 +75,99 @@ test("engine preferences: media type 偏好沿 subclass 父链继承（近亲优
   // 无链类型不继承；空值不命中。
   assert.equal(getMediaTypeEnginePreference(withPlain, "audio/mpeg"), null)
   assert.equal(getMediaTypeEnginePreference(withPlain, ""), null)
+})
+
+test("engine preferences: removed associations 设置/恢复与父链判定", () => {
+  const empty = emptyEnginePreferences()
+  assert.equal(isEngineAssociationRemoved(empty, "text/markdown", "code.editor"), false)
+
+  const removed = withEngineAssociationRemoved(
+    empty,
+    " Text/Markdown; charset=utf-8 ",
+    "code.editor",
+  )
+  assert.deepEqual(getRemovedEngineAssociations(removed, "text/markdown"), ["code.editor"])
+  assert.equal(isEngineAssociationRemoved(removed, "text/markdown", "code.editor"), true)
+  assert.equal(isEngineAssociationRemoved(removed, "text/markdown", "other.engine"), false)
+  // 父类型屏蔽沿父链对子类型生效（与偏好查找同一遍历）。
+  const removedParent = withEngineAssociationRemoved(empty, "text/plain", "plain.viewer")
+  assert.equal(
+    isEngineAssociationRemoved(removedParent, "application/ld+json", "plain.viewer"),
+    true,
+  )
+  assert.equal(
+    isEngineAssociationRemoved(removedParent, "application/ld+json", "code.editor"),
+    false,
+  )
+
+  // 恢复只作用于精确级别；键清空后被移除。
+  const restored = withEngineAssociationRestored(removed, "text/markdown", "code.editor")
+  assert.deepEqual(getRemovedEngineAssociations(restored, "text/markdown"), [])
+  assert.equal("text/markdown" in restored.removed, false)
+  // 幂等：重复屏蔽不重复记录，重复恢复状态不变。
+  const twice = withEngineAssociationRemoved(removed, "text/markdown", "code.editor")
+  assert.deepEqual(getRemovedEngineAssociations(twice, "text/markdown"), ["code.editor"])
+  assert.throws(() => withEngineAssociationRemoved(empty, "", "x"), TypeError)
+  assert.throws(() => withEngineAssociationRemoved(empty, "text/plain", "  "), TypeError)
+})
+
+test("engine preferences: 设为默认自动解除同类型同引擎的屏蔽", () => {
+  const removed = withEngineAssociationRemoved(
+    emptyEnginePreferences(),
+    "text/markdown",
+    "code.editor",
+  )
+  const withDefault = withMediaTypeEnginePreference(removed, "text/markdown", "code.editor")
+  assert.equal(getMediaTypeEnginePreference(withDefault, "text/markdown"), "code.editor")
+  assert.deepEqual(getRemovedEngineAssociations(withDefault, "text/markdown"), [])
+  // 对其他引擎的屏蔽不受影响。
+  const removedTwo = withEngineAssociationRemoved(removed, "text/markdown", "other.engine")
+  const withDefaultTwo = withMediaTypeEnginePreference(removedTwo, "text/markdown", "code.editor")
+  assert.deepEqual(getRemovedEngineAssociations(withDefaultTwo, "text/markdown"), ["other.engine"])
+})
+
+test("engine preferences: v1 数据读取升级为 v2（空 removed），写出一律 v2", () => {
+  const storage = memoryStorage()
+  storage.setItem(
+    ENGINE_PREFERENCES_STORAGE_KEY,
+    JSON.stringify({ version: 1, files: {}, mediaTypes: { "text/plain": "plain.editor" } }),
+  )
+  const upgraded = readEnginePreferences(storage)
+  assert.equal(upgraded.version, ENGINE_PREFERENCES_VERSION)
+  assert.equal(getMediaTypeEnginePreference(upgraded, "text/plain"), "plain.editor")
+  assert.deepEqual(getRemovedEngineAssociations(upgraded, "text/plain"), [])
+
+  const withRemoved = withEngineAssociationRemoved(upgraded, "text/plain", "plain.viewer")
+  assert.equal(writeEnginePreferences(storage, withRemoved), true)
+  const persisted = JSON.parse(storage.data.get(ENGINE_PREFERENCES_STORAGE_KEY)!)
+  assert.equal(persisted.version, 2)
+  assert.deepEqual(persisted.removed, { "text/plain": ["plain.viewer"] })
+  // 回读恢复屏蔽表。
+  assert.equal(
+    isEngineAssociationRemoved(readEnginePreferences(storage), "text/plain", "plain.viewer"),
+    true,
+  )
+  // 更高版本（未来格式）fail closed 回退空偏好。
+  storage.setItem(ENGINE_PREFERENCES_STORAGE_KEY, JSON.stringify({ version: 3, mediaTypes: {} }))
+  assert.deepEqual(readEnginePreferences(storage), emptyEnginePreferences())
+})
+
+test("engine preferences: removed 表消毒——非法类型/引擎 id/非数组被剔除", () => {
+  const parsed = parseEnginePreferences(
+    JSON.stringify({
+      version: 2,
+      files: {},
+      mediaTypes: {},
+      removed: {
+        " TEXT/PLAIN; charset=utf-8 ": ["a", "a", "b", " ", 42],
+        "": ["x"],
+        "audio/mpeg": "not-an-array",
+        "video/mp4": [],
+      },
+    }),
+  )
+  assert.deepEqual(getRemovedEngineAssociations(parsed, "text/plain"), ["a", "b"])
+  assert.deepEqual(Object.keys(parsed.removed), ["text/plain"])
 })
 
 test("engine preferences: 注入存储后可持久化、重载和清空", () => {

@@ -27,12 +27,20 @@ import { AUDIO_LIBRARY_ROOT_REF } from "@/filesystem/builtin-app-roots"
 import { corePlaceRef, panelForFile, resourceRefForFile } from "@/filesystem/resource-file-system"
 import { trashRootRef } from "@/filesystem/trash-file-system"
 import { engineRegistry } from "@/engines/builtin"
+import { filterRemovedEngineAssociations } from "@/engines/registry"
 import {
   EnginePreferenceStore,
   enginePreferencesStorageKey,
   getFileEnginePreference,
   getMediaTypeEnginePreference,
+  getRemovedEngineAssociations,
 } from "@/engines/preferences"
+import {
+  removeEngineAssociation,
+  restoreEngineAssociation,
+  setFileEngineDefault,
+  setMediaTypeEngineDefault,
+} from "./display/display-engines-write-adapter"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -369,7 +377,7 @@ function useEnginePreferences() {
     return store.snapshot()
   }, [store, revision])
   const refresh = () => setRevision((value) => value + 1)
-  return { store, preferences, refresh }
+  return { store, preferences, refresh, workspace }
 }
 
 function subscribeEngineRegistry(listener: () => void): () => void {
@@ -391,24 +399,60 @@ function useEngineRegistryRevision(): void {
 function EnginePicker({ file, engineId }: { file: IdeallFile; engineId: string }) {
   useEngineRegistryRevision()
   const activeRootId = useActiveRootId()
-  const { store, preferences, refresh } = useEnginePreferences()
-  const candidates = engineRegistry.matching(file)
+  const { store, preferences, refresh, workspace } = useEnginePreferences()
+  // 与默认解析同一过滤：被屏蔽的引擎不出现在候选里（兜底守卫在 filter 内）。
+  const candidates = filterRemovedEngineAssociations(
+    engineRegistry.matching(file),
+    preferences,
+    file.mediaType,
+  )
   const standaloneCandidates = candidates.filter(({ descriptor }) =>
     canOpenStandaloneWindow(file, descriptor),
   )
   const current = engineRegistry.get(engineId)
   const fileDefault = getFileEnginePreference(preferences, file.ref)
   const mediaDefault = getMediaTypeEnginePreference(preferences, file.mediaType)
+  const removedEngineIds = getRemovedEngineAssociations(preferences, file.mediaType)
 
-  const setFileDefault = () => {
-    store.setFile(file.ref, engineId)
+  const reload = () => {
+    store.reload()
     refresh()
-    toast.success("已设为此文件的默认引擎")
   }
-  const setMediaDefault = () => {
-    store.setMediaType(file.mediaType, engineId)
-    refresh()
-    toast.success(`已设为 ${file.mediaType} 的默认引擎`)
+  const setFileDefault = async () => {
+    try {
+      await setFileEngineDefault(workspace, file.ref, engineId)
+      reload()
+      toast.success("已设为此文件的默认引擎")
+    } catch {
+      toast.error("设置默认引擎失败")
+    }
+  }
+  const setMediaDefault = async () => {
+    try {
+      await setMediaTypeEngineDefault(workspace, file.mediaType, engineId)
+      reload()
+      toast.success(`已设为 ${file.mediaType} 的默认引擎`)
+    } catch {
+      toast.error("设置默认引擎失败")
+    }
+  }
+  const blockCurrentEngine = async () => {
+    try {
+      await removeEngineAssociation(workspace, file.mediaType, engineId)
+      reload()
+      toast.success(`已屏蔽 ${current?.label ?? engineId} 打开 ${file.mediaType}`)
+    } catch {
+      toast.error("屏蔽引擎失败")
+    }
+  }
+  const restoreEngine = async (removedEngineId: string) => {
+    try {
+      await restoreEngineAssociation(workspace, file.mediaType, removedEngineId)
+      reload()
+      toast.success("已恢复引擎关联")
+    } catch {
+      toast.error("恢复引擎关联失败")
+    }
   }
 
   return (
@@ -464,14 +508,35 @@ function EnginePicker({ file, engineId }: { file: IdeallFile; engineId: string }
           </>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={setFileDefault}>
+        <DropdownMenuItem onSelect={() => void setFileDefault()}>
           <span className="min-w-0 flex-1">设为此文件默认</span>
           {fileDefault === engineId && <Check className="h-3.5 w-3.5" />}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={setMediaDefault}>
+        <DropdownMenuItem onSelect={() => void setMediaDefault()}>
           <span className="min-w-0 flex-1 truncate">设为此类型默认</span>
           {mediaDefault === engineId && <Check className="h-3.5 w-3.5" />}
         </DropdownMenuItem>
+        {candidates.length > 1 && (
+          <DropdownMenuItem onSelect={() => void blockCurrentEngine()}>
+            <span className="min-w-0 flex-1 truncate">不再用当前引擎打开该类型</span>
+          </DropdownMenuItem>
+        )}
+        {removedEngineIds.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>已屏蔽（{file.mediaType}）</DropdownMenuLabel>
+            {removedEngineIds.map((removedEngineId) => (
+              <DropdownMenuItem
+                key={removedEngineId}
+                onSelect={() => void restoreEngine(removedEngineId)}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  恢复 {engineRegistry.get(removedEngineId)?.label ?? removedEngineId}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {

@@ -11,6 +11,8 @@ export const AGENT_AUDIT_APPEND_ACTION = "audit.append"
 export const AGENT_AUDIT_COMPLETE_ACTION = "audit.complete"
 export const AGENT_AUDIT_WRITE_PERMISSION = "agent.audit:write"
 export const DATABASE_FILE_SYSTEM_ID = "app.database"
+export const DISPLAY_FILE_SYSTEM_ID = "app.display"
+export const ENGINES_FILE_SYSTEM_ID = "app.engines"
 export const GIT_FILE_SYSTEM_ID = "app.git-repositories"
 export const INSTALLED_APPS_FILE_SYSTEM_ID = "third-party.installed-apps"
 export const SETTINGS_FILE_SYSTEM_ID = "app.settings"
@@ -69,5 +71,22 @@ export const INSTALLED_APPS_ROOT_REF: FileRef = {
 
 export const SETTINGS_ROOT_REF: FileRef = {
   fileSystemId: SETTINGS_FILE_SYSTEM_ID,
+  fileId: "root",
+}
+
+export const DISPLAY_ROOT_REF: FileRef = {
+  fileSystemId: DISPLAY_FILE_SYSTEM_ID,
+  fileId: "root",
+}
+
+/** Engine 关联（mimeapps.list 形状）的投影文件：三个工作区 scope 的默认/屏蔽关联。 */
+export const DISPLAY_ENGINES_FILE_REF: FileRef = {
+  fileSystemId: DISPLAY_FILE_SYSTEM_ID,
+  fileId: "engines",
+}
+
+/** Engine 描述符只读投影（Desktop Entry 系统层类比）的合成根。 */
+export const ENGINES_ROOT_REF: FileRef = {
+  fileSystemId: ENGINES_FILE_SYSTEM_ID,
   fileId: "root",
 }

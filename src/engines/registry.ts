@@ -5,6 +5,7 @@ import {
   emptyEnginePreferences,
   getFileEnginePreference,
   getMediaTypeEnginePreference,
+  isEngineAssociationRemoved,
   type EnginePreferences,
 } from "./preferences"
 
@@ -47,22 +48,45 @@ export function listMatchingEngines(
 }
 
 /**
+ * Removed Associations（mimeapps.list 语义）：从候选中剔除被屏蔽的引擎（沿 subclass
+ * 父链生效）。守卫：屏蔽不得清空候选——全部候选都被屏蔽时屏蔽失效，保留原列表
+ * （至少留下通用兜底引擎，文件不会因此打不开）。
+ */
+export function filterRemovedEngineAssociations(
+  candidates: readonly EngineCandidate[],
+  preferences: EnginePreferences,
+  mediaType: string,
+): EngineCandidate[] {
+  const filtered = candidates.filter(
+    (candidate) =>
+      !isEngineAssociationRemoved(preferences, mediaType, candidate.descriptor.engineId),
+  )
+  return filtered.length > 0 ? [...filtered] : [...candidates]
+}
+
+/**
  * 默认引擎的唯一解析入口：单文件偏好 > media type 偏好 > priority。
  * 指向已卸载或不再匹配的引擎偏好会被忽略，而不是让文件无法打开。
+ * 单文件偏好是逐文件显式选择，先于类型级屏蔽判定；屏蔽只作用于
+ * media type 偏好与 priority 两层（EnginePicker 候选列表同样经此过滤）。
  */
 export function resolveDefaultEngine(
   descriptors: Iterable<EngineDescriptor>,
   file: IdeallFile,
   preferences: EnginePreferences = emptyEnginePreferences(),
 ): EngineResolution | null {
-  const candidates = listMatchingEngines(descriptors, file)
-  if (candidates.length === 0) return null
-  const byId = new Map(candidates.map((candidate) => [candidate.descriptor.engineId, candidate]))
+  const matching = listMatchingEngines(descriptors, file)
+  if (matching.length === 0) return null
 
+  const byIdUnfiltered = new Map(
+    matching.map((candidate) => [candidate.descriptor.engineId, candidate]),
+  )
   const filePreference = getFileEnginePreference(preferences, file.ref)
-  const fileCandidate = filePreference ? byId.get(filePreference) : undefined
+  const fileCandidate = filePreference ? byIdUnfiltered.get(filePreference) : undefined
   if (fileCandidate) return { ...fileCandidate, source: "file-preference" }
 
+  const candidates = filterRemovedEngineAssociations(matching, preferences, file.mediaType)
+  const byId = new Map(candidates.map((candidate) => [candidate.descriptor.engineId, candidate]))
   const mediaTypePreference = getMediaTypeEnginePreference(preferences, file.mediaType)
   const mediaTypeCandidate = mediaTypePreference ? byId.get(mediaTypePreference) : undefined
   if (mediaTypeCandidate) return { ...mediaTypeCandidate, source: "media-type-preference" }

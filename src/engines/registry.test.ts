@@ -4,12 +4,14 @@ import type { EngineDescriptor } from "@protocol/engine"
 import type { IdeallFile } from "@protocol/file-system"
 import {
   emptyEnginePreferences,
+  withEngineAssociationRemoved,
   withFileEnginePreference,
   withMediaTypeEnginePreference,
 } from "./preferences"
 import {
   EngineRegistry,
   EngineRegistryError,
+  filterRemovedEngineAssociations,
   listMatchingEngines,
   resolveDefaultEngine,
 } from "./registry"
@@ -86,6 +88,57 @@ test("engine resolver: 失效偏好回退；priority、特异度与 engineId 决
     "a-exact",
   )
   assert.equal(resolveDefaultEngine([broad, exactB, exactA], file, preferences)?.source, "priority")
+})
+
+test("engine resolver: removed associations 从候选剔除并作用于偏好与 priority 层", () => {
+  const descriptors = [engine("high", 100), engine("media", 20), engine("fallback", -10)]
+  // 屏蔽最高 priority 引擎后，priority 层落到次优。
+  const removed = withEngineAssociationRemoved(emptyEnginePreferences(), "text/markdown", "high")
+  const resolution = resolveDefaultEngine(descriptors, file, removed)
+  assert.equal(resolution?.descriptor.engineId, "media")
+  assert.equal(resolution?.source, "priority")
+
+  // 屏蔽指向的 media type 偏好静默下落到次优候选（先设默认、后屏蔽）。
+  const preferred = withMediaTypeEnginePreference(emptyEnginePreferences(), "text/markdown", "high")
+  const preferredThenRemoved = withEngineAssociationRemoved(preferred, "text/markdown", "high")
+  const fellThrough = resolveDefaultEngine(descriptors, file, preferredThenRemoved)
+  assert.equal(fellThrough?.descriptor.engineId, "media")
+  assert.equal(fellThrough?.source, "priority")
+
+  // 屏蔽沿 subclass 父链生效：text/plain 上的屏蔽对 text/markdown 同样生效。
+  const removedParent = withEngineAssociationRemoved(emptyEnginePreferences(), "text/plain", "high")
+  assert.equal(resolveDefaultEngine(descriptors, file, removedParent)?.descriptor.engineId, "media")
+
+  // 单文件偏好是逐文件显式选择，先于类型级屏蔽。
+  const withFilePreference = withFileEnginePreference(removed, file.ref, "high")
+  const fileResolution = resolveDefaultEngine(descriptors, file, withFilePreference)
+  assert.equal(fileResolution?.descriptor.engineId, "high")
+  assert.equal(fileResolution?.source, "file-preference")
+
+  // 屏蔽未注册/不匹配引擎为惰性无效。
+  const removedUnknown = withEngineAssociationRemoved(
+    emptyEnginePreferences(),
+    "text/markdown",
+    "nope",
+  )
+  assert.equal(resolveDefaultEngine(descriptors, file, removedUnknown)?.descriptor.engineId, "high")
+})
+
+test("engine resolver: removed 守卫——屏蔽不得清空候选", () => {
+  const descriptors = [engine("high", 100), engine("media", 20)]
+  let preferences = withEngineAssociationRemoved(emptyEnginePreferences(), "text/markdown", "high")
+  preferences = withEngineAssociationRemoved(preferences, "text/markdown", "media")
+
+  // 全部候选都被屏蔽时屏蔽失效，文件不会因此打不开。
+  assert.deepEqual(
+    filterRemovedEngineAssociations(
+      listMatchingEngines(descriptors, file),
+      preferences,
+      file.mediaType,
+    ).map((candidate) => candidate.descriptor.engineId),
+    ["high", "media"],
+  )
+  assert.equal(resolveDefaultEngine(descriptors, file, preferences)?.descriptor.engineId, "high")
 })
 
 test("engine registry: 多引擎注册、查询、通知和精确注销", () => {
