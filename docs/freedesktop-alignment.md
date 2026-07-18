@@ -182,8 +182,8 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 
 ## 6. S5：显示层两处补齐（已落地，经用户拍板解除停放）
 
-- **recently-used.xbel → 最近打开记录（S5a，`f51c386`）**：打开路径（`openFileTarget`）在成功解析后记录 `{refKey, name, mediaType, engineId, openedAt}`，去重置顶、100 条封顶。隐私契约按设计执行：**默认关闭**（Home 概览「最近打开」面板给发现式启用入口）、隐身暂停、可清空、逐条移除、逐条 XBEL private 标记（保留文件但不展示）；`state` 存储类、不进同步；水合恢复的标签不经 `openFileTarget`，不会被误记。实现：`src/workspace/recently-used.ts`（领域 store）+ `src/modules/home/recently-opened.tsx`（面板）+ 打开路径钩子（`navigation.ts`）。
-- **Thumbnail spec → 缩略图缓存（S5b，`31bb223`）**：借 spec 的「key = 身份 + 失效版本」形状，**不借** `file://` URI + mtime——key = `(FileRef, version)`。`createImageBitmap` + canvas 降采样（最长边 320）→ dataURL 内存 LRU（200 条、在途去重、失败不缓存）；会话级 `cache` 语义，不进持久层/同步/归档。实现：`src/lib/thumbnail-cache.ts`；`ActiveThumbnail` 先查缓存、解码失败回退原图 ObjectURL。
+- **recently-used.xbel → 最近打开记录（S5a，`f51c386`）**：打开路径（`openFileTarget`）在成功解析后记录 `{refKey, name, mediaType, engineId, openedAt}`，去重置顶、100 条封顶。隐私契约按设计执行：**默认关闭**（Home 概览「最近打开」面板给发现式启用入口）、隐身暂停、可清空、逐条移除、逐条 XBEL private 标记（保留文件但不展示）；`state` 存储类、不进同步；水合恢复的标签不经 `openFileTarget`，不会被误记。实现：`src/workspace/recently-used.ts`（领域 store）+ `src/modules/home/recently-opened.tsx`（面板）+ 打开路径钩子（`navigation.ts`）。**收集面收窄（审查修订 `b812257`）**：`ideall.core` 只记录 `node` 资源（笔记/书签/文件/关注/对话），排除 panel/place 应用 Chrome 与 browser/info/community/tool 外链资源页（其 name 为完整 URL、可含搜索词，超出「文件」语义）；冷启动启动页与工作区切换传 `record=false`，`openedAt` 保持打开语义；持久化失败时内存缓存升格为本会话权威。
+- **Thumbnail spec → 缩略图缓存（S5b，`31bb223`）**：借 spec 的「key = 身份 + 失效版本」形状，**不借** `file://` URI + mtime——key = `(FileRef, version)`。`createImageBitmap` + canvas 降采样（最长边 320）→ dataURL 内存 LRU（200 条、在途去重、失败不缓存）；会话级 `cache` 语义，不进持久层/同步/归档。实现：`src/lib/thumbnail-cache.ts`；`ActiveThumbnail` 先查缓存、解码失败回退原图 ObjectURL。**格式细则（审查修订 `b812257`）**：GIF 短路回退原图（降采样丢动画且 JPEG 黑底化透明区）；默认解码统一 PNG 输出保留全部格式 alpha。
 
 ## 7. 明确不借鉴
 
