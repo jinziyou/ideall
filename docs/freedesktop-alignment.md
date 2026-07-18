@@ -1,7 +1,8 @@
 # freedesktop 对齐设计：数据、文件与显示的组织
 
-> **状态：S1 / S2 / S3 / S4 已落地，S5 停放。**
+> **状态：S1 / S1b / S2 / S3 / S4 已落地，S5 停放。**
 > **S1（已实现，commit `8cf0307`）**：`LocalDataSchema.storageClass` + IndexedDB 逐 store 分类（`src/plugins/shared/local-data-schema.ts`、各 manifest 注册点）。
+> **S1b（已实现，commit `6192216`）**：5 个未注册键补登记 + `dynamicKeys` 动态家族 + secure 动态键入安全快照与遗留迁移（`src/lib/secure-store.ts`、各 owner 注册点）。
 > **S2（已实现，commit `8d94420`）**：MIME subclass 表与父链上溯（`src/engines/media-type-tree.ts`、`matcher.ts`、`registry.ts`、`preferences.ts`）。
 > **S3（已实现，commit `a9909cf`）**：Engine 关联文件化 `app.display/engines.json` + 偏好 v2 Removed Associations（`src/workspace/display/*`、`src/engines/preferences.ts`、`registry.ts`、`src/workspace/registry.tsx`）。
 > **S4（已实现，commit `9186849`）**：Engine 描述符只读投影 `app.engines`（`src/workspace/display/engine-descriptors-file-system.ts`）。
@@ -73,10 +74,10 @@ export type LocalDataStorageClass =
 | 可清除/可重建 | 仅 `cache` | `local_search_index`、`local_semantic_index`、语义模型 Cache Storage |
 | 健康视图可修复 | 与类无关，仍由 `repair` 决定 | 不变 |
 
-### 2.5 已知盲区（登记为后续切片，不在 S1）
+### 2.5 已知盲区（S1b 已收口前两项，余一项）
 
-1. §2.1 列出的 5 个未注册键补登记（S1b，附带 validate/repair）；
-2. secure-store 动态键（`agent:secret:*`、`agent:oauth:*` 等）不在 `SECURE_STORE_KNOWN_ITEMS`，安全快照统计不到（属 secrets 类的登记缺口）；
+1. ~~5 个未注册键补登记~~ **已落地（S1b）**：semantic-search 开关（config）、device id（state）、tool 搜索历史（state）、runtime-extensions 安装记录（config）入 core schema；`agent.oauth` 动态家族（state/sensitive）经新增的 `dynamicKeys` 机制（validate-only）逐项展开；
+2. ~~secure-store 动态键脱离安全快照~~ **已落地（S1b）**：`registerSecureStoreDynamicItems` 把 `agent:secret:*`、`agent:workspace:*:apiKey`、`agent:oauth:*:tokens/:codeVerifier`、`runtime-extension-consent:*` 全部纳入快照与遗留明文迁移；
 3. 主 webview 与内嵌浏览器子 webview 的站点数据物理落点未在仓库钉死（Tauri/WebKit 默认目录），Linux 上按惯例在 `$XDG_DATA_HOME/org.wonita.ideall`，需实测写入文档。
 
 ## 3. S2：shared-mime-info subclassing → Engine 匹配沿父链上溯（已落地）
@@ -216,7 +217,7 @@ Engine 偏好已具 mimeapps.list 的完整形状（默认关联 + per-workspace
 | --- | --- | --- | --- |
 | **S1a** | schema 加 `storageClass`（+`storeClasses`）+ 全部既有注册归类 + 构造期不变量 + 测试；`app-data-navigation.md` 加存储类列 | `pnpm typecheck && pnpm lint && pnpm test` 全绿；新增不变量单测 | 已落地（`8cf0307`） |
 | **S2** | `media-type-tree.ts` + matcher 父链折损计分 + 偏好查找上溯 + 测试（语料保全 / 新类型降级 / 偏好继承 / vnd 隔离） | 全绿 + 语料保全真项断言 | 已落地（`8d94420`） |
-| S1b | 5 个未注册键补登记（validate/repair 从简）+ secrets 动态键登记进安全快照 | 健康视图可见 | 设计 |
+| S1b | 5 个未注册键补登记 + `dynamicKeys` 动态家族 + secrets 动态键登记进安全快照与迁移 | 健康视图可见 + 快照/迁移含动态键 | 已落地（`6192216`） |
 | S3 | `app.display` provider（engines.json 投影 + CAS + watch）+ 偏好格式 v2（`removed`）+ EnginePicker 屏蔽菜单 | 全绿 + CAS/守卫/迁移测试 | 已落地（`a9909cf`） |
 | S4 | `app.engines` 只读投影 + `ideall.display` extension 批次 + 投影一致性测试 | 全绿 | 已落地（`9186849`） |
 | S5 | recently-used（隐私决策先行）/ 缩略图缓存 | — | 停放 |
