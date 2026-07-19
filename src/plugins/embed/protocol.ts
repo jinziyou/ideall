@@ -9,7 +9,21 @@ export const INIT_MESSAGE_TYPE = "ideall:init"
 export const HELLO_MESSAGE_TYPE = "ideall:embed-hello"
 
 /** 传输/握手协议版本。 */
-export const PROTOCOL_VERSION = "1.0"
+export const PROTOCOL_VERSION = "1.1"
+
+/** 宿主 ServerPort 实际使用的 wonita 数据面版本。 */
+export const BACKEND_API_VERSION = "v2"
+
+/** 可独立协商的宿主能力；新能力只追加，不在同一主版本重解语义。 */
+export const EMBED_CAPABILITY = {
+  communityStringIds: "community:string-ids",
+  profileDisplayName: "profile:display-name",
+  partitionedSyncV2: "sync:partitioned-v2",
+} as const
+
+export type EmbedCapability = (typeof EMBED_CAPABILITY)[keyof typeof EMBED_CAPABILITY]
+
+export const EMBED_CAPABILITIES: EmbedCapability[] = Object.values(EMBED_CAPABILITY)
 
 // ── MCP 工具名 / 资源 URI (§5) ───────────────────────────────────────────────────
 export const TOOL = {
@@ -155,4 +169,7 @@ export interface IdeallInitMessage {
   appId: string
   permissions: string[]
   theme: ThemeTokens
+  /** 1.0 宿主未携带这两个字段，故保持可选以便客户端显式降级。 */
+  backendApiVersion?: string
+  capabilities?: string[]
 }

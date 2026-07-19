@@ -390,7 +390,12 @@ export const remoteServerFileSystem: FileSystemProvider = {
     }
     if (action === "delete-publication" && sameFileRef(ref, remoteCommunityDirectoryRef)) {
       const value = input as { token?: unknown; id?: unknown }
-      if (typeof value?.token !== "string" || !value.token || typeof value.id !== "number") {
+      if (
+        typeof value?.token !== "string" ||
+        !value.token ||
+        typeof value.id !== "string" ||
+        !value.id
+      ) {
         throw new FileSystemError("invalid-input", "Delete requires token and publication id", ref)
       }
       return getServerPort().deletePublication(value.token, value.id)

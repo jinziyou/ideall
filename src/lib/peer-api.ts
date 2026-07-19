@@ -29,6 +29,6 @@ export function publish(token: string, input: PublishDraft) {
 }
 
 /** 删除自己的一条发布 (需登录 token)。 */
-export function deletePublication(token: string, id: number) {
+export function deletePublication(token: string, id: string) {
   return invokeRemoteServerAction<ApiResult<unknown>>("delete-publication", { token, id })
 }

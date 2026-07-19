@@ -103,7 +103,7 @@
   │ 3. 校验 event.source === iframe.contentWindow 且 event.origin === manifest origin
   │ 4. new MessageChannel() ×2 (mcp, ui)
   │ 5. iframe.contentWindow.postMessage(
-  │      {type:"ideall:init", protocol, appId, permissions, theme},
+  │      {type:"ideall:init", protocol, appId, permissions, theme, backendApiVersion, capabilities},
   │      MANIFEST_ORIGIN, [mcpPort2, uiPort2])  ─────────────────────────►  6. 校验宿主 origin，接收两个 port
   │ 7. McpServer.connect(MessagePortTransport(mcpPort1))                  8. McpClient.connect(MessagePortTransport(mcpPort2))
   │ 9. ◄── initialize ──────────────────────────────────────────────────  client 发起 MCP initialize
@@ -338,8 +338,9 @@ function startBridge(manifest: Manifest, iframe: HTMLIFrameElement) {
   const mcp = new MessageChannel()
   const ui = new MessageChannel()
   iframe.contentWindow!.postMessage(
-    { type: "ideall:init", protocol: "1.0", appId: manifest.id,
-      permissions: manifest.permissions, theme: currentTheme() },
+    { type: "ideall:init", protocol: "1.1", appId: manifest.id,
+      permissions: manifest.permissions, theme: currentTheme(), backendApiVersion: "v2",
+      capabilities: ["community:string-ids", "profile:display-name", "sync:partitioned-v2"] },
     new URL(manifest.entry).origin, [mcp.port2, ui.port2])
 
   const grant = firstPartyGrant(manifest, Date.now())
@@ -422,7 +423,8 @@ class IdeallEmbed {
 
 ## 13. 版本化与协商
 
-- 传输/握手版本：`ideall:init.protocol`（如 `"1.0"`）；页面 `minHostProtocol` 不满足则降级（独立态/提示升级）。
+- 传输/握手版本：`ideall:init.protocol`（当前 `"1.1"`）；页面 `minHostProtocol` 不满足则降级（独立态/提示升级）。
+- 数据面协商：`backendApiVersion` 声明宿主实际连接的 wonita API，`capabilities` 逐项声明 string ID、展示名与分区同步能力；1.0 宿主缺失时客户端禁止 V2 写入。
 - MCP 层：`initialize` 协商 `protocolVersion` 与 server `capabilities`。
 - 能力契约演进：新增 tool/permission 向后兼容；破坏性变更走大版本，宿主可并行支持多版本契约。
 
@@ -464,7 +466,8 @@ class IdeallEmbed {
 
 ```jsonc
 // (A) 宿主 → iframe：init（随附两个 MessagePort）
-{ "type":"ideall:init", "protocol":"1.0", "appId":"community",
+{ "type":"ideall:init", "protocol":"1.1", "appId":"community", "backendApiVersion":"v2",
+  "capabilities":["community:string-ids","profile:display-name","sync:partitioned-v2"],
   "permissions":["identity:read","identity.publish","hub.subscriptions:write","host.external"],
   "theme":{"mode":"dark","tokens":{"--bg":"#0b0b0c","--fg":"#e8e8ea"}} }
 

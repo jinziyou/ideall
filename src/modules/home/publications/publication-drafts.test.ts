@@ -114,7 +114,7 @@ test("publication drafts: audit targets restore unknown and local-archive guards
         {
           operation: "community.publication.delete",
           status: "pending",
-          target: { kind: "publication", id: "42", label: "公开内容" },
+          target: { kind: "publication", id: `pub:${"4".repeat(32)}`, label: "公开内容" },
         },
         {
           operation: "community.publish",
@@ -129,14 +129,14 @@ test("publication drafts: audit targets restore unknown and local-archive guards
         {
           operation: "community.publication.delete",
           status: "pending",
-          target: { kind: "publication", id: "042", label: "非规范 id" },
+          target: { kind: "publication", id: "42", label: "V1 数字 id" },
         },
       ],
     }),
     {
       pendingDraftIds: ["draft-1"],
       publishedDraftIds: ["finished"],
-      pendingPublicationIds: [42],
+      pendingPublicationIds: [`pub:${"4".repeat(32)}`],
     },
   )
   assert.deepEqual(communityMutationGuardTargets(null), {
@@ -382,7 +382,7 @@ test("publication drafts: CRUD uses Note CAS, archives successes and discards th
   )
 
   const publication: Publication = {
-    id: 88,
+    id: `pub:${"8".repeat(32)}`,
     title: updated.title,
     url: "",
     body: updated.body,
@@ -390,7 +390,7 @@ test("publication drafts: CRUD uses Note CAS, archives successes and discards th
   }
   const archived = await archivePublishedDraft(updated, publication, storage.deps)
   assert.equal(archived.status, "published")
-  assert.equal(archived.remotePublicationId, 88)
+  assert.equal(archived.remotePublicationId, `pub:${"8".repeat(32)}`)
   assert.equal(archived.tags.includes(COMMUNITY_PUBLISHED_TAG), true)
   assert.deepEqual(await listPublicationDrafts(storage.deps), [])
 
@@ -407,7 +407,7 @@ function workflow(overrides: Record<string, unknown> = {}) {
   const events: string[] = []
   let sent: unknown
   const publication: Publication = {
-    id: 21,
+    id: `pub:${"2".repeat(32)}`,
     title: "准备发布",
     url: "https://example.com/article",
     body: "只发送这段正文",

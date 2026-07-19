@@ -65,7 +65,13 @@ function makeMemoryServerPort(): ServerPort {
     async listPeers() {
       return {
         ok: true,
-        data: [{ id: 1, name: "内存 peer", publication_count: publications.length }],
+        data: [
+          {
+            id: `u:${"1".repeat(32)}`,
+            name: "内存 peer",
+            publication_count: publications.length,
+          },
+        ],
       }
     },
     async getPeerPublications() {
@@ -75,7 +81,7 @@ function makeMemoryServerPort(): ServerPort {
       // token 由调用方 (宿主) 持有并传入; 内存后端据此鉴权后落库。
       if (!token) return { ok: false, message: "未鉴权" }
       const pub: Publication = {
-        id: nextId++,
+        id: `pub:${String(nextId++).padStart(32, "0")}`,
         title: draft.title,
         url: draft.url ?? "",
         body: draft.body ?? "",
@@ -100,10 +106,26 @@ function makeMemoryServerPort(): ServerPort {
       return { ok: true, data: { token: "mem-token", token_type: "Bearer" } }
     },
     async getMe() {
-      return { ok: true, data: { id: 1, email: "me@mem.local", name: "内存用户", avatar: null } }
+      return {
+        ok: true,
+        data: {
+          id: `u:${"1".repeat(32)}`,
+          email: "me@mem.local",
+          name: "内存用户",
+          avatar: null,
+        },
+      }
     },
-    async updateProfile() {
-      return { ok: true, data: { ok: true } }
+    async updateProfile(_token, patch) {
+      return {
+        ok: true,
+        data: {
+          id: `u:${"1".repeat(32)}`,
+          email: "me@mem.local",
+          name: patch.name,
+          avatar: null,
+        },
+      }
     },
   }
   return port
@@ -151,8 +173,8 @@ test("后端可换·端到端: 零 wonita 后端经真实业务 facade 驱动取
   // 发布完整流程: 经 peer-api facade 发布 → 列表可见 → 删除; 证明写路径全程走 getServerPort()
   const pub = await publish(token, { title: "来自内存后端" })
   assert.ok(pub.ok && pub.data)
-  const pubId = pub.ok && pub.data ? pub.data.id : -1
-  const after = await getPeerPublications("1")
+  const pubId = pub.ok && pub.data ? pub.data.id : ""
+  const after = await getPeerPublications(`u:${"1".repeat(32)}`)
   assert.equal(after.ok && after.data?.some((p) => p.id === pubId), true)
   const del = await deletePublication(token, pubId)
   assert.equal(del.ok, true)

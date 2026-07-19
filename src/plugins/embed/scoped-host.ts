@@ -15,7 +15,7 @@ import {
 } from "@protocol/node"
 import { getFilesPort, type FilesPort } from "@protocol/files"
 import { getServerPort, type ServerPort } from "@protocol/server-port"
-import { getSession, type Session } from "@/lib/auth/auth-store"
+import { getSession, setSession, type Session } from "@/lib/auth/auth-store"
 import type { Permission } from "./protocol"
 
 /** 私密正文受控的 FilesPort 子面 (注入 tools handler)。 */
@@ -100,6 +100,8 @@ export function makeScopedFiles(
 /** 注入 tools handler 的收窄宿主句柄: 取代 getSession / getServerPort / getFilesPort 模块单例。 */
 export interface ScopedHost {
   getSession: () => Session
+  /** 资料写入成功后刷新宿主会话；token 仍不离开宿主。 */
+  setSession: typeof setSession
   server: () => ServerPort
   files: ScopedFiles
 }
@@ -108,6 +110,7 @@ export interface ScopedHost {
 export function makeScopedHost(perms: Permission[]): ScopedHost {
   return {
     getSession,
+    setSession,
     server: getServerPort,
     files: makeScopedFiles(
       getFilesPort(),

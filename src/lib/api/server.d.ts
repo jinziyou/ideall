@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/market-signals/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /market-signals/series — 市场信号时间序列 feed (apiserver 对外)。 */
+        get: operations["get_market_signal_series"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threat-intel/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /threat-intel/feed — 威胁情报 feed (apiserver 对外, 直读 ClickHouse typed 表)。 */
+        get: operations["get_threat_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/altdata/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /v1/altdata/series — 另类数据时间序列观测, `{data:[AltDataObservation], meta}`。 */
+        get: operations["list_altdata_series"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/articles": {
         parameters: {
             query?: never;
@@ -131,7 +182,7 @@ export interface paths {
             cookie?: never;
         };
         /** GET /v1/auth/session — 校验 JWT 并回显当前用户 claims 数据。 */
-        get: operations["authorize"];
+        get: operations["get_session"];
         put?: never;
         post?: never;
         delete?: never;
@@ -265,6 +316,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/top": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /v1/events/top?window=24h — 关键事件榜 (form 预计算, 按时间衰减热度排序), `{data:[TopEvent], meta}`。
+         *     榜未生成 (功能未启用 / 首轮未跑) 时返回空 `data` —— 前端增强块无数据即隐藏, 不影响资讯主链路。
+         */
+        get: operations["get_top_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/geo/ip": {
         parameters: {
             query?: never;
@@ -272,7 +343,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /v1/geo/ip[?ip=] — 定位访问者所在城市, `{data:IpLocation}` (定位失败时经纬度 0)。 */
+        /**
+         * GET /v1/geo/ip[?ip=] — 定位访问者所在城市, `{data:IpLocation}` (定位失败时经纬度 0)。
+         *     访客定位逻辑 (信任门控 + CF 头 + 转发头 + 查库) 在 `infra::geoip::resolve_visitor_geo`。
+         */
         get: operations["get_ip_location"];
         put?: never;
         post?: never;
@@ -418,6 +492,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/publishers/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /v1/publishers/search — 按域名聚合后的确定性发布者分页列表。 */
+        get: operations["search_publishers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/scitech/papers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /v1/scitech/papers — 论文/预印本元数据列表, `{data:[SciTechPaper], meta}`。 */
+        get: operations["list_scitech_papers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stats/corpus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /v1/stats/corpus — 语料真实聚合: 总量 + 近 N 小时按小时入库量 (供 admin 仪表盘, 替代样本估算)。 */
+        get: operations["get_corpus_stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sync/{id}": {
         parameters: {
             query?: never;
@@ -447,8 +572,520 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /v1/users/email/{email} — 邮箱是否已注册, `{data:{exists}}` (始终 200, 不再用 404 表"不存在")。 */
+        /** GET /v1/users/email/{email} — 邮箱是否已注册, `{data:{exists}}` (不用 404 表"不存在")。 */
         get: operations["has_email_exist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/auth/handshake/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_handshake"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v2_app_login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v2_app_register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/community/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_list_accounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/community/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_get_account"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/community/accounts/{account_id}/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_account_publications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/community/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_get_presence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/community/presence/beat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v2_app_presence_beat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["v2_app_update_profile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/me/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_my_publications"];
+        put?: never;
+        post: operations["v2_app_create_publication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/me/publications/{publication_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["v2_app_delete_publication"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/sync/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_sync_limits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/sync/{sync_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_get_sync"];
+        put: operations["v2_app_put_sync"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/sync/{sync_id}/generations/{generation}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["v2_app_discard_sync_generation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/sync/{sync_id}/generations/{generation}/parts/{part_index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_get_sync_generation_part"];
+        put: operations["v2_app_put_sync_generation_part"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/app/sync/{sync_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_app_get_sync_manifest"];
+        put: operations["v2_app_commit_sync_manifest"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/analytics/entities/trending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["trending_entities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/analytics/events/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["query_events"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/analytics/events/top": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["top_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/catalog/publishers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_data_list_publishers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/catalog/publishers/{publisher_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_data_get_publisher"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/corpus/articles/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["query_articles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/corpus/articles/{article_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v2_data_get_article"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/datasets/papers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["papers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/datasets/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["series"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/graph/articles/{article_id}/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["related_articles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/graph/entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_entities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/graph/entities/{entity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_entity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/graph/entities/{entity_id}/neighbors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["entity_neighbors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/intel/indicators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["indicators"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/data/signals/market": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["market_signals"];
         put?: never;
         post?: never;
         delete?: never;
@@ -461,6 +1098,28 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AltDataObservation: {
+            /**
+             * Format: int64
+             * @description Wonita 入库/得知该观测的时刻 (epoch 毫秒, UTC), 可用于后续无未来函数投影。
+             */
+            collect_time_ms: number;
+            /** @description 地理维, 如 WLD/CHN; 无地理维时为空串。 */
+            geo: string;
+            /** @description 被描述周期, 如 2022。不是 point-in-time 可知时刻。 */
+            obs_date: string;
+            /** @description 指标/序列标识, 如 SP.POP.TOTL。 */
+            series_id: string;
+            /** @description 结构化源标识, 如 worldbank-pop。 */
+            source: string;
+            unit: string;
+            /** Format: double */
+            value: number;
+        };
+        AltDataObservationListResponse: {
+            data: components["schemas"]["AltDataObservation"][];
+            meta?: null | components["schemas"]["Meta"];
+        };
         ArticleListResponse: {
             data: components["schemas"]["Info"][];
             meta?: null | components["schemas"]["Meta"];
@@ -471,22 +1130,45 @@ export interface components {
         };
         /** @description 复杂文章检索请求体 (承载多实体过滤 entity_label_name)。 */
         ArticleSearch: {
+            /** @description 服务端返回的不透明下一页游标；与非零 offset 互斥 */
+            cursor?: string | null;
             /** @description 实体筛选, 每项 `(label, name)` (多实体取交集) */
             entity_label_name?: [
                 string,
                 string
             ][] | null;
+            /** @description 影响地理过滤 (closed set, 见 docs/news-classification.md §3.2); 命中数组中任意一个即匹配。 */
+            geo_scope?: string[] | null;
+            /**
+             * @description 文章语言主码 (如 `zh`/`en`/`ja`); 匹配 `info.language` 等于该码或以 `{码}-` 开头。
+             *     在 SKIP/LIMIT **之前**过滤, 避免高产外文源占满时间序首页。
+             */
+            language?: string | null;
             /** Format: int32 */
             limit?: number | null;
             /** Format: int32 */
             offset?: number | null;
+            /** @description 来源平台类型，如 website / youtube / bluesky */
+            platform_type?: string | null;
+            /**
+             * @description 发布者国家过滤 (在 SKIP/LIMIT **之前**):
+             *     - `中国` → **仅大陆** (`中国` / `中国大陆` / `中国内地` 等, **不含**港澳台);
+             *     - `港澳台` → `中国香港` / `中国台湾` / `中国澳门` (三地一并);
+             *     - `中国香港` / `中国台湾` / `中国澳门` → 该地区 (STARTS WITH);
+             *     - 其它值 → `publisher.country STARTS WITH` 前缀匹配。
+             */
+            publisher_country_prefix?: string | null;
             publisher_domain?: string | null;
+            /** @description 全局模糊搜索：标题、发布者域名/名称、实体名（最多 200 字符） */
+            q?: string | null;
             source_category?: string | null;
             /** @description `[from, to]` 采集时间戳毫秒闭区间 */
             timestamp_from_to?: [
                 number,
                 number
             ] | null;
+            /** @description 主题议题过滤 (closed set, 见 docs/news-classification.md §3.1); 命中数组中任意一个即匹配。 */
+            topics?: string[] | null;
         };
         AuthBody: {
             token: string;
@@ -528,6 +1210,34 @@ export interface components {
              */
             members: number;
         };
+        /**
+         * @description `GET /v1/stats/corpus` 响应: 语料总量 + 近 N 小时按小时入库量分桶。
+         *     total_articles 为 ClickHouse info FINAL 去重后的当前总量 (含全部历史)。
+         */
+        CorpusStats: {
+            buckets: components["schemas"]["CorpusStatsBucket"][];
+            /** Format: int64 */
+            total_articles: number;
+            /** Format: int32 */
+            window_hours: number;
+        };
+        /** @description `GET /v1/stats/corpus` 的单桶入库量 (按小时)。 */
+        CorpusStatsBucket: {
+            /**
+             * Format: int64
+             * @description 桶起点 (epoch 毫秒, UTC 整点)
+             */
+            bucket_start_ms: number;
+            /**
+             * Format: int64
+             * @description 该桶入库文章数
+             */
+            count: number;
+        };
+        CorpusStatsResponse: {
+            data: components["schemas"]["CorpusStats"];
+            meta?: null | components["schemas"]["Meta"];
+        };
         /** @description `GET /v1/users/email/{email}` 响应: 邮箱是否已注册 (替代旧的 200/404 语义)。 */
         EmailExists: {
             exists: boolean;
@@ -538,7 +1248,7 @@ export interface components {
         };
         /**
          * @description 媒体附件 (图片 / 视频 / 音频 / 文件) —— 由 form 抽取/采集得到, 以 JSON 存 Neo4j `Info.enclosures`,
-         *     apiserver 读出反序列化为结构化列表, 供消费端 (portal) 按 `Info.content_form` 渲染视频/音频/图文。
+         *     apiserver 读出反序列化为结构化列表; 与派生的 `Info.content_form` 配合供消费端 (portal) 渲染。
          */
         Enclosure: {
             /** @description 附件类型 (中文枚举值: 图片 / 视频 / 音频 / 文件) */
@@ -556,6 +1266,8 @@ export interface components {
              * @description 提及该实体的信息条数 (共现项 = 与目标实体共同出现的信息条数)
              */
             count: number;
+            /** @description 按访客 `Accept-Language` 从 Wikidata QID 解析的展示名; 与 `name` 相同时省略。 */
+            display_name?: string | null;
             /** @description 任一分桶节点有百科词条即为 true */
             has_entry: boolean;
             label: string;
@@ -574,6 +1286,8 @@ export interface components {
         EntityDetail: {
             /** @description 共现实体 top N (按共同出现的信息条数倒序) */
             co_entities: components["schemas"]["EntityBrief"][];
+            /** @description 按访客 `Accept-Language` 从 Wikidata QID 解析的展示名; 与 `name` 相同时省略。 */
+            display_name?: string | null;
             /**
              * Format: int64
              * @description 最早/最晚提及的采集时间 (epoch 毫秒; 无提及时为 0)
@@ -608,8 +1322,10 @@ export interface components {
             period: number;
         };
         /**
-         * @description 近 N 小时各类实体频次 (`GET /v1/entities/stats?window=`), 每类 top 20 的 `{name: count}`。
-         *     覆盖入图的全部五类 (TIME 实体不入图故无此类)。
+         * @description `/v1/entities/stats` 的稳定 wire DTO。
+         *
+         *     `EntityStats` 在服务内部保留 QID 与本地化展示名，供跨语言归并使用；v1 已发布契约的五个
+         *     map value 一直是整数。单独投影响应可避免内部富化条目改变旧客户端的 JSON 形状。
          */
         EntityStats: {
             event: {
@@ -632,9 +1348,50 @@ export interface components {
             data: components["schemas"]["EntityStats"];
             meta?: null | components["schemas"]["Meta"];
         };
+        ErrorDetail: {
+            code: string;
+            message: string;
+        };
+        /** @description 所有 HTTP 错误（含 JWT 401/429）的统一机器可读包络。 */
+        ErrorEnvelope: {
+            error: components["schemas"]["ErrorDetail"];
+        };
         EventListResponse: {
             data: components["schemas"]["InfoEvent"][];
             meta?: null | components["schemas"]["Meta"];
+        };
+        /**
+         * @description 事件分页模式。省略时保留旧的文章 limit/offset 窗口；显式 event_cursor 时先完整聚类再分页。
+         * @enum {string}
+         */
+        EventPaginationMode: "event_cursor";
+        /** @description 同事件复杂检索；默认兼容旧文章 offset，显式 event_cursor 时返回完整事件分页。 */
+        EventSearch: {
+            /** @description 服务端返回的不透明事件游标；仅与 pagination_mode=event_cursor 组合使用。 */
+            cursor?: string | null;
+            entity_label_name?: [
+                string,
+                string
+            ][] | null;
+            /** @description 影响地理过滤 (closed set, 见 docs/news-classification.md §3.2); 命中数组中任意一个即匹配。 */
+            geo_scope?: string[] | null;
+            language?: string | null;
+            /** Format: int32 */
+            limit?: number | null;
+            /** Format: int32 */
+            offset?: number | null;
+            pagination_mode?: null | components["schemas"]["EventPaginationMode"];
+            /** @description 来源平台类型，如 website / youtube / bluesky */
+            platform_type?: string | null;
+            publisher_country_prefix?: string | null;
+            publisher_domain?: string | null;
+            source_category?: string | null;
+            timestamp_from_to?: [
+                number,
+                number
+            ] | null;
+            /** @description 主题议题过滤 (closed set, 见 docs/news-classification.md §3.1); 命中数组中任意一个即匹配。 */
+            topics?: string[] | null;
         };
         /** @description `GET /v1/auth/handshake/{client_id}` 响应: 服务端临时 X25519 公钥 (hex)。 */
         Handshake: {
@@ -648,30 +1405,46 @@ export interface components {
         Info: {
             /** Format: int64 */
             collect_time: number;
-            /** @description 表现形式 (富文本 / 视频 / 音频 / 图文 / 纯文本): 供消费端按形态动态渲染。空串视为纯文本 (旧节点)。 */
+            /** @description 表现形式 (富文本 / 视频 / 音频 / 图文 / 纯文本): 读取时由 enclosures + data + is_rich_html 派生。 */
             content_form?: string;
             data: string;
             /** @description 媒体附件 (视频/音频/图片 URL): 供消费端取媒体播放/展示。 */
             enclosures?: components["schemas"]["Enclosure"][];
+            /** @description 影响地理 (closed set, 0..3 个); 未分类为空数组。 */
+            geo_scope?: string[];
             /** @description 文章稳定 ID = base64url(url); 服务端填充 (`/v1/articles/{id}` 标识用)。 */
             id?: string;
+            /** @description Feed 等路径正文已去 HTML 时, 标记原为富文本 (供派生 content_form)。 */
+            is_rich_html?: boolean;
             labels: components["schemas"]["NameEntity"][];
             language: string;
+            /** @description NER 实际后端 (`gliner` | `qwen` | `deepseek`); 历史/未知为空串。 */
+            ner_backend?: string;
+            /** @description 来源平台类型（如 `website` / `youtube` / `reddit`）；旧节点为空串。 */
+            platform_type?: string;
             /** Format: int64 */
             publish_time: number;
             publisher: components["schemas"]["Publisher"];
+            /** @description 内容类目 (`news` / `scitech` / `threat-intel` / `altdata`)；旧节点为空串。 */
+            source_category?: string;
+            /** @description 采集源稳定标识；历史信息或未标注来源为空串。 */
+            source_id?: string;
             title: string;
+            /** @description 文章主题 (closed set, 1..3 个; 见 docs/news-classification.md); 未分类为空数组。 */
+            topics?: string[];
             url: string;
         };
         /** @description 同一事件的多来源报道聚类 (`POST /v1/events/search`)。 */
         InfoEvent: {
+            /** @description 事件快照内的稳定 ID；旧 offset 响应可为空，保证旧序列化数据可继续反序列化。 */
+            event_id?: string;
             /** @description 代表稿: 聚类内最新采集的一篇 */
             lead: components["schemas"]["Info"];
             /** @description 同事件其它来源 (不含 lead, 按采集时间倒序) */
             related: components["schemas"]["Info"][];
             /**
              * Format: int32
-             * @description 报道总数 (含 lead)
+             * @description 独立信息源数 = 簇内 publisher.domain 去重计数 (一个发布者发多篇算一票, 含 lead)
              */
             source_count: number;
         };
@@ -691,6 +1464,20 @@ export interface components {
             data: components["schemas"]["IpLocation"];
             meta?: null | components["schemas"]["Meta"];
         };
+        MarketSignalPoint: {
+            /** @description 市场信号标识。 */
+            key: string;
+            /**
+             * Format: int64
+             * @description 信号可知时刻 (epoch 毫秒, UTC)。
+             */
+            ts: number;
+            /**
+             * Format: double
+             * @description 信号值。
+             */
+            value: number;
+        };
         /** @description 列表/受限元信息。单资源端点可不带 (meta=None)。 */
         Meta: {
             /**
@@ -698,11 +1485,15 @@ export interface components {
              * @description 本次实际返回的条目数。
              */
             count: number;
+            /** @description 是否还有下一页。仅支持 look-ahead/cursor 的端点返回；旧端点保持省略。 */
+            has_more?: boolean | null;
             /**
              * Format: int32
              * @description 本次返回的页大小上限 (回显请求的 limit, 已 clamp)。
              */
             limit: number;
+            /** @description 下一页不透明游标。仅在 `has_more=true` 时返回；客户端不得解析或拼装。 */
+            next_cursor?: string | null;
             /**
              * Format: int32
              * @description 偏移量 (回显请求的 offset)。
@@ -721,6 +1512,8 @@ export interface components {
          *     连接键 ("Trump"/"特朗普"/"ドナルド・トランプ" 共享同一 QID); 无 QID 的实体回退按 `(name,label)` 匹配。
          */
         NameEntity: {
+            /** @description 按访客 `Accept-Language` 从 Wikidata QID 解析的展示名; 与 `name` 相同时省略。 */
+            display_name?: string | null;
             has_entry?: boolean;
             label: string;
             name: string;
@@ -832,10 +1625,45 @@ export interface components {
             meta?: null | components["schemas"]["Meta"];
         };
         Publisher: {
+            /** @description 信息源人工标注城市 (空串 = 未标注)。 */
+            city?: string;
+            /** @description 信息源人工标注国家 (采集侧 Source 同步; 空串 = 未标注)。 */
+            country?: string;
             domain: string;
             name: string;
             /** Format: int64 */
             period: number;
+        };
+        /** @description 发布者管理列表中的稳定轻量投影；与历史 `/v1/publishers` 的 map 形状并存。 */
+        PublisherListItem: {
+            domain: string;
+            name: string;
+        };
+        /** @description `/v1/publishers/search` 的分页元信息。total/summary 均按过滤后的域名集合计算。 */
+        PublisherListMeta: {
+            /** Format: int32 */
+            count: number;
+            /** Format: int32 */
+            limit: number;
+            /** Format: int32 */
+            offset: number;
+            summary: components["schemas"]["PublisherListSummary"];
+            /** Format: int64 */
+            total: number;
+        };
+        /** @description 发布者分页搜索响应；旧 `/v1/publishers` 仍使用 `PublisherMapResponse`。 */
+        PublisherListResponse: {
+            data: components["schemas"]["PublisherListItem"][];
+            meta: components["schemas"]["PublisherListMeta"];
+        };
+        /** @description 发布者分页检索的全局汇总（基于过滤后的域名集合，而非当前页）。 */
+        PublisherListSummary: {
+            /** Format: int64 */
+            named: number;
+            /** Format: int64 */
+            total: number;
+            /** Format: int64 */
+            unnamed: number;
         };
         /**
          * @description 发布者地理位置 (供社区发布者地图展示)。
@@ -887,9 +1715,50 @@ export interface components {
             data: components["schemas"]["RelatedInfo"][];
             meta?: null | components["schemas"]["Meta"];
         };
+        SciTechPaper: {
+            abstract: string;
+            authors: string[];
+            /** @description 分类标签, 如 cs.CR / cs.AI。 */
+            categories: string[];
+            doi: string;
+            /** @description 源内主键, 如 arXiv id 2401.12345。 */
+            paper_id: string;
+            /** @description PDF 地址。 */
+            pdf_url: string;
+            published?: string | null;
+            /** @description 结构化源标识, 如 arxiv-cs-cr。 */
+            source: string;
+            title: string;
+            updated?: string | null;
+            /** @description 论文摘要页。 */
+            url: string;
+        };
+        SciTechPaperListResponse: {
+            data: components["schemas"]["SciTechPaper"][];
+            meta?: null | components["schemas"]["Meta"];
+        };
         SessionResponse: {
             data: components["schemas"]["UserClaimsData"];
             meta?: null | components["schemas"]["Meta"];
+        };
+        /** @description v2 online member identity uses the stable PostgreSQL account ID. */
+        StableOnlineMember: {
+            account_id: string;
+            city: string;
+            country: string;
+            display_name: string;
+            /** Format: double */
+            latitude: number;
+            /** Format: double */
+            longitude: number;
+        };
+        StablePresenceSnapshot: {
+            cities: components["schemas"]["CityPresence"][];
+            members: components["schemas"]["StableOnlineMember"][];
+            /** Format: int32 */
+            total_guests: number;
+            /** Format: int32 */
+            total_members: number;
         };
         SyncBlob: {
             /** @description 密文 (base64); 明文为客户端订阅列表 JSON, 服务端不可读 */
@@ -906,12 +1775,458 @@ export interface components {
             data: components["schemas"]["SyncBlob"];
             meta?: null | components["schemas"]["Meta"];
         };
+        ThreatFeedResponse: {
+            indicators: components["schemas"]["ThreatIndicator"][];
+            /**
+             * Format: int64
+             * @description 增量同步水印: 本次返回的最大 collect_time (epoch 毫秒), 供下次作 since 续拉。
+             */
+            max_collect_time_ms?: number | null;
+            source: string;
+        };
+        ThreatIndicator: {
+            category: string;
+            /** Format: int32 */
+            confidence?: number | null;
+            description?: string | null;
+            first_seen?: string | null;
+            last_seen?: string | null;
+            reference?: string | null;
+            severity: string;
+            source?: string | null;
+            tags?: string[] | null;
+            type: string;
+            value: string;
+        };
+        /**
+         * @description 关键事件榜项 (`GET /v1/events/top`): 一个「实体社区」= 一个事件。
+         *
+         *     口径与 InfoEvent (POST /events/search, IDF 质心聚类、按新鲜度；事件游标模式冻结完整候选快照) **不同**:
+         *     本榜由 form leader job 从 ClickHouse 窗口全局预计算 —— 以「两个非地点实体共现」为边、
+         *     「一个 publisher.domain 一票」计权, 把边合并成实体社区 (一条大新闻的多对实体归一个事件),
+         *     按独立来源时间衰减热度分排序 (同分再看 source_count / 新鲜度)。apiserver 只读 form 写入的 Neo4j 单例 :EventBoard 节点直出,
+         *     自身无 ClickHouse 依赖。展示以实体社区 + 代表标题为主 (多源标题不一致, 故 lead 取确定性选出的一篇)。
+         */
+        TopEvent: {
+            debug?: null | components["schemas"]["TopEventDebug"];
+            /** @description 事件展示标题: form 预计算, 优先簇内最佳 EVENT 实体名; 空串时退回 lead.title */
+            display_title?: string;
+            /** @description 事件的实体社区 top-k (按社区内提及频次倒序), 已按 Wikidata QID 跨语言归一 */
+            entities: components["schemas"]["EntityBrief"][];
+            /** @description 稳定事件指纹: form 基于展示标题 + 实体锚点生成, 用于跨刷新轮次 diff / 追踪 */
+            event_id?: string;
+            /** @description 代表稿: 社区内确定性选出的一篇 (驱动右栏「全面报道」+ 无 display_title 时的标题兜底) */
+            lead: components["schemas"]["Info"];
+            /** @description 同事件其它来源报道 (不含 lead, 按采集时间倒序) */
+            related: components["schemas"]["Info"][];
+            /**
+             * Format: int32
+             * @description 独立信息源数 = 覆盖该事件的 publisher.domain 去重计数 (用于解释覆盖度; 排序由热度分决定)
+             */
+            source_count: number;
+        };
+        /** @description 关键事件榜调试信息: 仅解释排序/过滤, 不参与客户端主展示。 */
+        TopEventDebug: {
+            /**
+             * Format: int32
+             * @description lead 过滤后的成员文章数。
+             */
+            filtered_count: number;
+            /**
+             * Format: double
+             * @description 最终热度分 = recency_score × 趋势 boost。
+             */
+            heat_score: number;
+            /**
+             * Format: int64
+             * @description 事件内最新有效时间 (publish_time 优先, collect_time 兜底), epoch ms。
+             */
+            latest_ms: number;
+            /**
+             * Format: int32
+             * @description lead 过滤前的成员文章数。
+             */
+            members_before: number;
+            /**
+             * Format: int32
+             * @description 因共享实体不足被过滤的成员数。
+             */
+            pair_dropped: number;
+            /**
+             * Format: double
+             * @description 来源质量加权、同稿 cap 后的时间衰减分。
+             */
+            recency_score: number;
+            /**
+             * Format: int32
+             * @description 因语义门不匹配被过滤的成员数。
+             */
+            semantic_dropped: number;
+            /**
+             * Format: double
+             * @description 入榜来源的平均质量权重。
+             */
+            source_weight_avg: number;
+            /** @description 拆分说明: none / event_seed_split / oversized_no_split。 */
+            split_reason: string;
+            /** @description 本事件内被停用的高频实体展示名。 */
+            stopped_entities: string[];
+            /**
+             * Format: int32
+             * @description 被同稿标题 cap 截断的标题签名组数。
+             */
+            syndication_groups_capped: number;
+            /**
+             * Format: int32
+             * @description 最近 long 窗口内的独立来源数。
+             */
+            trend_long_sources: number;
+            /**
+             * Format: double
+             * @description 最近 short 窗口来源数 / 最近 long 窗口来源数。
+             */
+            trend_ratio: number;
+            /**
+             * Format: int32
+             * @description 最近 short 窗口内的独立来源数。
+             */
+            trend_short_sources: number;
+            /**
+             * Format: double
+             * @description 同稿 cap 前的加权来源分。
+             */
+            weighted_sources: number;
+        };
+        TopEventListResponse: {
+            data: components["schemas"]["TopEvent"][];
+            meta?: null | components["schemas"]["Meta"];
+        };
         UserClaimsData: {
+            /** @description v1 已发布的 session 字段；当前无头像写入源时保持 null。 */
             avatar?: string | null;
             email: string;
             /** Format: int64 */
             id: number;
             name: string;
+        };
+        V2AppClaimsData: {
+            account_id: string;
+            display_name: string;
+            email: string;
+        };
+        V2AppNewPublication: {
+            body?: string;
+            title: string;
+            url?: string;
+        };
+        V2AppPresenceBeat: {
+            sid: string;
+        };
+        V2AppProfileUpdate: {
+            display_name: string;
+        };
+        V2AppPublicAccount: {
+            account_id: string;
+            /** Format: int64 */
+            created_at_ms: number;
+            display_name: string;
+            /** Format: int64 */
+            publication_count: number;
+        };
+        V2AppPublication: {
+            body: string;
+            /** Format: int64 */
+            created_at_ms: number;
+            owner_account_id: string;
+            publication_id: string;
+            title: string;
+            /** Format: int64 */
+            updated_at_ms: number;
+            url: string;
+        };
+        V2AppSyncBlob: {
+            ciphertext: string;
+            iv: string;
+            /** Format: int64 */
+            updated_at_ms: number;
+            /** Format: int64 */
+            version: number;
+        };
+        V2AppSyncGenerationPart: {
+            ciphertext: string;
+            content_sha256: string;
+            generation: string;
+            iv: string;
+            /** Format: int32 */
+            part_index: number;
+        };
+        V2AppSyncManifest: {
+            generation: string;
+            /** Format: int32 */
+            part_count: number;
+            /** @description SHA-256 over the ordered `part_index:content_sha256\n` entries. */
+            parts_sha256: string;
+            /** Format: int64 */
+            total_ciphertext_chars: number;
+            /** Format: int64 */
+            updated_at_ms: number;
+            /**
+             * Format: int64
+             * @description Opaque, server-maintained CAS version. The first committed manifest is version 1.
+             */
+            version: number;
+        };
+        V2AppSyncManifestWrite: {
+            /** @description Fresh lowercase 128-bit hex generation identifier. */
+            generation: string;
+            /**
+             * Format: int32
+             * @description Exact number of parts; committed indices must be contiguous `0..part_count`.
+             */
+            part_count: number;
+        };
+        V2AppSyncPartReceipt: {
+            /** Format: int32 */
+            ciphertext_chars: number;
+            /** @description SHA-256 of `iv + NUL + ciphertext`, lowercase hex. */
+            content_sha256: string;
+            created: boolean;
+            generation: string;
+            /** Format: int32 */
+            part_index: number;
+        };
+        V2AppSyncPartWrite: {
+            /** @description Canonical standard Base64 ciphertext including the AES-GCM tag. */
+            ciphertext: string;
+            /** @description Canonical standard Base64 for a 12-byte AES-GCM IV. */
+            iv: string;
+        };
+        V2AppSyncProtocolLimits: {
+            /** Format: int64 */
+            max_account_ciphertext_chars: number;
+            /** Format: int64 */
+            max_generation_ciphertext_chars: number;
+            /** Format: int32 */
+            max_part_ciphertext_chars: number;
+            /** Format: int32 */
+            max_parts_per_generation: number;
+            /**
+             * Format: int32
+             * @description Dedicated authenticated per-IP budget for all partitioned sync routes.
+             */
+            max_requests_per_minute: number;
+            /** Format: int32 */
+            max_staged_generations_per_sync: number;
+            /** Format: int32 */
+            max_sync_ids_per_account: number;
+            /**
+             * Format: int64
+             * @description Idle TTL for uncommitted generations. Later sync writes lazily collect expired entries.
+             */
+            staged_generation_idle_ttl_ms: number;
+        };
+        V2AppSyncWrite: {
+            ciphertext: string;
+            iv: string;
+        };
+        V2DataArticle: {
+            article_id: string;
+            body: string;
+            canonical_url: string;
+            /** Format: int64 */
+            collected_at_ms: number;
+            enclosures?: unknown[];
+            entities?: components["schemas"]["V2DataEntityMention"][];
+            geo_scope: string[];
+            language: string;
+            platform_type: string;
+            /** Format: int64 */
+            published_at_ms: number;
+            publisher_country: string;
+            publisher_domain: string;
+            publisher_id: string;
+            revision_id: string;
+            source_category: string;
+            source_id: string;
+            title: string;
+            topics: string[];
+            /** Format: int64 */
+            version_ms: number;
+        };
+        V2DataArticleQuery: {
+            cursor?: string | null;
+            entity_ids?: string[] | null;
+            /** Format: int64 */
+            from_ms?: number | null;
+            geo_scope?: string[] | null;
+            language?: string | null;
+            /** Format: int32 */
+            limit?: number | null;
+            platform_type?: string | null;
+            publisher_country_prefix?: string | null;
+            publisher_id?: string | null;
+            q?: string | null;
+            source_category?: string | null;
+            /** Format: int64 */
+            to_ms?: number | null;
+            topics?: string[] | null;
+        };
+        V2DataEntity: {
+            canonical_name: string;
+            description?: string | null;
+            display_name: string;
+            entity_id: string;
+            has_entry: boolean;
+            label: string;
+            qid?: string | null;
+            /** Format: int64 */
+            updated_at_ms: number;
+            wikipedia_url?: string | null;
+        };
+        V2DataEntityDetail: components["schemas"]["V2DataEntity"] & {
+            /** Format: int64 */
+            first_seen_ms: number;
+            /** Format: int64 */
+            last_seen_ms: number;
+            /** Format: int64 */
+            mention_count: number;
+            weekly: components["schemas"]["V2DataEntityPeriodCount"][];
+        };
+        V2DataEntityMention: {
+            canonical_name: string;
+            /** Format: double */
+            confidence: number;
+            entity_id: string;
+            label: string;
+            qid: string;
+            surface: string;
+        };
+        V2DataEntityNeighbor: {
+            entity: components["schemas"]["V2DataEntity"];
+            /** Format: double */
+            score: number;
+            /** Format: int64 */
+            shared_articles: number;
+        };
+        V2DataEntityPeriodCount: {
+            /** Format: int64 */
+            mention_count: number;
+            /** Format: int64 */
+            period_ms: number;
+        };
+        V2DataEventQuery: {
+            cursor?: string | null;
+            /** Format: int64 */
+            from_ms?: number | null;
+            geo_scope?: string[] | null;
+            language?: string | null;
+            /** Format: int32 */
+            limit?: number | null;
+            source_category?: string | null;
+            /** Format: int64 */
+            to_ms?: number | null;
+            topics?: string[] | null;
+            window?: string | null;
+        };
+        V2DataEventResult: {
+            display_title: string;
+            event_id: string;
+            lead: components["schemas"]["V2DataArticle"];
+            related: components["schemas"]["V2DataArticle"][];
+            /** Format: int32 */
+            source_count: number;
+        };
+        V2DataMarketSignalPoint: {
+            key: string;
+            /** Format: int64 */
+            ts_ms: number;
+            /** Format: double */
+            value: number;
+        };
+        V2DataPaper: {
+            abstract: string;
+            authors: string[];
+            categories: string[];
+            doi: string;
+            paper_id: string;
+            pdf_url: string;
+            /** Format: int64 */
+            published_at_ms?: number | null;
+            source: string;
+            title: string;
+            /** Format: int64 */
+            updated_at_ms?: number | null;
+            url: string;
+        };
+        V2DataPublisher: {
+            /** Format: int64 */
+            article_count: number;
+            category: string;
+            city: string;
+            country: string;
+            domain: string;
+            /** Format: int64 */
+            latest_published_at_ms: number;
+            /** Format: double */
+            latitude?: number | null;
+            /** Format: double */
+            longitude?: number | null;
+            name: string;
+            publisher_id: string;
+        };
+        V2DataRelatedArticle: {
+            article: components["schemas"]["V2DataArticle"];
+            /** Format: double */
+            score: number;
+            /** Format: int64 */
+            shared_entities: number;
+        };
+        V2DataSeriesObservation: {
+            /** Format: int64 */
+            collect_time_ms: number;
+            geo: string;
+            observation_period: string;
+            series_id: string;
+            source: string;
+            unit: string;
+            /** Format: double */
+            value: number;
+        };
+        V2DataThreatIndicator: {
+            category: string;
+            /** Format: int32 */
+            confidence?: number | null;
+            description?: string | null;
+            /** Format: int64 */
+            first_seen_ms?: number | null;
+            /** Format: int64 */
+            last_seen_ms?: number | null;
+            reference?: string | null;
+            severity: string;
+            source?: string | null;
+            tags?: string[] | null;
+            type: string;
+            value: string;
+        };
+        V2DataTrendingEntity: {
+            canonical_name: string;
+            entity_id: string;
+            label: string;
+            /** Format: int64 */
+            mention_count: number;
+        };
+        V2Meta: {
+            /** Format: int64 */
+            generated_at_ms: number;
+            has_more: boolean;
+            next_cursor?: string | null;
+            projection_watermark?: null | components["schemas"]["V2ProjectionWatermark"];
+        };
+        V2ProjectionWatermark: {
+            /** Format: int64 */
+            corpus_version_ms: number;
+            /** Format: int64 */
+            graph_version_ms: number;
         };
     };
     responses: never;
@@ -922,6 +2237,137 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_market_signal_series: {
+        parameters: {
+            query: {
+                /** @description 市场信号标识, 如 mention_count.BTC。 */
+                key: string;
+                /** @description 起始时间 (epoch 毫秒, UTC, 含)。 */
+                from: number;
+                /** @description 结束时间 (epoch 毫秒, UTC, 含)。 */
+                to: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description point-in-time 市场信号序列 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketSignalPoint"][];
+                };
+            };
+            /** @description 非法时间范围 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_threat_feed: {
+        parameters: {
+            query?: {
+                /** @description kcatta=仅 ip/domain/ja3; turn=全类型含 cve。 */
+                format?: string;
+                /** @description 仅返回置信 >= 此值的指标。 */
+                min_confidence?: number;
+                /**
+                 * @description 增量同步水印: 仅返回 collect_time >= 此值 (epoch 毫秒) 的指标 (TAXII added_after 同型);
+                 *     响应 max_collect_time_ms 供下次续拉。缺省为全量 (历史行为)。
+                 */
+                since_ms?: number;
+                /** @description 返回条数上限 (默认全量; 增量模式建议 500)。 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 威胁情报 FeedFile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreatFeedResponse"];
+                };
+            };
+            /** @description 非法 format/min_confidence */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ClickHouse 数据查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_altdata_series: {
+        parameters: {
+            query?: {
+                /** @description 结构化源过滤, 多个用逗号分隔, 如 worldbank-pop。 */
+                source?: string;
+                /** @description 指标/序列标识, 如 SP.POP.TOTL。 */
+                series_id?: string;
+                /** @description 地理维, 如 WLD/CHN。 */
+                geo?: string;
+                /** @description 观测日期下界 (ISO 日期, 含), 如 2024-01-01。 */
+                obs_from?: string;
+                /** @description 观测日期上界 (ISO 日期, 含)。 */
+                obs_to?: string;
+                /** @description 可知时刻过滤: 仅返回 collect_time <= 此值 (epoch 毫秒) 的观测 (回测防未来函数)。 */
+                asof_ms?: number;
+                /** @description 页大小 (默认 200, 上限 500)。 */
+                limit?: number;
+                /** @description 偏移 (默认 0)。 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 另类数据时间序列观测 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AltDataObservationListResponse"];
+                };
+            };
+            /** @description 非法过滤参数 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 数据查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_articles: {
         parameters: {
             query?: {
@@ -929,6 +2375,8 @@ export interface operations {
                 publisher_domain?: string;
                 /** @description 信息源类目: news / scitech / threat-intel / altdata */
                 source_category?: string;
+                /** @description 来源平台类型，如 website / youtube / bluesky */
+                platform_type?: string;
                 /** @description 采集时间下界 (epoch 毫秒, 含) */
                 since?: number;
                 /** @description 采集时间上界 (epoch 毫秒, 含) */
@@ -937,10 +2385,22 @@ export interface operations {
                 entity_name?: string;
                 /** @description 单实体筛选类别 (PER/ORG/LOC/PRODUCT/EVENT) */
                 entity_label?: string;
+                /** @description 文章语言主码 (如 `zh`/`en`/`ja`); 语义同 POST /v1/articles/search */
+                language?: string;
+                /** @description 发布者国家前缀 (如 `中国`/`港澳台`); 语义同 POST /v1/articles/search */
+                publisher_country_prefix?: string;
+                /** @description 主题议题过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
+                topics?: string;
+                /** @description 影响地理过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
+                geo_scope?: string;
                 /** @description 页大小 (默认 200, 上限 200) */
                 limit?: number;
                 /** @description 偏移 (默认 0) */
                 offset?: number;
+                /** @description 全局模糊搜索：标题、发布者域名/名称、实体名（最多 200 字符） */
+                q?: string;
+                /** @description 服务端返回的不透明下一页游标；与非零 offset 互斥 */
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -1151,6 +2611,20 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 签发凭证失败 (服务端内部错误) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 认证请求或 Argon2 计算容量已满，请稍后重试 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     register: {
@@ -1196,9 +2670,16 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 认证请求或 Argon2 计算容量已满，请稍后重试 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    authorize: {
+    get_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -1221,7 +2702,20 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 无效 JWT 全局 admission 已满 */
+            429: {
+                headers: {
+                    /** @description 重试等待秒数 */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
         };
     };
@@ -1272,6 +2766,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PresenceSnapshotResponse"];
+                };
+            };
+            /** @description 显式 JWT 无效 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 无效 JWT 全局 admission 已满 */
+            429: {
+                headers: {
+                    /** @description 重试等待秒数 */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description 在线状态写入/查询失败 */
@@ -1387,22 +2901,26 @@ export interface operations {
     list_events: {
         parameters: {
             query?: {
-                /** @description 发布者域名筛选 */
                 publisher_domain?: string;
-                /** @description 信息源类目: news / scitech / threat-intel / altdata */
                 source_category?: string;
-                /** @description 采集时间下界 (epoch 毫秒, 含) */
                 since?: number;
-                /** @description 采集时间上界 (epoch 毫秒, 含) */
                 until?: number;
-                /** @description 单实体筛选名 (须与 entity_label 同时给出) */
                 entity_name?: string;
-                /** @description 单实体筛选类别 (PER/ORG/LOC/PRODUCT/EVENT) */
                 entity_label?: string;
-                /** @description 页大小 (默认 200, 上限 200) */
+                /** @description 文章语言主码 (如 `zh`/`en`/`ja`); 语义同 POST /v1/events/search */
+                language?: string;
+                /** @description 发布者国家前缀 (如 `中国`/`港澳台`); 语义同 POST /v1/events/search */
+                publisher_country_prefix?: string;
+                /** @description 主题议题过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
+                topics?: string;
+                /** @description 影响地理过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
+                geo_scope?: string;
                 limit?: number;
-                /** @description 偏移 (默认 0) */
                 offset?: number;
+                /** @description `event_cursor`：在完整聚类快照上按事件分页；省略则沿用旧文章 offset 语义。 */
+                pagination_mode?: components["schemas"]["EventPaginationMode"];
+                /** @description 服务端返回的不透明事件游标；仅与 pagination_mode=event_cursor 组合使用。 */
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -1418,6 +2936,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["EventListResponse"];
                 };
+            };
+            /** @description 事件游标非法或与 offset 冲突 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 事件游标快照已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 候选文章超限，须缩短查询范围 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description 数据查询失败 */
             500: {
@@ -1437,7 +2976,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ArticleSearch"];
+                "application/json": components["schemas"]["EventSearch"];
             };
         };
         responses: {
@@ -1448,6 +2987,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventListResponse"];
+                };
+            };
+            /** @description 事件游标非法、筛选不匹配或与 offset 冲突 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 事件游标快照已过期 */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 候选文章超限，须缩短查询范围 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 数据查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_top_events: {
+        parameters: {
+            query?: {
+                /** @description 榜单窗口标识 (默认 24h); 取值须为 form 侧已生成的窗口, 否则返回空榜。 */
+                window?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 关键事件榜 (实体社区 + 代表标题, 按时间衰减热度排序) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopEventListResponse"];
                 };
             };
             /** @description 数据查询失败 */
@@ -1509,12 +3099,32 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 缺失或非法的 JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description 用户不存在 */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description 无效 JWT 全局 admission 已满 */
+            429: {
+                headers: {
+                    /** @description 重试等待秒数 */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
             /** @description 更新失败 */
             500: {
@@ -1554,6 +3164,26 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 缺失或非法的 JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description 无效 JWT 全局 admission 已满 */
+            429: {
+                headers: {
+                    /** @description 重试等待秒数 */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description 发布失败 */
             500: {
                 headers: {
@@ -1582,12 +3212,32 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description 缺失或非法的 JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
             /** @description 发布不存在或不属于当前用户 */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description 无效 JWT 全局 admission 已满 */
+            429: {
+                headers: {
+                    /** @description 重试等待秒数 */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
             };
             /** @description 删除失败 */
             500: {
@@ -1751,6 +3401,126 @@ export interface operations {
             };
         };
     };
+    search_publishers: {
+        parameters: {
+            query?: {
+                /** @description 域名或最新非空名称的大小写不敏感模糊搜索（最多 200 字符） */
+                q?: string;
+                /** @description 页大小（默认 20，上限 200） */
+                limit?: number;
+                /** @description 偏移（默认 0） */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 发布者分页列表及过滤后汇总 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublisherListResponse"];
+                };
+            };
+            /** @description 搜索参数非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 数据查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_scitech_papers: {
+        parameters: {
+            query?: {
+                /** @description 结构化源过滤, 多个用逗号分隔, 如 arxiv-cs-cr。 */
+                source?: string;
+                /** @description 论文分类过滤, 多个用逗号分隔, 如 cs.CR,cs.AI。 */
+                category?: string;
+                /** @description 标题大小写不敏感检索 (最多 200 字符)。 */
+                q?: string;
+                /** @description 发表时间下界 (ISO 字符串, 含), 如 2024-01-01。 */
+                published_from?: string;
+                /** @description 发表时间上界 (ISO 字符串, 含)。 */
+                published_to?: string;
+                /** @description 页大小 (默认 100, 上限 200)。 */
+                limit?: number;
+                /** @description 偏移 (默认 0)。 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 论文/预印本元数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SciTechPaperListResponse"];
+                };
+            };
+            /** @description 非法过滤参数 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 数据查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_corpus_stats: {
+        parameters: {
+            query?: {
+                /** @description 入库量分桶窗口 (小时, 默认 12, 上限 168) */
+                window_hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 语料总量与按小时入库分桶 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorpusStatsResponse"];
+                };
+            };
+            /** @description 数据查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_sync_blob: {
         parameters: {
             query?: never;
@@ -1772,8 +3542,22 @@ export interface operations {
                     "application/json": components["schemas"]["SyncBlobResponse"];
                 };
             };
+            /** @description id 非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description 该 id 尚无同步数据 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 查询失败 */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1849,6 +3633,1633 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailExistsResponse"];
+                };
+            };
+            /** @description 查询失败 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_handshake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ephemeral server public key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description `GET /v1/auth/handshake/{client_id}` 响应: 服务端临时 X25519 公钥 (hex)。 */
+                        data: {
+                            /** @description 服务端临时公钥 (hex 明文串), 供客户端 AEAD 加密密码。 */
+                            public_key: string;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_app_login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPayload"];
+            };
+        };
+        responses: {
+            /** @description authenticated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            token: string;
+                            token_type: string;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description invalid credentials */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description authentication capacity exhausted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPayload"];
+            };
+        };
+        responses: {
+            /** @description registered */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            token: string;
+                            token_type: string;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description email exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description authentication capacity exhausted */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description current app session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            account_id: string;
+                            display_name: string;
+                            email: string;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_list_accounts: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description public account catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            account_id: string;
+                            /** Format: int64 */
+                            created_at_ms: number;
+                            display_name: string;
+                            /** Format: int64 */
+                            publication_count: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_app_get_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description public account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            account_id: string;
+                            /** Format: int64 */
+                            created_at_ms: number;
+                            display_name: string;
+                            /** Format: int64 */
+                            publication_count: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_account_publications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description account publications */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            body: string;
+                            /** Format: int64 */
+                            created_at_ms: number;
+                            owner_account_id: string;
+                            publication_id: string;
+                            title: string;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            url: string;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_app_get_presence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description stable-account presence snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            cities: components["schemas"]["CityPresence"][];
+                            members: components["schemas"]["StableOnlineMember"][];
+                            /** Format: int32 */
+                            total_guests: number;
+                            /** Format: int32 */
+                            total_members: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_app_presence_beat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AppPresenceBeat"];
+            };
+        };
+        responses: {
+            /** @description presence snapshot after heartbeat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            cities: components["schemas"]["CityPresence"][];
+                            members: components["schemas"]["StableOnlineMember"][];
+                            /** Format: int32 */
+                            total_guests: number;
+                            /** Format: int32 */
+                            total_members: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description explicit JWT is invalid */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_update_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AppProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description profile updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            account_id: string;
+                            display_name: string;
+                            email: string;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_my_publications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description current account publications */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            body: string;
+                            /** Format: int64 */
+                            created_at_ms: number;
+                            owner_account_id: string;
+                            publication_id: string;
+                            title: string;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            url: string;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_create_publication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AppNewPublication"];
+            };
+        };
+        responses: {
+            /** @description publication created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            body: string;
+                            /** Format: int64 */
+                            created_at_ms: number;
+                            owner_account_id: string;
+                            publication_id: string;
+                            title: string;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            url: string;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_delete_publication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description publication deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_sync_limits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description partitioned sync protocol limits */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: int64 */
+                            max_account_ciphertext_chars: number;
+                            /** Format: int64 */
+                            max_generation_ciphertext_chars: number;
+                            /** Format: int32 */
+                            max_part_ciphertext_chars: number;
+                            /** Format: int32 */
+                            max_parts_per_generation: number;
+                            /**
+                             * Format: int32
+                             * @description Dedicated authenticated per-IP budget for all partitioned sync routes.
+                             */
+                            max_requests_per_minute: number;
+                            /** Format: int32 */
+                            max_staged_generations_per_sync: number;
+                            /** Format: int32 */
+                            max_sync_ids_per_account: number;
+                            /**
+                             * Format: int64
+                             * @description Idle TTL for uncommitted generations. Later sync writes lazily collect expired entries.
+                             */
+                            staged_generation_idle_ttl_ms: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_app_get_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sync_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description encrypted sync blob */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            ciphertext: string;
+                            iv: string;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            /** Format: int64 */
+                            version: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_put_sync: {
+        parameters: {
+            query: {
+                expected: number;
+            };
+            header?: never;
+            path: {
+                sync_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AppSyncWrite"];
+            };
+        };
+        responses: {
+            /** @description encrypted sync blob updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            ciphertext: string;
+                            iv: string;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            /** Format: int64 */
+                            version: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing or invalid JWT */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description version conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid JWT admission is exhausted */
+            429: {
+                headers: {
+                    /** @description seconds before retry */
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    v2_app_discard_sync_generation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sync_id: string;
+                generation: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description uncommitted generation discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description generation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description committed generation cannot be discarded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_get_sync_generation_part: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sync_id: string;
+                generation: string;
+                part_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description part from the currently committed generation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            ciphertext: string;
+                            content_sha256: string;
+                            generation: string;
+                            iv: string;
+                            /** Format: int32 */
+                            part_index: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description generation is uncommitted, superseded, or part is absent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_put_sync_generation_part: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sync_id: string;
+                generation: string;
+                part_index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AppSyncPartWrite"];
+            };
+        };
+        responses: {
+            /** @description immutable part stored or idempotently confirmed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: int32 */
+                            ciphertext_chars: number;
+                            /** @description SHA-256 of `iv + NUL + ciphertext`, lowercase hex. */
+                            content_sha256: string;
+                            created: boolean;
+                            generation: string;
+                            /** Format: int32 */
+                            part_index: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description invalid id, index, IV, or ciphertext */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description part differs from an existing immutable part or generation is committed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description sync storage quota exceeded */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_get_sync_manifest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sync_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description currently committed generation manifest */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            generation: string;
+                            /** Format: int32 */
+                            part_count: number;
+                            /** @description SHA-256 over the ordered `part_index:content_sha256\n` entries. */
+                            parts_sha256: string;
+                            /** Format: int64 */
+                            total_ciphertext_chars: number;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            /**
+                             * Format: int64
+                             * @description Opaque, server-maintained CAS version. The first committed manifest is version 1.
+                             */
+                            version: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description no committed generation */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v2_app_commit_sync_manifest: {
+        parameters: {
+            query: {
+                expected: number;
+            };
+            header?: never;
+            path: {
+                sync_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2AppSyncManifestWrite"];
+            };
+        };
+        responses: {
+            /** @description manifest atomically committed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            generation: string;
+                            /** Format: int32 */
+                            part_count: number;
+                            /** @description SHA-256 over the ordered `part_index:content_sha256\n` entries. */
+                            parts_sha256: string;
+                            /** Format: int64 */
+                            total_ciphertext_chars: number;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            /**
+                             * Format: int64
+                             * @description Opaque, server-maintained CAS version. The first committed manifest is version 1.
+                             */
+                            version: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description invalid manifest */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description manifest version conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description generation is incomplete or exceeds quota */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    trending_entities: {
+        parameters: {
+            query?: {
+                window_hours?: number | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description trending entities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            canonical_name: string;
+                            entity_id: string;
+                            label: string;
+                            /** Format: int64 */
+                            mention_count: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing analytics scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    query_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2DataEventQuery"];
+            };
+        };
+        responses: {
+            /** @description event snapshots */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            display_title: string;
+                            event_id: string;
+                            lead: components["schemas"]["V2DataArticle"];
+                            related: components["schemas"]["V2DataArticle"][];
+                            /** Format: int32 */
+                            source_count: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    top_events: {
+        parameters: {
+            query?: {
+                window?: string | null;
+                limit?: number | null;
+                cursor?: string | null;
+                source_category?: string | null;
+                language?: string | null;
+                topics?: string[] | null;
+                geo_scope?: string[] | null;
+                from_ms?: number | null;
+                to_ms?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description top event snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            display_title: string;
+                            event_id: string;
+                            lead: components["schemas"]["V2DataArticle"];
+                            related: components["schemas"]["V2DataArticle"][];
+                            /** Format: int32 */
+                            source_count: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_data_list_publishers: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description publisher catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: int64 */
+                            article_count: number;
+                            category: string;
+                            city: string;
+                            country: string;
+                            domain: string;
+                            /** Format: int64 */
+                            latest_published_at_ms: number;
+                            /** Format: double */
+                            latitude?: number | null;
+                            /** Format: double */
+                            longitude?: number | null;
+                            name: string;
+                            publisher_id: string;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_data_get_publisher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publisher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description publisher */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: int64 */
+                            article_count: number;
+                            category: string;
+                            city: string;
+                            country: string;
+                            domain: string;
+                            /** Format: int64 */
+                            latest_published_at_ms: number;
+                            /** Format: double */
+                            latitude?: number | null;
+                            /** Format: double */
+                            longitude?: number | null;
+                            name: string;
+                            publisher_id: string;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    query_articles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["V2DataArticleQuery"];
+            };
+        };
+        responses: {
+            /** @description cursor-paged article corpus */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            article_id: string;
+                            body: string;
+                            canonical_url: string;
+                            /** Format: int64 */
+                            collected_at_ms: number;
+                            enclosures?: unknown[];
+                            entities?: components["schemas"]["V2DataEntityMention"][];
+                            geo_scope: string[];
+                            language: string;
+                            platform_type: string;
+                            /** Format: int64 */
+                            published_at_ms: number;
+                            publisher_country: string;
+                            publisher_domain: string;
+                            publisher_id: string;
+                            revision_id: string;
+                            source_category: string;
+                            source_id: string;
+                            title: string;
+                            topics: string[];
+                            /** Format: int64 */
+                            version_ms: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    v2_data_get_article: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description current authoritative article revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            article_id: string;
+                            body: string;
+                            canonical_url: string;
+                            /** Format: int64 */
+                            collected_at_ms: number;
+                            enclosures?: unknown[];
+                            entities?: components["schemas"]["V2DataEntityMention"][];
+                            geo_scope: string[];
+                            language: string;
+                            platform_type: string;
+                            /** Format: int64 */
+                            published_at_ms: number;
+                            publisher_country: string;
+                            publisher_domain: string;
+                            publisher_id: string;
+                            revision_id: string;
+                            source_category: string;
+                            source_id: string;
+                            title: string;
+                            topics: string[];
+                            /** Format: int64 */
+                            version_ms: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    papers: {
+        parameters: {
+            query?: {
+                source?: string | null;
+                category?: string | null;
+                /** @description 标题大小写不敏感检索 (最多 200 字符)。 */
+                q?: string | null;
+                /** @description 发表时间窗 (ISO 字符串闭区间)。 */
+                published_from?: string | null;
+                published_to?: string | null;
+                limit?: number | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description paper dataset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            abstract: string;
+                            authors: string[];
+                            categories: string[];
+                            doi: string;
+                            paper_id: string;
+                            pdf_url: string;
+                            /** Format: int64 */
+                            published_at_ms?: number | null;
+                            source: string;
+                            title: string;
+                            /** Format: int64 */
+                            updated_at_ms?: number | null;
+                            url: string;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    series: {
+        parameters: {
+            query?: {
+                source?: string | null;
+                series_id?: string | null;
+                geo?: string | null;
+                /** @description 观测时间窗 (obs_date 闭区间)。 */
+                obs_from?: string | null;
+                obs_to?: string | null;
+                /** @description 可知时刻过滤: 仅 collect_time <= 此值 (epoch 毫秒) 的观测 (回测防未来函数)。 */
+                asof_ms?: number | null;
+                limit?: number | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description time-series dataset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            /** Format: int64 */
+                            collect_time_ms: number;
+                            geo: string;
+                            observation_period: string;
+                            series_id: string;
+                            source: string;
+                            unit: string;
+                            /** Format: double */
+                            value: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    related_articles: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                article_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description related articles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            article: components["schemas"]["V2DataArticle"];
+                            /** Format: double */
+                            score: number;
+                            /** Format: int64 */
+                            shared_entities: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description graph unavailable or behind */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_entities: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description entity catalog */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            canonical_name: string;
+                            description?: string | null;
+                            display_name: string;
+                            entity_id: string;
+                            has_entry: boolean;
+                            label: string;
+                            qid?: string | null;
+                            /** Format: int64 */
+                            updated_at_ms: number;
+                            wikipedia_url?: string | null;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    get_entity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description entity identity and bounded corpus statistics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["V2DataEntity"] & {
+                            /** Format: int64 */
+                            first_seen_ms: number;
+                            /** Format: int64 */
+                            last_seen_ms: number;
+                            /** Format: int64 */
+                            mention_count: number;
+                            weekly: components["schemas"]["V2DataEntityPeriodCount"][];
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    entity_neighbors: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                entity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description co-occurring entities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            entity: components["schemas"]["V2DataEntity"];
+                            /** Format: double */
+                            score: number;
+                            /** Format: int64 */
+                            shared_articles: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description graph unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    indicators: {
+        parameters: {
+            query?: {
+                format?: string | null;
+                min_confidence?: number | null;
+                limit?: number | null;
+                cursor?: string | null;
+                /** @description 增量水印: 仅返回 collect_time >= 此值 (epoch 毫秒) 的指标 (与 keyset 游标正交组合)。 */
+                since_ms?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description threat indicators */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            category: string;
+                            /** Format: int32 */
+                            confidence?: number | null;
+                            description?: string | null;
+                            /** Format: int64 */
+                            first_seen_ms?: number | null;
+                            /** Format: int64 */
+                            last_seen_ms?: number | null;
+                            reference?: string | null;
+                            severity: string;
+                            source?: string | null;
+                            tags?: string[] | null;
+                            type: string;
+                            value: string;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    market_signals: {
+        parameters: {
+            query: {
+                key: string;
+                from_ms: number;
+                to_ms: number;
+                limit?: number | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description market signal series */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            key: string;
+                            /** Format: int64 */
+                            ts_ms: number;
+                            /** Format: double */
+                            value: number;
+                        }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
                 };
             };
         };

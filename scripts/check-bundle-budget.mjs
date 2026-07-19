@@ -6,12 +6,12 @@ import { pathToFileURL } from "node:url"
 import { gzipSync } from "node:zlib"
 
 export const DEFAULT_BUNDLE_BUDGET = Object.freeze({
-  // R2 写前预览/审计与 R3 扩展信任边界增加常驻 provider、系统凭据 consent、
-  // 设置审计面及 publisher 双签密钥轮换。2026-07 minor deps（next/react 等）
-  // 将总 raw 顶到约 5.66MB；上调 total raw 并保留 gzip/单 chunk 闸，继续阻止无界增长。
+  // R2/R3 常驻 provider 与 2026-07 minor deps 将总 raw 顶到约 5.66MB；Wonita V2
+  // adapter、字符串 ID 映射和分片同步恢复将当前产物推进到约 5.71MB raw / 1.79MB
+  // gzip。只小幅更新总量基线，继续保留更严格的单 chunk 闸，阻止无界增长。
   totalBytes: 5_750_000,
   largestChunkBytes: 1_150_000,
-  totalGzipBytes: 1_780_000,
+  totalGzipBytes: 1_810_000,
   largestChunkGzipBytes: 390_000,
 })
 

@@ -99,7 +99,13 @@ test("settings contract decodes the five bounded JSON projections", () => {
       storage: { usage: 10, quota: 100 },
       publishingIdentity: {
         signedIn: true,
-        user: { id: 1, email: "user@example.test", name: "User", avatar: null, token: "drop" },
+        user: {
+          id: `u:${"1".repeat(32)}`,
+          email: "user@example.test",
+          name: "User",
+          avatar: null,
+          token: "drop",
+        },
       },
     }),
     {
@@ -117,7 +123,12 @@ test("settings contract decodes the five bounded JSON projections", () => {
       storage: { usage: 10, quota: 100 },
       publishingIdentity: {
         signedIn: true,
-        user: { id: 1, email: "user@example.test", name: "User", avatar: null },
+        user: {
+          id: `u:${"1".repeat(32)}`,
+          email: "user@example.test",
+          name: "User",
+          avatar: null,
+        },
       },
     },
   )
@@ -143,6 +154,19 @@ test("settings contract decodes the five bounded JSON projections", () => {
         grantedAt: 10,
       },
     ],
+  )
+
+  assert.throws(
+    () =>
+      decodeDeviceSettings({
+        sync: { enabled: false, lastRun: null },
+        storage: null,
+        publishingIdentity: {
+          signedIn: true,
+          user: { id: 1, email: "legacy@example.test", name: "Legacy", avatar: null },
+        },
+      }),
+    /Publishing identity user id/,
   )
   assert.deepEqual(
     decodeRuntimeExtensionSettings({

@@ -101,7 +101,7 @@ export default function MyPublications() {
   const [pendingPublish, setPendingPublish] = React.useState(false)
   const [unknownDrafts, setUnknownDrafts] = React.useState<ReadonlySet<string>>(new Set())
   const [publishedDrafts, setPublishedDrafts] = React.useState<ReadonlySet<string>>(new Set())
-  const [unknownPublications, setUnknownPublications] = React.useState<ReadonlySet<number>>(
+  const [unknownPublications, setUnknownPublications] = React.useState<ReadonlySet<string>>(
     new Set(),
   )
   const [auditRecoveryAvailable, setAuditRecoveryAvailable] = React.useState(true)

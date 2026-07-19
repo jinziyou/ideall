@@ -6,7 +6,7 @@ export type { AuthBody, CurrentUser } from "@protocol/server-port"
 /** 注册/登录请求体 (= ServerPort 的 AuthCredentials)。 */
 export type AuthPayload = AuthCredentials
 
-/** GET /v1/auth/handshake/{clientId} —— 服务端临时公钥 ({data:{public_key}} hex)。 */
+/** GET /v2/app/auth/handshake/{clientId} —— 服务端临时公钥。 */
 export function getServerPublicKey(clientId: string) {
   return getServerPort().getServerPublicKey(clientId)
 }
@@ -19,7 +19,7 @@ export function register(payload: AuthPayload) {
   return getServerPort().register(payload)
 }
 
-/** 带 token 取当前用户 (GET /v1/auth/session)。 */
+/** 带 token 取当前用户 (GET /v2/app/auth/session)。 */
 export function fetchMe(token: string) {
   return getServerPort().getMe(token)
 }

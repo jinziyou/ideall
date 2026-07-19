@@ -52,10 +52,10 @@ export async function runAuthSubmit(
   return { token: res.data.token, email: payload.email }
 }
 
-/** 拉当前用户; 失败时回退为最小 CurrentUser (与原 auth-form 行为一致)。 */
-export async function runAuthProfile(token: string, email: string): Promise<AuthFlowResult> {
+/** 拉当前用户。V2 稳定 account_id 不可由邮箱猜测，故 session 失败必须中止登录流。 */
+export async function runAuthProfile(token: string, _email: string): Promise<AuthFlowResult> {
   const me = await fetchMe(token)
-  const user =
-    me.ok && me.data ? me.data : { id: 0, email, name: email, avatar: null as string | null }
-  return { token, user }
+  if (!me.ok) throw new Error(me.message)
+  if (!me.data) throw new Error("获取用户信息失败，请重试")
+  return { token, user: me.data }
 }

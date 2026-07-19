@@ -79,7 +79,7 @@ export type DeviceSettingsDocument = Readonly<{
     | Readonly<{
         signedIn: true
         user: Readonly<{
-          id: number
+          id: string
           email: string
           name: string
           avatar: string | null
@@ -438,7 +438,7 @@ export function decodeDeviceSettings(value: unknown): DeviceSettingsDocument {
     publishingIdentity: {
       signedIn: true,
       user: {
-        id: integer(user.id, "Publishing identity user id"),
+        id: text(user.id, "Publishing identity user id", 128),
         email: text(user.email, "Publishing identity email", 512),
         name: text(user.name, "Publishing identity name", 512),
         avatar: avatar === null ? null : text(avatar, "Publishing identity avatar", 4096),
