@@ -1321,35 +1321,27 @@ export interface components {
             /** Format: int64 */
             period: number;
         };
-        /** @description 近 N 小时单实体频次条目 (`GET /v1/entities/stats?window=` 每类 top 20 的一项)。 */
-        EntityStatEntry: {
-            /** Format: int32 */
-            count: number;
-            /** @description 按访客 `Accept-Language` 从 Wikidata QID 解析的展示名 */
-            display_name?: string | null;
-            /** @description Wikidata QID (跨语言归一键), 无则 null */
-            wikidata_id?: string | null;
-        };
         /**
-         * @description 近 N 小时各类实体频次 (`GET /v1/entities/stats?window=`), 每类 top 20。
-         *     键为图谱规范 `name` (实体页深链 / 筛选参数), 值为频次与可选展示字段。
-         *     覆盖入图的全部五类 (TIME 实体不入图故无此类)。
+         * @description `/v1/entities/stats` 的稳定 wire DTO。
+         *
+         *     `EntityStats` 在服务内部保留 QID 与本地化展示名，供跨语言归并使用；v1 已发布契约的五个
+         *     map value 一直是整数。单独投影响应可避免内部富化条目改变旧客户端的 JSON 形状。
          */
         EntityStats: {
             event: {
-                [key: string]: components["schemas"]["EntityStatEntry"];
+                [key: string]: number;
             };
             loc: {
-                [key: string]: components["schemas"]["EntityStatEntry"];
+                [key: string]: number;
             };
             org: {
-                [key: string]: components["schemas"]["EntityStatEntry"];
+                [key: string]: number;
             };
             per: {
-                [key: string]: components["schemas"]["EntityStatEntry"];
+                [key: string]: number;
             };
             product: {
-                [key: string]: components["schemas"]["EntityStatEntry"];
+                [key: string]: number;
             };
         };
         EntityStatsResponse: {
@@ -1910,6 +1902,8 @@ export interface components {
             meta?: null | components["schemas"]["Meta"];
         };
         UserClaimsData: {
+            /** @description v1 已发布的 session 字段；当前无头像写入源时保持 null。 */
+            avatar?: string | null;
             email: string;
             /** Format: int64 */
             id: number;
