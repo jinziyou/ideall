@@ -93,9 +93,11 @@ export const syncManifest = {
 
 function syncFailureCode(error: unknown): SyncFailureCode {
   const message = error instanceof Error ? error.message : String(error)
-  if (/单块上限|同步记录超过/.test(message)) return "block-limit"
+  if (/单块上限|域上限|服务端配额|分片数超过|同步(?:记录|明文)超过/.test(message)) {
+    return "block-limit"
+  }
   if (/冲突|本地变化/.test(message)) return "conflict"
   if (/解密|同步码/.test(message)) return "decrypt"
-  if (/拉取|上传|网络|offline|fetch/i.test(message)) return "network"
+  if (/拉取|上传|网络|过于频繁|稍后重试|offline|fetch/i.test(message)) return "network"
   return "unknown"
 }

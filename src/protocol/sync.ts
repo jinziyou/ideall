@@ -18,6 +18,25 @@ export interface SyncRecord {
 /** 服务端不透明存储的加密同步块 (PUT/GET /sync/{id})。 */
 export type SyncBlob = { iv: string; ciphertext: string; updated_at: number }
 
+/** V2 分区快照的原子可见性指针。 */
+export type SyncManifest = {
+  generation: string
+  part_count: number
+  total_ciphertext_chars: number
+  parts_sha256: string
+  version: number
+  updated_at_ms: number
+}
+
+/** V2 已提交 generation 中的一个不可变密文分片。 */
+export type SyncGenerationPart = {
+  generation: string
+  part_index: number
+  iv: string
+  ciphertext: string
+  content_sha256: string
+}
+
 export type SyncBlockBudget = Readonly<{
   maxRecords: number
   maxPlaintextBytes: number
@@ -42,9 +61,14 @@ export const SYNC_BLOCK_BUDGETS = Object.freeze({
   bookmarks: syncBlockBudget(100_000, 16 * MIB),
 })
 
-export const SYNC_MAX_RESPONSE_BYTES =
-  Math.max(...Object.values(SYNC_BLOCK_BUDGETS).map((budget) => budget.maxCiphertextBase64Chars)) +
-  4_096
+/** 服务端每片的 canonical Base64 字符上限。 */
+export const SYNC_PART_MAX_CIPHERTEXT_CHARS = 262_144
+
+/** 扣除 16-byte AES-GCM tag 后，可在上述 Base64 上限内装下的最大明文。 */
+export const SYNC_PART_MAX_PLAINTEXT_BYTES = 196_592
+
+/** 单个分片响应上限（密文 + JSON 包装/元数据余量）。 */
+export const SYNC_MAX_RESPONSE_BYTES = SYNC_PART_MAX_CIPHERTEXT_CHARS + 8_192
 
 /** 分片 0 保持历史 storageId；未来新增分片只可使用 1..1023。 */
 export const SYNC_MAX_PARTITION = 1_023

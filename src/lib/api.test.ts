@@ -57,6 +57,18 @@ test("apiFetch: !ok 且体含 detail → 提取 detail 作错误消息", async (
   }
 })
 
+test("apiFetch: !ok 且体为 wonita 统一错误包络 → 提取嵌套 message", async () => {
+  setFetch(() =>
+    resp(409, JSON.stringify({ error: { code: "conflict", message: "同步版本冲突" } })),
+  )
+  const r = await apiFetch("/x")
+  assert.equal(r.ok, false)
+  if (!r.ok) {
+    assert.equal(r.status, 409)
+    assert.equal(r.message, "同步版本冲突")
+  }
+})
+
 test("apiFetch: !ok 且体为纯文本 → 用文本作错误消息", async () => {
   setFetch(() => resp(500, "boom"))
   const r = await apiFetch("/x")

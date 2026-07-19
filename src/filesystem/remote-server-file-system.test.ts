@@ -39,16 +39,16 @@ function backend(): ServerPort {
     getEntityDetail: async () => null,
     listPeers: async () => ({
       ok: true,
-      data: [{ id: 7, name: "Peer", publication_count: 1 }],
+      data: [{ id: `u:${"7".repeat(32)}`, name: "Peer", publication_count: 1 }],
     }),
     getPeerPublications: async () => ({
       ok: true,
-      data: [{ id: 9, title: "Post", url: "", body: "Body", created_at: 3 }],
+      data: [{ id: `pub:${"9".repeat(32)}`, title: "Post", url: "", body: "Body", created_at: 3 }],
     }),
     publish: async (_token, draft) => ({
       ok: true,
       data: {
-        id: 10,
+        id: `pub:${"a".repeat(32)}`,
         title: draft.title,
         url: draft.url ?? "",
         body: draft.body ?? "",
@@ -92,7 +92,10 @@ test("remote server filesystem: remote content has stable file refs and director
     { actor: "ui", permissions: [], intent: "directory" },
     {},
   )
-  assert.deepEqual(communityPage.entries[0]?.target, remotePeerPublicationsRef("7"))
+  assert.deepEqual(
+    communityPage.entries[0]?.target,
+    remotePeerPublicationsRef(`u:${"7".repeat(32)}`),
+  )
 })
 
 test("remote server filesystem: info facade reads through provider and enforces actor permission", async (t) => {
@@ -200,4 +203,35 @@ test("remote server filesystem: directory cursor advances by the returned item c
     [2, 0],
     [2, 2],
   ])
+})
+
+test("remote server filesystem: delete action 只接受字符串发布 ID", async (t) => {
+  const original = getServerPort()
+  t.after(() => registerServerPort(original))
+  const publicationId = `pub:${"a".repeat(32)}`
+  let deleted: string | null = null
+  registerServerPort({
+    ...backend(),
+    deletePublication: async (_token, id) => {
+      deleted = id
+      return { ok: true, data: null }
+    },
+  })
+  const context = { actor: "ui", permissions: [], intent: "action" } as const
+  await assert.rejects(
+    remoteServerFileSystem.invoke(
+      remoteCommunityDirectoryRef,
+      "delete-publication",
+      { token: "token", id: 7 },
+      context,
+    ),
+    (error: unknown) => error instanceof FileSystemError && error.code === "invalid-input",
+  )
+  await remoteServerFileSystem.invoke(
+    remoteCommunityDirectoryRef,
+    "delete-publication",
+    { token: "token", id: publicationId },
+    context,
+  )
+  assert.equal(deleted, publicationId)
 })

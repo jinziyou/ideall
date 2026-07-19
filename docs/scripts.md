@@ -113,10 +113,19 @@ pnpm test:coverage
 ```bash
 pnpm gen:api
 pnpm gen:api:check
-SERVER_LOCAL=/abs/path/to/openapi.json pnpm sync:api
+SERVER_LOCAL=/abs/path/to/wonita/apiserver/openapi.json \
+SERVER_SOURCE_COMMIT=<wonita-commit> pnpm sync:api
 ```
 
-`openapi/server.json` 是提交到仓库的契约源；`src/lib/api/server.d.ts` 是生成物，只允许 HTTP 适配器消费。普通开发通常只需要 `pnpm gen:api`，维护者拿到后端新 schema 时才运行 `sync:api`。
+`openapi/server.json` 是提交到仓库的契约快照；`openapi/server.provenance.json` 同时记录 wonita
+仓库、不可变 commit、源路径和快照 SHA-256；`src/lib/api/server.d.ts` 是生成物，只允许 HTTP
+适配器消费。`pnpm gen:api:check` 会先验证 provenance 与快照哈希，再检查生成类型，因此单独替换
+快照以及缺失或格式错误的 commit 都会使 CI 失败。普通开发通常只需要 `pnpm gen:api`，维护者拿到后端新
+schema 时才运行 `sync:api`；同步必须提供 `SERVER_SOURCE_COMMIT`。非默认 fork 或源路径可另设
+`SERVER_SOURCE_REPOSITORY=owner/repo`、`SERVER_SOURCE_PATH=path/to/openapi.json`。
+
+跨仓自动同步由中立的 `jinziyou` 编排仓负责：wonita `dev` 的 OpenAPI 更新会触发一个 ideall PR，
+PR 同时更新快照、provenance 与生成类型。手工同步主要用于本地预检和自动化故障恢复。
 
 ```bash
 pnpm bump <x.y.z>

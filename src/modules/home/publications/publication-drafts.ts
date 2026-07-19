@@ -76,7 +76,7 @@ export type PublicationDraft = PublicationDraftInput &
     version: string | null
     status: PublicationDraftStatus
     origin?: PublicationDraftOrigin
-    remotePublicationId?: number
+    remotePublicationId?: string
     publishedAt?: number
     createdAt: number
     updatedAt: number
@@ -99,7 +99,7 @@ type PublicationDraftMetadata = Readonly<{
   status: PublicationDraftStatus
   url: string
   origin?: PublicationDraftOrigin
-  remotePublicationId?: number
+  remotePublicationId?: string
   publishedAt?: number
 }>
 
@@ -158,7 +158,7 @@ export type PublicationDeleteOutcome =
 export type CommunityMutationGuards = Readonly<{
   pendingDraftIds: readonly string[]
   publishedDraftIds: readonly string[]
-  pendingPublicationIds: readonly number[]
+  pendingPublicationIds: readonly string[]
 }>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -168,6 +168,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function text(value: unknown, maximum: number): string | null {
   if (typeof value !== "string" || value.length > maximum) return null
   return value
+}
+
+function stablePublicationId(value: unknown): string | undefined {
+  return typeof value === "string" && /^pub:[0-9a-f]{32}$/u.test(value) ? value : undefined
 }
 
 function normalizeTitle(value: string): string {
@@ -241,7 +245,7 @@ export function publicationDraftContent(
   options: Readonly<{
     origin?: PublicationDraftOrigin
     status?: PublicationDraftStatus
-    remotePublicationId?: number
+    remotePublicationId?: string
     publishedAt?: number
   }> = {},
 ): NoteContent {
@@ -252,7 +256,7 @@ export function publicationDraftContent(
     status: options.status ?? "draft",
     url: normalized.url,
     ...(origin ? { origin } : {}),
-    ...(Number.isSafeInteger(options.remotePublicationId) && options.remotePublicationId! >= 0
+    ...(stablePublicationId(options.remotePublicationId)
       ? { remotePublicationId: options.remotePublicationId }
       : {}),
     ...(typeof options.publishedAt === "number" && Number.isFinite(options.publishedAt)
@@ -286,10 +290,7 @@ function decodeDraftMetadata(content: NoteContent): PublicationDraftMetadata | n
   const url = text(raw.url, MAX_PUBLICATION_DRAFT_URL)
   if (url === null || (url && safeHref(url) !== url)) return null
   const origin = normalizeOrigin(raw.origin as PublicationDraftOrigin | undefined)
-  const remotePublicationId =
-    Number.isSafeInteger(raw.remotePublicationId) && Number(raw.remotePublicationId) >= 0
-      ? Number(raw.remotePublicationId)
-      : undefined
+  const remotePublicationId = stablePublicationId(raw.remotePublicationId)
   const publishedAt =
     typeof raw.publishedAt === "number" && Number.isFinite(raw.publishedAt)
       ? raw.publishedAt
@@ -364,7 +365,7 @@ export function communityMutationGuardTargets(value: unknown): CommunityMutation
   }
   const pendingDraftIds = new Set<string>()
   const publishedDraftIds = new Set<string>()
-  const pendingPublicationIds = new Set<number>()
+  const pendingPublicationIds = new Set<string>()
   for (const record of value.records) {
     if (!isRecord(record) || !isRecord(record.target)) continue
     const id = record.target.id
@@ -384,14 +385,8 @@ export function communityMutationGuardTargets(value: unknown): CommunityMutation
       record.target.kind === "publication" &&
       typeof id === "string"
     ) {
-      const publicationId = Number(id)
-      if (
-        Number.isSafeInteger(publicationId) &&
-        publicationId >= 0 &&
-        String(publicationId) === id
-      ) {
-        pendingPublicationIds.add(publicationId)
-      }
+      const publicationId = stablePublicationId(id)
+      if (publicationId) pendingPublicationIds.add(publicationId)
     }
   }
   return {

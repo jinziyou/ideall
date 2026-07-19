@@ -39,6 +39,18 @@ function readTokenSync(): string | null {
   return (isTauri() ? null : secureFallbackGet(AUTH_TOKEN_SECURE_KEY)) ?? cachedTokenRaw
 }
 
+function isCurrentUser(value: unknown): value is CurrentUser {
+  if (!value || typeof value !== "object") return false
+  const user = value as Record<string, unknown>
+  return (
+    typeof user.id === "string" &&
+    user.id.length > 0 &&
+    typeof user.email === "string" &&
+    typeof user.name === "string" &&
+    (user.avatar === null || typeof user.avatar === "string")
+  )
+}
+
 export async function hydrateSessionTokenSecure(): Promise<string | null> {
   if (tokenHydrating) return tokenHydrating
   tokenHydrating = secureGetWithLegacy(AUTH_TOKEN_SECURE_KEY, AUTH_TOKEN_STORAGE_KEY)
@@ -67,7 +79,8 @@ export function getSession(): Session {
   let value: Session = null
   if (tokenRaw && userRaw) {
     try {
-      value = { token: tokenRaw, user: JSON.parse(userRaw) as CurrentUser }
+      const user = JSON.parse(userRaw) as unknown
+      value = isCurrentUser(user) ? { token: tokenRaw, user } : null
     } catch {
       value = null
     }

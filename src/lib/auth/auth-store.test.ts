@@ -25,7 +25,12 @@ const localStorageStub: Storage = {
 }
 Object.defineProperty(globalThis, "localStorage", { value: localStorageStub, configurable: true })
 
-const user = { id: 1, email: "u@example.test", name: "User", avatar: null }
+const user = {
+  id: `u:${"1".repeat(32)}`,
+  email: "u@example.test",
+  name: "User",
+  avatar: null,
+}
 
 test("auth-store: getter 不迁移旧公开 token", () => {
   mem.clear()
@@ -57,6 +62,16 @@ test("auth-store: 旧用户资料迁移到 ideall 命名空间并删除旧键", 
   assert.deepEqual(getSession(), { token, user })
   assert.equal(mem.get(AUTH_USER_STORAGE_KEY), JSON.stringify(user))
   assert.equal(mem.get(LEGACY_AUTH_USER_STORAGE_KEY), undefined)
+})
+
+test("auth-store: V1 数字用户 ID 缓存不再恢复为 V2 会话", () => {
+  mem.clear()
+  mem.set(secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY), "legacy-v1-token")
+  mem.set(
+    AUTH_USER_STORAGE_KEY,
+    JSON.stringify({ id: 1, email: "legacy@example.test", name: "Legacy", avatar: null }),
+  )
+  assert.equal(getSession(), null)
 })
 
 test("auth-store: 新旧用户资料同时存在时 canonical 用户资料胜出", () => {

@@ -56,7 +56,7 @@ export const communityEmbedManifest: Manifest = {
   version: "1.0.0",
   entry: `${EMBED_BASE}/community`,
   origins: [EMBED_ORIGIN],
-  minHostProtocol: "1.0",
+  minHostProtocol: "1.1",
   permissions: [
     "identity:read",
     "identity.publish",

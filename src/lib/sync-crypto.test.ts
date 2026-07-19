@@ -5,7 +5,9 @@ import assert from "node:assert/strict"
 
 import {
   deriveKeys,
+  decryptBytes,
   encryptJson,
+  encryptBytes,
   decryptJson,
   isValidSyncCode,
   generateSyncCode,
@@ -65,6 +67,18 @@ test("encryptJson/decryptJson: 往返还原明文, 密文不含明文", async ()
   assert.deepEqual(back, value)
   // 密文不应直接暴露明文
   assert.ok(!ciphertext.includes("测试关注标题"))
+})
+
+test("encryptBytes/decryptBytes: V2 分片按原始字节往返并守密文上限", async () => {
+  const { key } = await deriveKeys(CODE, "notes", 1)
+  const plaintext = new TextEncoder().encode("跨分片 JSON 🚀")
+  const encrypted = await encryptBytes(key, plaintext, 1_024)
+  assert.deepEqual(await decryptBytes(key, encrypted.iv, encrypted.ciphertext, 1_024), plaintext)
+  await assert.rejects(encryptBytes(key, plaintext, 20), /传输上限/)
+  await assert.rejects(
+    decryptBytes(key, encrypted.iv, encrypted.ciphertext, encrypted.ciphertext.length - 4),
+    /格式无效或超过上限/,
+  )
 })
 
 test("decryptJson: 错误同步码派生的密钥必须解密失败 (端到端隔离)", async () => {

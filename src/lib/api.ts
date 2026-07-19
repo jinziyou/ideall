@@ -139,5 +139,11 @@ function extractErrorMessage(body: unknown): string | undefined {
     const value = record[key]
     if (typeof value === "string" && value) return value
   }
+  // wonita 的统一错误包络：{ error: { code, message } }。
+  const nestedError = record.error
+  if (nestedError && typeof nestedError === "object") {
+    const message = (nestedError as Record<string, unknown>).message
+    if (typeof message === "string" && message) return message
+  }
   return undefined
 }

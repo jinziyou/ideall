@@ -126,6 +126,45 @@ export async function encryptJson(
   return { iv: bytesToBase64(iv), ciphertext: bytesToBase64(new Uint8Array(ct)) }
 }
 
+/** 加密已分片的原始 JSON 字节；不再对分片做 JSON 包装。 */
+export async function encryptBytes(
+  key: CryptoKey,
+  plaintext: Uint8Array<ArrayBuffer>,
+  maxCiphertextBase64Chars?: number,
+): Promise<Encrypted> {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext))
+  const ciphertext = bytesToBase64(ct)
+  if (maxCiphertextBase64Chars && ciphertext.length > maxCiphertextBase64Chars) {
+    throw new SyncBlockLimitError("同步分片密文超过传输上限")
+  }
+  return { iv: bytesToBase64(iv), ciphertext }
+}
+
+/** 解密一个 V2 原始字节分片。 */
+export async function decryptBytes(
+  key: CryptoKey,
+  iv: string,
+  ciphertext: string,
+  maxCiphertextBase64Chars?: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (
+    !isBase64(iv) ||
+    base64ToBytes(iv).byteLength !== 12 ||
+    !isBase64(ciphertext) ||
+    base64ToBytes(ciphertext).byteLength < 16 ||
+    (maxCiphertextBase64Chars && ciphertext.length > maxCiphertextBase64Chars)
+  ) {
+    throw new SyncBlockLimitError("同步分片密文格式无效或超过上限")
+  }
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToBytes(iv) },
+    key,
+    base64ToBytes(ciphertext),
+  )
+  return new Uint8Array(plaintext)
+}
+
 export async function decryptJson<T>(
   key: CryptoKey,
   iv: string,

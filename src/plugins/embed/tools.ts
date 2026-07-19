@@ -46,6 +46,14 @@ function fail(code: number, message: string): ToolResult {
 // 关注类型白名单: 用 zod enum 让 handler 直接拿到领域联合 (SubscriptionType), 杜绝任意字符串写入脏关注。
 const subType = z.enum(["publisher", "entity", "tool", "search", "peer"])
 
+// Rust 服务端按 Unicode scalar value 计数；Zod 的 string.max() 按 UTF-16 code unit
+// 计数，会把 emoji 等非 BMP 字符算作两个，导致前端比 API 更早拒绝合法名称。
+const displayName = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => [...value].length <= 100, "发布名称最多 100 个字符")
+
 // 节点 kind 白名单 (fs.* 文件面)。缺省 kind = 列全部命名空间。
 // 从 @protocol/node 的唯一数据来源 NODE_KINDS 派生, 杜绝与 NodeKind 联合漂移 (红队 §should-fix)。
 const nodeKind = z.enum([...NODE_KINDS] as [NodeKind, ...NodeKind[]])
@@ -98,23 +106,22 @@ export function registerGrantedTools(
       },
     )
 
-    server.tool(TOOL.communityDeletePublication, { id: z.number() }, async (a) => {
+    server.tool(TOOL.communityDeletePublication, { id: z.string() }, async (a) => {
       const s = host.getSession()
       if (!s) return fail(-32002, "not-authenticated")
       const r = await host.server().deletePublication(s.token, a.id)
       return r.ok ? ok({ ok: true }) : fail(-32000, r.message)
     })
 
-    server.tool(
-      TOOL.meUpdateProfile,
-      { name: z.string().optional(), avatar: z.string().optional() },
-      async (a) => {
-        const s = host.getSession()
-        if (!s) return fail(-32002, "not-authenticated")
-        const r = await host.server().updateProfile(s.token, { name: a.name, avatar: a.avatar })
-        return r.ok ? ok({ ok: true }) : fail(-32000, r.message)
-      },
-    )
+    server.tool(TOOL.meUpdateProfile, { name: displayName }, async (a) => {
+      const s = host.getSession()
+      if (!s) return fail(-32002, "not-authenticated")
+      const r = await host.server().updateProfile(s.token, { name: a.name })
+      if (!r.ok) return fail(-32000, r.message)
+      if (!r.data) return fail(-32000, "invalid-profile-response")
+      await host.setSession(s.token, r.data)
+      return ok(r.data)
+    })
   }
 
   // ── hub / 本机私有数据 ──────────────────────────────────────────────────────

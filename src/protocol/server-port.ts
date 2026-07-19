@@ -47,7 +47,7 @@ export interface Info {
   publish_time: number
 }
 
-/** `GET /v1/articles/{id}/related` 响应项: Info 平铺 + 关联强度分数 (向后兼容按 Info 读)。 */
+/** V2 文章图响应项: Info 平铺 + 关联强度分数（向后兼容按 Info 读）。 */
 export type RelatedInfo = Info & {
   /** 与目标共享的实体数 (全实体口径) */
   shared: number
@@ -71,7 +71,7 @@ export interface EntityPeriodCount {
   period: number
 }
 
-/** 实体详情聚合 (`GET /v1/entities/{label}/{name}`)。实体不存在时 `mention_count = 0`。 */
+/** V2 实体详情聚合；适配器先从公开 catalog 解析稳定 entity ID。 */
 export interface EntityDetail {
   label: string
   name: string
@@ -99,17 +99,18 @@ export interface InfoQuery {
   page_size_offset?: [number, number] | null
 }
 
-/** 社区发布者 (用户) 公开档案 + 发布数。`id` 即关注键 (`type:"peer"` 的 key)。 */
+/** 社区发布者 (用户) 公开档案 + 发布数。`id` 是稳定账户 ID，也是关注键。 */
 export interface PeerPublisher {
-  /** 用户节点 id (= JWT claims.id) */
-  id: number
+  /** V2 稳定账户 ID (`u:<hex>`)。 */
+  id: string
   name: string
   publication_count: number
 }
 
 /** 一条发布内容。 */
 export interface Publication {
-  id: number
+  /** V2 稳定发布 ID (`pub:<hex>`)。 */
+  id: string
   title: string
   /** 关联链接 (可空) */
   url: string
@@ -119,7 +120,7 @@ export interface Publication {
   created_at: number
 }
 
-/** 发布入参 (POST /v1/me/publications)。 */
+/** 发布入参 (POST /v2/app/me/publications)。 */
 export interface PublishDraft {
   title: string
   url?: string
@@ -145,7 +146,8 @@ export interface AuthCredentials {
 
 /** 当前登录用户 (公开发布身份)。 */
 export interface CurrentUser {
-  id: number
+  /** V2 稳定账户 ID (`u:<hex>`)。 */
+  id: string
   email: string
   name: string
   avatar: string | null
@@ -172,17 +174,14 @@ export interface ServerPort {
   listPeers(): Promise<ApiResult<PeerPublisher[]>>
   getPeerPublications(id: string): Promise<ApiResult<Publication[]>>
   publish(token: string, draft: PublishDraft): Promise<ApiResult<Publication>>
-  deletePublication(token: string, id: number): Promise<ApiResult<unknown>>
+  deletePublication(token: string, id: string): Promise<ApiResult<unknown>>
   // 鉴权 (X25519 登录方案)
   getServerPublicKey(clientId: string): Promise<ApiResult<string>>
   login(payload: AuthCredentials): Promise<ApiResult<AuthBody>>
   register(payload: AuthCredentials): Promise<ApiResult<AuthBody>>
   getMe(token: string): Promise<ApiResult<CurrentUser>>
-  /** 更新发布资料 (PUT /v1/me/profile)。嵌入桥 `me.updateProfile` 用; token 由宿主持有, 不出 iframe。 */
-  updateProfile(
-    token: string,
-    patch: { name?: string; avatar?: string },
-  ): Promise<ApiResult<unknown>>
+  /** 更新发布名称 (PUT /v2/app/me/profile)。V2 不提供 avatar 写入能力。 */
+  updateProfile(token: string, patch: { name: string }): Promise<ApiResult<CurrentUser>>
 }
 
 let override: ServerPort | null = null

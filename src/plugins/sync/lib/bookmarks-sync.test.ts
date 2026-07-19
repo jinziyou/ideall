@@ -6,9 +6,10 @@ import {
   type BookmarkSyncNode,
   type StorageSyncPort,
 } from "@protocol/storage-sync"
-import { recordsEqual, type SyncBlob } from "@protocol/sync"
+import { recordsEqual } from "@protocol/sync"
 import { decryptJson, deriveKeys, encryptJson } from "@/lib/sync-crypto"
 import { gcBookmarks, isValidRemoteBookmarkNode, syncBookmarks } from "./bookmarks-sync"
+import { makeSyncTestServer } from "./sync-test-server"
 
 const CODE = "0123456789abcdef0123456789abcdef"
 
@@ -82,28 +83,6 @@ afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-function makeServer(initial: SyncBlob | null = null) {
-  const state = { blob: initial, putCount: 0 }
-  const response = (status: number, body: string) => ({
-    ok: status >= 200 && status < 300,
-    status,
-    text: async () => body,
-  })
-  globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
-    const url = String(input)
-    if (!url.includes("/sync/")) throw new Error(`unexpected url: ${url}`)
-    if ((init.method ?? "GET") === "GET") {
-      return state.blob ? response(200, JSON.stringify({ data: state.blob })) : response(404, "")
-    }
-    state.putCount++
-    const expected = Number(url.match(/[?&]expected=(\d+)/)?.[1] ?? "0")
-    if (expected !== (state.blob?.updated_at ?? 0)) return response(409, "conflict")
-    state.blob = JSON.parse(String(init.body)) as SyncBlob
-    return response(200, "{}")
-  }) as unknown as typeof fetch
-  return state
-}
-
 function makeBookmarkHub(initial: BookmarkSyncNode[]) {
   const store = structuredClone(initial)
   const bulkCalls: Array<{
@@ -149,7 +128,7 @@ test("syncBookmarks: merges folder and bookmark in one CAS snapshot and uploads 
     bookmark({ id: "remote-bookmark", parentId: "remote-folder", updatedAt: 2 }),
   ]
   const encrypted = await encryptJson(key, remote)
-  const server = makeServer({ ...encrypted, updated_at: 100 })
+  const server = makeSyncTestServer({ ...encrypted, updated_at: 100 })
   const local = [bookmark({ id: "local-bookmark" })]
   const hub = makeBookmarkHub(local)
 
@@ -177,7 +156,7 @@ test("syncBookmarks: 远端孤儿书签在落地和回传前移到根级", async
   const { key } = await deriveKeys(CODE, "bookmarks")
   const remote = [bookmark({ id: "orphan", parentId: "missing-folder", updatedAt: 8 })]
   const encrypted = await encryptJson(key, remote)
-  const server = makeServer({ ...encrypted, updated_at: 100 })
+  const server = makeSyncTestServer({ ...encrypted, updated_at: 100 })
   const hub = makeBookmarkHub([])
 
   await syncBookmarks(CODE)

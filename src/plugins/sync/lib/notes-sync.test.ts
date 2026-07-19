@@ -9,9 +9,10 @@ import {
   StorageSyncConflictError,
   type StorageSyncPort,
 } from "@protocol/storage-sync"
-import { recordsEqual, type SyncBlob } from "@protocol/sync"
+import { recordsEqual } from "@protocol/sync"
 import { decryptJson, deriveKeys, encryptJson } from "@/lib/sync-crypto"
 import { mergeTwoNotes, mergeNotes, isValidRemoteNote, syncNotes } from "./notes-sync"
+import { makeSyncTestServer } from "./sync-test-server"
 
 const blk = (id: string, text: string) => ({ id, type: "p", children: [{ text }] })
 const note = (over: Partial<Note>): Note => ({
@@ -171,30 +172,6 @@ afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-/** 内存「服务端」(同 subscription-sync.test): 单同步块 + 乐观并发; putCount 计收到的 PUT 数。 */
-function makeServer(initial: SyncBlob | null = null) {
-  const state = { blob: initial, putCount: 0 }
-  const text = (s: number, b: string) => ({
-    ok: s >= 200 && s < 300,
-    status: s,
-    text: async () => b,
-  })
-  globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
-    const url = String(input)
-    if (!url.includes("/sync/")) throw new Error("unexpected url: " + url)
-    if ((init.method ?? "GET") === "GET") {
-      return state.blob ? text(200, JSON.stringify({ data: state.blob })) : text(404, "")
-    }
-    state.putCount++
-    const expected = Number(url.match(/[?&]expected=(\d+)/)?.[1] ?? "0")
-    const current = state.blob?.updated_at ?? 0
-    if (expected !== current) return text(409, "conflict")
-    state.blob = JSON.parse(String(init.body)) as SyncBlob
-    return text(200, "{}")
-  }) as unknown as typeof fetch
-  return state
-}
-
 /** 内存 StorageSyncPort (syncNotes 仅用笔记同步原始面)，实现真实快照 CAS。 */
 function makeNotesHub(initial: Note[]) {
   const normalizeNote = (value: Note): Note => {
@@ -239,7 +216,7 @@ test("syncNotes: 合并结果与远端等价 → 跳过重新加密上传", asyn
   const { key } = await deriveKeys(CODE, "notes")
   const notes = [note({ id: "n1", createdAt: 1000, updatedAt: 1000 })]
   const enc = await encryptJson(key, notes)
-  const server = makeServer({ iv: enc.iv, ciphertext: enc.ciphertext, updated_at: 111 })
+  const server = makeSyncTestServer({ iv: enc.iv, ciphertext: enc.ciphertext, updated_at: 111 })
   makeNotesHub(notes)
   const res = await syncNotes(CODE)
   assert.equal(server.putCount, 0, "无变更 → 不应 PUT")
@@ -248,10 +225,12 @@ test("syncNotes: 合并结果与远端等价 → 跳过重新加密上传", asyn
 })
 
 test("syncNotes: 本地有远端没有的笔记 → 照常上传", async () => {
-  const server = makeServer()
+  const server = makeSyncTestServer()
   makeNotesHub([note({ id: "n1", createdAt: 1000, updatedAt: 1000 })])
   const res = await syncNotes(CODE)
   assert.equal(server.putCount, 1, "有增量 → 应 PUT 一次")
+  assert.equal(server.partPutCount, 1, "单片快照 → 应上传一个 generation part")
+  assert.deepEqual(server.fallbackGetOrder, ["manifest", "v2-single", "v1-legacy"])
   assert.ok(server.blob, "服务端应已写入密文")
   assert.equal(res.total, 1)
 })
@@ -265,7 +244,11 @@ test("syncNotes: 拉取远端增量时以初始快照执行本地 CAS", async ()
     } as Note,
   ]
   const encrypted = await encryptJson(key, remoteNotes)
-  const server = makeServer({ iv: encrypted.iv, ciphertext: encrypted.ciphertext, updated_at: 123 })
+  const server = makeSyncTestServer({
+    iv: encrypted.iv,
+    ciphertext: encrypted.ciphertext,
+    updated_at: 123,
+  })
   const hub = makeNotesHub([note({ id: "local", createdAt: 1000, updatedAt: 1000 })])
 
   const res = await syncNotes(CODE)
