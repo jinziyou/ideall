@@ -33,14 +33,14 @@ env:
   NEXT_PUBLIC_EMBED_BASE: ${{ vars.NEXT_PUBLIC_EMBED_BASE || 'https://www.wonita.link' }}
 
 jobs:
-  # 判定是否构建: tag / main 手动 → 总是; main 推送 → 仅当本次改动含应用或发布链文件才构建。
-  # 纯文档、非发布 workflow 与格式配置跳过；app-build 本身和共享 setup action 必须触发构建。
+  # 判定是否构建 + 发版预检合为一个 job。
+  # tag / main 手动 → 总是构建; main 推送 → 仅应用或发布链改动才构建。
+  # JS/Rust 质量门见 ci.yml / rust.yml，此处只做签名密钥与 updater 配置预检。
   gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     outputs:
       build: ${{ steps.decide.outputs.build }}
-      rust: ${{ steps.decide.outputs.rust }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -58,19 +58,8 @@ jobs:
         env:
           BEFORE_SHA: ${{ github.event.before }}
         run: node scripts/app-build-gate.mjs
-
-  preflight:
-    needs: gate
-    if: needs.gate.outputs.build == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-          persist-credentials: false
       - name: Verify release tag belongs to main
-        if: github.ref_type == 'tag'
+        if: steps.decide.outputs.build == 'true' && github.ref_type == 'tag'
         run: |
           git fetch --no-tags origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
@@ -78,37 +67,16 @@ jobs:
             exit 1
           fi
       - uses: ./.github/actions/setup-js
+        if: steps.decide.outputs.build == 'true'
       - name: Verify release configuration and updater signing key
+        if: steps.decide.outputs.build == 'true'
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/release-preflight.mjs
-      - name: Verify JavaScript quality gates
-        run: pnpm verify:checks
-      - name: Install Linux WebKit deps
-        if: needs.gate.outputs.rust == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        if: needs.gate.outputs.rust == 'true'
-        with:
-          components: clippy,rustfmt
-      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        if: needs.gate.outputs.rust == 'true'
-        with:
-          workspaces: ./src-tauri -> target
-      - name: Verify Rust quality gates
-        if: needs.gate.outputs.rust == 'true'
-        working-directory: src-tauri
-        run: |
-          mkdir -p ../out
-          cargo fmt --all -- --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
 
   desktop:
-    needs: [gate, preflight]
+    needs: gate
     if: needs.gate.outputs.build == 'true'
     name: desktop (${{ matrix.label }})
     strategy:
@@ -179,7 +147,7 @@ jobs:
   android:
     name: android (debug apk)
     # 仅 tag / 手动时出 APK (main 每次推送不打 Android, 省 CI)。
-    needs: [gate, preflight]
+    needs: gate
     if: needs.gate.outputs.build == 'true' && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-22.04
     timeout-minutes: 75
@@ -242,7 +210,7 @@ jobs:
 
   publish:
     name: validate and publish desktop release
-    needs: [gate, preflight, desktop]
+    needs: [gate, desktop]
     if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
