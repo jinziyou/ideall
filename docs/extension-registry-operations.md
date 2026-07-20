@@ -78,6 +78,8 @@ pnpm registry:verify
 
 发布顺序是：先让 `extension-registry` Release 成功，再部署包含代理路由的 wonita apiserver。验收：
 
+当前状态（2026-07-20）：首次空目录 Release 已发布并通过下载摘要与 Minisign 独立验收；Wonita 代理代码已合并，生产端点仍返回 HTTP 404，等待生产部署。
+
 ```bash
 curl -fsS 'https://api.wonita.link/v1/extensions/registry?limit=64'
 ```
