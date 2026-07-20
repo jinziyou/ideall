@@ -331,9 +331,9 @@ AI 或阅读结果可以转为：
 20. R3 外部 Agent 执行后端：桌面端可在内置模型与用户配置的外部 ACP CLI Agent 间切换；initialize/session/prompt、流式文本、工具状态、取消、超时和诊断进入同一对话 UI。普通聊天拒绝权限，智能体模式逐次确认并先写 pending 审计；命令和 argv 只来自设备设置且不经 shell，也不会向外部进程注入 ideall MCP。
 21. R0 统一快速捕获：资讯与社区嵌入页、聚合关注流、单来源详情、普通工具外链和内嵌浏览器共用 bookmarks FileSystem 的 `capture.bookmark` specialized action。标题、URL、摘要和 favicon 在 provider 边界有界规范化，新对象自动进入收件箱；canonical URL 查询与创建位于同一 IndexedDB 事务，跨入口、跨窗口和锚点变体不会重复。所有入口共用“保存到我的”的加载、成功与 existing 回执，保存结果继续进入全文索引和 AI 上下文链路。
 22. R0 首次捕获引导：首个新建书签、网页快照、摘录、导入文件或系统分享成功后，以一次性 toast 动作回流到“我的 / 收件箱”；收件箱用非模态内联说明解释“保存 → 检查 → 归档”，完成一次归档或主动关闭后结束。状态只存本机公开配置，跨窗口同步；已有对象和重复捕获不启动或重置引导，配置不可用也不能阻断捕获。
-23. R3 联网扩展 Registry 客户端：Rust 只访问固定官方 HTTPS 端点，不跟随重定向，逐页验证官方 Minisign 信封的原始 payload，并绑定序列、生成/过期时间、请求游标、全局排序、页数和条目上限。原始签名页原子缓存且每次读取重新验签；断网回退可信缓存并显示 stale/故障码。设置页刷新经 Settings FileSystem specialized action，目录只提供发现元数据和签名包地址，安装仍走既有 envelope、publisher、撤销、摘要和 consent 链。客户端门禁已通过；固定端点当前返回 HTTP 404，生产签名 feed 需在服务端仓库发布。
+23. R3 联网扩展 Registry 客户端：Rust 只访问固定官方 HTTPS 端点，不跟随重定向，逐页验证官方 Minisign 信封的原始 payload，并绑定序列、生成/过期时间、请求游标、全局排序、页数和条目上限。原始签名页原子缓存且每次读取重新验签；断网回退可信缓存并显示 stale/故障码。设置页刷新经 Settings FileSystem specialized action，目录只提供发现元数据和签名包地址，安装仍走既有 envelope、publisher、撤销、摘要和 consent 链。客户端门禁与首次签名 Release 已通过；固定 Wonita 端点当前仍返回 HTTP 404，等待生产部署已合并的代理路由。
 24. R3 publisher 计划密钥轮换：严格信封的原始 payload 同时要求当前密钥授权和下一密钥持有证明；publisher 密钥序列只能加一，签名发布时间单调，最多 32 个历史指纹永久退役且不能回滚。信任库从 schema v1 读时迁移到 v2；设置页先检查候选并展示新旧指纹，确认时再次原生复验，然后先停止旧 connector、撤销 consent 并切换新根。旧密钥签名包及回滚副本立即失效，必须重新签名、安装和授权；已泄露当前密钥的独立恢复根仍未实现。
 25. R3 签名扩展更新事务：只对已安装且 Registry 版本更高的包开放用户触发更新。Rust 从重新验签且未过期的缓存取 URL，解析 DNS 后拒绝任一非全局地址并钉连已检查 IP，请求禁代理、重定向和压缩；响应有界并校验文件 SHA-256。临时候选继续绑定 Registry 序列/有效期、publisher 指纹、manifest 摘要、版本与权限差异；确认时全部重验，桌面层先停止旧 connector、撤销 consent，再原子安装并保留单版本回滚。取消、成功和失败均清理临时包；不做后台静默下载或自动授权。
-26. R3 生产 Registry 发布链：目录真相源经严格脚本绑定包、manifest、权限、publisher 指纹和 SHA，复用 App updater Minisign Secret 生成最多八页的短期信封；发布先上传并复核 staging Release，再原子切换固定通道，且拒绝 sequence 回退。Wonita apiserver 只从固定 HTTPS Release 代理有界 JSON 并短时缓存，不持有私钥；桌面再拒绝低序列或同序列分叉。代码与跨仓服务分支已完成，首次 Release、服务端合并部署及真实端点验收待外部发布步骤。
+26. R3 生产 Registry 发布链：目录真相源经严格脚本绑定包、manifest、权限、publisher 指纹和 SHA，复用 App updater Minisign Secret 生成最多八页的短期信封；发布先上传并复核 staging Release，再原子切换固定通道，且拒绝 sequence 回退。Wonita apiserver 只从固定 HTTPS Release 代理有界 JSON 并短时缓存，不持有私钥；桌面再拒绝低序列或同序列分叉。首次空目录 Release 已发布并独立验签，跨仓服务代码已合并；剩余生产部署和真实端点验收。
 
-下一批执行入口：完成首次空 Registry 签名 Release、合并部署服务端代理并进行真实刷新验收；随后实现独立离线密钥恢复。Android/iOS 原生分享扩展继续等待具备平台工具链的环境。
+下一批执行入口：部署 Wonita 服务端代理并进行真实端点与桌面刷新验收；随后实现独立离线密钥恢复。Android/iOS 原生分享扩展继续等待具备平台工具链的环境。

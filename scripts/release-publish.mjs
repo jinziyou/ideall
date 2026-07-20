@@ -13,6 +13,18 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+const RELEASE_VISIBILITY_DELAYS_MS = [0, 250, 500, 1_000, 2_000, 4_000, 8_000]
+
+async function waitForRelease(client, tag, predicate, visibilityDelays) {
+  let release = null
+  for (const delay of visibilityDelays) {
+    if (delay) await sleep(delay)
+    release = await client.getReleaseByTag(tag)
+    if (predicate(release)) return release
+  }
+  return release
+}
+
 export function readPreparedRelease(directory) {
   const manifestPath = path.join(directory, "release-manifest.json")
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
@@ -221,7 +233,7 @@ async function promoteFormalRelease(client, staging, metadata) {
   return promoted
 }
 
-async function promoteEdgeRelease(client, staging, metadata, logger) {
+async function promoteEdgeRelease(client, staging, metadata, logger, visibilityDelays) {
   const oldRelease = await client.getReleaseByTag(metadata.tag)
   const oldRef = await client.getRef(metadata.tag)
   if (oldRelease && !oldRef) throw new Error("现有 app-edge Release 缺少对应 git tag，拒绝切换")
@@ -232,7 +244,7 @@ async function promoteEdgeRelease(client, staging, metadata, logger) {
   try {
     if (oldRef) await client.createRef(backupTag, oldRef.object.sha)
     if (oldRelease) {
-      await client.updateRelease(oldRelease.id, {
+      const moved = await client.updateRelease(oldRelease.id, {
         tag_name: backupTag,
         target_commitish: oldRef.object.sha,
         name: oldRelease.name,
@@ -242,6 +254,18 @@ async function promoteEdgeRelease(client, staging, metadata, logger) {
         make_latest: "false",
       })
       oldMoved = true
+      if (moved.id !== oldRelease.id || moved.draft || !moved.prerelease) {
+        throw new Error("旧 app-edge Release 迁移到备份通道失败")
+      }
+      const visibleBackup = await waitForRelease(
+        client,
+        backupTag,
+        (release) => release?.id === oldRelease.id && !release.draft && release.prerelease,
+        visibilityDelays,
+      )
+      if (visibleBackup?.id !== oldRelease.id) {
+        throw new Error("旧 app-edge backup Release 在等待期内不可见")
+      }
     }
     if (oldRef) await client.deleteRef(metadata.tag)
 
@@ -254,8 +278,13 @@ async function promoteEdgeRelease(client, staging, metadata, logger) {
       prerelease: true,
       make_latest: "false",
     })
-    const active = await client.getReleaseByTag(metadata.tag)
-    if (!active || active.id !== staging.id || active.draft || !active.prerelease) {
+    const active = await waitForRelease(
+      client,
+      metadata.tag,
+      (release) => release?.id === staging.id && !release.draft && release.prerelease,
+      visibilityDelays,
+    )
+    if (active?.id !== staging.id || active.draft || !active.prerelease) {
       throw new Error("app-edge staging Release 切换后校验失败")
     }
 
@@ -264,7 +293,12 @@ async function promoteEdgeRelease(client, staging, metadata, logger) {
     await client.deleteRef(metadata.stagingTag)
     return promoted
   } catch (error) {
-    const active = await client.getReleaseByTag(metadata.tag).catch(() => null)
+    const active = await waitForRelease(
+      client,
+      metadata.tag,
+      (release) => release?.id === staging.id && !release.draft && release.prerelease,
+      visibilityDelays,
+    ).catch(() => null)
     if (active?.id === staging.id && !active.draft) {
       logger.warn(`app-edge 已切换，但清理旧资源失败: ${error.message}`)
       return active
@@ -294,7 +328,13 @@ async function promoteEdgeRelease(client, staging, metadata, logger) {
   }
 }
 
-export async function publishPreparedRelease({ client, prepared, metadata, logger = console }) {
+export async function publishPreparedRelease({
+  client,
+  prepared,
+  metadata,
+  logger = console,
+  visibilityDelays = RELEASE_VISIBILITY_DELAYS_MS,
+}) {
   const stagingTag = `ideall-staging-${metadata.runId}-${metadata.runAttempt}`
   const fullMetadata = { ...metadata, stagingTag }
   const stale = await client.getReleaseByTag(stagingTag)
@@ -322,7 +362,7 @@ export async function publishPreparedRelease({ client, prepared, metadata, logge
   try {
     return metadata.isTag
       ? await promoteFormalRelease(client, staging, fullMetadata)
-      : await promoteEdgeRelease(client, staging, fullMetadata, logger)
+      : await promoteEdgeRelease(client, staging, fullMetadata, logger, visibilityDelays)
   } catch (error) {
     const active = await client.getReleaseByTag(metadata.tag).catch(() => null)
     if (active?.id !== staging.id) await cleanupRelease(client, staging, stagingTag, logger)
