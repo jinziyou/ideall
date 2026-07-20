@@ -1,8 +1,7 @@
 name: rust
 
-# Rust 门 (src-tauri): Linux 跑 rustfmt + clippy 零警告 + 全量测试。
-# Win/macOS 编译由 app-build 桌面 matrix 覆盖, 不再在此重复 cargo check。
-# paths 过滤: 仅 src-tauri 改动才跑。
+# Rust 门 (src-tauri): Linux 跑 rustfmt + clippy + 全量测试；Windows/macOS 低成本编译全部 targets。
+# paths 过滤: 仅 src-tauri 改动才跑 (省 CI 分钟数; 首跑冷缓存 ~7min, rust-cache 后显著缩短)。
 on:
   pull_request:
     paths:
@@ -24,7 +23,7 @@ permissions:
 
 jobs:
   rust:
-    name: cargo fmt + clippy + test
+    name: cargo fmt + check + clippy + test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -47,9 +46,40 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
         working-directory: src-tauri
+      - name: Check
+        run: cargo check --all-targets
+        working-directory: src-tauri
       - name: Clippy (警告即失败)
         run: cargo clippy --all-targets -- -D warnings
         working-directory: src-tauri
       - name: Test
         run: cargo test
+        working-directory: src-tauri
+
+  platform-check:
+    name: cargo check (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: ./src-tauri -> target
+      # tauri::generate_context! 在所有宿主平台都会读取 frontendDist=../out。
+      - name: Stub frontend dist
+        shell: bash
+        run: mkdir -p out
+      - name: Check all targets
+        run: cargo check --all-targets
         working-directory: src-tauri
