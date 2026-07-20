@@ -50,6 +50,7 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
     codeText.includes("安全存储") && codeText.includes("迁移/清理敏感值"),
   )
   const legacySecurity = await readSecurityMigrationState(page)
+  // 0.2 数据 epoch 后不再把 wonita auth/sync 迁入 secure-store；迁移动作只清理规范键上的明文。
   const recognizedLegacySecurity =
     (legacySecurity.legacyAuthToken === LEGACY_AUTH_TOKEN ||
       legacySecurity.fallbackAuthToken === LEGACY_AUTH_TOKEN) &&
@@ -64,15 +65,7 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
   record("Code 插件可识别旧敏感存储", recognizedLegacySecurity)
   await page.getByRole("button", { name: "迁移/清理敏感值", exact: true }).click()
   await page.waitForFunction(
-    ({
-      authToken,
-      syncCode,
-      agentKey,
-      secret,
-      workspaceKey,
-      workspaceTarget,
-      workspaceFallbackKey,
-    }) => {
+    ({ agentKey, secret, workspaceKey, workspaceTarget, workspaceFallbackKey }) => {
       const rawWorkspaceCredential = localStorage.getItem(workspaceFallbackKey)
       let workspaceCredentialMatches = rawWorkspaceCredential === workspaceKey
       if (!workspaceCredentialMatches && rawWorkspaceCredential !== null) {
@@ -88,10 +81,6 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
         }
       }
       return (
-        localStorage.getItem("wonita:auth:token") === null &&
-        localStorage.getItem("wonita:sync:code") === null &&
-        localStorage.getItem("ideall:secure-fallback:ideall:auth:token") === authToken &&
-        localStorage.getItem("ideall:secure-fallback:ideall:sync:code") === syncCode &&
         localStorage.getItem("ideall:secure-fallback:ideall:agent:settings:apiKey") === agentKey &&
         localStorage.getItem("ideall:secure-fallback:ideall:agent:secret:SMOKE_SECRET") ===
           secret &&
@@ -99,8 +88,6 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
       )
     },
     {
-      authToken: LEGACY_AUTH_TOKEN,
-      syncCode: LEGACY_SYNC_CODE,
       agentKey: LEGACY_AGENT_KEY,
       secret: LEGACY_MCP_SECRET,
       workspaceKey: LEGACY_WORKSPACE_KEY,
@@ -111,12 +98,8 @@ export async function runCodePluginSmoke({ page, record, markStage }) {
   )
   const migratedSecurity = await readSecurityMigrationState(page)
   record(
-    "Code 插件可迁移旧敏感存储到 secure-store",
-    migratedSecurity.legacyAuthToken === null &&
-      migratedSecurity.legacySyncCode === null &&
-      migratedSecurity.fallbackAuthToken === LEGACY_AUTH_TOKEN &&
-      migratedSecurity.fallbackSyncCode === LEGACY_SYNC_CODE &&
-      migratedSecurity.fallbackAgentKey === LEGACY_AGENT_KEY &&
+    "Code 插件可迁移明文敏感存储到 secure-store",
+    migratedSecurity.fallbackAgentKey === LEGACY_AGENT_KEY &&
       migratedSecurity.fallbackSecret === LEGACY_MCP_SECRET &&
       migratedSecurity.fallbackWorkspaceKey === LEGACY_WORKSPACE_KEY &&
       migratedSecurity.publicAgentApiKey === undefined &&
