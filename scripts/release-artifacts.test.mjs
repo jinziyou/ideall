@@ -225,9 +225,10 @@ test("prepare 拒绝指向 stage assets 目录外的符号链接", (t) => {
 })
 
 class FakeReleaseClient {
-  constructor({ failUpload = false, failPromotion = false } = {}) {
+  constructor({ failUpload = false, failPromotion = false, promotionVisibilityMisses = 0 } = {}) {
     this.failUpload = failUpload
     this.failPromotion = failPromotion
+    this.promotionVisibilityMisses = promotionVisibilityMisses
     this.nextId = 2
     this.releases = new Map([
       [
@@ -248,7 +249,12 @@ class FakeReleaseClient {
   }
 
   async getReleaseByTag(tag) {
-    return this.releases.get(tag) ?? null
+    const release = this.releases.get(tag) ?? null
+    if (tag === "app-edge" && release?.id !== 1 && this.promotionVisibilityMisses > 0) {
+      this.promotionVisibilityMisses -= 1
+      return null
+    }
+    return release
   }
   async getRef(tag) {
     return this.refs.get(tag) ?? null
@@ -279,6 +285,9 @@ class FakeReleaseClient {
     this.releases.delete(oldTag)
     Object.assign(release, data)
     this.releases.set(data.tag_name ?? oldTag, release)
+    if (data.tag_name && data.target_commitish) {
+      this.refs.set(data.tag_name, { object: { sha: data.target_commitish } })
+    }
     return release
   }
   async deleteRelease(id) {
@@ -308,6 +317,7 @@ function publishFixture(client) {
       runAttempt: "1",
     },
     logger: { warn() {} },
+    visibilityDelays: [0, 1, 1],
   })
 }
 
@@ -340,6 +350,15 @@ test("app-edge promotion 失败时回滚旧 Release 与 tag", async () => {
   await assert.rejects(publishFixture(client), /promotion failed/)
   assert.equal(client.releases.get("app-edge")?.id, 1)
   assert.equal(client.refs.get("app-edge")?.object.sha, "old-sha")
+})
+
+test("app-edge promotion 等待 GitHub tag Release 最终一致后再清理旧版本", async () => {
+  const client = new FakeReleaseClient({ promotionVisibilityMisses: 1 })
+  const release = await publishFixture(client)
+  assert.equal(release.id, 2)
+  assert.equal(client.releases.get("app-edge")?.id, 2)
+  assert.equal(client.refs.get("app-edge")?.object.sha, "new-sha")
+  assert.equal(client.releases.has("app-edge-backup-42-1"), false)
 })
 
 test("正式 tag 在资产完整后仍保持 draft 且不是 prerelease", async () => {
