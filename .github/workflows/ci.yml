@@ -1,13 +1,9 @@
 name: CI
 
-# 日常门禁单 job: verify:checks → app:export → (应用面改动时) 浏览器冒烟。
-# Rust 门见 rust.yml; App 发布见 app-build.yml。
 on:
   pull_request:
   push:
     branches: [main, dev]
-  schedule:
-    - cron: "17 19 * * 0"
   workflow_dispatch:
 
 concurrency:
@@ -18,14 +14,33 @@ permissions:
   contents: read
 
 jobs:
-  ci:
-    name: ci
+  quality:
+    name: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js
+      - name: Run quality checks
+        run: pnpm verify:checks
+      - name: Upload core coverage
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: core-coverage
+          path: node_modules/.cache/ideall/coverage
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js
       - name: Restore Next cache
@@ -36,69 +51,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-next-
-      - name: Quality + static export
-        run: pnpm verify:base
-      - id: smoke
-        name: Decide smoke
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+      - name: Build
+        run: pnpm app:export
 
-          pattern='^(src/|public/|package\.json|pnpm-lock\.yaml|next\.config\.ts|tsconfig\.json|scripts/smoke/|scripts/script-utils\.mjs|scripts/check-static-export\.mjs|scripts/verify-full\.mjs|scripts/verify-static-smoke\.mjs|scripts/serve-out\.mjs|\.github/actions/setup-js/|\.github/workflows/ci\.yml)'
-
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            git fetch --no-tags origin "$BASE_REF"
-            range="origin/${BASE_REF}...HEAD"
-          elif [ -n "${BEFORE_SHA:-}" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
-            range="${BEFORE_SHA}...HEAD"
-          elif git rev-parse --verify --quiet HEAD~1 >/dev/null; then
-            range="HEAD~1...HEAD"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! files="$(git diff --name-only "$range")"; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if printf '%s\n' "$files" | grep -Eq "$pattern"; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Restore Playwright cache
-        if: steps.smoke.outputs.run == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-      - name: Install Playwright Chromium
-        if: steps.smoke.outputs.run == 'true'
-        run: pnpm exec playwright install chromium --with-deps
-      - name: Static smoke
-        if: steps.smoke.outputs.run == 'true'
-        run: node scripts/verify-static-smoke.mjs --no-build
-        env:
-          SMOKE_LEVEL: ${{ github.event_name == 'pull_request' && 'core' || 'full' }}
-      - name: Upload smoke screenshots
-        if: failure() && steps.smoke.outputs.run == 'true'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: smoke-screenshots
-          path: |
-            /tmp/notes-smoke
-            /tmp/files-smoke
-            /tmp/plugins-smoke
-            /tmp/trash-smoke
-          if-no-files-found: ignore
+# 另两道门拆在独立工作流 (带 paths 过滤, 省 CI 分钟数):
+#   rust.yml  — clippy 零警告 + cargo test (仅 src-tauri/** 改动时跑)
+#   smoke.yml — 真浏览器冒烟, 测静态导出生产形态 (仅应用面改动时跑)
