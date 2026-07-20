@@ -5,7 +5,7 @@ import path from "node:path"
 import test from "node:test"
 import { prepareReleaseArtifacts, stageReleaseArtifacts } from "./release-artifacts.mjs"
 import { assertEmbedOriginAllowed, assertSignatureMatchesPublicKey } from "./release-preflight.mjs"
-import { publishPreparedRelease } from "./release-publish.mjs"
+import { GitHubReleaseClient, publishPreparedRelease } from "./release-publish.mjs"
 
 function makeMinisignFixtures() {
   const keyId = Buffer.from("0102030405060708", "hex")
@@ -115,6 +115,32 @@ test("release preflight 校验 embed CSP 和 updater key id", () => {
     /不在 Tauri CSP/,
   )
   assert.equal(assertSignatureMatchesPublicKey(keys.signature, keys.publicKey), "0102030405060708")
+})
+
+test("删除不存在的 GitHub tag ref 保持幂等且不吞掉其他 422", async (t) => {
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  const client = new GitHubReleaseClient({
+    owner: "jinziyou",
+    repo: "ideall",
+    token: "test-token",
+  })
+
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ message: "Reference does not exist" }), {
+      status: 422,
+      headers: { "Content-Type": "application/json" },
+    })
+  await assert.doesNotReject(client.deleteRef("missing"))
+
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ message: "Validation Failed" }), {
+      status: 422,
+      headers: { "Content-Type": "application/json" },
+    })
+  await assert.rejects(client.deleteRef("invalid"), /422:.*Validation Failed/)
 })
 
 test("artifact-first 聚合四个平台并确定性生成 latest.json 与 SHA256SUMS", (t) => {
