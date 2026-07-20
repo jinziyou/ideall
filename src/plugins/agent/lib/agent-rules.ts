@@ -102,3 +102,13 @@ export function setRuleEnabled(id: string, enabled: boolean): void {
 export function deleteRule(id: string): void {
   store.remove(id)
 }
+
+/**
+ * 以一个公开配置快照替换规则注册表。
+ *
+ * FileSystem / 导入适配器走这个入口而不是直接写 localStorage，确保正在显示的规则 UI
+ * 能收到同一条 store 订阅通知，并复用既有的容旧迁移。
+ */
+export function replaceRules(rules: readonly Partial<AgentRule>[]): void {
+  store.replaceAll(rules.map(migrate))
+}

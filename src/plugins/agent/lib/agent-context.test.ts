@@ -1,11 +1,17 @@
-// 对话即文件 (§6.5) 回归: gatherReferencedContext 把"当前查看的 note/thread"内容注入上下文 (隐式 consent),
-// 其余 kind 不注入 (概览已覆盖)。宿主全量读 (FilesPort), 不改 agent 的 MCP 授权集。
+// 对话即文件 (§6.5) 回归：gatherReferencedContext 只供显式生成精确提示；普通发送使用可见托盘的
+// gatherSelectedContext。宿主全量读仍经 FilesPort，不改 agent 的 MCP 授权集。
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { registerFilesPort, type FilesPort } from "@protocol/files"
 import type { Node } from "@protocol/node"
 import { registerActiveNode } from "@/lib/active-node"
-import { gatherHomeContext, gatherReferencedContext } from "./agent-context"
+import { nodeAgentContextSource, urlAgentContextSource } from "@/lib/agent-context-tray"
+import {
+  buildSystemPrompt,
+  gatherHomeContext,
+  gatherReferencedContext,
+  gatherSelectedContext,
+} from "./agent-context"
 
 function mockGetNode(nodes: Record<string, Node>) {
   registerFilesPort({
@@ -82,4 +88,42 @@ test("home 上下文: 分项读取失败时标记失败来源, 不伪装为空",
   assert.ok(ctx.includes("上下文读取状态"), "应包含上下文状态")
   assert.ok(ctx.includes("我的笔记"), "应指出失败来源")
   assert.ok(ctx.includes("不能据此判断为空"), "应避免误判为空数据")
+})
+
+test("上下文托盘: 只返回成功读取的显式来源并注入来源标记", async () => {
+  const bookmark: Node = {
+    id: "b1",
+    kind: "bookmark",
+    title: "Source",
+    parentId: null,
+    sortKey: "a1",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    content: {
+      url: "https://example.com/source",
+      description: "Primary evidence",
+      favicon: "",
+    },
+  }
+  mockGetNode({ n1: noteWithBody, b1: bookmark })
+  const external = urlAgentContextSource("https://example.com/external", "External")
+  assert.ok(external)
+
+  const prepared = await gatherSelectedContext([
+    nodeAgentContextSource("note", "n1", "方案"),
+    nodeAgentContextSource("bookmark", "b1", "Source"),
+    nodeAgentContextSource("note", "missing", "Missing"),
+    external!,
+  ])
+
+  assert.deepEqual(
+    prepared.sources.map((source) => source.title),
+    ["方案", "Source", "External"],
+  )
+  assert.match(prepared.text, /\[来源 node:note:n1\]/)
+  assert.match(prepared.text, /私密正文/)
+  assert.match(prepared.text, /Primary evidence/)
+  assert.doesNotMatch(prepared.text, /Missing/)
+  assert.match(buildSystemPrompt("", { selected: prepared.text }), /明确加入上下文托盘/)
 })

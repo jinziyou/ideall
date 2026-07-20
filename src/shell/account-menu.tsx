@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { CircleUser } from "lucide-react"
 import { Button } from "@/ui/button"
 import {
@@ -14,17 +13,22 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu"
 import { toast } from "sonner"
-import { clearSession, getSession, subscribeSession } from "@protocol/auth"
+import { clearSession, getSession, subscribeSession } from "@/lib/auth/auth-store"
+import { HOME_TARGET } from "@/shell/nav-config"
+import { openTarget } from "@/workspace/store"
 
 /** 账户菜单: 已登录显示用户名 + 退出; 未登录显示登录入口。读本地会话 (useSyncExternalStore)。 */
 export default function AccountMenu() {
   const session = React.useSyncExternalStore(subscribeSession, getSession, () => null)
-  const router = useRouter()
 
-  function logout() {
-    clearSession()
-    toast.success("已退出登录")
-    router.push("/home")
+  async function logout() {
+    try {
+      await clearSession()
+      toast.success("已退出登录")
+      openTarget(HOME_TARGET)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "退出登录失败")
+    }
   }
 
   return (
@@ -42,10 +46,8 @@ export default function AccountMenu() {
               {session.user.name || session.user.email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/home">我的</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={logout}>退出登录</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openTarget(HOME_TARGET)}>我的</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void logout()}>退出登录</DropdownMenuItem>
           </>
         ) : (
           <>

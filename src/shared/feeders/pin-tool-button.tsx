@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { getFilesPort } from "@protocol/files"
 import { undoableToast } from "@/lib/undo-toast"
+import { directorySurface } from "@/workspace/directory-surfaces"
+import { openTarget } from "@/workspace/store"
 import { flowbackToast } from "./flowback-toast"
 
 /**
@@ -23,7 +24,6 @@ export function PinToolButton({
   url: string
   className?: string
 }) {
-  const router = useRouter()
   const [pinned, setPinned] = React.useState<boolean | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [pulse, setPulse] = React.useState(false)
@@ -59,7 +59,13 @@ export function PinToolButton({
       } else {
         await filesPort.addSubscription({ type: "tool", key: url, title: name })
         setPinned(true)
-        flowbackToast(`已固定 ${name}`, () => router.push("/home/subscriptions"))
+        flowbackToast(`已固定 ${name}`, () =>
+          openTarget({
+            type: "path",
+            path: directorySurface("subscriptions").navigationPath,
+            transient: true,
+          }),
+        )
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
       }

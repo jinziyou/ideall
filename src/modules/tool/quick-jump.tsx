@@ -5,7 +5,8 @@ import { Clock, ExternalLink, LayoutGrid, Search, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/ui/button"
 import { Input } from "@/ui/input"
-import { PinToolButton } from "@/shared/feeders"
+import { PinToolButton } from "@/shared/feeders/pin-tool-button"
+import { CaptureLinkButton } from "@/shared/feeders/capture-link-button"
 import { openExternal } from "@/lib/safe-url"
 import { jumpToSearchEngine } from "@/lib/search-jump"
 import { isTauri } from "@/lib/tauri"
@@ -245,7 +246,7 @@ export default function QuickJump({ title, placeholder, providers, historyKey }:
             <button
               type="button"
               onClick={() => jump(provider)}
-              className="group flex w-full items-start gap-3 rounded-lg border bg-card p-3 pr-8 text-left text-card-foreground transition-colors hover:border-primary/40 hover:bg-accent"
+              className="group flex w-full items-start gap-3 rounded-lg border bg-card p-3 pr-14 text-left text-card-foreground transition-colors hover:border-primary/40 hover:bg-accent"
             >
               {/* 单色: 提供方首字母用中性方块, 不再用彩色 (尊重纯墨灰主题) */}
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold text-foreground">
@@ -258,6 +259,12 @@ export default function QuickJump({ title, placeholder, providers, historyKey }:
                 </span>
               </span>
             </button>
+            <CaptureLinkButton
+              title={provider.name}
+              url={provider.home}
+              description={provider.hint}
+              className="absolute right-7 top-1.5"
+            />
             <PinToolButton
               name={provider.name}
               url={provider.home}

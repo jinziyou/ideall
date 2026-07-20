@@ -26,21 +26,20 @@ import {
 } from "@/ui/dropdown-menu"
 import { TextPromptDialog } from "@/shared/prompt-dialog"
 import { cn } from "@/lib/utils"
-import { FileMeta } from "@protocol/files"
-import {
-  deleteFile,
-  getFile,
-  listFiles,
-  restoreFile,
-  updateFileMeta,
-} from "@/files/stores/files-store"
+import type { FileMeta } from "@protocol/files"
+import { invokeFileAction, watchFile } from "@/filesystem/registry"
+import { corePlaceRef } from "@/filesystem/resource-file-system"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import { fileTypeInfo, formatBytes, formatTime } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
-import FilePreviewDialog from "./file-preview-dialog"
 import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"
 import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
+import { downloadStoredFile, readStoredNodeFile, storedNodeFileRef } from "./file-preview"
+import { getThumbnail } from "@/lib/thumbnail-cache"
+import { openTarget } from "@/workspace/store"
+import { useTabActive } from "@/workspace/tab-active-context"
+import { loadManagedFiles, type ManagedFile } from "./file-manager-data"
 
 // 类型筛选分组: 把细分 FileKind 归并为用户可理解的几类
 type TypeFilter = "all" | "image" | "code" | "doc" | "data" | "media" | "archive" | "other"
@@ -56,6 +55,10 @@ const TYPE_TABS: { value: TypeFilter; label: string }[] = [
   { value: "other", label: "其他" },
 ]
 
+const FILES_ROOT_REF = corePlaceRef("files")
+const UI_ACTION_CONTEXT = { actor: "ui", permissions: [], intent: "action" } as const
+const UI_WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
+
 /** FileTypeInfo.group → 筛选分组 */
 function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
   const group = fileTypeInfo(file.name, file.type).group
@@ -67,25 +70,12 @@ function typeGroup(file: FileMeta): Exclude<TypeFilter, "all"> {
 
 type ViewMode = "grid" | "list"
 
-/** 触发浏览器下载一个 Blob */
-function downloadBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = name
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  // 延后释放: a.click() 触发的下载是异步发起的, 部分引擎 (WebKitGTK/Firefox) 若同步 revoke
-  // 会拿不到 blob 导致下载失败/空文件。本项目经 Tauri webview 分发 (Linux=WebKitGTK), 风险真实。
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
 /**
- * 图片缩略图: 仅在缩略图滚入视口后才读取自身 Blob 并建 ObjectURL, 卸载时释放。
- * 懒加载避免列表里所有图片文件在挂载即一次性 getFile + createObjectURL (本地优先场景可达上千个)。
+ * 图片缩略图: 滚入视口后先查缩略图缓存（key=(ref,version)，降采样 dataURL）；
+ * 缓存未命中/解码失败时回退原图 ObjectURL。懒加载避免列表里所有图片文件在挂载即
+ * 一次性 getFile + createObjectURL (本地优先场景可达上千个)。
  */
-function Thumbnail({ id }: { id: string }) {
+function ActiveThumbnail({ file }: { file: ManagedFile }) {
   const [src, setSrc] = React.useState<string | null>(null)
   const [visible, setVisible] = React.useState(false)
   const placeholderRef = React.useRef<HTMLDivElement | null>(null)
@@ -110,18 +100,38 @@ function Thumbnail({ id }: { id: string }) {
 
   React.useEffect(() => {
     if (!visible) return
+    // ref 由稳定 id 派生（而非依赖每次列表刷新都重建的 file.ref 对象），
+    // 避免无关目录变更令全部缩略图 effect 重跑。
+    const ref = storedNodeFileRef(file.id)
     let url: string | null = null
-    let active = true
-    getFile(id).then((f) => {
-      if (!active || !f) return
-      url = URL.createObjectURL(f.blob)
-      setSrc(url)
-    })
+    let alive = true
+    let loadedBlob: Blob | null = null
+    const loadBlob = async () => {
+      loadedBlob = (await readStoredNodeFile(file.id))?.file.blob ?? null
+      return loadedBlob
+    }
+    void (async () => {
+      const dataUrl = await getThumbnail(ref, file.version, loadBlob)
+      if (!alive) return
+      if (dataUrl) {
+        setSrc(dataUrl)
+        return
+      }
+      try {
+        // 解码失败：复用刚读出的 Blob 建原图 ObjectURL（不再二次 stat+read）。
+        const blob = loadedBlob ?? (await loadBlob())
+        if (!alive || !blob) return
+        url = URL.createObjectURL(blob)
+        setSrc(url)
+      } catch {
+        // 保持占位图标
+      }
+    })()
     return () => {
-      active = false
+      alive = false
       if (url) URL.revokeObjectURL(url)
     }
-  }, [id, visible])
+  }, [file.id, file.version, visible])
 
   if (!src)
     return (
@@ -133,22 +143,34 @@ function Thumbnail({ id }: { id: string }) {
   return <img src={src} alt="" className="h-full w-full object-cover" />
 }
 
+function Thumbnail({ file }: { file: ManagedFile }) {
+  const active = useTabActive()
+  if (!active) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+      </div>
+    )
+  }
+  return <ActiveThumbnail file={file} />
+}
+
 export default function FileManager() {
-  const [files, setFiles] = React.useState<FileMeta[]>([])
+  const tabActive = useTabActive()
+  const [files, setFiles] = React.useState<ManagedFile[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<TypeFilter>("all")
   const [view, setView] = React.useState<ViewMode>("grid")
   const [dragging, setDragging] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
-  const [previewId, setPreviewId] = React.useState<string | null>(null)
   // 重命名对话框状态 (替代 window.prompt): 以目标文件对象控制 open
-  const [renameTarget, setRenameTarget] = React.useState<FileMeta | null>(null)
+  const [renameTarget, setRenameTarget] = React.useState<ManagedFile | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   const refresh = React.useCallback(async () => {
     try {
-      setFiles(await listFiles())
+      setFiles(await loadManagedFiles())
     } catch (e) {
       toast.error("读取文件失败", { description: String(e) })
     } finally {
@@ -158,22 +180,30 @@ export default function FileManager() {
 
   // 首次挂载加载: setState 仅发生在 await 之后, 满足 react-hooks 规则
   React.useEffect(() => {
-    let active = true
+    if (!tabActive) return
+    let alive = true
     async function load() {
       try {
-        const list = await listFiles()
-        if (active) setFiles(list)
+        const list = await loadManagedFiles()
+        if (alive) setFiles(list)
       } catch (e) {
         toast.error("读取文件失败", { description: String(e) })
       } finally {
-        if (active) setLoading(false)
+        if (alive) setLoading(false)
       }
     }
-    load()
-    return () => {
-      active = false
+    void load()
+    let watch: ReturnType<typeof watchFile> = null
+    try {
+      watch = watchFile(FILES_ROOT_REF, UI_WATCH_CONTEXT, () => void load())
+    } catch {
+      // 首次目录读取仍可用于尚未实现 watch 的 provider。
     }
-  }, [])
+    return () => {
+      alive = false
+      watch?.dispose()
+    }
+  }, [tabActive])
 
   const handleUpload = React.useCallback(
     async (fileList: FileList | File[]) => {
@@ -198,47 +228,45 @@ export default function FileManager() {
     [refresh],
   )
 
-  async function handleDelete(file: FileMeta) {
+  async function handleDelete(file: ManagedFile) {
     try {
-      // 列表只有元数据, 先取完整文件 (含 Blob) 供撤销原样写回
-      const full = await getFile(file.id)
-      await deleteFile(file.id)
-      setFiles((prev) => prev.filter((f) => f.id !== file.id))
-      if (full) {
-        undoableDeleteToast(file.name, async () => {
-          await restoreFile(full)
-          setFiles((prev) =>
-            [file, ...prev.filter((f) => f.id !== file.id)].sort(
-              (a, b) => b.createdAt - a.createdAt,
-            ),
-          )
-        })
-      } else {
-        toast.success("已删除", { description: file.name })
-      }
+      await invokeFileAction(file.ref, "delete", undefined, UI_ACTION_CONTEXT, {
+        expectedVersion: file.version,
+      })
+      await refresh()
+      undoableDeleteToast(file.name, async () => {
+        await invokeFileAction(file.ref, "restore", undefined, UI_ACTION_CONTEXT)
+        await refresh()
+      })
     } catch (e) {
       toast.error("删除失败", { description: String(e) })
     }
   }
 
-  async function handleRename(file: FileMeta, name: string) {
+  async function handleRename(file: ManagedFile, name: string) {
     if (name === file.name) return
     try {
-      await updateFileMeta(file.id, { name })
-      setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name } : f)))
+      await invokeFileAction(file.ref, "edit", { title: name }, UI_ACTION_CONTEXT, {
+        expectedVersion: file.version,
+      })
+      await refresh()
     } catch (e) {
       toast.error("重命名失败", { description: String(e) })
     }
   }
 
-  async function handleDownload(file: FileMeta) {
+  async function handleDownload(file: ManagedFile) {
     try {
-      const full = await getFile(file.id)
-      if (!full) return
-      downloadBlob(full.blob, full.name)
+      const loaded = await readStoredNodeFile(file.id)
+      if (!loaded) return
+      downloadStoredFile(loaded.file)
     } catch (e) {
       toast.error("下载失败", { description: String(e) })
     }
+  }
+
+  function handlePreview(file: ManagedFile) {
+    openTarget({ type: "file", ref: file.ref, transient: true, rootId: "home" })
   }
 
   // 统计: 总占用 + 各分组数量
@@ -411,7 +439,7 @@ export default function FileManager() {
             <FileGridCard
               key={file.id}
               file={file}
-              onPreview={() => setPreviewId(file.id)}
+              onPreview={() => handlePreview(file)}
               onDownload={() => handleDownload(file)}
               onRename={() => setRenameTarget(file)}
               onDelete={() => handleDelete(file)}
@@ -425,7 +453,7 @@ export default function FileManager() {
               key={file.id}
               file={file}
               first={i === 0}
-              onPreview={() => setPreviewId(file.id)}
+              onPreview={() => handlePreview(file)}
               onDownload={() => handleDownload(file)}
               onRename={() => setRenameTarget(file)}
               onDelete={() => handleDelete(file)}
@@ -444,11 +472,6 @@ export default function FileManager() {
         </div>
       )}
 
-      <FilePreviewDialog
-        fileId={previewId}
-        onOpenChange={(open) => !open && setPreviewId(null)}
-        onDownload={(f) => downloadBlob(f.blob, f.name)}
-      />
       <TextPromptDialog
         open={renameTarget !== null}
         onOpenChange={(open) => {
@@ -517,7 +540,7 @@ function FileMenu({ onPreview, onDownload, onRename, onDelete }: FileActions) {
   )
 }
 
-function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
+function FileGridCard({ file, ...actions }: { file: ManagedFile } & FileActions) {
   const type = fileTypeInfo(file.name, file.type)
   return (
     <div className="group flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground transition-colors hover:border-foreground/20">
@@ -527,7 +550,7 @@ function FileGridCard({ file, ...actions }: { file: FileMeta } & FileActions) {
         className="flex aspect-video items-center justify-center overflow-hidden bg-muted"
       >
         {type.kind === "image" ? (
-          <Thumbnail id={file.id} />
+          <Thumbnail file={file} />
         ) : (
           <FileTypeIcon name={file.name} type={file.type} className="h-10 w-10" />
         )}
@@ -554,7 +577,7 @@ function FileListRow({
   file,
   first,
   ...actions
-}: { file: FileMeta; first: boolean } & FileActions) {
+}: { file: ManagedFile; first: boolean } & FileActions) {
   const type = fileTypeInfo(file.name, file.type)
   return (
     <div
@@ -569,7 +592,7 @@ function FileListRow({
         className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-muted"
       >
         {type.kind === "image" ? (
-          <Thumbnail id={file.id} />
+          <Thumbnail file={file} />
         ) : (
           <FileTypeIcon name={file.name} type={file.type} className="h-5 w-5" />
         )}

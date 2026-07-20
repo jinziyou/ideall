@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import "@/app/globals.css"
+import { sourceHanSans } from "@/lib/fonts"
 import WorkspaceShell from "@/workspace/workspace-shell"
 import CommandPalette from "./command-palette"
 import { Toaster } from "@/ui/sonner"
@@ -30,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning className={sourceHanSans.variable}>
       <body className="font-sans antialiased">
         {/* 无闪烁: 首帧前同步打 .dark 类 */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />

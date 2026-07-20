@@ -70,6 +70,18 @@ const editorTheme = EditorView.theme({
   },
 })
 
+const BASIC_SETUP = {
+  lineNumbers: true,
+  foldGutter: true,
+  highlightActiveLine: true,
+  highlightActiveLineGutter: true,
+  bracketMatching: true,
+  closeBrackets: true,
+  autocompletion: true,
+  rectangularSelection: true,
+  crosshairCursor: true,
+}
+
 export default function CodeEditor({
   value,
   filename,
@@ -78,6 +90,34 @@ export default function CodeEditor({
   className,
   onChange,
 }: CodeEditorProps) {
+  const onChangeRef = React.useRef(onChange)
+  const mountedRef = React.useRef(false)
+  const pendingChangeRef = React.useRef<string | null>(null)
+  const changeTimerRef = React.useRef<number | null>(null)
+  React.useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+  React.useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      pendingChangeRef.current = null
+      if (changeTimerRef.current !== null) window.clearTimeout(changeTimerRef.current)
+      changeTimerRef.current = null
+    }
+  }, [])
+  const handleChange = React.useCallback((nextValue: string) => {
+    pendingChangeRef.current = nextValue
+    if (changeTimerRef.current !== null) return
+    // CodeMirror invokes listeners inside its transaction dispatch. Leave the current browser
+    // task before updating controlled React state, otherwise rapid input can hit React's depth guard.
+    changeTimerRef.current = window.setTimeout(() => {
+      changeTimerRef.current = null
+      const pending = pendingChangeRef.current
+      pendingChangeRef.current = null
+      if (mountedRef.current && pending !== null) onChangeRef.current(pending)
+    }, 0)
+  }, [])
   const extensions = React.useMemo(
     () => [
       ...languageExtensions(filename, language),
@@ -95,19 +135,9 @@ export default function CodeEditor({
       height="100%"
       editable={!readOnly}
       readOnly={readOnly}
-      basicSetup={{
-        lineNumbers: true,
-        foldGutter: true,
-        highlightActiveLine: true,
-        highlightActiveLineGutter: true,
-        bracketMatching: true,
-        closeBrackets: true,
-        autocompletion: true,
-        rectangularSelection: true,
-        crosshairCursor: true,
-      }}
+      basicSetup={BASIC_SETUP}
       extensions={extensions}
-      onChange={onChange}
+      onChange={handleChange}
       className={cn("h-full overflow-hidden bg-background text-left", className)}
     />
   )

@@ -38,6 +38,11 @@ function validateOrderKey(key: string): void {
   if (f.slice(-1) === ZERO) throw new Error("非法排序键 (小数部分以 0 结尾): " + key)
 }
 
+/** 在持久化边界校验已有排序键；损坏数据应显式失败，不能静默回退并制造重复键。 */
+export function assertValidSortKey(key: string): void {
+  validateOrderKey(key)
+}
+
 /** 小数部分的严格中点: 返回 m 使 a < m < b (b 为 null 表示无上界)。要求 a < b 且均不以 0 结尾。 */
 function midpoint(a: string, b: string | null): string {
   if (b !== null && a >= b) throw new Error(a + " >= " + b)
@@ -149,16 +154,40 @@ export function initialSortKey(): string {
   return sortKeyBetween(null, null)
 }
 
+/** 返回集合中的最大非空排序键；删除标记也应由调用方保留在集合中。 */
+export function maxSortKey(items: readonly { sortKey?: unknown }[]): string | null {
+  let max: string | null = null
+  for (const item of items) {
+    const key = item.sortKey
+    if (typeof key === "string" && key.length > 0 && (max === null || key > max)) max = key
+  }
+  return max
+}
+
+/** 在末尾追加一个键；遇到损坏或已耗尽的旧键时回退到首个合法键。 */
+export function appendSortKey(after: string | null): string {
+  try {
+    return sortKeyBetween(after, null)
+  } catch {
+    return initialSortKey()
+  }
+}
+
+/** 自 after 起生成 count 个严格递增的追加键。 */
+export function appendSortKeys(after: string | null, count: number): string[] {
+  const keys: string[] = []
+  let previous = after
+  for (let i = 0; i < count; i++) {
+    previous = appendSortKey(previous)
+    keys.push(previous)
+  }
+  return keys
+}
+
 /**
  * 为一批「按目标顺序排列」的项依次生成递增排序键 (迁移 / 批量导入用)。
  * 返回与 count 等长的严格递增键数组。
  */
 export function sequentialSortKeys(count: number): string[] {
-  const keys: string[] = []
-  let prev: string | null = null
-  for (let i = 0; i < count; i++) {
-    prev = sortKeyBetween(prev, null)
-    keys.push(prev)
-  }
-  return keys
+  return appendSortKeys(null, count)
 }

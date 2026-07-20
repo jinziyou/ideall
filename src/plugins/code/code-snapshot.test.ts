@@ -73,6 +73,7 @@ test("readCodeSnapshot: 工作区优先读 sessionStorage 且敏感值脱敏", (
   assert.equal(snapshot.workspace?.source, "sessionStorage")
   assert.equal(snapshot.workspace?.tabs, 2)
   assert.equal(snapshot.workspace?.activeId, "tab-b")
+  assert.equal("mode" in (snapshot.workspace ?? {}), false)
   assert.equal(
     snapshot.storage.localStorage.entries.find((entry) => entry.key === "authToken")?.redacted,
     true,
@@ -86,6 +87,5 @@ test("readWorkspace: 非法 JSON 以 parse-error 保留诊断上下文", () => {
     tabs: 0,
     activeId: null,
     activeModule: "parse-error",
-    mode: null,
   })
 })

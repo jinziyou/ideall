@@ -4,12 +4,13 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 
 use tauri::utils::config::WindowConfig;
-use tauri::{
-    LogicalSize, Monitor, PhysicalPosition, PhysicalRect, PhysicalSize, WebviewWindow,
-};
+// 用 Window 而非 Window: 主窗口挂上 browser 子 webview 后 get_webview_window("main")
+// 恒为 None (is_webview_window 检查不过), Window 无此限制。
+use tauri::{LogicalSize, Monitor, PhysicalPosition, PhysicalRect, PhysicalSize, Window};
 
 const CORNER_TOLERANCE_PX: i32 = 48;
 const MAX_PLACE_ATTEMPTS: u8 = 8;
@@ -20,7 +21,12 @@ const SPANNING_DESKTOP_MIN_WIDTH: u32 = 3200;
 static WSL_PSEUDO_MAX: AtomicBool = AtomicBool::new(false);
 
 /// 铺满主屏可用区域 (WSL 最大化用)。
-pub fn apply_primary_work_area(window: &WebviewWindow) -> Result<(), String> {
+pub fn apply_primary_work_area(window: &Window) -> Result<(), String> {
+    if !wsl_managed_maximize() {
+        return Ok(());
+    }
+    // 须在改尺寸/坐标前置位, 否则 Resized 回调里的 try_place_window 会把窗口拉回居中。
+    WSL_PSEUDO_MAX.store(true, Ordering::Relaxed);
     let screens = enumerate_screens(window)?;
     let primary = pick_primary_screen(window, &screens)?;
     if window.is_fullscreen().unwrap_or(false) {
@@ -33,48 +39,53 @@ pub fn apply_primary_work_area(window: &WebviewWindow) -> Result<(), String> {
     let scale = window
         .scale_factor()
         .unwrap_or_else(|_| primary.scale_factor());
-    // set_size 走逻辑像素 (与 place_main_window 一致); 误用 PhysicalSize 在 HiDPI/WSLg 下
-    // 会导致外壳变大而 webview 视口仍停在旧尺寸 → UI 挤在左上角、下方大块空白。
     let logical_w = work.size.width as f64 / scale;
     let logical_h = work.size.height as f64 / scale;
     window
         .set_size(LogicalSize::new(logical_w, logical_h))
         .map_err(|e| e.to_string())?;
+    settle_window_size_for_wsl(window, &work.size)?;
     apply_window_position(window, work.position)?;
     notify_webview_resize(window);
-    eprintln!(
-        "[ideall] 铺满主屏 work area: {}×{} logical (scale={scale}, physical {}×{}) @ ({}, {})",
-        logical_w.round(),
-        logical_h.round(),
-        work.size.width,
-        work.size.height,
-        work.position.x,
-        work.position.y
-    );
+    if let Ok(outer) = window.outer_size() {
+        eprintln!(
+            "[ideall] 铺满主屏 work area: {}×{} logical (scale={scale}, physical {}×{}) @ ({}, {}), 实际 {}×{}",
+            logical_w.round(),
+            logical_h.round(),
+            work.size.width,
+            work.size.height,
+            work.position.x,
+            work.position.y,
+            outer.width,
+            outer.height
+        );
+    }
     Ok(())
 }
 
 /// GTK/WSL 手工改窗尺寸后, webview 内 CSS 视口 (dvh/innerHeight) 可能不刷新 → 派发 resize。
-fn notify_webview_resize(window: &WebviewWindow) {
+fn notify_webview_resize(window: &Window) {
     let script = r#"window.dispatchEvent(new Event("resize"));"#;
-    if let Err(e) = window.eval(script) {
+    // eval 在 webview 上; 窗口可能还挂着 browser 子 webview, 只通知主 webview。
+    let Some(wv) = window.webviews().into_iter().find(|w| w.label() == "main") else {
+        return;
+    };
+    if let Err(e) = wv.eval(script) {
         eprintln!("[ideall] webview resize notify failed: {e}");
     }
 }
 
 /// 窗控「最大化/还原」: WSL 走伪最大化; 其余平台用系统 toggleMaximize。
-pub fn toggle_primary_maximize(window: &WebviewWindow, conf: &WindowConfig) -> Result<bool, String> {
-    #[cfg(target_os = "linux")]
-    if running_under_wsl() {
+pub fn toggle_primary_maximize(window: &Window, _conf: &WindowConfig) -> Result<bool, String> {
+    if wsl_managed_maximize() {
         if WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
             WSL_PSEUDO_MAX.store(false, Ordering::Relaxed);
             let _ = normalize_on_close(window);
-            place_main_window(window, conf)?;
+            place_main_window(window, _conf)?;
             notify_webview_resize(window);
             return Ok(false);
         }
         apply_primary_work_area(window)?;
-        WSL_PSEUDO_MAX.store(true, Ordering::Relaxed);
         return Ok(true);
     }
     let next = !window.is_maximized().unwrap_or(false);
@@ -87,22 +98,24 @@ pub fn toggle_primary_maximize(window: &WebviewWindow, conf: &WindowConfig) -> R
 }
 
 /// 窗控图标状态: WSL 伪最大化时也为 true。
-pub fn is_primary_maximized(window: &WebviewWindow) -> bool {
-    #[cfg(target_os = "linux")]
-    if running_under_wsl() {
+pub fn is_primary_maximized(window: &Window) -> bool {
+    if wsl_managed_maximize() {
         return WSL_PSEUDO_MAX.load(Ordering::Relaxed);
     }
     window.is_maximized().unwrap_or(false)
 }
 
 /// 识别屏幕 → 判定主屏 → 在主屏正中放置; 返回是否已对齐且完全落在主屏内。
-pub fn place_main_window(window: &WebviewWindow, conf: &WindowConfig) -> Result<bool, String> {
+pub fn place_main_window(window: &Window, conf: &WindowConfig) -> Result<bool, String> {
     let screens = enumerate_screens(window)?;
     log_all_screens(&screens);
     let primary = pick_primary_screen(window, &screens)?;
     let size = placement_size(window, conf)?;
     if size.width < 200 || size.height < 200 {
-        eprintln!("[ideall] 窗口尚未就绪 ({}×{}), 跳过定位", size.width, size.height);
+        eprintln!(
+            "[ideall] 窗口尚未就绪 ({}×{}), 跳过定位",
+            size.width, size.height
+        );
         return Ok(false);
     }
     normalize_window_state(window, conf, &primary)?;
@@ -114,7 +127,7 @@ pub fn place_main_window(window: &WebviewWindow, conf: &WindowConfig) -> Result<
     Ok(is_well_placed(window, &primary, &screens, size))
 }
 
-pub fn schedule_initial_placement(window: &WebviewWindow, conf: WindowConfig) {
+pub fn schedule_initial_placement(window: &Window, conf: WindowConfig) {
     let target = window.clone();
     let attempts = Arc::new(AtomicU8::new(0));
     let event_conf = conf.clone();
@@ -175,12 +188,12 @@ pub fn schedule_initial_placement(window: &WebviewWindow, conf: WindowConfig) {
     }
 }
 
-fn window_is_user_expanded(window: &WebviewWindow) -> bool {
+fn window_is_user_expanded(window: &Window) -> bool {
     window.is_maximized().unwrap_or(false) || window.is_fullscreen().unwrap_or(false)
 }
 
 /// 窗口已手动铺满主屏 work area (WSL 伪最大化), 勿再按 conf 缩回 1200×800。
-fn fills_primary_work_area(window: &WebviewWindow, primary: &Monitor) -> bool {
+fn fills_primary_work_area(window: &Window, primary: &Monitor) -> bool {
     let Ok(size) = window.outer_size() else {
         return false;
     };
@@ -196,7 +209,10 @@ fn fills_primary_work_area(window: &WebviewWindow, primary: &Monitor) -> bool {
         && window_rect_fits_in_work_area(pos, size, primary)
 }
 
-fn try_fix_expanded_on_primary(window: &WebviewWindow, attempts: Option<&AtomicU8>) {
+fn try_fix_expanded_on_primary(window: &Window, attempts: Option<&AtomicU8>) {
+    if !wsl_managed_maximize() {
+        return;
+    }
     if !window_is_user_expanded(window) {
         return;
     }
@@ -231,20 +247,19 @@ fn try_fix_expanded_on_primary(window: &WebviewWindow, attempts: Option<&AtomicU
     }
 }
 
-fn try_place_window(
-    window: &WebviewWindow,
-    conf: &WindowConfig,
-    attempts: Option<&AtomicU8>,
-) {
+fn try_place_window(window: &Window, conf: &WindowConfig, attempts: Option<&AtomicU8>) {
     if attempts.is_some_and(|a| a.load(Ordering::Relaxed) >= MAX_PLACE_ATTEMPTS) {
         return;
     }
-    // 用户最大化/全屏: 勿 normalize+居中 (会把窗口缩回 conf 尺寸); 仅修正跨屏错位。
-    if window_is_user_expanded(window) && !WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
-        try_fix_expanded_on_primary(window, attempts);
+    if WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
         return;
     }
-    if WSL_PSEUDO_MAX.load(Ordering::Relaxed) {
+    // 原生 WM 最大化/全屏: 勿干预 (Windows 双屏下误触 apply_primary_work_area 会导致
+    // is_maximized=false 但视觉已铺满 → 再点 maximize 跨屏溢出)。
+    if window_is_user_expanded(window) {
+        if wsl_managed_maximize() {
+            try_fix_expanded_on_primary(window, attempts);
+        }
         return;
     }
     let Ok(screens) = enumerate_screens(window) else {
@@ -277,12 +292,10 @@ fn try_place_window(
 }
 
 /// 关闭前退出全屏/最大化, 避免 WM 把错误右下角坐标写入会话。
-fn normalize_on_close(window: &WebviewWindow) -> Result<(), String> {
+fn normalize_on_close(window: &Window) -> Result<(), String> {
     WSL_PSEUDO_MAX.store(false, Ordering::Relaxed);
     if window.is_fullscreen().unwrap_or(false) {
-        window
-            .set_fullscreen(false)
-            .map_err(|e| e.to_string())?;
+        window.set_fullscreen(false).map_err(|e| e.to_string())?;
     }
     if window.is_maximized().unwrap_or(false) {
         window.unmaximize().map_err(|e| e.to_string())?;
@@ -291,7 +304,7 @@ fn normalize_on_close(window: &WebviewWindow) -> Result<(), String> {
 }
 
 fn normalize_window_state(
-    window: &WebviewWindow,
+    window: &Window,
     conf: &WindowConfig,
     monitor: &Monitor,
 ) -> Result<(), String> {
@@ -327,6 +340,18 @@ fn running_under_wsl() -> bool {
         .unwrap_or(false)
 }
 
+/// 仅 WSL 需本模块接管最大化; Windows/macOS/原生 Linux 信任 WM 原生 maximize。
+fn wsl_managed_maximize() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        running_under_wsl()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 /// WSLg X11 WM 对 gtk move_ 有固定偏移 (实测 move 802,541 → 实际 764,482)。
 /// 可通过 IDEALL_PLACEMENT_OFFSET=x,y 覆盖, 设为 0,0 关闭。
 #[cfg(target_os = "linux")]
@@ -346,17 +371,38 @@ fn gtk_placement_offset() -> (i32, i32) {
     }
 }
 
-/// 设置窗口位置。WSLg Wayland 忽略坐标; X11 下走 gtk move_ (不做读回补偿)。
-fn apply_window_position(
-    window: &WebviewWindow,
-    pos: PhysicalPosition<i32>,
-) -> Result<(), String> {
-    let scale = window.scale_factor().unwrap_or(1.0);
-    let lx = (pos.x as f64 / scale).round() as i32;
-    let ly = (pos.y as f64 / scale).round() as i32;
+/// WSLg 下 set_size 异步生效; 尺寸未收敛就 move_ 会导致 WM 拒绝贴边 (尤其最大化到 0,0)。
+#[cfg(target_os = "linux")]
+fn settle_window_size_for_wsl(window: &Window, target: &PhysicalSize<u32>) -> Result<(), String> {
+    if !running_under_wsl() {
+        return Ok(());
+    }
+    for _ in 0..8 {
+        while gtk::events_pending() {
+            gtk::main_iteration();
+        }
+        if let Ok(outer) = window.outer_size() {
+            if outer.width <= target.width + 2 && outer.height <= target.height + 2 {
+                return Ok(());
+            }
+        }
+        std::thread::sleep(Duration::from_millis(16));
+    }
+    Ok(())
+}
 
+#[cfg(not(target_os = "linux"))]
+fn settle_window_size_for_wsl(_window: &Window, _target: &PhysicalSize<u32>) -> Result<(), String> {
+    Ok(())
+}
+
+/// 设置窗口位置。WSLg Wayland 忽略坐标; X11 下走 gtk move_ (不做读回补偿 —— 立即读回常为旧坐标)。
+fn apply_window_position(window: &Window, pos: PhysicalPosition<i32>) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let lx = (pos.x as f64 / scale).round() as i32;
+        let ly = (pos.y as f64 / scale).round() as i32;
         use gtk::prelude::GtkWindowExt;
         if let Ok(gtk_win) = window.gtk_window() {
             let (ox, oy) = gtk_placement_offset();
@@ -377,7 +423,7 @@ fn apply_window_position(
         .map_err(|e| e.to_string())
 }
 
-fn read_window_position(window: &WebviewWindow) -> Result<PhysicalPosition<i32>, String> {
+fn read_window_position(window: &Window) -> Result<PhysicalPosition<i32>, String> {
     if let Ok(pos) = window.outer_position() {
         if physical_position_valid(pos) {
             return Ok(pos);
@@ -402,10 +448,8 @@ fn read_window_position(window: &WebviewWindow) -> Result<PhysicalPosition<i32>,
 
 // ── 1. 识别屏幕 ──────────────────────────────────────────────────────────────
 
-fn enumerate_screens(window: &WebviewWindow) -> Result<Vec<Monitor>, String> {
-    let all = window
-        .available_monitors()
-        .map_err(|e| e.to_string())?;
+fn enumerate_screens(window: &Window) -> Result<Vec<Monitor>, String> {
+    let all = window.available_monitors().map_err(|e| e.to_string())?;
     let physical: Vec<Monitor> = all
         .iter()
         .filter(|m| !is_likely_spanning_desktop(m))
@@ -428,7 +472,7 @@ fn enumerate_screens(window: &WebviewWindow) -> Result<Vec<Monitor>, String> {
 
 // ── 2. 判定主屏幕 ────────────────────────────────────────────────────────────
 
-fn pick_primary_screen(window: &WebviewWindow, screens: &[Monitor]) -> Result<Monitor, String> {
+fn pick_primary_screen(window: &Window, screens: &[Monitor]) -> Result<Monitor, String> {
     if screens.is_empty() {
         return Err("no monitor".to_string());
     }
@@ -484,7 +528,11 @@ fn log_all_screens(screens: &[Monitor]) {
         let w = m.work_area();
         eprintln!(
             "[ideall] 屏 {i}: {}×{} @ ({}, {}), scale={}",
-            w.size.width, w.size.height, w.position.x, w.position.y, m.scale_factor()
+            w.size.width,
+            w.size.height,
+            w.position.x,
+            w.position.y,
+            m.scale_factor()
         );
     }
 }
@@ -501,12 +549,19 @@ fn log_placement_target(primary: &Monitor, size: PhysicalSize<u32>, pos: Physica
     let w = primary.work_area();
     eprintln!(
         "[ideall] 目标位置: ({}, {}), 窗口 {}×{}, 主屏 {}×{} @ ({}, {})",
-        pos.x, pos.y, size.width, size.height, w.size.width, w.size.height, w.position.x, w.position.y
+        pos.x,
+        pos.y,
+        size.width,
+        size.height,
+        w.size.width,
+        w.size.height,
+        w.position.x,
+        w.position.y
     );
 }
 
 /// 窗口尚未布局完成时用配置尺寸 × scale 估算物理尺寸。
-fn placement_size(window: &WebviewWindow, conf: &WindowConfig) -> Result<PhysicalSize<u32>, String> {
+fn placement_size(window: &Window, conf: &WindowConfig) -> Result<PhysicalSize<u32>, String> {
     let outer = window.outer_size().map_err(|e| e.to_string())?;
     if outer.width >= 200 && outer.height >= 200 {
         return Ok(outer);
@@ -526,10 +581,7 @@ fn work_area_pixels(m: &Monitor) -> u64 {
 }
 
 fn largest_work_area_monitor(monitors: &[Monitor]) -> Option<Monitor> {
-    monitors
-        .iter()
-        .max_by_key(|m| work_area_pixels(m))
-        .cloned()
+    monitors.iter().max_by_key(|m| work_area_pixels(m)).cloned()
 }
 
 fn center_in_work_area(monitor: &Monitor, size: PhysicalSize<u32>) -> PhysicalPosition<i32> {
@@ -555,7 +607,7 @@ fn clamp_to_work_area(
 // ── 放置校验 ──────────────────────────────────────────────────────────────────
 
 fn is_well_placed(
-    window: &WebviewWindow,
+    window: &Window,
     primary: &Monitor,
     screens: &[Monitor],
     _size: PhysicalSize<u32>,
@@ -587,7 +639,7 @@ fn is_well_placed(
 }
 
 fn needs_reposition(
-    window: &WebviewWindow,
+    window: &Window,
     primary: &Monitor,
     screens: &[Monitor],
 ) -> Result<bool, String> {
@@ -635,16 +687,10 @@ fn window_rect_fits_in_work_area(
         && pos.y + size.height as i32 <= work.position.y + work.size.height as i32
 }
 
-fn rects_overlap(
-    a: (i32, i32, u32, u32),
-    b: (i32, i32, u32, u32),
-) -> bool {
+fn rects_overlap(a: (i32, i32, u32, u32), b: (i32, i32, u32, u32)) -> bool {
     let (ax, ay, aw, ah) = a;
     let (bx, by, bw, bh) = b;
-    ax < bx + bw as i32
-        && ax + aw as i32 > bx
-        && ay < by + bh as i32
-        && ay + ah as i32 > by
+    ax < bx + bw as i32 && ax + aw as i32 > bx && ay < by + bh as i32 && ay + ah as i32 > by
 }
 
 fn straddles_screens(
@@ -652,8 +698,7 @@ fn straddles_screens(
     size: PhysicalSize<u32>,
     screens: &[Monitor],
 ) -> bool {
-    let areas: Vec<PhysicalRect<i32, u32>> =
-        screens.iter().map(|m| *m.work_area()).collect();
+    let areas: Vec<PhysicalRect<i32, u32>> = screens.iter().map(|m| *m.work_area()).collect();
     straddles_work_areas(pos, size, &areas)
 }
 

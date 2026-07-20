@@ -6,11 +6,15 @@ import {
   type PluginDataPackage,
 } from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
+import { base64ToBytes, bytesToBase64 } from "@/lib/base64"
+import { nextUpdatedAt } from "@/files/version"
 
 export const AUDIO_DB_NAME = "ideall:audio"
 export const AUDIO_DB_VERSION = 1
-const STORE_TRACKS = "tracks"
-const STORE_STATE = "state"
+export const STORE_AUDIO_TRACKS = "tracks"
+export const STORE_AUDIO_STATE = "state"
+const STORE_TRACKS = STORE_AUDIO_TRACKS
+const STORE_STATE = STORE_AUDIO_STATE
 const AUDIO_EXTS = new Set(["mp3", "flac", "wav", "ogg", "m4a", "aac", "wma", "opus"])
 
 export type AudioTrack = {
@@ -134,33 +138,6 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
-type BufferLike = {
-  from: (
-    input: Uint8Array | string,
-    encoding?: string,
-  ) => { toString: (encoding: string) => string }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as unknown as { Buffer?: BufferLike }).Buffer
-  if (maybeBuffer) return maybeBuffer.from(bytes).toString("base64")
-  let binary = ""
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.slice(i, i + 0x8000))
-  }
-  return btoa(binary)
-}
-
-function base64ToBytes(value: string): Uint8Array {
-  const maybeBuffer = (globalThis as unknown as { Buffer?: BufferLike }).Buffer
-  if (maybeBuffer) {
-    const binary = maybeBuffer.from(value, "base64").toString("binary")
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-  }
-  const binary = atob(value)
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-}
-
 async function blobToBase64(blob: Blob): Promise<string> {
   return bytesToBase64(new Uint8Array(await blob.arrayBuffer()))
 }
@@ -267,7 +244,7 @@ export async function updateAudioTrack(
 ): Promise<AudioTrack | null> {
   const current = await audioDb.get<AudioTrack>(STORE_TRACKS, id)
   if (!current) return null
-  const next = { ...current, ...patch, updatedAt: Date.now() }
+  const next = { ...current, ...patch, updatedAt: nextUpdatedAt(current.updatedAt) }
   await audioDb.put(STORE_TRACKS, next)
   return next
 }
@@ -300,6 +277,7 @@ export async function exportAudioLibraryJson(): Promise<string> {
   return stringifyPluginDataPackage(payload)
 }
 
+/** Store 级整库替换原语；生产入口必须经 audio-write-adapter 获取音频库根锁。 */
 export async function importAudioLibraryJson(raw: string): Promise<{ tracks: number }> {
   const backup = parseAudioLibraryExport(raw)
   const tracks = backup.payload.tracks.map(audioTrackFromExport)

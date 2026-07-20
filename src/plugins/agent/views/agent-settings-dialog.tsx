@@ -20,10 +20,9 @@ import {
   getAgentSettings,
   hydrateAgentSettingsSecure,
   PROVIDER_PRESETS,
-  setAgentSettings,
 } from "../lib/agent-settings"
-import { AcpSettings, getAcpSettings, setAcpSettings } from "../lib/acp/acp-settings"
-import { disableAcpServer, enableAcpServer, runExposeSelfTest } from "../lib/acp/acp-expose"
+import { persistAgentSettingsWithFileLock } from "../agent-settings-write-adapter"
+import { getAcpSettings, setAcpSettings, type AcpSettings } from "../lib/acp/acp-settings"
 import { detectAgents, type DetectedAgent } from "../lib/acp/acp-detect"
 import { isTauri } from "@/lib/tauri"
 
@@ -50,12 +49,14 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
   const [detected, setDetected] = React.useState<DetectedAgent[]>([])
   const [detecting, setDetecting] = React.useState(true) // 挂载即自动检测
   const [selftesting, setSelftesting] = React.useState(false)
+  const [probingExternal, setProbingExternal] = React.useState(false)
 
   // 暴露方向一键自测: 起监听 + 内置客户端连回跑一轮, 结果经 toast 反馈。
   async function exposeSelfTest() {
     setSelftesting(true)
     try {
       setAcpSettings(acp) // 持久化当前端口/开关, 与自测一致
+      const { runExposeSelfTest } = await import("../lib/acp/acp-expose")
       const r = await runExposeSelfTest(acp.listenPort || undefined)
       if (r.ok) {
         toast.success(
@@ -67,6 +68,24 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
       }
     } finally {
       setSelftesting(false)
+    }
+  }
+
+  async function probeExternal() {
+    if (!acp.externalAgent.program.trim()) return
+    setProbingExternal(true)
+    try {
+      const { probeExternalAcpAgent } = await import("../lib/acp/acp-client")
+      const result = await probeExternalAcpAgent(acp.externalAgent)
+      toast.success(`外部 Agent 已连通（${result.latencyMs} ms）`, {
+        description: `ACP protocol ${result.protocolVersion}`,
+      })
+    } catch (error) {
+      toast.error("外部 Agent 连接失败", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setProbingExternal(false)
     }
   }
 
@@ -118,20 +137,34 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
       defaultAgentMode: form.defaultAgentMode,
       approvalPolicy: form.approvalPolicy ?? DEFAULT_SETTINGS.approvalPolicy,
     }
-    if (!next.apiKey) {
+    // 外部后端不要求 Key，但兼容弹窗也不能因安全凭据尚未水合而误删既有 Key。
+    if (acp.executionBackend === "external-acp" && !next.apiKey) {
+      next.apiKey = (await hydrateAgentSettingsSecure()).apiKey
+    }
+    if (acp.executionBackend === "model" && !next.apiKey) {
       toast.error("请填写 API Key")
       return
     }
-    if (!next.model) {
+    if (acp.executionBackend === "model" && !next.model) {
       toast.error("请填写模型名")
       return
     }
-    setAgentSettings(next)
+    if (acp.executionBackend === "external-acp" && !acp.externalAgent.program.trim()) {
+      toast.error("请填写外部 ACP Agent 程序")
+      return
+    }
+    try {
+      await persistAgentSettingsWithFileLock(next)
+    } catch {
+      toast.error("API Key 安全存储失败，请重试")
+      return
+    }
 
     // ACP 暴露开关: 持久化并即时启停监听 (仅桌面 App; web/dev 仅存设置不起监听)。
     setAcpSettings(acp)
     if (isTauri()) {
       try {
+        const { disableAcpServer, enableAcpServer } = await import("../lib/acp/acp-expose")
         if (acp.allowEditorConnect) {
           const port = await enableAcpServer(acp.listenPort || undefined)
           toast.success(`已开启 ACP 监听 127.0.0.1:${port}`)
@@ -229,6 +262,26 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
 
         <div className="grid gap-1.5 border-t pt-3">
           <Label>外部协议接入（ACP）</Label>
+          <div className="grid gap-1.5">
+            <Label>对话执行后端</Label>
+            <Select
+              value={acp.executionBackend}
+              onValueChange={(value) =>
+                setAcp((current) => ({
+                  ...current,
+                  executionBackend: value === "external-acp" ? "external-acp" : "model",
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="model">内置 OpenAI 兼容模型</SelectItem>
+                <SelectItem value="external-acp">外部 ACP Agent（桌面）</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -334,8 +387,24 @@ function SettingsForm({ onClose }: { onClose: () => void }) {
               }
             />
             <p className="text-xs text-muted-foreground">
-              在「AI 工作区 → 外部智能体」里连接并对话。命令由你配置、绝不由模型决定；仅桌面 App。
+              选择“外部 ACP
+              Agent”后，普通对话会拒绝其权限请求；智能体模式逐次确认。命令仅由你配置；仅桌面 App。
+              命令参数存于本机公开设置，请勿填写 token 或密码。
             </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!isTauri() || probingExternal || !acp.externalAgent.program.trim()}
+                onClick={() => void probeExternal()}
+              >
+                {probingExternal ? "诊断中…" : "连接诊断"}
+              </Button>
+              {!isTauri() && (
+                <span className="text-xs text-muted-foreground">仅桌面 App 可运行</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

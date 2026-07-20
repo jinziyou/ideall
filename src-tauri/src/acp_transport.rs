@@ -3,8 +3,9 @@
 // 设计 (方案 C, 见 src/plugins/agent/lib/acp-expose.ts + acp-agent.ts): Rust 只做两件与协议无关的事 ——
 //   1. spawn 一个外部 ACP 智能体子进程 (program/args/cwd 来自用户设置, **绝不**由模型/网页内容控制);
 //   2. 在子进程 stdin/stdout 上做 NDJSON 行框定 (每条 JSON-RPC 消息一行, 按 '\n' 切分)。
-// **绝不解析 JSON-RPC、绝不理解 ACP 语义** —— 协议逻辑全在 webview 侧 (acp-agent.ts / acp-expose.ts), 与 agent 内核同处一地;
-// 故 agent 的四道安全闸 (越权=工具不存在 / 信任档 / 私密读 / 出站守卫) 因「未被触碰」而原样保住。
+// **绝不解析 JSON-RPC、绝不理解 ACP 语义** —— 协议逻辑全在 webview 侧
+// (acp-client.ts / acp-agent.ts / acp-expose.ts)。ideall 作为 agent 暴露时仍走既有工具安全闸；
+// 反向启动的外部 CLI 是当前 OS 用户权限下的进程，ACP permission 只是合作协议而非 OS 沙箱。
 //
 // 与 embed 的 MessagePortTransport / LoopbackTransport (MCP-over-postMessage, 进程内/iframe) 完全正交, 共存不互扰。
 // 仅桌面: 移动端 (iOS/Android) 沙箱不允许 spawn 子进程, 故本模块在 lib.rs 以 #[cfg(desktop)] 挂载、命令也只在桌面注册。
@@ -14,6 +15,7 @@
 // capability (capabilities/acp.json) 限定主窗口 + 仅桌面三平台。
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -45,6 +47,12 @@ enum AcpEvent {
     Closed(Option<i32>),
 }
 
+const MAX_NDJSON_LINE_BYTES: usize = 4 * 1024 * 1024;
+
+fn valid_outbound_line(line: &str) -> bool {
+    line.len() <= MAX_NDJSON_LINE_BYTES && !line.bytes().any(|byte| matches!(byte, b'\r' | b'\n'))
+}
+
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AcpMessagePayload {
@@ -61,48 +69,96 @@ struct AcpClosedPayload {
 
 /// 行框定核心: 从 reader 逐行读, 每行 emit Message; EOF/读错 emit 一次 Closed 后返回。
 /// 纯逻辑 (不碰 Tauri / 会话表), emit 由调用方注入 —— 故可用内存 reader / 真子进程单测 (见 mod tests)。
-async fn pump_lines<R, F>(reader: R, mut emit: F)
+async fn pump_lines<R, F>(mut reader: R, mut emit: F)
 where
     R: AsyncBufRead + Unpin,
     F: FnMut(AcpEvent),
 {
-    let mut lines = reader.lines();
+    let mut line = Vec::new();
     loop {
-        match lines.next_line().await {
-            Ok(Some(line)) => emit(AcpEvent::Message(line)),
-            Ok(None) | Err(_) => {
+        let available = match reader.fill_buf().await {
+            Ok(available) => available,
+            Err(_) => {
                 emit(AcpEvent::Closed(None));
-                break;
+                return;
+            }
+        };
+        if available.is_empty() {
+            if !line.is_empty() {
+                let message = std::mem::take(&mut line);
+                match String::from_utf8(message) {
+                    Ok(message) => emit(AcpEvent::Message(message)),
+                    Err(_) => {
+                        emit(AcpEvent::Closed(None));
+                        return;
+                    }
+                }
+            }
+            emit(AcpEvent::Closed(None));
+            return;
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let data_bytes = newline.unwrap_or(available.len());
+        if line.len().saturating_add(data_bytes) > MAX_NDJSON_LINE_BYTES {
+            emit(AcpEvent::Closed(None));
+            return;
+        }
+        line.extend_from_slice(&available[..data_bytes]);
+        reader.consume(data_bytes + usize::from(newline.is_some()));
+
+        if newline.is_some() {
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            let message = std::mem::take(&mut line);
+            match String::from_utf8(message) {
+                Ok(message) => emit(AcpEvent::Message(message)),
+                Err(_) => {
+                    emit(AcpEvent::Closed(None));
+                    return;
+                }
             }
         }
     }
 }
 
-/// spawn 外部 ACP 智能体子进程, 起 reader 把其 stdout 逐行经 `acp://message` 事件回送 webview; EOF 发 `acp://closed`。
-#[tauri::command]
-pub(crate) async fn acp_spawn(
+pub(crate) async fn spawn_resolved(
     app: AppHandle,
-    sessions: State<'_, AcpSessions>,
+    sessions: &AcpSessions,
     id: String,
-    program: String,
+    resolved: PathBuf,
     args: Vec<String>,
-    cwd: Option<String>,
+    cwd: Option<PathBuf>,
+    sanitize_environment: bool,
 ) -> Result<(), String> {
-    if program.trim().is_empty() {
-        return Err("empty-program".into());
-    }
-
-    // 解析为绝对路径 (经增广 PATH), 并把增广 PATH 注入子进程 —— 修 GUI 启动 App 时 PATH 缺 nvm 等导致
-    // 找不到 node / claude-agent-acp; 子进程拿到增广 PATH 后, 其 `#!/usr/bin/env node` shebang 也能解析。
-    let resolved = which(&program).ok_or_else(|| format!("program-not-found: {program}"))?;
     let mut cmd = Command::new(&resolved);
     cmd.args(&args)
-        .env("PATH", augmented_path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true); // 会话 drop (acp_close / EOF 清理 / 应用退出) 即杀+收尸, 不留僵尸。
-    if let Some(dir) = cwd.as_deref().filter(|s| !s.is_empty()) {
+    if sanitize_environment {
+        cmd.env_clear();
+        for key in [
+            "PATH",
+            "HOME",
+            "USERPROFILE",
+            "SYSTEMROOT",
+            "WINDIR",
+            "TEMP",
+            "TMP",
+            "LANG",
+            "LC_ALL",
+        ] {
+            if let Some(value) = std::env::var_os(key) {
+                cmd.env(key, value);
+            }
+        }
+    } else {
+        cmd.env("PATH", augmented_path());
+    }
+    if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
 
@@ -154,6 +210,33 @@ pub(crate) async fn acp_spawn(
     Ok(())
 }
 
+/// 用户显式配置的 ACP/MCP 命令走 PATH 解析；签名扩展调用绝对路径入口并清理环境。
+#[tauri::command]
+pub(crate) async fn acp_spawn(
+    app: AppHandle,
+    sessions: State<'_, AcpSessions>,
+    id: String,
+    program: String,
+    args: Vec<String>,
+    cwd: Option<String>,
+) -> Result<(), String> {
+    if program.trim().is_empty() {
+        return Err("empty-program".into());
+    }
+    let resolved = which(&program).ok_or_else(|| format!("program-not-found: {program}"))?;
+    let cwd = cwd.filter(|value| !value.is_empty()).map(PathBuf::from);
+    spawn_resolved(
+        app,
+        &sessions,
+        id,
+        PathBuf::from(resolved),
+        args,
+        cwd,
+        false,
+    )
+    .await
+}
+
 /// 向会话子进程 stdin 写一行 (调用方传一条完整 JSON-RPC 消息, 本函数补 '\n' 行框定)。
 #[tauri::command]
 pub(crate) async fn acp_send(
@@ -161,6 +244,9 @@ pub(crate) async fn acp_send(
     id: String,
     line: String,
 ) -> Result<(), String> {
+    if !valid_outbound_line(&line) {
+        return Err("invalid-message".into());
+    }
     let mut map = sessions.lock().await;
     let s = map.get_mut(&id).ok_or("no-session")?;
     s.stdin
@@ -458,7 +544,10 @@ pub(crate) fn acp_script_path(name: String) -> Option<String> {
     for base in ["scripts", "../scripts"] {
         let p = cwd.join(base).join(&file);
         if p.is_file() {
-            return p.canonicalize().ok().map(|c| c.to_string_lossy().into_owned());
+            return p
+                .canonicalize()
+                .ok()
+                .map(|c| c.to_string_lossy().into_owned());
         }
     }
     None
@@ -542,6 +631,20 @@ mod tests {
             events.into_inner().unwrap(),
             vec![AcpEvent::Message("only".into()), AcpEvent::Closed(None)]
         );
+    }
+
+    #[test]
+    fn oversized_or_injected_ndjson_lines_are_rejected() {
+        let events = Mutex::new(Vec::new());
+        tauri::async_runtime::block_on(async {
+            let input = vec![b'x'; MAX_NDJSON_LINE_BYTES + 1];
+            let reader = BufReader::new(input.as_slice());
+            pump_lines(reader, |ev| events.lock().unwrap().push(ev)).await;
+        });
+        assert_eq!(events.into_inner().unwrap(), vec![AcpEvent::Closed(None)]);
+        assert!(valid_outbound_line("{\"jsonrpc\":\"2.0\"}"));
+        assert!(!valid_outbound_line("{}\n{}"));
+        assert!(!valid_outbound_line(&"x".repeat(MAX_NDJSON_LINE_BYTES + 1)));
     }
 
     // 入站 TCP 往返 (跨平台): 监听 127.0.0.1:0 → 客户端连入写两行并半关 → 服务端读半经 pump_lines 行框定。

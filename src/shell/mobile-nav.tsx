@@ -1,69 +1,43 @@
 "use client"
 
-// 移动端「浏览」抽屉 (汉堡, md:hidden) —— 文件树 + 发现/系统入口 + 主题/账户, 单一抽屉。
-// 旧的独立文件树抽屉 (file-tree-sheet) 已并入: 双左侧抽屉入口易混, 顶栏也过挤。
-// 文件树复用桌面二级侧栏 SidebarTree (随激活模块自动切换), 是「我的」各区段的层级入口
-// (故不再平铺「我的」链接; 模块间跳转走底部标签栏)。主题/账户从顶栏移入抽屉底部 (顶栏瘦身)。
-// 点击树节点改变 activeId → 自动收起 (展开/折叠不改 activeId, 不误关); 点链接亦收起。
+// 移动端导航抽屉与桌面共用五分区及其叶项。
 import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
 import { Menu } from "lucide-react"
 import { Button } from "@/ui/button"
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/ui/sheet"
 import { WonitaMark } from "@/shared/wonita-mark"
-import { cn } from "@/lib/utils"
-import { HOME_SUBPAGES, SPOKES, type NavLink } from "@/shell/nav-config"
-import SidebarTree from "@/workspace/tree/sidebar-tree"
-import { useActiveId } from "@/workspace/store"
+import { IDEALL_ROOT_REF } from "@/filesystem/root-ref"
+import NavigationSidebarList from "@/workspace/navigation-sidebar-list"
+import {
+  NAVIGATION_SECTIONS,
+  isNavigationSectionId,
+  navigationSection,
+  navigationSectionForEntry,
+} from "@/workspace/navigation-sections"
+import { useNavigationDirectory } from "@/workspace/use-navigation-directory"
+import { toggleFileRoot, useActiveId, useActiveRootId } from "@/workspace/store"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
 import AccountMenu from "./account-menu"
 import ThemeToggle from "./theme-toggle"
 
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/home") return pathname === "/home"
-  return pathname === href || pathname.startsWith(href + "/")
-}
-
-/** 单个导航链接 (模块级, 避免在 MobileNav 渲染体内重建组件类型 → 每次渲染都卸载重挂)。 */
-function MLink({
-  link,
-  active,
-  onNavigate,
-}: {
-  link: NavLink
-  active: boolean
-  onNavigate: () => void
-}) {
-  return (
-    <Link
-      href={link.href}
-      onClick={onNavigate}
-      className={cn(
-        "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-        active
-          ? "bg-primary/10 font-medium text-primary"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground",
-      )}
-    >
-      {link.dot ? (
-        <span className={cn("h-2 w-2 rounded-full", link.dot)} />
-      ) : (
-        <link.icon className="h-4 w-4" />
-      )}
-      {link.label}
-    </Link>
-  )
-}
-
-/** 移动端浏览抽屉 (文件树 + 导航), 链接与桌面共用 nav-config 这一唯一数据来源。 */
+/** 移动端浏览抽屉。 */
 export default function MobileNav() {
   const [open, setOpen] = React.useState(false)
-  const pathname = usePathname()
   const activeId = useActiveId()
+  const activeRootId = useActiveRootId()
+  const navigation = useNavigationDirectory(IDEALL_ROOT_REF)
+  const loadedSections = navigation.items.flatMap(({ entry }) => {
+    const next = navigationSectionForEntry(entry)
+    return next ? [next] : []
+  })
+  const sections = loadedSections.length > 0 ? loadedSections : NAVIGATION_SECTIONS
+  const section =
+    sections.find((item) => item.id === activeRootId) ?? navigationSection(activeRootId)
+  const SectionIcon = section.icon
   const lastActive = React.useRef(activeId)
   const close = () => setOpen(false)
 
-  // 打开期间激活标签变化 (= 用户在树里点开了节点/面板) → 收起抽屉, 露出主区内容。
+  // 打开期间激活标签变化 → 收起抽屉，露出主区内容。
   React.useEffect(() => {
     if (open && activeId !== lastActive.current) setOpen(false)
     lastActive.current = activeId
@@ -82,27 +56,39 @@ export default function MobileNav() {
           <WonitaMark className="h-5 w-auto text-foreground" />
           <span>ideall</span>
         </SheetTitle>
-        {/* 文件树 (随激活模块自动切换): 层级浏览主体, 占满余高、内部滚动。 */}
-        <div className="flex min-h-0 flex-1 flex-col">
-          <SidebarTree />
+        <SheetDescription className="sr-only">选择导航分区并打开其中的功能。</SheetDescription>
+        <div className="shrink-0 border-b p-3">
+          <Select
+            value={section.id}
+            onValueChange={(rootId) => {
+              if (!isNavigationSectionId(rootId)) return
+              toggleFileRoot(rootId, sections.find((item) => item.id === rootId)?.path)
+            }}
+          >
+            <SelectTrigger className="h-9">
+              <span className="flex min-w-0 items-center">
+                <SectionIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                <SelectValue placeholder="选择导航分区" />
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {sections.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        {/* 发现 / 系统入口 + 主题/账户 (从顶栏移入)。 */}
-        <nav className="shrink-0 border-t px-2 py-2">
-          <span className="block px-3 pb-1 text-xs font-medium text-muted-foreground">发现</span>
-          {SPOKES.map((s) => (
-            <MLink key={s.href} link={s} active={isActive(pathname, s.href)} onNavigate={close} />
-          ))}
-          <span className="block px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground">
-            系统服务
-          </span>
-          {HOME_SUBPAGES.filter((p) => p.group === "system").map((p) => (
-            <MLink key={p.href} link={p} active={isActive(pathname, p.href)} onNavigate={close} />
-          ))}
-          <div className="mt-2 flex items-center gap-1 border-t px-1 pt-2">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <NavigationSidebarList sectionId={section.id} onNavigate={close} />
+        </div>
+        <div className="shrink-0 border-t px-3 py-2">
+          <div className="flex items-center gap-1">
             <ThemeToggle />
             <AccountMenu />
           </div>
-        </nav>
+        </div>
       </SheetContent>
     </Sheet>
   )

@@ -15,7 +15,7 @@ import {
 } from "@protocol/node"
 import { getFilesPort, type FilesPort } from "@protocol/files"
 import { getServerPort, type ServerPort } from "@protocol/server-port"
-import { getSession, type Session } from "@/lib/auth/auth-store"
+import { getSession, setSession, type Session } from "@/lib/auth/auth-store"
 import type { Permission } from "./protocol"
 
 /** 私密正文受控的 FilesPort 子面 (注入 tools handler)。 */
@@ -37,12 +37,18 @@ export interface ScopedFiles {
   readGated(id: string, kind: NodeKind): Promise<Node | "gated" | null>
   /** 写后回读自动净化 (无 notes-read 剥 note/thread 正文; 写 ≠ 可读)。 */
   createNode(input: FsCreateInput): Promise<Node>
-  updateNode(kind: NodeKind, id: string, patch: FsWritePatch): Promise<Node | undefined>
+  updateNode(
+    kind: NodeKind,
+    id: string,
+    patch: FsWritePatch,
+    expectedVersion?: string,
+  ): Promise<Node | undefined>
   moveNode(
     kind: NodeKind,
     id: string,
     parentId: string | null,
     afterSortKey?: string | null,
+    expectedVersion?: string,
   ): Promise<Node | undefined>
 }
 
@@ -80,12 +86,12 @@ export function makeScopedFiles(
     async createNode(input) {
       return sanitize(await port.fsCreateNode(input))
     },
-    async updateNode(kind, id, patch) {
-      const n = await port.fsUpdateNode(kind, id, patch)
+    async updateNode(kind, id, patch, expectedVersion) {
+      const n = await port.fsUpdateNode(kind, id, patch, expectedVersion)
       return n ? sanitize(n) : undefined
     },
-    async moveNode(kind, id, parentId, afterSortKey) {
-      const n = await port.fsMoveNode(kind, id, parentId, afterSortKey)
+    async moveNode(kind, id, parentId, afterSortKey, expectedVersion) {
+      const n = await port.fsMoveNode(kind, id, parentId, afterSortKey, expectedVersion)
       return n ? sanitize(n) : undefined
     },
   }
@@ -94,6 +100,8 @@ export function makeScopedFiles(
 /** 注入 tools handler 的收窄宿主句柄: 取代 getSession / getServerPort / getFilesPort 模块单例。 */
 export interface ScopedHost {
   getSession: () => Session
+  /** 资料写入成功后刷新宿主会话；token 仍不离开宿主。 */
+  setSession: typeof setSession
   server: () => ServerPort
   files: ScopedFiles
 }
@@ -102,6 +110,7 @@ export interface ScopedHost {
 export function makeScopedHost(perms: Permission[]): ScopedHost {
   return {
     getSession,
+    setSession,
     server: getServerPort,
     files: makeScopedFiles(
       getFilesPort(),

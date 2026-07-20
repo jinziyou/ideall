@@ -5,6 +5,7 @@ import {
   createFileActionHandlers,
   fileReference,
   parseFileTags,
+  type FileActionMetadata,
   type FileActionDeps,
 } from "./use-file-actions"
 
@@ -25,10 +26,12 @@ function storedFile(id = "f1", name = "demo.txt"): StoredFile {
 function makeDeps(initialFiles: StoredFile[] = []) {
   const files = new Map(initialFiles.map((file) => [file.id, file]))
   const patches: Array<{ id: string; patch: Partial<Pick<StoredFile, "name" | "tags">> }> = []
+  const updateOptions: Array<Parameters<FileActionDeps["updateFileMeta"]>[2]> = []
   const renamedTabs: Array<{ id: string; name: string }> = []
   const closedTabs: Array<{ id: string; label: string }> = []
   const deleted: string[] = []
-  const restored: StoredFile[] = []
+  const deleteOptions: Array<Parameters<FileActionDeps["deleteFile"]>[1]> = []
+  const restored: string[] = []
   const clearedDrafts: string[] = []
   const downloads: StoredFile[] = []
   const clipboard: string[] = []
@@ -38,15 +41,18 @@ function makeDeps(initialFiles: StoredFile[] = []) {
   let refreshes = 0
 
   const deps: FileActionDeps = {
-    updateFileMeta: async (id, patch) => {
+    updateFileMeta: async (id, patch, options) => {
       patches.push({ id, patch })
+      updateOptions.push(options)
     },
     getFile: async (id) => files.get(id),
-    deleteFile: async (id) => {
+    getFileMetadata: async (id) => files.get(id),
+    deleteFile: async (id, options) => {
       deleted.push(id)
+      deleteOptions.push(options)
     },
-    restoreFile: async (file) => {
-      restored.push(file)
+    restoreFile: async (id) => {
+      restored.push(id)
     },
     renameFileTab: (id, name) => {
       renamedTabs.push({ id, name })
@@ -80,9 +86,11 @@ function makeDeps(initialFiles: StoredFile[] = []) {
   return {
     deps,
     patches,
+    updateOptions,
     renamedTabs,
     closedTabs,
     deleted,
+    deleteOptions,
     restored,
     clearedDrafts,
     downloads,
@@ -110,8 +118,9 @@ test("rename: trim 名称后更新元数据、标签标题、刷新树并回调"
   const fakes = makeDeps()
   const actions = createFileActionHandlers(fakes.deps, { onRenamed: (name) => seen.push(name) })
 
-  assert.equal(await actions.rename("f1", "  next.md  "), true)
+  assert.equal(await actions.rename("f1", "  next.md  ", "v1"), true)
   assert.deepEqual(fakes.patches, [{ id: "f1", patch: { name: "next.md" } }])
+  assert.deepEqual(fakes.updateOptions, [{ expectedVersion: "v1" }])
   assert.deepEqual(fakes.renamedTabs, [{ id: "f1", name: "next.md" }])
   assert.equal(fakes.refreshes, 1)
   assert.deepEqual(seen, ["next.md"])
@@ -136,8 +145,9 @@ test("updateTags: 解析去重标签并支持关闭树刷新", async () => {
     onTagsChanged: (tags) => seen.push(tags),
   })
 
-  assert.equal(await actions.updateTags("f1", "code, draft，code\nreview"), true)
+  assert.equal(await actions.updateTags("f1", "code, draft，code\nreview", "v2"), true)
   assert.deepEqual(fakes.patches, [{ id: "f1", patch: { tags: ["code", "draft", "review"] } }])
+  assert.deepEqual(fakes.updateOptions, [{ expectedVersion: "v2" }])
   assert.equal(fakes.refreshes, 0)
   assert.deepEqual(seen, [["code", "draft", "review"]])
   assert.deepEqual(fakes.successes, ["已更新标签"])
@@ -165,7 +175,7 @@ test("copyName / copyRef: 写入剪贴板并提示", async () => {
 
 test("remove: 删除文件、清草稿、关闭标签并支持撤销恢复", async () => {
   const file = storedFile("f1", "disk.txt")
-  const deletedFiles: StoredFile[] = []
+  const deletedFiles: FileActionMetadata[] = []
   const fakes = makeDeps([file])
   const actions = createFileActionHandlers(fakes.deps, {
     onDeleted: (deleted) => deletedFiles.push(deleted),
@@ -181,7 +191,7 @@ test("remove: 删除文件、清草稿、关闭标签并支持撤销恢复", asy
   assert.deepEqual(deletedFiles, [file])
 
   await fakes.undoDeletes[0].restore()
-  assert.deepEqual(fakes.restored, [file])
+  assert.deepEqual(fakes.restored, [file.id])
   assert.equal(fakes.refreshes, 2)
 })
 
@@ -190,12 +200,50 @@ test("remove: 可用传入的文件快照恢复且不关闭标签", async () => 
   const fakes = makeDeps()
   const actions = createFileActionHandlers(fakes.deps)
 
-  assert.equal(await actions.remove({ id: displayed.id, file: displayed, closeTab: false }), true)
+  assert.equal(
+    await actions.remove({
+      id: displayed.id,
+      file: displayed,
+      expectedVersion: "v3",
+      closeTab: false,
+    }),
+    true,
+  )
   assert.deepEqual(fakes.closedTabs, [])
+  assert.deepEqual(fakes.deleteOptions, [{ expectedVersion: "v3" }])
   assert.equal(fakes.undoDeletes[0].label, "display.txt")
 
   await fakes.undoDeletes[0].restore()
-  assert.deepEqual(fakes.restored, [displayed])
+  assert.deepEqual(fakes.restored, [displayed.id])
+})
+
+test("remove: metadata version becomes the delete precondition but is not reused for undo", async () => {
+  const file = storedFile("versioned", "versioned.txt")
+  const fakes = makeDeps()
+  fakes.deps.getFileMetadata = async () => ({ id: file.id, name: file.name, version: "v4" })
+  const actions = createFileActionHandlers(fakes.deps)
+
+  assert.equal(await actions.remove({ id: file.id }), true)
+  assert.deepEqual(fakes.deleteOptions, [{ expectedVersion: "v4" }])
+
+  await fakes.undoDeletes[0].restore()
+  assert.deepEqual(fakes.restored, [file.id])
+})
+
+test("remove: conflicts do not apply destructive UI side effects", async () => {
+  const file = storedFile("conflict", "conflict.txt")
+  const fakes = makeDeps()
+  fakes.deps.deleteFile = async (_id, options) => {
+    fakes.deleteOptions.push(options)
+    throw new Error("conflict")
+  }
+  const actions = createFileActionHandlers(fakes.deps)
+
+  assert.equal(await actions.remove({ id: file.id, file, expectedVersion: "stale" }), false)
+  assert.deepEqual(fakes.deleteOptions, [{ expectedVersion: "stale" }])
+  assert.deepEqual(fakes.clearedDrafts, [])
+  assert.deepEqual(fakes.closedTabs, [])
+  assert.deepEqual(fakes.undoDeletes, [])
 })
 
 test("remove: 文件不存在时不删除", async () => {

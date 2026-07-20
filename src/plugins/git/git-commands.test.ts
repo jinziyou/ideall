@@ -4,6 +4,7 @@ import {
   buildGitCommand,
   ensureGitRepoPath,
   gitShellPlatform,
+  parseGitSnapshotRefs,
   parseGitStatus,
   quoteGitArg,
   validateGitBranchName,
@@ -29,6 +30,26 @@ test("parseGitStatus: 解析分支、upstream 与短状态文件", () => {
     upstream: undefined,
     files: [{ status: "M", path: "loose.txt" }],
   })
+})
+
+test("parseGitSnapshotRefs: canonicalizes heads, remote-tracking refs and tags", () => {
+  assert.deepEqual(
+    parseGitSnapshotRefs(
+      [
+        `refs/tags/v1\t${"c".repeat(40)}`,
+        `refs/remotes/fork/release\t${"b".repeat(40)}`,
+        `refs/heads/main\t${"a".repeat(40)}`,
+      ].join("\n"),
+    ),
+    [
+      { refname: "refs/heads/main", objectname: "a".repeat(40) },
+      { refname: "refs/remotes/fork/release", objectname: "b".repeat(40) },
+      { refname: "refs/tags/v1", objectname: "c".repeat(40) },
+    ],
+  )
+  assert.deepEqual(parseGitSnapshotRefs(""), [])
+  assert.throws(() => parseGitSnapshotRefs("refs/remotes/origin/main\tnot-an-object"), /malformed/)
+  assert.throws(() => parseGitSnapshotRefs("refs/remotes/origin/main\tdeadbeef"), /malformed/)
 })
 
 test("validateGitBranchName: trim 合法名称并拒绝 shell/flag 风险输入", () => {

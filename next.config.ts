@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   // Tauri app:dev 若误用 127.0.0.1 加载 dev 服, 放行跨域 dev 资源 (HMR 等), 避免整页点击失效。
   allowedDevOrigins: ["127.0.0.1"],
+  // 桌面壳已有自定义状态/调试入口; 禁用 Next 开发指示器, 避免左下角悬浮球遮挡工作区。
+  devIndicators: false,
 }
 
 export default nextConfig

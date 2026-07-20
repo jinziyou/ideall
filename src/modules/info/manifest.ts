@@ -2,10 +2,10 @@
 // 「我的」关注流经此拉取最新文章, 不再直接 import info 的 data 模块 (依赖反转)。
 import type { Subscription, SubscriptionType } from "@protocol/subscription"
 import type { ContentResolver, FeedItem, ResolveCtx, ResolverRegistration } from "@protocol/content"
-import { fetchLatestInfo } from "./data"
 
 /** 发布者/实体/搜索三类来源拉取最新文章 (搜索拉较大窗口, 客户端按标题过滤)。 */
 async function fetchInfoSource(sub: Subscription, ctx: ResolveCtx) {
+  const { fetchLatestInfo } = await import("./data")
   if (sub.type === "publisher") {
     return fetchLatestInfo({ publisher_domain: sub.key, page_size_offset: [ctx.perSource, 0] })
   }

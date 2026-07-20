@@ -48,9 +48,11 @@ const InlineComboboxContext = React.createContext<InlineComboboxContextValue>(
 )
 
 const defaultFilter: FilterFn = ({ group, keywords = [], label, value }, search) => {
-  const uniqueTerms = new Set([value, ...keywords, group, label].filter(Boolean))
+  const uniqueTerms = new Set(
+    [value, ...keywords, group, label].filter((term): term is string => Boolean(term)),
+  )
 
-  return Array.from(uniqueTerms).some((keyword) => filterWords(keyword!, search))
+  return Array.from(uniqueTerms).some((keyword) => filterWords(keyword, search))
 }
 
 type InlineComboboxProps = {
@@ -62,6 +64,10 @@ type InlineComboboxProps = {
   showTrigger?: boolean
   value?: string
   setValue?: (value: string) => void
+}
+
+type CollaborativeElement = TElement & {
+  userId?: unknown
 }
 
 const InlineCombobox = ({
@@ -84,11 +90,11 @@ const InlineCombobox = ({
 
   // Check if current user is the creator of this element (for Yjs collaboration)
   const isCreator = React.useMemo(() => {
-    const elementUserId = (element as any).userId
+    const elementUserId = (element as CollaborativeElement).userId
     const currentUserId = editor.meta.userId
 
     // If no userId (backwards compatibility or non-Yjs), allow
-    if (!elementUserId) return true
+    if (typeof elementUserId !== "string" || elementUserId.length === 0) return true
 
     return elementUserId === currentUserId
   }, [editor.meta.userId, element])

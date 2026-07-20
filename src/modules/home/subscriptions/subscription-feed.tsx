@@ -6,30 +6,35 @@ import { Rss, Search, Tag, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
-import { SUB_SPOKE_META } from "@/files/spoke-meta"
+import { SUB_SPOKE_META } from "./subscription-meta"
 import { cn } from "@/lib/utils"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { entityLabelText } from "@/lib/ner-labels"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
-import { SUBSCRIPTIONS_SYNCED } from "@protocol/flowback"
-import type { SubscriptionType } from "@protocol/subscription"
-import type { Subscription } from "@protocol/subscription"
-import {
-  addSubscription,
-  listSubscriptions,
-  removeSubscription,
-} from "@/files/stores/subscriptions-store"
+import type { Subscription, SubscriptionType } from "@protocol/subscription"
+import { watchFile } from "@/filesystem/registry"
 import { undoableToast } from "@/lib/undo-toast"
 import { EmptyState } from "@/ui/empty-state"
+import { useTabActive } from "@/workspace/tab-active-context"
+import { CaptureLinkButton } from "@/shared/feeders/capture-link-button"
+import {
+  SUBSCRIPTIONS_ROOT,
+  deleteSubscriptionFile,
+  readSubscriptions,
+  restoreSubscriptionFile,
+  type FileSubscription,
+} from "./subscription-file-system"
 
 /** 每个关注来源在关注流里展示的最新条数。 */
 const PER_SOURCE = 5
 /** 搜索关注本地过滤前先拉取的窗口大小 (服务端无关键词搜索, 故客户端在此窗口内按标题过滤)。 */
 const SEARCH_WINDOW = 200
 
-type SourceFeed = { sub: Subscription; items: FeedItem[]; error: boolean }
-type Loaded = { tools: Subscription[]; feeds: SourceFeed[] }
+const WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
+
+type SourceFeed = { sub: FileSubscription; items: FeedItem[]; error: boolean }
+type Loaded = { tools: FileSubscription[]; feeds: SourceFeed[] }
 
 /** 关注来源对应的内链。 */
 function sourceHref(sub: Subscription): string {
@@ -43,7 +48,7 @@ function sourceHref(sub: Subscription): string {
 
 /** 来源内容统一经 protocol 内容解析注册表拉取 (info/community 各自注册 resolver), 「我的」不直接依赖发现模块。 */
 const FEED_CTX = { perSource: PER_SOURCE, searchWindow: SEARCH_WINDOW }
-async function loadFeed(sub: Subscription): Promise<SourceFeed> {
+async function loadFeed(sub: FileSubscription): Promise<SourceFeed> {
   const { items, error } = await resolveSubscription(sub, FEED_CTX)
   return { sub, items, error }
 }
@@ -52,7 +57,7 @@ async function loadFeed(sub: Subscription): Promise<SourceFeed> {
  * 关注流 —— 把 home 已关注的来源汇聚到「我的」:
  *   - 工具 (tool): 顶部「已固定工具」快捷启动区 (无内容流, 点开即跳)
  *   - 发布者 / 实体 / 搜索 / 社区发布者(peer): 各自最新条目卡片
- * 本地优先: 关注偏好读自 IndexedDB; 内容实时从 wonita 服务拉取。
+ * 本地优先: 关注偏好经文件系统投影读取本地存储; 内容实时从 wonita 服务拉取。
  */
 export default function SubscriptionFeed({
   types,
@@ -64,20 +69,21 @@ export default function SubscriptionFeed({
   title?: string
   dotClass?: string
 } = {}) {
+  const active = useTabActive()
   const [state, setState] = React.useState<Loaded | null>(null)
   const [view, setView] = React.useState<"grid" | "list">("grid")
   // 取消关注进行中的项 (按 sub.id): 防重复触发, 并禁用对应的取消按钮
   const [pending, setPending] = React.useState<Set<string>>(new Set())
   const mountedRef = React.useRef(true)
-  // 并发去重: 挂载 load 与同步事件 load 可能同时在飞, 仅最后发起的一次允许落 state, 防后写覆盖。
+  // 并发去重: 挂载 load 与文件 watch 刷新可能同时在飞, 仅最后发起的一次允许落 state, 防后写覆盖。
   const seqRef = React.useRef(0)
 
   const load = React.useCallback(async () => {
     const seq = ++seqRef.current
     const fresh = () => mountedRef.current && seq === seqRef.current
-    let subs: Subscription[] = []
+    let subs: FileSubscription[] = []
     try {
-      subs = await listSubscriptions()
+      subs = await readSubscriptions()
     } catch {
       if (fresh()) setState({ tools: [], feeds: [] })
       return
@@ -90,22 +96,25 @@ export default function SubscriptionFeed({
   }, [types])
 
   React.useEffect(() => {
+    if (!active) {
+      mountedRef.current = false
+      seqRef.current += 1
+      return
+    }
     mountedRef.current = true
-    load()
-    // 跨端同步完成后刷新关注流 (SyncPanel 广播)
-    const onSynced = () => load()
-    window.addEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
+    void load()
+    const watch = watchFile(SUBSCRIPTIONS_ROOT, WATCH_CONTEXT, () => void load())
     return () => {
       mountedRef.current = false
-      window.removeEventListener(SUBSCRIPTIONS_SYNCED, onSynced)
+      watch?.dispose()
     }
-  }, [load])
+  }, [active, load])
 
-  async function unsubscribe(sub: Subscription) {
+  async function unsubscribe(sub: FileSubscription) {
     if (pending.has(sub.id)) return // 防重: 同一项取消关注进行中不再触发
     setPending((p) => new Set(p).add(sub.id))
     try {
-      await removeSubscription(sub.type, sub.key)
+      await deleteSubscriptionFile(sub)
       setState((prev) =>
         prev
           ? {
@@ -114,9 +123,9 @@ export default function SubscriptionFeed({
             }
           : prev,
       )
-      // 关注是长期积累的资产, 误点可一键撤销 (addSubscription 恢复被软删的记录: 清 deletedAt, 保留 createdAt)
+      // 关注是长期积累的资产，误点可一键撤销；restore 清除软删标记并保留原创建时间。
       undoableToast(`已取消关注 ${sub.title}`, async () => {
-        await addSubscription(sub)
+        await restoreSubscriptionFile(sub)
         await load()
       })
     } catch {
@@ -306,18 +315,27 @@ export default function SubscriptionFeed({
                       {items.map((it) => (
                         <li key={it.key} className="flex flex-col gap-0.5">
                           {/* it.url 来自其他社区用户的发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
-                          {safeHref(it.url) ? (
-                            <a
-                              href={safeHref(it.url)}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              className="line-clamp-2 text-sm hover:underline"
-                            >
-                              {it.title}
-                            </a>
-                          ) : (
-                            <span className="line-clamp-2 text-sm">{it.title}</span>
-                          )}
+                          <div className="flex items-start gap-1">
+                            {safeHref(it.url) ? (
+                              <a
+                                href={safeHref(it.url)}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="line-clamp-2 min-w-0 flex-1 text-sm hover:underline"
+                              >
+                                {it.title}
+                              </a>
+                            ) : (
+                              <span className="line-clamp-2 min-w-0 flex-1 text-sm">
+                                {it.title}
+                              </span>
+                            )}
+                            <CaptureLinkButton
+                              title={it.title}
+                              url={it.url ?? ""}
+                              description={it.body}
+                            />
+                          </div>
                           {it.body ? (
                             <span className="line-clamp-2 text-xs text-muted-foreground">
                               {it.body}

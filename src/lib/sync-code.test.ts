@@ -41,15 +41,15 @@ test("sync-code: hydrate 显式迁移旧公开同步码到 secure-store fallback
   assert.equal(getSyncCode(), "legacy-sync-code")
 })
 
-test("sync-code: 新写入只落 secure-store fallback", () => {
+test("sync-code: 新写入只落 secure-store fallback", async () => {
   mem.clear()
-  setSyncCode("new-sync-code")
+  await setSyncCode("new-sync-code")
 
   assert.equal(getSyncCode(), "new-sync-code")
   assert.equal(mem.get(SYNC_CODE_STORAGE_KEY), undefined)
   assert.equal(mem.get(secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)), "new-sync-code")
 
-  clearSyncCode()
+  await clearSyncCode()
   assert.equal(getSyncCode(), null)
   assert.equal(mem.get(secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)), undefined)
 })

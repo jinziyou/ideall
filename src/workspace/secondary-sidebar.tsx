@@ -1,28 +1,22 @@
 "use client"
 
-// 二级侧栏: 标题栏 + 统一文件树 (所有模式共用 sidebar-tree)。
-// 点击树节点 → 开/激活标签; 概览由活动栏「我的」直达。
+// 二级侧栏：显示当前五分区的固定叶项。
 
 import { PanelLeftClose } from "lucide-react"
 import { cn } from "@/lib/utils"
-import SidebarTree from "./tree/sidebar-tree"
-import { moduleById } from "./modules"
-import { isPluginModule } from "./plugin-entries"
-import { useActiveModule, useMode, setSidebarCollapsed } from "./store"
+import { IDEALL_ROOT_REF } from "@/filesystem/root-ref"
+import NavigationSidebarList from "./navigation-sidebar-list"
+import { navigationSection, navigationSectionForEntry } from "./navigation-sections"
+import { useActiveRootId, setSidebarCollapsed } from "./store"
+import { useNavigationDirectory } from "./use-navigation-directory"
 
 export default function SecondarySidebar({ collapsed = false }: { collapsed?: boolean }) {
-  const activeModule = useActiveModule()
-  const mode = useMode()
-  const mod = moduleById(activeModule)
-  const isPlugins = activeModule === "plugins" || isPluginModule(activeModule)
-  const title =
-    activeModule === "agent"
-      ? mode === "local"
-        ? "工作区"
-        : "AI"
-      : isPlugins
-        ? "插件"
-        : mod.sidebarTitle
+  const activeRootId = useActiveRootId()
+  const navigation = useNavigationDirectory(IDEALL_ROOT_REF)
+  const loadedSection = navigation.items
+    .map(({ entry }) => navigationSectionForEntry(entry))
+    .find((section) => section?.id === activeRootId)
+  const title = loadedSection?.label ?? navigationSection(activeRootId).label
 
   return (
     <aside
@@ -49,7 +43,7 @@ export default function SecondarySidebar({ collapsed = false }: { collapsed?: bo
             <PanelLeftClose className="h-4 w-4" />
           </button>
         </div>
-        <SidebarTree />
+        <NavigationSidebarList />
       </div>
     </aside>
   )

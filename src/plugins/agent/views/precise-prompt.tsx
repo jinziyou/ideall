@@ -21,22 +21,69 @@ import {
   WORKSPACE_SEGMENT_LABELS,
   WORKSPACE_SEGMENT_ORDER,
 } from "../lib/agent-context"
-import {
-  homeSelectionOf,
-  saveWorkspace,
-  workspaceRulesText,
-  type AgentWorkspace,
-} from "../lib/agent-workspace"
+import { updateWorkspace } from "../agent-workspace-write-adapter"
+import { homeSelectionOf, workspaceRulesText, type AgentWorkspace } from "../lib/agent-workspace"
+import { useWorkspaceTextDraft } from "./use-workspace-text-draft"
 
-export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
+export default function PrecisePrompt({
+  ws,
+  sourceVersion,
+}: {
+  ws: AgentWorkspace
+  sourceVersion: string
+}) {
   const [tools, setTools] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
   const save = (p: Partial<AgentWorkspace["prompt"]>) =>
-    saveWorkspace({ ...ws, prompt: { ...ws.prompt, ...p } })
+    updateWorkspace(ws.id, (current) => ({
+      ...current,
+      prompt: { ...current.prompt, ...p },
+    }))
+  const saveSafely = (p: Partial<AgentWorkspace["prompt"]>) => {
+    void save(p).catch(() => toast.error("保存工作区提示词失败"))
+  }
+  const keepFailedDraft = React.useCallback(() => {
+    toast.error("保存工作区提示词失败")
+    return "keep" as const
+  }, [])
+  const templateDraft = useWorkspaceTextDraft({
+    workspaceId: ws.id,
+    sourceValue: ws.prompt.template,
+    sourceVersion,
+    context: undefined,
+    async commit(workspaceId, template) {
+      const updated = await updateWorkspace(workspaceId, (current) => ({
+        ...current,
+        prompt: { ...current.prompt, template },
+      }))
+      if (!updated) throw new Error("Agent workspace no longer exists")
+      return updated.prompt.template
+    },
+    onError: keepFailedDraft,
+  })
+  const overrideDraft = useWorkspaceTextDraft({
+    workspaceId: ws.id,
+    sourceValue: ws.prompt.override,
+    sourceVersion,
+    context: undefined,
+    async commit(workspaceId, override) {
+      const updated = await updateWorkspace(workspaceId, (current) => ({
+        ...current,
+        prompt: { ...current.prompt, override },
+      }))
+      if (!updated) throw new Error("Agent workspace no longer exists")
+      return updated.prompt.override
+    },
+    onError: keepFailedDraft,
+  })
 
   async function generate() {
+    const templateOperation = templateDraft.captureOperationToken()
+    const overrideOperation = overrideDraft.captureOperationToken()
+    const template = templateDraft.value
     setBusy(true)
     try {
+      await Promise.all([templateDraft.flush(), overrideDraft.flush()])
       const sel = homeSelectionOf(ws)
       let homeContext = ""
       let referenced = ""
@@ -54,6 +101,12 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
         }
         browser = gatherBrowserContext()
       }
+      if (
+        !templateDraft.isOperationCurrent(templateOperation) ||
+        !overrideDraft.isOperationCurrent(overrideOperation)
+      ) {
+        return
+      }
       const text = assembleSystemPrompt(
         buildWorkspaceSegments({
           tools,
@@ -64,10 +117,14 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
           rules: workspaceRulesText(ws),
           examples: "",
         }),
-        ws.prompt.template,
+        template,
       )
-      save({ override: text, precise: true })
-      toast.success("已生成最终提示，可直接编辑")
+      await save({ override: text, precise: true })
+      if (overrideDraft.adoptIfCurrent(overrideOperation, text)) {
+        toast.success("已生成最终提示，可直接编辑")
+      }
+    } catch {
+      toast.error("生成提示词失败")
     } finally {
       setBusy(false)
     }
@@ -91,7 +148,10 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
               variant="ghost"
               size="sm"
               className="h-6 text-xs"
-              onClick={() => save({ template: "" })}
+              onClick={() => {
+                templateDraft.setValue("")
+                void templateDraft.flush().catch(() => {})
+              }}
             >
               恢复默认
             </Button>
@@ -103,8 +163,9 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
             rows={5}
             className="font-mono text-xs"
             placeholder={DEFAULT_WORKSPACE_TEMPLATE}
-            value={ws.prompt.template}
-            onChange={(e) => save({ template: e.target.value })}
+            value={templateDraft.value}
+            onChange={(e) => templateDraft.setValue(e.target.value)}
+            onBlur={() => void templateDraft.flush().catch(() => {})}
           />
           <p className="text-xs text-muted-foreground">
             {WORKSPACE_SEGMENT_ORDER.map((k) => `{{${k}}} = ${WORKSPACE_SEGMENT_LABELS[k]}`).join(
@@ -129,13 +190,14 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
             rows={12}
             className="font-mono text-xs"
             placeholder="点上方「生成」后，在此查看并编辑实际发给模型的系统提示…"
-            value={ws.prompt.override}
-            onChange={(e) => save({ override: e.target.value })}
+            value={overrideDraft.value}
+            onChange={(e) => overrideDraft.setValue(e.target.value)}
+            onBlur={() => void overrideDraft.flush().catch(() => {})}
           />
           <label className="flex cursor-pointer items-start gap-2 text-xs">
             <Checkbox
               checked={ws.prompt.precise}
-              onCheckedChange={(v) => save({ precise: v === true })}
+              onCheckedChange={(v) => saveSafely({ precise: v === true })}
               className="mt-0.5"
             />
             <span>
@@ -157,7 +219,13 @@ export default function PrecisePrompt({ ws }: { ws: AgentWorkspace }) {
             variant="ghost"
             size="sm"
             className="h-7 text-xs"
-            onClick={() => save({ override: "", precise: false })}
+            onClick={() => {
+              overrideDraft.setValue("")
+              void overrideDraft
+                .flush()
+                .then(() => save({ precise: false }))
+                .catch(() => toast.error("保存工作区提示词失败"))
+            }}
           >
             清空并关闭原样发送
           </Button>

@@ -34,7 +34,6 @@ export type CodeSnapshot = {
     tabs: number
     activeId: string | null
     activeModule: string | null
-    mode: string | null
   }
 }
 
@@ -113,14 +112,12 @@ export function readWorkspace(
       tabs?: unknown[]
       activeId?: unknown
       activeModule?: unknown
-      mode?: unknown
     }
     return {
       source,
       tabs: Array.isArray(parsed.tabs) ? parsed.tabs.length : 0,
       activeId: typeof parsed.activeId === "string" ? parsed.activeId : null,
       activeModule: typeof parsed.activeModule === "string" ? parsed.activeModule : null,
-      mode: typeof parsed.mode === "string" ? parsed.mode : null,
     }
   } catch {
     return {
@@ -128,7 +125,6 @@ export function readWorkspace(
       tabs: 0,
       activeId: null,
       activeModule: "parse-error",
-      mode: null,
     }
   }
 }

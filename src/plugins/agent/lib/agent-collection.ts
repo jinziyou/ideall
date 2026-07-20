@@ -1,6 +1,7 @@
 // 本地优先集合 store 工厂 —— 把「localStorage 持久化 + 订阅 + 稳定快照」收敛为一处。
-// 供 AI 注册表 (规则 / MCP server / 自定义技能 / 任务) 复用; 与 agent-settings / agent-workspace 同范式
-// (纯 store + subscribe/get, 组件侧自行 useSyncExternalStore)。仅存本机, 不入 IndexedDB / 不跨端同步 (MVP)。
+// 供 AI 注册表 (规则 / MCP server / 自定义技能 / 任务) 复用; 与 agent-settings / agent-workspace 同范式。
+// store 是 app.agent-config provider 的本地 Storage，管理 Display 统一经 FileSystem/FileDocument 访问；
+// 仅存本机，不入 IndexedDB / 不跨端同步 (MVP)。
 
 export interface Identified {
   id: string
@@ -19,6 +20,13 @@ export interface Collection<T extends Identified> {
   replaceAll(items: T[]): void
 }
 
+export type CollectionOptions<T> = {
+  /** setItem 成功后才发布内存快照；用于需要感知 quota/security 错误的关键索引。 */
+  persistence?: "best-effort" | "strict"
+  /** 仅用于修复历史/损坏持久化快照；正常 commit 仍由领域入口校验。 */
+  normalizeLoaded?: (items: T[]) => T[]
+}
+
 const EMPTY: readonly never[] = Object.freeze([])
 
 /**
@@ -31,6 +39,7 @@ export function createCollection<T extends Identified>(
   key: string,
   seed: () => T[] = () => [],
   migrate: (raw: Partial<T>) => T = (raw) => raw as T,
+  options: CollectionOptions<T> = {},
 ): Collection<T> {
   let state: T[] | null = null
   const listeners = new Set<() => void>()
@@ -41,12 +50,16 @@ export function createCollection<T extends Identified>(
       const raw = localStorage.getItem(key)
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<T>[]
-        if (Array.isArray(parsed)) return parsed.map(migrate)
+        if (Array.isArray(parsed)) {
+          const migrated = parsed.map(migrate)
+          return options.normalizeLoaded ? options.normalizeLoaded(migrated) : migrated
+        }
       }
     } catch {
       /* 损坏数据 → 落种子 */
     }
-    return seed()
+    const initial = seed()
+    return options.normalizeLoaded ? options.normalizeLoaded(initial) : initial
   }
 
   function ensure(): T[] {
@@ -54,8 +67,12 @@ export function createCollection<T extends Identified>(
     return state
   }
 
-  function persist(s: T[]) {
+  function persist(s: T[], strict: boolean) {
     if (typeof localStorage === "undefined") return
+    if (strict) {
+      localStorage.setItem(key, JSON.stringify(s))
+      return
+    }
     try {
       localStorage.setItem(key, JSON.stringify(s))
     } catch {
@@ -64,8 +81,11 @@ export function createCollection<T extends Identified>(
   }
 
   function commit(next: T[]) {
+    const strict = options.persistence === "strict"
+    // 关键索引必须先耐久化再发布；失败时 state/订阅者保持 last-good。
+    if (strict) persist(next, true)
     state = next
-    persist(next)
+    if (!strict) persist(next, false)
     for (const l of listeners) l()
   }
 

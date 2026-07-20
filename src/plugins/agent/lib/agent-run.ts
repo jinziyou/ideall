@@ -6,16 +6,25 @@ import { requestCompletion } from "./agent-chat"
 import { connectAgentMcp, summarizeTool, type ConnectAgentOpts } from "./agent-mcp"
 import type { AgentToolEvent } from "./model"
 import { TOOL } from "@/plugins/embed/protocol"
+import { createAgentToolPreview, type AgentToolPreview } from "./agent-tool-preview"
 
 const MAX_ROUNDS = 8
 
 const FORCE_APPROVAL_TOOLS = new Set<string>([
+  TOOL.communityPublish,
+  TOOL.communityDeletePublication,
+  TOOL.meUpdateProfile,
+  TOOL.hubAddSubscription,
+  TOOL.hubRemoveSubscription,
+  TOOL.hubAddBookmark,
   TOOL.fsCreate,
   TOOL.fsWrite,
   TOOL.fsMove,
   TOOL.fsDelete,
   TOOL.uiOpenTab,
   TOOL.uiCloseTab,
+  TOOL.hostNavigate,
+  TOOL.hostOpenExternal,
   TOOL.browserNavigate,
   TOOL.browserClick,
   TOOL.browserFill,
@@ -36,10 +45,21 @@ export interface RunAgentOptions {
   /** 工作区能力收窄 (能力位子集 / 工具白名单); 缺省 = 全部默认能力。 */
   mcp?: ConnectAgentOpts
   /** 工具审批 (approvalPolicy==="confirm" 时由 UI 提供): 每次执行工具前征询, 返回 false → 跳过该工具。 */
-  onApprove?: (name: string, argsText: string) => Promise<boolean>
+  onApprove?: (preview: AgentToolPreview) => Promise<boolean>
+  /** 副作用执行前持久化脱敏 outbox；失败时必须阻止工具执行。 */
+  onToolIntent?: (preview: AgentToolPreview) => Promise<string>
+  /** 只发送脱敏预览与结果；结算失败会保留 pending，不得重放已执行工具。 */
+  onToolAudit?: (event: RunAgentToolAuditEvent) => void | Promise<void>
   /** confirm=全部工具确认; auto=仅危险/外部工具强制确认。缺省保持旧行为: 传了 onApprove 就全部确认。 */
   approvalPolicy?: "confirm" | "auto"
 }
+
+export type RunAgentToolAuditEvent = Readonly<{
+  preview: AgentToolPreview
+  status: "committed" | "failed" | "rejected"
+  summary: string
+  auditId?: string
+}>
 
 export interface RunAgentResult {
   content: string
@@ -50,6 +70,26 @@ export interface RunAgentResult {
 function shorten(raw: string): string {
   const s = (raw ?? "").trim()
   return s.length > 120 ? s.slice(0, 120) + "…" : s
+}
+
+function previewArgsText(preview: AgentToolPreview): string {
+  const details = [
+    preview.target?.label,
+    ...preview.fields.map((field) => `${field.label}: ${field.value}`),
+  ].filter((value): value is string => Boolean(value))
+  return shorten(details.join("；"))
+}
+
+async function notifyToolAudit(
+  callback: RunAgentOptions["onToolAudit"],
+  event: RunAgentToolAuditEvent,
+): Promise<void> {
+  if (!callback || !event.preview.mutating) return
+  try {
+    await callback(event)
+  } catch {
+    // 审计是副作用后的可见回执；存储失败不能伪装成工具失败或导致重放。
+  }
 }
 
 function requiresApproval(name: string): boolean {
@@ -110,13 +150,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
       for (const tc of toolCalls) {
         // 用户中途「停止」: 不再执行后续工具, 把副作用限制在已发起的这一个之内
         if (opts.signal?.aborted) return { content: "", toolEvents, canceled: true }
+        const apiName = tc.function.name
+        const mcpName = mcp.resolveToolName(apiName)
         let args: Record<string, unknown>
         try {
           args = JSON.parse(tc.function.arguments || "{}")
         } catch {
           const ev: AgentToolEvent = {
-            name: tc.function.name,
-            argsText: shorten(tc.function.arguments),
+            name: mcpName,
+            argsText: "参数无效（原始值已隐藏）",
             ok: false,
             summary: "工具参数不是合法 JSON，已跳过执行",
           }
@@ -128,20 +170,49 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
           })
           continue
         }
+        const initialPreview = createAgentToolPreview(mcpName, args)
+        let prepared: Awaited<ReturnType<typeof mcp.prepareToolCall>>
+        try {
+          prepared = await mcp.prepareToolCall(apiName, args, initialPreview)
+        } catch {
+          const ev: AgentToolEvent = {
+            name: mcpName,
+            argsText: previewArgsText(initialPreview),
+            ok: false,
+            summary: "执行前校验失败，已跳过工具",
+          }
+          pushToolEvent(toolEvents, ev, opts.onToolEvent)
+          await notifyToolAudit(opts.onToolAudit, {
+            preview: initialPreview,
+            status: "failed",
+            summary: ev.summary,
+          })
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, summary: ev.summary }),
+          })
+          continue
+        }
+        const { args: executionArgs, preview } = prepared
         // 工具审批 (confirm 策略): 执行前征询用户; 拒绝 → 把「已拒绝」喂回模型, 不执行副作用。
         if (
           opts.onApprove &&
-          ((opts.approvalPolicy ?? "confirm") === "confirm" ||
-            requiresApproval(tc.function.name)) &&
-          !(await opts.onApprove(tc.function.name, tc.function.arguments || ""))
+          ((opts.approvalPolicy ?? "confirm") === "confirm" || requiresApproval(mcpName)) &&
+          !(await opts.onApprove(preview))
         ) {
           const ev: AgentToolEvent = {
-            name: tc.function.name,
-            argsText: shorten(tc.function.arguments),
+            name: mcpName,
+            argsText: previewArgsText(preview),
             ok: false,
             summary: "已拒绝执行",
           }
           pushToolEvent(toolEvents, ev, opts.onToolEvent)
+          await notifyToolAudit(opts.onToolAudit, {
+            preview,
+            status: "rejected",
+            summary: ev.summary,
+          })
           messages.push({
             role: "tool",
             tool_call_id: tc.id,
@@ -149,15 +220,44 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunAgentResult> {
           })
           continue
         }
-        const { ok, data } = await mcp.callTool(tc.function.name, args)
-        const summary = summarizeTool(tc.function.name, ok, data)
+        let auditId: string | undefined
+        try {
+          if (preview.mutating && opts.onToolIntent) {
+            auditId = await opts.onToolIntent(preview)
+            if (!auditId) throw new Error("Missing audit id")
+          }
+        } catch {
+          const ev: AgentToolEvent = {
+            name: mcpName,
+            argsText: previewArgsText(preview),
+            ok: false,
+            summary: "无法建立耐久审计，已阻止执行",
+          }
+          pushToolEvent(toolEvents, ev, opts.onToolEvent)
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, summary: ev.summary }),
+          })
+          continue
+        }
+        // transport 抛错时无法判断远端副作用是否已经发生：保留 pending 供人工核对，不能误结算为 failed。
+        const result = await mcp.callTool(apiName, executionArgs)
+        const { ok, data } = result
+        const summary = summarizeTool(mcpName, ok, data)
         const ev: AgentToolEvent = {
-          name: tc.function.name,
-          argsText: shorten(tc.function.arguments),
+          name: mcpName,
+          argsText: previewArgsText(preview),
           ok,
           summary,
         }
         pushToolEvent(toolEvents, ev, opts.onToolEvent)
+        await notifyToolAudit(opts.onToolAudit, {
+          preview,
+          status: ok ? "committed" : "failed",
+          summary,
+          auditId,
+        })
         messages.push({
           role: "tool",
           tool_call_id: tc.id,

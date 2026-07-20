@@ -1,13 +1,17 @@
 // ACP 暴露方向 —— 生产侧把 ideall ACP 智能体接到内核 (runAgent) 与运行上下文 (resolveRun)。
 //
 // 与 acp-agent.ts (纯映射, 可单测) 分离: 本文件引内核 (agent-run) + 设置 + home 上下文 (重依赖, 运行时才用),
-// 不入纯映射的单测链。真实入站连接 (loopback socket → Stream) 由 Rust 监听器提供, 见 §下一步 (尚未接入);
-// 届时调 exposeIdeallAcpAgent(stream) 即可。
+// 不入纯映射的单测链。真实入站连接由 Rust loopback 监听器提供，boot 时按本机设置启停并把
+// socket Stream 交给 exposeIdeallAcpAgent。
 //
 // 注: 暴露方向是 headless —— 不注入"当前查看的节点"(gatherReferencedContext, UI 概念); 仅用 home 快照 (仅标题)。
 import type { Stream } from "@agentclientprotocol/sdk"
 import type { ConnectAgentOpts } from "../agent-mcp"
 import { runAgent } from "../agent-run"
+import {
+  appendAgentWriteAuditViaFileSystem,
+  completeAgentWriteAuditViaFileSystem,
+} from "../agent-write-audit-client"
 import { hydrateAgentSettingsSecure, isConfigured } from "../agent-settings"
 import { gatherHomeContext, buildSystemPrompt } from "../agent-context"
 import { buildIdeallAcpAgent, type AcpTurnRunner } from "./acp-agent"
@@ -57,6 +61,33 @@ export const runIdeallTurn: AcpTurnRunner = async (prompt, hooks) => {
     signal: hooks.signal,
     onToolEvent: hooks.onToolEvent,
     mcp: run.mcp,
+    onToolIntent: async (preview) =>
+      appendAgentWriteAuditViaFileSystem({
+        source: "tool",
+        operation: preview.toolName,
+        title: preview.title,
+        summary: "已批准，等待执行",
+        status: "pending",
+        effect: preview.effect,
+        risk: preview.risk,
+        ...(preview.target ? { target: preview.target } : {}),
+      }),
+    onToolAudit: async ({ preview, status, summary, auditId }) => {
+      if (auditId && status !== "rejected") {
+        await completeAgentWriteAuditViaFileSystem({ id: auditId, status, summary })
+        return
+      }
+      await appendAgentWriteAuditViaFileSystem({
+        source: "tool",
+        operation: preview.toolName,
+        title: preview.title,
+        summary,
+        status,
+        effect: preview.effect,
+        risk: preview.risk,
+        ...(preview.target ? { target: preview.target } : {}),
+      })
+    },
   })
   return content
 }

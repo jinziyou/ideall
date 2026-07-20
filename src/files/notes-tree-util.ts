@@ -1,4 +1,4 @@
-// 递归页树的纯组装逻辑 (无 React, 供 notes-store 与 notes-tree 共用, 保证两侧层级一致)。
+// 递归页树的纯组装与父关系逻辑 (无 React，供 Node stores 与兼容投影共用)。
 // 关键不变量: 每个活跃节点都必须从某个根可达。故「有效父」对以下三种情形一律重挂到根 (null):
 //   - 根节点 (parentId=null);
 //   - 孤儿 (parentId 指向已删/不存在的节点);
@@ -18,7 +18,7 @@ export interface TreeItem {
 /** 泛型递归树节点。 */
 export type Tree<T> = { item: T; children: Tree<T>[] }
 
-/** 笔记专用别名 (历史): node.note 即 TreeItem。notes-tree.tsx 沿用此形状, 不 fork。 */
+/** 笔记专用兼容别名：node.note 即 TreeItem，不复制另一套层级模型。 */
 export type TreeNode = { note: NoteMeta; children: TreeNode[] }
 
 /** 活跃集合的 id → parentId 映射 (parentOf.has(x) 即「x 是活跃节点」)。 */

@@ -15,6 +15,7 @@ export default function CommandTrigger({ className }: { className?: string }) {
     <button
       type="button"
       onClick={openCommandPalette}
+      onMouseDown={(e) => e.stopPropagation()}
       className={cn(
         "flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
         className,

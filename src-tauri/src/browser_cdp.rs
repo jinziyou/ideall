@@ -2,19 +2,22 @@
 // 默认不启用 (内嵌 WebKitGTK); 设 IDEALL_BROWSER_CDP=1 时启用 —— Agent 自动化更强, 但会弹出系统 Chrome。
 
 use chromiumoxide::browser::{Browser, BrowserConfig};
-use chromiumoxide::Page;
 use chromiumoxide::cdp::browser_protocol::browser::{
     Bounds as CdpWindowBounds, GetWindowForTargetParams, SetWindowBoundsParams, WindowId,
     WindowState,
 };
+use chromiumoxide::Page;
 use futures::StreamExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::browser_scripts::{self, CONTENT_JS, LIST_INTERACTIVE_JS};
-use crate::{parse_list_interactive, BrowserBackendInfo, BrowserInteractiveResult, BrowserPageContent, Bounds};
+use crate::{
+    parse_list_interactive, Bounds, BrowserBackendInfo, BrowserInteractiveResult,
+    BrowserPageContent,
+};
 
 pub struct BrowserCdpState {
     pub chrome_path: Option<PathBuf>,
@@ -68,10 +71,7 @@ impl BrowserCdpState {
             },
             cdp_available: self.chrome_available(),
             running,
-            chrome_path: self
-                .chrome_path
-                .as_ref()
-                .map(|p| p.display().to_string()),
+            chrome_path: self.chrome_path.as_ref().map(|p| p.display().to_string()),
         }
     }
 }
@@ -86,6 +86,21 @@ async fn window_id_of(browser: &Browser, page: &Page) -> Result<WindowId, String
         .await
         .map_err(|e| e.to_string())?;
     Ok(resp.result.window_id)
+}
+
+/// 前端 getBoundingClientRect 是视口坐标; CDP/Chrome 窗口要屏幕物理像素。
+fn viewport_bounds_to_screen(app: &AppHandle, b: Bounds) -> Result<Bounds, String> {
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "主窗口不存在".to_string())?;
+    let scale = main.scale_factor().map_err(|e| e.to_string())?;
+    let outer = main.outer_position().map_err(|e| e.to_string())?;
+    Ok(Bounds {
+        x: outer.x as f64 + b.x * scale,
+        y: outer.y as f64 + b.y * scale,
+        w: b.w * scale,
+        h: b.h * scale,
+    })
 }
 
 async fn apply_window_bounds(
@@ -104,10 +119,7 @@ async fn apply_window_bounds(
         builder = builder.window_state(state);
     }
     browser
-        .execute(SetWindowBoundsParams::new(
-            window_id,
-            builder.build(),
-        ))
+        .execute(SetWindowBoundsParams::new(window_id, builder.build()))
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -219,10 +231,11 @@ pub async fn open(
 
     std::fs::create_dir_all(profile_dir()).map_err(|e| e.to_string())?;
 
-    let wx = b.x.max(0.0) as i32;
-    let wy = b.y.max(0.0) as i32;
-    let ww = b.w.max(1.0) as u32;
-    let wh = b.h.max(1.0) as u32;
+    let screen = viewport_bounds_to_screen(app, b)?;
+    let wx = screen.x.max(0.0) as i32;
+    let wy = screen.y.max(0.0) as i32;
+    let ww = screen.w.max(1.0) as u32;
+    let wh = screen.h.max(1.0) as u32;
 
     let config = BrowserConfig::builder()
         .chrome_executable(chrome)
@@ -231,6 +244,8 @@ pub async fn open(
         .arg("--no-first-run")
         .arg("--disable-sync")
         .arg("--disable-features=TranslateUI")
+        // 内网 inventory 等站点常用自签证书; 仅 CDP 独立窗口, 不影响主 App webview。
+        .arg("--ignore-certificate-errors")
         .arg(format!("--window-position={wx},{wy}"))
         .arg(format!("--window-size={ww},{wh}"))
         .arg(format!("--app={url}"))
@@ -242,9 +257,7 @@ pub async fn open(
         .await
         .map_err(|e| format!("启动 Chrome 失败: {e}"))?;
 
-    let handler_task = tokio::spawn(async move {
-        while handler.next().await.is_some() {}
-    });
+    let handler_task = tokio::spawn(async move { while handler.next().await.is_some() {} });
 
     let pages = browser.pages().await.map_err(|e| e.to_string())?;
     let page = if let Some(p) = pages.into_iter().next() {
@@ -267,11 +280,12 @@ pub async fn open(
     Ok(())
 }
 
-pub async fn set_bounds(state: &BrowserCdpState, b: Bounds) -> Result<(), String> {
+pub async fn set_bounds(state: &BrowserCdpState, app: &AppHandle, b: Bounds) -> Result<(), String> {
     *state.bounds.lock().await = b;
+    let screen = viewport_bounds_to_screen(app, b)?;
     let guard = state.session.lock().await;
     if let Some(sess) = guard.as_ref() {
-        apply_window_bounds(&sess.browser, &sess.page, b, Some(WindowState::Normal)).await?;
+        apply_window_bounds(&sess.browser, &sess.page, screen, Some(WindowState::Normal)).await?;
     }
     Ok(())
 }
@@ -326,12 +340,13 @@ pub async fn hide(state: &BrowserCdpState) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn show(state: &BrowserCdpState) -> Result<(), String> {
+pub async fn show(state: &BrowserCdpState, app: &AppHandle) -> Result<(), String> {
     *state.visible.lock().await = true;
     let b = *state.bounds.lock().await;
+    let screen = viewport_bounds_to_screen(app, b)?;
     let guard = state.session.lock().await;
     if let Some(sess) = guard.as_ref() {
-        apply_window_bounds(&sess.browser, &sess.page, b, Some(WindowState::Normal)).await?;
+        apply_window_bounds(&sess.browser, &sess.page, screen, Some(WindowState::Normal)).await?;
         let _ = sess.page.bring_to_front().await;
     }
     Ok(())
@@ -353,7 +368,11 @@ pub async fn get_content(state: &BrowserCdpState) -> Result<BrowserPageContent, 
         .await
         .map_err(|e| e.to_string())?
         .unwrap_or_default();
-    let title = page.get_title().await.map_err(|e| e.to_string())?.unwrap_or_default();
+    let title = page
+        .get_title()
+        .await
+        .map_err(|e| e.to_string())?
+        .unwrap_or_default();
     let v = eval_json_page(&page, CONTENT_JS).await?;
     if let Some(err) = v.get("error").and_then(|x| x.as_str()) {
         if !err.is_empty() {
@@ -364,6 +383,7 @@ pub async fn get_content(state: &BrowserCdpState) -> Result<BrowserPageContent, 
         url,
         title: v["title"].as_str().unwrap_or(&title).to_string(),
         text: v["text"].as_str().unwrap_or("").to_string(),
+        selection: v["selection"].as_str().unwrap_or("").to_string(),
     })
 }
 

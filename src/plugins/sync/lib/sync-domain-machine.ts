@@ -16,6 +16,7 @@ type DomainMachineContext = {
   key: CryptoKey
   now: number
   localAll: SyncRecord[]
+  localSnapshot: SyncRecord[]
   merged: SyncRecord[]
   attempt: number
   result?: SyncResult
@@ -54,6 +55,7 @@ const domainSyncMachine = setup({
     key: null as unknown as CryptoKey,
     now: 0,
     localAll: [],
+    localSnapshot: [],
     merged: [],
     attempt: 1,
   }),
@@ -69,6 +71,7 @@ const domainSyncMachine = setup({
             key: event.output.key,
             now: event.output.now,
             localAll: event.output.localAll,
+            localSnapshot: event.output.localSnapshot,
             merged: event.output.merged,
           })),
         },
@@ -91,6 +94,7 @@ const domainSyncMachine = setup({
             key: context.key,
             now: context.now,
             localAll: context.localAll,
+            localSnapshot: context.localSnapshot,
             merged: context.merged,
             attempt: context.attempt,
           },
@@ -113,6 +117,8 @@ const domainSyncMachine = setup({
             actions: assign({
               attempt: ({ context }) => context.attempt + 1,
               merged: ({ event }) => (event.output.type === "retry" ? event.output.merged : []),
+              localSnapshot: ({ event }) =>
+                event.output.type === "retry" ? event.output.localSnapshot : [],
             }),
           },
           {

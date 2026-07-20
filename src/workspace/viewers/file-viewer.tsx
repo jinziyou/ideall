@@ -1,24 +1,35 @@
 "use client"
 
 // 节点查看器: 文件。自取数 (useFilePreview) + 按 mime 分派预览 (FilePreviewBox) + 下载。
-// 复用 home/resources/file-preview 的核心 (与预览对话框同一逻辑, 不 fork)。onLoaded 回填标签标题。
+// 复用 home/resources/file-preview 的兼容核心。onLoaded 回填标签标题。
 import * as React from "react"
 import dynamic from "next/dynamic"
 import { Eye, Loader2, Pencil } from "lucide-react"
 import { toast } from "sonner"
+import { writeFile } from "@/filesystem/registry"
 import { fileTypeInfo } from "@/lib/format"
-import { updateFileContent } from "@/files/stores/files-store"
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { useFilePreview, FilePreviewBox } from "@/modules/home/resources/file-preview"
-import { nodeTab } from "../node-tab"
-import { promoteActiveTab, renameNodeTab, setTabDirty, tabKey } from "../store"
+import { resourceFileTab } from "../resource-file-tab"
+import {
+  promoteActiveTab,
+  renameNodeTab,
+  setTabDirty,
+  setTabSuspendReady,
+  tabKey,
+  useTabs,
+} from "../store"
 import { useTabActive } from "../tab-active-context"
 import { useFileActions } from "../use-file-actions"
 import { clearFileDraft, readFileDraft, writeFileDraft } from "./file-draft"
 import FileViewerToolbar from "./file-viewer-toolbar"
-import type { NodeViewerProps } from "../node-viewers"
+import type { NodeViewerProps } from "../node-kind-ui"
+import { fileEngineTargetForTab } from "../file-tab"
+import { resourceRefForFile } from "@/filesystem/resource-file-system"
 
 export type FileViewerMode = "preview" | "edit"
+
+const UI_WRITE_CONTEXT = { actor: "ui", permissions: [], intent: "write" } as const
 
 const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
   ssr: false,
@@ -33,9 +44,17 @@ const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
 export default function FileViewer({ nodeId }: NodeViewerProps) {
   const active = useTabActive()
   const [revision, setRevision] = React.useState(0)
-  const preview = useFilePreview(nodeId, revision)
+  const preview = useFilePreview(nodeId, revision, active)
   const { file, loading } = preview
-  const tabId = React.useMemo(() => tabKey(nodeTab({ kind: "file", id: nodeId }, "")), [nodeId])
+  const tabs = useTabs()
+  const tabId = React.useMemo(() => {
+    const engineTab = tabs.find((tab) => {
+      const target = fileEngineTargetForTab(tab)
+      const resource = target ? resourceRefForFile(target.ref) : null
+      return resource?.scheme === "node" && resource.kind === "file" && resource.id === nodeId
+    })
+    return engineTab?.id ?? tabKey(resourceFileTab({ scheme: "node", kind: "file", id: nodeId }))
+  }, [nodeId, tabs])
   const [mode, setMode] = React.useState<FileViewerMode>("preview")
   const [draft, setDraft] = React.useState("")
   const [saving, setSaving] = React.useState(false)
@@ -43,6 +62,9 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
   const [renameOpen, setRenameOpen] = React.useState(false)
   const [tagsOpen, setTagsOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [renameVersion, setRenameVersion] = React.useState<string | null>()
+  const [tagsVersion, setTagsVersion] = React.useState<string | null>()
+  const [deleteVersion, setDeleteVersion] = React.useState<string | null>()
   const [draftSavedAt, setDraftSavedAt] = React.useState<number | null>(null)
   const restoredDraftRef = React.useRef<string | null>(null)
   const draftRef = React.useRef("")
@@ -65,6 +87,9 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     restoredDraftRef.current = null
     setMetaOverride({})
     setDraftSavedAt(null)
+    setRenameVersion(undefined)
+    setTagsVersion(undefined)
+    setDeleteVersion(undefined)
   }, [nodeId])
 
   React.useEffect(() => {
@@ -130,28 +155,20 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     if (!file || !editable || preview.text === null) return
     if (dirty) {
       const now = Date.now()
-      writeFileDraft(file.id, {
+      const ready = writeFileDraft(file.id, {
         base: preview.text,
         draft,
         fileName: displayName,
         updatedAt: now,
       })
-      setDraftSavedAt(now)
+      setTabSuspendReady(tabId, ready)
+      setDraftSavedAt(ready ? now : null)
     } else {
       clearFileDraft(file.id)
+      setTabSuspendReady(tabId, false)
       setDraftSavedAt(null)
     }
-  }, [dirty, displayName, draft, editable, file, preview.text])
-
-  React.useEffect(() => {
-    if (!dirty) return
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      e.preventDefault()
-      e.returnValue = ""
-    }
-    window.addEventListener("beforeunload", onBeforeUnload)
-    return () => window.removeEventListener("beforeunload", onBeforeUnload)
-  }, [dirty])
+  }, [dirty, displayName, draft, editable, file, preview.text, tabId])
 
   const handleModeChange = React.useCallback((next: FileViewerMode) => {
     if (next === "edit") promoteActiveTab()
@@ -173,15 +190,15 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     if (!file || !type || !editable || preview.text === null || nextDraft === preview.text) return
     setSaving(true)
     try {
-      const saved = await updateFileContent(
-        file.id,
-        nextDraft,
-        mimeForSave(type.preview, file.type),
+      await writeFile(
+        preview.ref,
+        {
+          data: nextDraft,
+          mediaType: mimeForSave(type.preview, file.type),
+          expectedVersion: preview.version,
+        },
+        UI_WRITE_CONTEXT,
       )
-      if (!saved) {
-        toast.error("文件不存在或已删除")
-        return
-      }
       clearFileDraft(file.id)
       setDraftSavedAt(null)
       toast.success("已保存")
@@ -191,7 +208,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     } finally {
       setSaving(false)
     }
-  }, [editable, file, preview.text, type])
+  }, [editable, file, preview.ref, preview.text, preview.version, type])
 
   React.useEffect(() => {
     if (!active || !editable) return
@@ -205,22 +222,23 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true })
   }, [active, editable, handleSave])
 
-  async function handleRename(nextName: string) {
+  async function handleRename(nextName: string, expectedVersion: string | null | undefined) {
     if (!file || nextName === displayName) return
-    await fileActions.rename(file.id, nextName)
+    await fileActions.rename(file.id, nextName, expectedVersion)
   }
 
-  async function handleTags(nextTagsText: string) {
+  async function handleTags(nextTagsText: string, expectedVersion: string | null | undefined) {
     if (!file) return
-    await fileActions.updateTags(file.id, nextTagsText)
+    await fileActions.updateTags(file.id, nextTagsText, expectedVersion)
   }
 
-  async function handleDelete() {
+  async function handleDelete(expectedVersion: string | null | undefined) {
     if (!file) return
     await fileActions.remove({
       id: file.id,
       name: displayName,
       file: displayFile ?? file,
+      expectedVersion,
       closeTab: true,
     })
   }
@@ -254,15 +272,24 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
         onModeChange={handleModeChange}
         onSave={() => void handleSave()}
         onDownload={(target) => void fileActions.download(target)}
-        onRename={() => setRenameOpen(true)}
-        onEditTags={() => setTagsOpen(true)}
-        onClearTags={() => void handleTags("")}
+        onRename={() => {
+          setRenameVersion(preview.version ?? null)
+          setRenameOpen(true)
+        }}
+        onEditTags={() => {
+          setTagsVersion(preview.version ?? null)
+          setTagsOpen(true)
+        }}
+        onClearTags={() => void handleTags("", preview.version ?? null)}
         onCopyName={() => void fileActions.copyName(displayName)}
         onCopyRef={() => {
           if (file) void fileActions.copyRef(file.id)
         }}
         onDiscardDraft={discardDraft}
-        onDelete={() => setDeleteOpen(true)}
+        onDelete={() => {
+          setDeleteVersion(preview.version ?? null)
+          setDeleteOpen(true)
+        }}
       />
 
       <div className="min-h-0 flex-1">
@@ -316,7 +343,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
             title="重命名文件"
             label="名称"
             defaultValue={displayName}
-            onSubmit={(value) => void handleRename(value)}
+            onSubmit={(value) => void handleRename(value, renameVersion)}
           />
           <TextPromptDialog
             open={tagsOpen}
@@ -326,7 +353,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
             defaultValue={displayTags.join(", ")}
             placeholder="用逗号分隔多个标签"
             confirmLabel="保存"
-            onSubmit={(value) => void handleTags(value)}
+            onSubmit={(value) => void handleTags(value, tagsVersion)}
           />
           <ConfirmDialog
             open={deleteOpen}
@@ -337,7 +364,7 @@ export default function FileViewer({ nodeId }: NodeViewerProps) {
             }
             confirmLabel="删除"
             destructive
-            onConfirm={() => void handleDelete()}
+            onConfirm={() => void handleDelete(deleteVersion)}
           />
         </>
       )}

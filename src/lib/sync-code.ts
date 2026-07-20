@@ -11,6 +11,7 @@ import {
   secureGetWithLegacy,
   secureSet,
 } from "@/lib/secure-store"
+import { isTauri } from "@/lib/tauri"
 
 export const SYNC_CODE_STORAGE_KEY = LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE
 export const SYNC_CODE_SECURE_KEY = SECURE_STORE_KEYS.SYNC_CODE
@@ -24,7 +25,7 @@ function notify() {
 }
 
 function readSyncCodeSync(): string | null {
-  return secureFallbackGet(SYNC_CODE_SECURE_KEY) ?? cachedCode
+  return (isTauri() ? null : secureFallbackGet(SYNC_CODE_SECURE_KEY)) ?? cachedCode
 }
 
 export async function hydrateSyncCodeSecure(): Promise<string | null> {
@@ -54,19 +55,19 @@ export function subscribeSyncCode(cb: () => void): () => void {
   }
 }
 
-export function setSyncCode(code: string): void {
+export async function setSyncCode(code: string): Promise<void> {
+  await secureSet(SYNC_CODE_SECURE_KEY, code)
   cachedCode = code
   hydrated = true
   publicStorageRemove(SYNC_CODE_STORAGE_KEY)
-  void secureSet(SYNC_CODE_SECURE_KEY, code)
   notify()
 }
 
-export function clearSyncCode(): void {
+export async function clearSyncCode(): Promise<void> {
+  await secureDelete(SYNC_CODE_SECURE_KEY)
   cachedCode = null
   hydrated = true
   publicStorageRemove(SYNC_CODE_STORAGE_KEY)
-  void secureDelete(SYNC_CODE_SECURE_KEY)
   notify()
 }
 
@@ -86,7 +87,7 @@ if (typeof window !== "undefined") {
         notify()
         return
       }
-      cachedCode = secureFallbackGet(SYNC_CODE_SECURE_KEY)
+      cachedCode = isTauri() ? null : secureFallbackGet(SYNC_CODE_SECURE_KEY)
       hydrated = true
       notify()
     }

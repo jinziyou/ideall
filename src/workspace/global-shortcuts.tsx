@@ -3,7 +3,7 @@
 // 工作区全局快捷键 (单点 window keydown, 挂 WorkspaceShell → /auth 之外全局生效):
 // 标签操作 (关闭 / 循环切换 / 按序跳转) + 侧栏开合。「一切皆标签页」的外壳借用了 IDE/浏览器
 // 的视觉语言, 此表兑现其键盘预期 —— 此前除 ⌘K 外全应用没有任何全局快捷键, 关标签只能鼠标悬停点 X。
-// ⌘K 仍由 command-palette 自持 (保留其开/关切换语义); 本表条目同时供 ⌘K 命令面板展示键位提示。
+// ⌘K 仍由 command-palette 自持，保留其开/关切换语义。
 //
 // 已知边界: Web 浏览器里 Ctrl+W / Ctrl+Tab 是浏览器保留键, preventDefault 无效 —— 它们主要
 // 服务 Tauri 桌面 App (主要分发形态); Web 端可用 Ctrl+PgUp/PgDn 与 mod+1..9 替代。
@@ -13,8 +13,8 @@ import * as React from "react"
 import { inEditableTarget, matchesCombo, type ShortcutDef } from "@/lib/shortcuts"
 import { activateAdjacentTab, activateTabAt, requestCloseActiveTab, toggleSidebar } from "./store"
 
-/** 标签/布局快捷键绑定表 (⌘K 命令面板据此展示键位)。 */
-export const WORKSPACE_SHORTCUTS: ShortcutDef[] = [
+/** 标签/布局快捷键绑定表。 */
+const WORKSPACE_SHORTCUTS: ShortcutDef[] = [
   {
     id: "tab.close",
     combo: "mod+w",

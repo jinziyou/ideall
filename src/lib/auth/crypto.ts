@@ -6,10 +6,7 @@
 
 import { x25519 } from "@noble/curves/ed25519.js"
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js"
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
-}
+import { bytesToHex } from "@/lib/hex"
 
 function fromHex(hex: string): Uint8Array {
   const clean = hex.trim()
@@ -20,7 +17,7 @@ function fromHex(hex: string): Uint8Array {
 
 /** 随机会话 id (服务端按它缓存其临时密钥对; GET secret 与 POST 登录须用同一个)。 */
 export function newClientId(): string {
-  return toHex(crypto.getRandomValues(new Uint8Array(16)))
+  return bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
 }
 
 export type ClientKeypair = { priv: Uint8Array; publicHex: string }
@@ -28,7 +25,7 @@ export type ClientKeypair = { priv: Uint8Array; publicHex: string }
 /** 生成客户端 X25519 密钥对; publicHex 作为 client_secret 上传。 */
 export function newKeypair(): ClientKeypair {
   const priv = x25519.utils.randomSecretKey()
-  return { priv, publicHex: toHex(x25519.getPublicKey(priv)) }
+  return { priv, publicHex: bytesToHex(x25519.getPublicKey(priv)) }
 }
 
 /** 用服务端临时公钥加密密码, 返回 encrypted_password 的 hex (nonce||密文||tag)。 */
@@ -43,5 +40,5 @@ export function encryptPassword(
   const out = new Uint8Array(nonce.length + sealed.length)
   out.set(nonce, 0)
   out.set(sealed, nonce.length)
-  return toHex(out)
+  return bytesToHex(out)
 }

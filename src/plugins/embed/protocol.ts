@@ -9,7 +9,21 @@ export const INIT_MESSAGE_TYPE = "ideall:init"
 export const HELLO_MESSAGE_TYPE = "ideall:embed-hello"
 
 /** 传输/握手协议版本。 */
-export const PROTOCOL_VERSION = "1.0"
+export const PROTOCOL_VERSION = "1.1"
+
+/** 宿主 ServerPort 实际使用的 wonita 数据面版本。 */
+export const BACKEND_API_VERSION = "v2"
+
+/** 可独立协商的宿主能力；新能力只追加，不在同一主版本重解语义。 */
+export const EMBED_CAPABILITY = {
+  communityStringIds: "community:string-ids",
+  profileDisplayName: "profile:display-name",
+  partitionedSyncV2: "sync:partitioned-v2",
+} as const
+
+export type EmbedCapability = (typeof EMBED_CAPABILITY)[keyof typeof EMBED_CAPABILITY]
+
+export const EMBED_CAPABILITIES: EmbedCapability[] = Object.values(EMBED_CAPABILITY)
 
 // ── MCP 工具名 / 资源 URI (§5) ───────────────────────────────────────────────────
 export const TOOL = {
@@ -30,6 +44,8 @@ export const TOOL = {
   fsWrite: "fs.write",
   fsMove: "fs.move",
   fsDelete: "fs.delete",
+  // Agent 专用的脱敏配置读取；只有 loopback 宿主注入回调且持专用权限时才注册。
+  agentConfigRead: "agent.config.read",
   // ui.* 标签面 (§6.1): 让消费方把节点打开为标签页。
   uiOpenTab: "ui.openTab",
   uiCloseTab: "ui.closeTab",
@@ -49,6 +65,17 @@ export const TOOL = {
   browserWait: "browser.wait",
   browserWaitForSelector: "browser.waitForSelector",
 } as const
+
+export const AGENT_CONFIG_SECTION_IDS = [
+  "settings",
+  "workspaces",
+  "rules",
+  "skills",
+  "mcp",
+  "tasks",
+] as const
+
+export type AgentConfigSection = (typeof AGENT_CONFIG_SECTION_IDS)[number]
 
 export const RESOURCE = {
   identityMe: "identity://me",
@@ -81,6 +108,9 @@ export const PERMISSIONS = [
   // 须二次持 fs.blobs:read, 否则 consent-required。agentGrant 不含此位 —— agent 默认不能无授权把上传文件
   // (PDF/图片等) 读出外发模型端点。
   "fs.blobs:read",
+  // Agent 配置正文（工作区路径、规则、prompt、MCP/技能拓扑）独立于通用 fs:read。
+  // 只允许一方 Agent 经用户工作区显式勾选；普通文件枚举只能看到 metadata。
+  "agent.config:read",
   "ui.tabs",
   // web.* 出站联网 (§egress): 经守卫 (https-only + 私网/元数据 IP 拦截 + 重定向复检 + 体积/超时上限) 取数。
   // 钉死 first-party (见 grant.ts PERMISSION_MIN_TIER): 仅本应用 agent 持有, 不下放给 verified/any-origin 嵌入页。
@@ -139,4 +169,7 @@ export interface IdeallInitMessage {
   appId: string
   permissions: string[]
   theme: ThemeTokens
+  /** 1.0 宿主未携带这两个字段，故保持可选以便客户端显式降级。 */
+  backendApiVersion?: string
+  capabilities?: string[]
 }

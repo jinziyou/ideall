@@ -6,11 +6,14 @@ import {
   type PluginDataPackage,
 } from "@/plugins/shared/plugin-data"
 import { createPluginDb } from "@/plugins/shared/plugin-idb"
+import { nextUpdatedAt } from "@/files/version"
 
 export const DATABASE_DB_NAME = "ideall:database"
 export const DATABASE_DB_VERSION = 1
-const STORE_TABLES = "tables"
-const STORE_ROWS = "rows"
+export const STORE_DATABASE_TABLES = "tables"
+export const STORE_DATABASE_ROWS = "rows"
+const STORE_TABLES = STORE_DATABASE_TABLES
+const STORE_ROWS = STORE_DATABASE_ROWS
 
 export type DataTable = {
   id: string
@@ -184,6 +187,11 @@ export async function listTables(): Promise<DataTable[]> {
   return tables.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+/** 按主键读取单表，供 FileSystem.stat/read 避免为一个 FileRef 扫描全部表。 */
+export async function getTable(id: string): Promise<DataTable | undefined> {
+  return databaseDb.get<DataTable>(STORE_TABLES, id)
+}
+
 export async function createTable(name: string, columns: string[]): Promise<DataTable> {
   const draft = validateTableDraft(name, columns)
   const now = Date.now()
@@ -228,6 +236,11 @@ export async function listRows(tableId: string): Promise<DataRow[]> {
   return rows.sort((a, b) => b.createdAt - a.createdAt)
 }
 
+/** 按主键读取单行；调用方仍须校验 tableId，防止伪造 row FileRef 跨表寻址。 */
+export async function getRow(id: string): Promise<DataRow | undefined> {
+  return databaseDb.get<DataRow>(STORE_ROWS, id)
+}
+
 export async function addRow(tableId: string, values: Record<string, string>): Promise<DataRow> {
   const now = Date.now()
   const row: DataRow = {
@@ -248,7 +261,13 @@ export async function updateRow(
 ): Promise<DataRow> {
   const now = Date.now()
   const current = await databaseDb.get<DataRow>(STORE_ROWS, id)
-  const row: DataRow = { id, tableId, values, createdAt: current?.createdAt ?? now, updatedAt: now }
+  const row: DataRow = {
+    id,
+    tableId,
+    values,
+    createdAt: current?.createdAt ?? now,
+    updatedAt: current ? nextUpdatedAt(current.updatedAt, now) : now,
+  }
   await databaseDb.put(STORE_ROWS, row)
   return row
 }

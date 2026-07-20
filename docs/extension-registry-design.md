@@ -1,11 +1,11 @@
 # 动态注册 / 安装机制设计（Extension Registry）
 
-> 落地 [extensions.md](extensions.md) 推荐模型所需的**唯一净新机制**：把「编译期硬编码的注册」解冻为「运行期可添加」。
+> 本文保留运行时扩展落地前的红队设计基线。当前权威概念模型见 [extensions.md](extensions.md)，五层运行时契约见 [file-system-engine-architecture.md](file-system-engine-architecture.md)。
 > 设计原则：**最大复用既有原语**（MCP 总线 / NodeKind+REGISTRY / Grant），**最小解冻**，**信任优先**。
 >
 > **本稿经三视角对抗式红队审查（安全/信任 · 同步/迁移/类型安全 · 可行性/自洽）修正。** 方向（复用既有原语、最小解冻、分期）经审查成立；但初稿把多处**尚未实现的净新机制**误述为「已有不变量」，并有数处对代码的事实性误判。下文已纠正，并在 §0 汇总红队结论，让「已成立 / 须新建 / 事实纠错」一目了然。
 >
-> **状态更新（2026-07）：两项「须新建」已落地** —— ① tier 门：`grant.ts` 已有 `TIER_RANK`/`tierAtLeast`/`PERMISSION_MIN_TIER`/`effectivePermissions`，`grant.tier` 已被强制读取执行（`local-mcp-server` 走 `effectivePermissions`，并有「低信任档剥 `web:*`」的测试锁定）；② kind 单源：`node.ts` 的 `NODE_KINDS` 已是唯一真相源，`tools.ts` zod enum 与 `nodes-store` 均从其派生。文中 `文件:行号` 锚点是红队审查时的快照、可能已漂移，以符号名为准。
+> **状态更新（2026-07）**：① tier 门已落地：`grant.ts` 的 `TIER_RANK`/`tierAtLeast`/`PERMISSION_MIN_TIER`/`effectivePermissions` 已在能力创建时执行；② kind 单源已落地：`protocol/node.ts` 是唯一真相源；③五层模型的可信运行时组合注册已落地：package 走宿主注入的 `discover -> verify -> consent/restore -> activate`，Catalog 用一次性内存 permit 调用 Registry，严格 v2 receipt 不承载代码；桌面 consent 进入系统凭据库且不向 Web 明文降级；④桌面多 publisher 签名宿主已落地：固定目录、严格 manifest、官方内置/第三方指纹确认根、单调累积签名撤销清单、当前/下一密钥双签名计划轮换、永久退役指纹、原子安装更新、单版本回滚、物理卸载，以及 discover/verify/spawn 三处 Minisign 与 connector SHA-256 复验；⑤联网扩展目录与用户触发更新事务已落地：Rust 逐页验证固定官方 Registry 的 Minisign 信封并原子缓存原始签名页；已安装扩展的更高版本通过 DNS 全局地址检查/IP 钉连、包 SHA、publisher、manifest 和权限复验后进入临时槽，用户确认权限差异才停止旧版本并原子安装。生产签名 feed 尚待服务端发布；⑥已授权 connector 已按权限映射为独立 FileSystem、搜索资源和受确认/审计的工具动作；⑦外部 MCP client 已支持 stdio、SSE 与 Streamable HTTP。现行发行协议详见 [runtime-extension-packages.md](runtime-extension-packages.md)。本文其余“现状”、路线阶段和 `文件:行号` 是红队审查时的历史快照，以本段及现行代码为准；独立离线密钥恢复仍未落地。
 
 ## 0. 红队结论速览（先看这条）
 
@@ -23,14 +23,14 @@
 
 **经审查仍成立（design holds）**：① core `PERMISSIONS` 闭合联合对一方仍「拼错即编译失败」（只要类型层分叉 core/ext）；② 「越权=工具不存在」最小权限默认；③ 每消费方独立 server+Grant 互不可见（隔离基座，`local-mcp-server.ts`）；④ `agentGrant` 不含 `fs.notes:read` 是真实最小权限默认（被破坏的是下游 stripNode/端口闸，非该集合）；⑤ `REGISTRY` 字符串键 + 优雅兜底；⑥ 平面3 端口后端已是 register/get；⑦ ext 作单一逃生舱 kind 方向合理（须认其真实联动成本）；⑧ 分期 P0→P3 排序合理。
 
-## 1. 现状：编译期硬编码（实证）
+## 1. 审查时快照：编译期硬编码（历史实证）
 
 | 注册点 | 文件 | 形态 | 冻结程度 |
 | --- | --- | --- | --- |
 | 能力（tool/resource） | `tools.ts` `registerGrantedTools/Resources` | 一串 `if(has(perm)) server.tool(...)` 字面量，含按 kind 的**运行期二次 gate**（`tools.ts:171-177` notes、`:188` 写分流） | **硬**（且非纯权限位映射） |
 | 授权位 | `protocol.ts:53` `PERMISSIONS` `as const` | 闭合联合，三处单一事实源，防孤立能力漂移 | **硬**（闭合，价值即编译期防漂移） |
 | 应用面板 | `registry.tsx:37` `REGISTRY` | 字符串键 + `React.lazy`，`TabContent` 有「未知标签类型」兜底 | **软**（字符串键） |
-| 文件查看器 | `node-viewers.ts:24` `KIND_VIEWER` | `NodeKind→viewer`，`resolveViewer(kind)`→null 兜底（**只拿 kind，拿不到 Node 本体**） | **软查 / 硬 kind** |
+| 文件查看器 | 当时的 Node viewer（现兼容实现见 `node-kind-ui.ts`） | `NodeKind→viewer`，`resolveViewer(kind)`→null 兜底（**只拿 kind，拿不到 Node 本体**） | **软查 / 硬 kind** |
 | 数据类型 | `node.ts:9/88` + **`tools.ts:29` zod enum** + **`nodes-store.ts:42` ALL_NODE_KINDS** | 三份手抄的 kind 真相源 + `stripNode` 隐私分类 + createNode switch | **最硬**（多源、无 exhaustiveness 检查） |
 | 同步范围 | `sync-crypto.ts:13` `SyncScope` | **仅 `"subs"\|"notes"`**；其余 kind 不同步 | **最硬**（无通用 Node 同步层） |
 | 组合根 | `boot.ts` `registerAll()` | 硬编码 manifest 列表，一次性幂等 | **硬** |
@@ -63,7 +63,7 @@ type CapabilitySpec = {
 - **`createLocalMcpServer` 注册门 = 两条都过**：`permission ∈ grant.permissions` **且** `TIER_RANK[grant.tier] ≥ TIER_RANK[spec.minTier]`。`TIER_RANK = {first-party:2, verified:1, any-origin:0}` 是**净新偏序**（红队审查时 `grant.tier` 全仓不被读取；✅ 现已落地于 `grant.ts`）。敏感 core 位 `fs.notes:read`/`identity.publish`/`fs:write` 的 `minTier` **钉死 first-party**，T2 即便在 `grant.permissions` 里携带也不挂载。
 - **句柄注入而非单例**：`handler(ctx)` 的 `ctx` 是按 Grant 收窄过的 `ScopedHostCtx`（如只读、已 stripNode 的 FilesPort 视图），杜绝 handler 经 ambient 单例越过 `fs.notes:read` 闸门拿正文（红队证实 `getFilesPort().getNodeRaw` 返回完整 content，绕过 `tools.ts:174` 唯一的手写闸）。**正文净化须下沉到端口**：FilesPort 暴露 `getNodePublic`（已 stripNode）与 `getNodeRaw`（须显式 notes 能力），raw 不再是 ambient 依赖。
 - **`fs.*` 家族保持手写 handler**：红队证实「一 spec 一 permission」装不下 `fs.read` 按 kind 二次 gate notes、`fs:write` 按 kind 分流、ui.* 依赖 `ctx.openTab`(非 permission)、`host.toast` 无授权位。`CAP_REGISTRY` 主吃**纯 handler / 外部**能力；`fs.*`/ui.*/host.* 内置面继续手写，只是改用同一注册 API 录入。
-- **`mcp`（外部 server）** = 进程外 MCP **client** 出站连接（stdio/ws，**净新 transport**），把对端 `tools/list` 适配成命名空间化 `ExtCapability`（`ext.<serverId>.<tool>`），挂在一个**专属消费方身份 `ext:<serverId>` + 专属持久 T2 Grant** 下，`CAP_REGISTRY` 按命名空间过滤——确保 ext 能力**只对该 server 的 server 实例可见，不污染 agentGrant / iframe Grant**（守不变量3）。
+- **`mcp`（外部 server）**：基础 client transport 现已支持 stdio、SSE 与 Streamable HTTP。下述命名空间化 `ExtCapability`、专属持久 T2 Grant 与出站数据分类仍是本设计的增强方案，不能把“已连接外部 MCP”等同于这些隔离机制已经全部落地。
 
 #### `PERMISSIONS` 闭合联合的解冻（红队修正：类型层分叉 + 严格正则）
 
@@ -106,7 +106,7 @@ type Permission     = CorePermission | ExtPermission
 - 为保 `stripNode` 纯函数，把「是否敏感」做成**显式参数**（调用点 `tools.ts:165/351` 传入已解析的扩展元数据；注册表未就绪时传 `conservative=true` 全剥）；
 - 显式规定 ext **不得把私密数据放 title/tags**（这两者 stripNode 永不剥）；meta 默认全私密。
 
-**`resolveViewer` 修正**：`node-viewers.ts:33` 签名是 `resolveViewer(kind)`，调用点（`registry.tsx:85`）只有 `{kind,id}`、**拿不到 Node 本体**，故「按 `meta.extKind` 二级分派」不能在此发生。改为：`resolveViewer("ext")` 固定返回一个 `ExtViewerShell`，由它用 `nodeId` 取 Node 后读 `meta.extKind`，再查 `registerExtViewer(extKind→{viewer,sensitive,validator})` 二级分派；未注册走兜底 + 默认剥离。
+**`resolveViewer` 修正（历史 Node 方案）**：审查时的 `resolveViewer(kind)`（现兼容实现见 `node-kind-ui.ts`）只拿 `{kind,id}`、**拿不到 Node 本体**，故「按 `meta.extKind` 二级分派」不能在此发生。该段保留为当时方案；现行扩展表面优先通过 FileSystem + Engine 贡献，不要求新增 `NodeKind`。
 
 > 权衡（红队 low）：`meta.extKind` 二级分派**重新引入了 `content:unknown` 的运行期不可检分派面**（正是 `NodeKind` 可辨识联合当初要消灭的）。这是「用类型安全换动态性」的自觉取舍，用注册表驱动的运行期 validator 补偿。
 
@@ -150,15 +150,15 @@ type Permission     = CorePermission | ExtPermission
 
 **跨端缺扩展**：B 端没装某扩展 → `resolveViewer` 落「暂不支持」（已实现），但**前提是 ext 数据真的同步到了 B 端**（见上，仅 (B) 成立）；且 B 端不知该 extKind 是否敏感 → `stripNode` 必须 `conservative=true` fail-closed（§2.3）。
 
-## 5. 分期路线（按成本/风险递增，已标注真实代价）
+## 5. 历史分期路线（按成本/风险递增）
 
 | 期 | 内容 | 真实净新机制（红队校准） |
 | --- | --- | --- |
 | **P-（先行）** | `skill` = 补 `server.prompt` + `agent.run` 模板 | Prompts 实现 |
 | **P0** | 能力注册表（§2.1），内置能力改数据驱动 | 注册 API + **TIER_RANK 偏序门** + **ScopedHostCtx 句柄注入**（非「字面量改 Map」那么轻；`fs.*` 仍手写） |
 | **P1** | 应用表面运行期注册 + 持久化 + **持久 Grant** + **consent/撤销面板** + **撤销主动 teardown** | consent UI + 持久层 + **重放时序 gate** + **撤销 teardown**（不变量4 前置） |
-| **P2** | 外部 MCP server（`mcp`） | **出站 MCP client transport** + `ext:<serverId>` 专属消费方/Grant + **出站参数污点扫描**（不变量5 前置） |
-| **P3** | `native-app` 表面 + `ext` 逃生舱 kind | `NodeKind\|="ext"` **联动 5 处** + `stripNode` fail-closed + 原生 launcher + 同步决策 (A)/(B) |
+| **P2** | 外部 MCP server（`mcp`） | client transport 已落地；专属消费方/Grant 与出站数据分类仍须按安全边界单独验收 |
+| **P3** | `native-app` 表面 + `ext` 逃生舱 kind | native-app 启动链路已由 FileSystem + Engine 落地；`ext` Node 方案未采用为通用表面 |
 
 ## 6. 已定决策（本轮拍板）
 
@@ -173,4 +173,4 @@ type Permission     = CorePermission | ExtPermission
 | 7 | 外部 MCP 沙箱 | **保守默认**：只读 + 禁出站网络 + 进程隔离（stdio 子进程）；写 / 联网 / 敏感数据出站一律逐能力 T2 显式批准 | §3 不变量5 |
 | 8 | 端口后端是否对外可添加 | **进，作一等扩展类型**（兑现「后端可换 / 可自建」）；但按端口分信任档：`ServerPort`/`SyncPort` 用户可换、`FilesPort` 默认仅自托管/高级项 | §2.4 |
 
-> 据此，**§4 取 (A) ext 本地-only**、**§2.2 三方带桥 plugin 仅一方/签名**、**§2.3 两级隐私 + fail-closed**、**§2.4 端口后端按端口分档** 已为定稿方向。剩余纯实现细节（`TIER_RANK` 常量值、`ScopedHostCtx` 句柄面、ext-viewer 注册表签名）进 P0 工单时定。
+> 据此，**§4 取 (A) ext 本地-only**、**§2.2 三方带桥 plugin 仅一方/签名**、**§2.3 两级隐私 + fail-closed**、**§2.4 端口后端按端口分档** 是这份历史设计的决策。`TIER_RANK` 已落地；其余未在顶部状态更新中明确标为完成的机制，仍不能视为现行能力。

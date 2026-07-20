@@ -25,7 +25,7 @@ const mockPort: ServerPort = {
   }),
   getMe: async () => ({
     ok: true,
-    data: { id: 1, email: "u@test.com", name: "Test User", avatar: null },
+    data: { id: `u:${"1".repeat(32)}`, email: "u@test.com", name: "Test User", avatar: null },
   }),
   updateProfile: async () => ({ ok: true, data: null }),
 }
@@ -61,5 +61,16 @@ test("runAuthFlow: 握手失败 → 可展示错误", async () => {
   await assert.rejects(
     () => runAuthFlow({ mode: "login", email: "u@test.com", password: "secret" }),
     /服务不可用/,
+  )
+})
+
+test("runAuthFlow: V2 session 失败时不伪造数字用户 ID", async () => {
+  registerServerPort({
+    ...mockPort,
+    getMe: async () => ({ ok: false, status: 503, message: "session unavailable" }),
+  })
+  await assert.rejects(
+    () => runAuthFlow({ mode: "login", email: "u@test.com", password: "secret" }),
+    /session unavailable/,
   )
 })

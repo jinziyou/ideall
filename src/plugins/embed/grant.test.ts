@@ -94,6 +94,20 @@ test("agentGrant **不含** fs.notes:read (既存笔记正文须 @ 引用 consen
   assert.equal(agentGrant(NOW).permissions.includes("fs.notes:read"), false)
 })
 
+test("agent.config:read 默认关闭，仅显式工作区授权且只对 first-party 生效", () => {
+  assert.equal(agentGrant(NOW).permissions.includes("agent.config:read"), false)
+  assert.equal(
+    agentGrant(NOW, ["fs:read", "agent.config:read"]).permissions.includes("agent.config:read"),
+    true,
+  )
+  const untrusted: Grant = {
+    ...firstPartyGrant(manifest(), NOW),
+    tier: "verified",
+    permissions: ["agent.config:read"],
+  }
+  assert.deepEqual(effectivePermissions(untrusted), [])
+})
+
 test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:write / web:* 出站位", () => {
   for (const m of [infoEmbedManifest, communityEmbedManifest]) {
     assert.equal(m.permissions.includes("fs.notes:read"), false, `${m.id} 不得含 fs.notes:read`)
@@ -101,6 +115,16 @@ test("iframe embed manifest (info/community) 永不含 fs.notes:read / fs.notes:
     // 出站联网是 agent 专属 (嵌入页自有同源取数, 不该借宿主出站通道); 半信任源永不该拿 web:*。
     assert.equal(m.permissions.includes("web:search"), false, `${m.id} 不得含 web:search`)
     assert.equal(m.permissions.includes("web:fetch"), false, `${m.id} 不得含 web:fetch`)
+  }
+})
+
+test("info/community manifests share the same save-to-mine bookmark capability", () => {
+  for (const manifest of [infoEmbedManifest, communityEmbedManifest]) {
+    assert.equal(
+      manifest.permissions.includes("hub.bookmarks:write"),
+      true,
+      `${manifest.id} 应提供统一捕获能力`,
+    )
   }
 })
 

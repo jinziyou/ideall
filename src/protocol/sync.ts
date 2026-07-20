@@ -1,12 +1,12 @@
 // 跨端同步接口约定 —— 加密同步块的形状 + 纯合并逻辑 (LWW 并集)。
 // AES/HKDF 密码学与编排在 sync 插件内; 此处只放跨端共享的接口约定与可独立单测的纯逻辑。
 //
-// 合并逻辑对「可同步记录」泛型化 (SyncRecord): 关注 (Subscription) 与笔记 (Note) 等本地优先实体
+// 合并逻辑对「可同步记录」泛型化 (SyncRecord): 关注、笔记、书签等本地优先实体
 // 都满足该形状 (id + 版本时间 + 软删除标记), 故共用同一套 LWW 并集 / 删除标记 GC, 不各写一份。
 
 /**
  * 可跨端同步的记录的最小形状 —— LWW 合并只需: 主键 id、版本时间 (updatedAt)、软删除标记 (deletedAt)。
- * 关注 / 笔记等实体结构上满足即可参与同一套合并。
+ * 关注 / 笔记 / 书签等实体结构上满足即可参与同一套合并。
  */
 export interface SyncRecord {
   id: string
@@ -18,8 +18,93 @@ export interface SyncRecord {
 /** 服务端不透明存储的加密同步块 (PUT/GET /sync/{id})。 */
 export type SyncBlob = { iv: string; ciphertext: string; updated_at: number }
 
+/** V2 分区快照的原子可见性指针。 */
+export type SyncManifest = {
+  generation: string
+  part_count: number
+  total_ciphertext_chars: number
+  parts_sha256: string
+  version: number
+  updated_at_ms: number
+}
+
+/** V2 已提交 generation 中的一个不可变密文分片。 */
+export type SyncGenerationPart = {
+  generation: string
+  part_index: number
+  iv: string
+  ciphertext: string
+  content_sha256: string
+}
+
+export type SyncBlockBudget = Readonly<{
+  maxRecords: number
+  maxPlaintextBytes: number
+  maxCiphertextBase64Chars: number
+}>
+
+const MIB = 1024 * 1024
+
+function syncBlockBudget(maxRecords: number, maxPlaintextBytes: number): SyncBlockBudget {
+  return Object.freeze({
+    maxRecords,
+    maxPlaintextBytes,
+    // AES-GCM 在明文后追加 16-byte tag，再按 Base64 4/3 膨胀。
+    maxCiphertextBase64Chars: 4 * Math.ceil((maxPlaintextBytes + 16) / 3),
+  })
+}
+
+/** 单块客户端硬预算；服务端仍只看见不透明密文。 */
+export const SYNC_BLOCK_BUDGETS = Object.freeze({
+  subs: syncBlockBudget(50_000, 4 * MIB),
+  notes: syncBlockBudget(100_000, 32 * MIB),
+  bookmarks: syncBlockBudget(100_000, 16 * MIB),
+})
+
+/** 服务端每片的 canonical Base64 字符上限。 */
+export const SYNC_PART_MAX_CIPHERTEXT_CHARS = 262_144
+
+/** 扣除 16-byte AES-GCM tag 后，可在上述 Base64 上限内装下的最大明文。 */
+export const SYNC_PART_MAX_PLAINTEXT_BYTES = 196_592
+
+/** 单个分片响应上限（密文 + JSON 包装/元数据余量）。 */
+export const SYNC_MAX_RESPONSE_BYTES = SYNC_PART_MAX_CIPHERTEXT_CHARS + 8_192
+
+/** 分片 0 保持历史 storageId；未来新增分片只可使用 1..1023。 */
+export const SYNC_MAX_PARTITION = 1_023
+
 /** 一次同步的结果摘要。 */
 export type SyncResult = { total: number; added: number }
+
+export type SyncFailureCode = "block-limit" | "conflict" | "decrypt" | "network" | "unknown"
+
+export type SyncTelemetrySnapshot = Readonly<{
+  status: "success" | "failure"
+  startedAt: number
+  finishedAt: number
+  durationMs: number
+  total: number | null
+  added: number | null
+  failureCode: SyncFailureCode | null
+}>
+
+let syncTelemetrySnapshot: SyncTelemetrySnapshot | null = null
+const syncTelemetryListeners = new Set<() => void>()
+
+/** 最近一次同步的非敏感运行指标；只驻留当前进程，不包含同步码、storageId 或错误正文。 */
+export function getSyncTelemetrySnapshot(): SyncTelemetrySnapshot | null {
+  return syncTelemetrySnapshot
+}
+
+export function recordSyncTelemetry(snapshot: SyncTelemetrySnapshot): void {
+  syncTelemetrySnapshot = Object.freeze({ ...snapshot })
+  for (const listener of syncTelemetryListeners) listener()
+}
+
+export function subscribeSyncTelemetry(listener: () => void): () => void {
+  syncTelemetryListeners.add(listener)
+  return () => syncTelemetryListeners.delete(listener)
+}
 
 /** 跨端同步端口 —— sync 插件实现 (编排: 拉远端→解密→合并→写本地→加密→推远端)。 */
 export interface SyncPort {
@@ -29,8 +114,12 @@ export interface SyncPort {
 let syncPort: SyncPort | null = null
 
 /** sync 插件在启动时注册其实现。 */
-export function registerSyncPort(p: SyncPort): void {
+export function registerSyncPort(p: SyncPort): () => void {
+  const previous = syncPort
   syncPort = p
+  return () => {
+    if (syncPort === p) syncPort = previous
+  }
 }
 
 /** 取同步端口 (core 的同步面板用); 未注册 (无 sync 插件) 时为 null。 */
@@ -132,11 +221,24 @@ export function expiredTombstoneIdsToDelete(
     .map((s) => s.id)
 }
 
-/** 两记录集合是否等价 (按 id 排序后逐项比较), 用于决定是否写回本地。 */
+function canonicalJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue)
+  if (!value || typeof value !== "object") return value
+  const source = value as Record<string, unknown>
+  const canonical: Record<string, unknown> = {}
+  for (const key of Object.keys(source).sort()) {
+    if (source[key] !== undefined) canonical[key] = canonicalJsonValue(source[key])
+  }
+  return canonical
+}
+
+/** 两记录集合是否结构等价 (记录按 id、对象字段按键规范化；数组顺序保留)。 */
 export function recordsEqual<T extends SyncRecord>(a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false
   const norm = (xs: T[]) =>
-    [...xs].sort((x, y) => x.id.localeCompare(y.id)).map((s) => JSON.stringify(s))
+    [...xs]
+      .sort((x, y) => x.id.localeCompare(y.id))
+      .map((record) => JSON.stringify(canonicalJsonValue(record)))
   const na = norm(a)
   const nb = norm(b)
   return na.every((v, i) => v === nb[i])

@@ -4,6 +4,7 @@
 // 纯 store + subscribe/get (复用 agent-collection)。
 
 import { secureDelete, secureFallbackGet, secureGet, secureSet } from "@/lib/secure-store"
+import { registerSecureStoreDynamicItems } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
 import { createCollection } from "./agent-collection"
 
@@ -19,6 +20,8 @@ const store = createCollection<Secret>(AGENT_SECRETS_STORAGE_KEY)
 const secretCache = new Map<string, string>()
 let hydrated = false
 let hydrating: Promise<void> | null = null
+let snapshotSource: Secret[] | null = null
+let snapshot: Secret[] = []
 
 function secureKey(id: string): string {
   return `ideall:agent:secret:${id}`
@@ -27,12 +30,21 @@ function secureKey(id: string): string {
 function materialized(secret: Secret): Secret {
   return {
     ...secret,
-    value: secretCache.get(secret.id) ?? secureFallbackGet(secureKey(secret.id)) ?? "",
+    value:
+      secretCache.get(secret.id) ??
+      (isTauri() ? null : secureFallbackGet(secureKey(secret.id))) ??
+      "",
   }
 }
 
 export const subscribeSecrets = store.subscribe
-export const getSecrets = () => store.get().map(materialized)
+export function getSecrets(): Secret[] {
+  const source = store.get()
+  if (source === snapshotSource) return snapshot
+  snapshotSource = source
+  snapshot = source.map(materialized)
+  return snapshot
+}
 export const getServerSecrets = store.getServer
 
 /** 名须与 ${NAME} 解析正则一致 (字母/数字/下划线), 否则存了也引用不到。 */
@@ -40,18 +52,18 @@ export function isValidSecretName(name: string): boolean {
   return /^\w+$/.test(name.trim())
 }
 
-export function setSecret(name: string, value: string): void {
+export async function setSecret(name: string, value: string): Promise<void> {
   const id = name.trim()
   if (!isValidSecretName(id)) return
+  await secureSet(secureKey(id), value)
   secretCache.set(id, value)
   store.upsert({ id, value: "", secure: true })
-  void secureSet(secureKey(id), value)
 }
 
-export function deleteSecret(name: string): void {
+export async function deleteSecret(name: string): Promise<void> {
+  await secureDelete(secureKey(name))
   secretCache.delete(name)
   store.remove(name)
-  void secureDelete(secureKey(name))
 }
 
 // 安全: 密钥仅在 buildHeaders 解析后发往用户自己配置的 server URL; 当前无配置导入/分享路径,
@@ -64,7 +76,7 @@ export function resolveSecrets(text: string): string {
     /\$\{(\w+)\}/g,
     (m, name: string) =>
       secretCache.get(name) ??
-      secureFallbackGet(secureKey(name)) ??
+      (isTauri() ? null : secureFallbackGet(secureKey(name))) ??
       (isTauri() ? undefined : store.byId(name)?.value) ??
       m,
   )
@@ -80,18 +92,27 @@ export async function hydrateAgentSecretsSecure(): Promise<void> {
   hydrating = (async () => {
     const current = store.get()
     let changed = false
+    let cacheChanged = false
     for (const secret of current) {
       const secureValue = await secureGet(secureKey(secret.id))
       if (secureValue) {
-        secretCache.set(secret.id, secureValue)
+        if (secretCache.get(secret.id) !== secureValue) {
+          secretCache.set(secret.id, secureValue)
+          cacheChanged = true
+        }
       } else if (!isTauri() && secret.value) {
-        secretCache.set(secret.id, secret.value)
+        if (secretCache.get(secret.id) !== secret.value) {
+          secretCache.set(secret.id, secret.value)
+          cacheChanged = true
+        }
         await secureSet(secureKey(secret.id), secret.value)
       }
       if (secret.value || !secret.secure) changed = true
     }
     if (changed) {
       store.replaceAll(current.map((secret) => ({ id: secret.id, value: "", secure: true })))
+    } else if (cacheChanged) {
+      store.replaceAll([...current])
     }
     hydrated = true
   })().finally(() => {
@@ -112,3 +133,13 @@ export function agentSecretsSecuritySnapshot(): {
     secureHydrated: hydrated,
   }
 }
+
+// 每条密钥的 secure key 都是动态家族成员（ideall:agent:secret:{id}），纳入安全快照统计。
+registerSecureStoreDynamicItems(() =>
+  store.get().map((secret) => ({
+    id: `agent.secret.${secret.id}`,
+    label: `MCP 密钥「${secret.id}」`,
+    owner: "agent",
+    key: secureKey(secret.id),
+  })),
+)

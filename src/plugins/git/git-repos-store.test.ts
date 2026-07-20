@@ -7,14 +7,20 @@ import {
   GIT_REPOS_STORAGE_KEY,
   addGitRepo,
   createGitReposExport,
+  importGitReposJson,
   loadGitRepos,
   normalizeGitRepos,
   parseGitReposExport,
   removeGitRepo,
   saveGitRepos,
+  type GrantedGitRepoMount,
+  type GitRepoMount,
   type RepoStorage,
 } from "./git-repos-store"
 import { PLUGIN_DATA_PACKAGE_KIND, PLUGIN_DATA_PACKAGE_VERSION } from "@/plugins/shared/plugin-data"
+
+const REPO_A: GrantedGitRepoMount = { id: "mount-a", grantId: "grant-a", path: "/repo/a" }
+const REPO_B: GrantedGitRepoMount = { id: "mount-b", grantId: "grant-b", path: "/repo/b" }
 
 function memoryStorage(
   initial: Record<string, string> = {},
@@ -30,27 +36,40 @@ function memoryStorage(
   }
 }
 
-test("normalizeGitRepos: trim、去重、过滤非字符串并限制数量", () => {
-  assert.deepEqual(normalizeGitRepos([" /repo/a ", 1, "", "/repo/a", "/repo/b", "/repo/c"], 2), [
-    "/repo/a",
-    "/repo/b",
-  ])
+test("normalizeGitRepos: keeps structured grants and quarantines legacy path strings", () => {
+  const repos = normalizeGitRepos(
+    [REPO_A, REPO_A, " /repo/legacy ", "/repo/legacy", REPO_B, { path: "" }],
+    3,
+  )
+  assert.deepEqual(repos.slice(0, 1), [REPO_A])
+  assert.equal(repos[1].path, "/repo/legacy")
+  assert.equal(repos[1].grantId, null)
+  assert.match(repos[1].id, /^legacy:/)
+  assert.deepEqual(repos[2], REPO_B)
 })
 
-test("add/removeGitRepo: 新仓库置顶并移除指定路径", () => {
-  const added = addGitRepo(["/repo/a", "/repo/b"], " /repo/c ")
-  assert.deepEqual(added, ["/repo/c", "/repo/a", "/repo/b"])
-  assert.deepEqual(addGitRepo(added, "/repo/a"), ["/repo/a", "/repo/c", "/repo/b"])
-  assert.deepEqual(removeGitRepo(added, "/repo/a"), ["/repo/c", "/repo/b"])
+test("add/removeGitRepo: selected grant replaces an unauthorized legacy path", () => {
+  const legacy = normalizeGitRepos(["/repo/a", "/repo/b"])
+  const added = addGitRepo(legacy, REPO_A)
+  assert.deepEqual(added, [REPO_A, legacy[1]])
+  assert.deepEqual(addGitRepo(added, REPO_B), [REPO_B, REPO_A])
+  assert.deepEqual(removeGitRepo([REPO_B, REPO_A], REPO_A.id), [REPO_B])
 })
 
-test("loadGitRepos/saveGitRepos: 存储异常时降级为空/false", () => {
+test("loadGitRepos/saveGitRepos: migrates old strings without implicitly granting them", () => {
   const storage = memoryStorage({
     [GIT_REPOS_STORAGE_KEY]: JSON.stringify(["/repo/a", "/repo/a", "/repo/b"]),
   })
-  assert.deepEqual(loadGitRepos(storage), ["/repo/a", "/repo/b"])
-  assert.equal(saveGitRepos(["/repo/c"], storage), true)
-  assert.equal(storage.data[GIT_REPOS_STORAGE_KEY], JSON.stringify(["/repo/c"]))
+  const legacy = loadGitRepos(storage)
+  assert.deepEqual(
+    legacy.map((repo) => ({ path: repo.path, grantId: repo.grantId })),
+    [
+      { path: "/repo/a", grantId: null },
+      { path: "/repo/b", grantId: null },
+    ],
+  )
+  assert.equal(saveGitRepos([REPO_A], storage), true)
+  assert.equal(storage.data[GIT_REPOS_STORAGE_KEY], JSON.stringify([REPO_A]))
 
   const broken: RepoStorage = {
     getItem: () => {
@@ -61,11 +80,11 @@ test("loadGitRepos/saveGitRepos: 存储异常时降级为空/false", () => {
     },
   }
   assert.deepEqual(loadGitRepos(broken), [])
-  assert.equal(saveGitRepos(["/repo/a"], broken), false)
+  assert.equal(saveGitRepos([REPO_A], broken), false)
 })
 
-test("createGitReposExport/parseGitReposExport: 使用统一插件数据封套", () => {
-  const pack = createGitReposExport([" /repo/a ", "/repo/a", "/repo/b"], "now")
+test("Git repo export strips grant capabilities and imports as unauthorized legacy mounts", () => {
+  const pack = createGitReposExport([REPO_A, REPO_B], "now")
   assert.deepEqual(pack, {
     kind: PLUGIN_DATA_PACKAGE_KIND,
     version: PLUGIN_DATA_PACKAGE_VERSION,
@@ -78,5 +97,28 @@ test("createGitReposExport/parseGitReposExport: 使用统一插件数据封套",
     exportedAt: "now",
     payload: { repos: ["/repo/a", "/repo/b"] },
   })
-  assert.deepEqual(parseGitReposExport(JSON.stringify(pack)).payload.repos, ["/repo/a", "/repo/b"])
+  const parsed = parseGitReposExport(JSON.stringify(pack))
+  assert.deepEqual(parsed.payload.repos, ["/repo/a", "/repo/b"])
+  assert.ok(normalizeGitRepos(parsed.payload.repos).every((repo) => repo.grantId === null))
+})
+
+test("Git repo import reports persistence failure instead of publishing a false commit", async () => {
+  const raw = JSON.stringify(createGitReposExport([REPO_A], "now"))
+  const storage = memoryStorage()
+
+  assert.deepEqual(await importGitReposJson(raw, storage), { repos: 1 })
+  assert.deepEqual(
+    loadGitRepos(storage).map((repo) => repo.path),
+    [REPO_A.path],
+  )
+
+  await assert.rejects(
+    importGitReposJson(raw, {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("blocked")
+      },
+    }),
+    /Unable to persist imported Git/,
+  )
 })

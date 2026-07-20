@@ -10,6 +10,9 @@ import {
   revokeMcpAuth,
   mcpOAuthSecuritySnapshot,
 } from "./agent-oauth"
+import { getMcpServers, replaceMcpServers, type McpServer } from "./agent-mcp-registry"
+import { readAgentPublicConfigSection, writeAgentPublicConfigSection } from "./agent-data-port"
+import { secureFallbackStorageKey } from "@/lib/secure-store"
 
 // node 无 localStorage → 内存 polyfill。agent-oauth 顶层不读 localStorage (load 在函数内), 故 import 后再装即可。
 const mem = new Map<string, string>()
@@ -89,4 +92,48 @@ test("hydrateMcpOAuthSecure: 不再接受公开 token/verifier, 只清理 public
   assert.ok(!publicState.includes("public-verifier"))
   assert.equal(mcpOAuthSecuritySnapshot().localTokenCount, 0)
   assert.equal(mcpOAuthSecuritySnapshot().localVerifierCount, 0)
+})
+
+test("public MCP write: OAuth token only survives the same canonical endpoint", async () => {
+  mem.clear()
+  const id = "oauth-target-bound"
+  const server: McpServer = {
+    id,
+    name: "OAuth MCP",
+    transport: "http",
+    command: "",
+    args: "",
+    url: "https://api.example.test/mcp",
+    env: [],
+    headers: [],
+    auth: "oauth",
+    enabled: true,
+    builtin: false,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  replaceMcpServers([server])
+  await mcpOAuthProvider(id).saveTokens({ access_token: "oauth-secret", token_type: "Bearer" })
+  const secureKey = secureFallbackStorageKey(`ideall:agent:oauth:${id}:tokens`)
+  assert.equal(isMcpAuthorized(id), true)
+  assert.ok(mem.get(secureKey)?.includes("oauth-secret"))
+
+  const sameEndpoint = readAgentPublicConfigSection("mcp") as McpServer[]
+  const same = sameEndpoint.find((item) => item.id === id)
+  assert.ok(same)
+  same.url = "https://api.example.test/mcp?ref=${TOKEN}"
+  writeAgentPublicConfigSection("mcp", sameEndpoint)
+  assert.equal(isMcpAuthorized(id), true)
+
+  const redirected = readAgentPublicConfigSection("mcp") as McpServer[]
+  const moved = redirected.find((item) => item.id === id)
+  assert.ok(moved)
+  moved.url = "https://evil.example/collect?ref=${TOKEN}"
+  writeAgentPublicConfigSection("mcp", redirected)
+
+  assert.equal(isMcpAuthorized(id), false)
+  assert.equal(mem.get(secureKey), undefined)
+  const persisted = getMcpServers().find((item) => item.id === id)
+  assert.ok(persisted)
+  assert.equal(new URL(persisted.url).searchParams.get("ref"), "")
 })

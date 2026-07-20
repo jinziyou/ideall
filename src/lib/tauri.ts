@@ -9,9 +9,41 @@
 // 纯浏览器 (`pnpm dev` 的 webview 加载源是 localhost) / SSR 预渲染期均无 `__TAURI_INTERNALS__`,
 // 故全部退化为标准 `fetch` / `window.open`; 插件只在 App 形态惰性加载, 不进 web/SSR 主链路。
 
+// core 的 invoke 静态导入 (进主 chunk): 惰性 import("@tauri-apps/api/core") 在 dev(Turbopack HMR)
+// 下其独立 chunk 会被「deleted by an HMR update」而导入失败/挂起, 致改码后窗控/命令静默失效。
+// core.js 顶层无 window 访问, 静态导入对 SSR/纯浏览器安全 (invoke 仅在 isTauri() 为真时调用)。
+import { invoke as coreInvoke } from "@tauri-apps/api/core"
+import { BrowserNativeLifecycle } from "./browser-native-lifecycle"
+
 /** 当前运行在 Tauri App webview 内 (而非纯浏览器 / SSR 预渲染)。 */
 export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+}
+
+export type NativeCaptureSharePayload =
+  | Readonly<{ kind: "url"; url: string; title?: string | null }>
+  | Readonly<{ kind: "file"; name: string; mime: string; base64: string }>
+  | Readonly<{ kind: "error"; name: string; message: string }>
+
+/** 取走已由原生壳完成路由、类型与体积校验的系统分享投递。 */
+export async function takeNativeCaptureShares(): Promise<NativeCaptureSharePayload[]> {
+  if (!isTauri()) return []
+  return invokeCommand<NativeCaptureSharePayload[]>("capture_take_pending")
+}
+
+/** 调用自定义命令 (静态 invoke, 免受 HMR chunk 删除影响)。仅在 isTauri() 为真时调用。 */
+async function invokeCommand<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  return coreInvoke<T>(cmd, args)
+}
+
+/**
+ * Windows: 原生子 webview (HWND) 叠在主界面之上, bounds 异常时会挡全窗。
+ * 由 browser_present 原子 set_bounds + show, 并在 bounds 非法时 browserClose 释放。
+ */
+
+/** 收起并销毁原生子 webview (切标签 / 异常 bounds 时清场)。 */
+export function browserRelease(): Promise<void> {
+  return browserLifecycle.release(() => tauriInvoke("browser_close"))
 }
 
 // tauri-plugin-http 的 fetch 惰性加载一次后缓存 (undefined=未尝试, null=加载失败回退标准 fetch)。
@@ -70,18 +102,23 @@ export type BrowserBounds = {
 }
 
 async function tauriInvoke(cmd: string, args?: Record<string, unknown>): Promise<void> {
-  const { invoke } = await import("@tauri-apps/api/core")
-  await invoke(cmd, args)
+  await invokeCommand<void>(cmd, args)
 }
+
+const browserLifecycle = new BrowserNativeLifecycle()
 
 // —— 内嵌浏览器 (路线 A): 主窗口控制原生子 webview; 全部经自定义命令, 外站子 webview 零授权。 ——
 /** 打开内嵌浏览器子 webview, 加载 url, 定位到主窗口内容区 bounds (仅 Tauri 桌面)。 */
 export function openBrowserView(url: string, bounds: BrowserBounds): Promise<void> {
-  return tauriInvoke("open_browser_view", { url, b: bounds })
+  return browserLifecycle.activate(() => tauriInvoke("open_browser_view", { url, b: bounds }))
 }
 /** 同步子 webview 矩形 (内容区随窗口/侧栏变化时调用)。 */
 export function browserSetBounds(bounds: BrowserBounds): Promise<void> {
   return tauriInvoke("browser_set_bounds", { b: bounds })
+}
+/** 同步 bounds 并显示子 webview (原子操作, 避免 Windows HWND 全窗遮挡)。 */
+export function browserPresent(bounds: BrowserBounds): Promise<void> {
+  return browserLifecycle.activate(() => tauriInvoke("browser_present", { b: bounds }))
 }
 /** 地址栏导航。 */
 export function browserNavigate(url: string): Promise<void> {
@@ -100,10 +137,10 @@ export function browserHide(): Promise<void> {
   return tauriInvoke("browser_hide")
 }
 export function browserShow(): Promise<void> {
-  return tauriInvoke("browser_show")
+  return browserLifecycle.activate(() => tauriInvoke("browser_show"))
 }
 export function browserClose(): Promise<void> {
-  return tauriInvoke("browser_close")
+  return browserRelease()
 }
 
 /** 内嵌浏览器后端信息 (CDP / WebKit / WebView)。 */
@@ -125,6 +162,8 @@ export interface BrowserPageContent {
   url: string
   title: string
   text: string
+  /** 页面或非密码输入控件中的当前选中文本。 */
+  selection: string
 }
 
 export async function browserGetPageContent(): Promise<BrowserPageContent> {
@@ -191,18 +230,28 @@ export async function browserWaitForSelector(selector: string, timeoutMs?: numbe
   await invoke("browser_wait_for_selector", { selector, timeoutMs })
 }
 
+/** 窗控最小化。 */
+export async function windowMinimize(): Promise<void> {
+  if (!isTauri()) return
+  await invokeCommand<void>("window_minimize")
+}
+
+/** 窗控关闭。 */
+export async function windowClose(): Promise<void> {
+  if (!isTauri()) return
+  await invokeCommand<void>("window_close")
+}
+
 /** 窗控最大化/还原 (WSL 下铺满主屏 work area)。返回最大化后是否为「已最大化」态。 */
 export async function windowToggleMaximize(): Promise<boolean> {
   if (!isTauri()) return false
-  const { invoke } = await import("@tauri-apps/api/core")
-  return invoke<boolean>("window_toggle_maximize")
+  return invokeCommand<boolean>("window_toggle_maximize")
 }
 
 /** 窗控最大化图标状态 (含 WSL 伪最大化)。 */
 export async function windowQueryMaximized(): Promise<boolean> {
   if (!isTauri()) return false
-  const { invoke } = await import("@tauri-apps/api/core")
-  return invoke<boolean>("window_query_maximized")
+  return invokeCommand<boolean>("window_query_maximized")
 }
 
 /** 监听内嵌浏览器当前 URL 变化 (on_navigation / on_page_load emit); 返回取消监听; 非 Tauri 为 no-op。 */

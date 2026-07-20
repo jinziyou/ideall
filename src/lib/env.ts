@@ -10,5 +10,14 @@
 export const SERVER_ADDR: string =
   process.env.SERVER_ADDR ?? process.env.NEXT_PUBLIC_SERVER_ADDR ?? "https://api.wonita.link"
 
-/** wonita 服务 v1 资源化接口约定的 base URL —— 所有端点 (articles/entities/auth/me/peers/sync…) 都挂在 `/v1` 下。 */
+/** wonita V2 App API：鉴权、资料、社区发布与账户目录。 */
+export const API_V2_APP: string = `${SERVER_ADDR}/v2/app`
+
+/** wonita V2 Data API：可匿名直连的 corpus / graph / catalog 公共读端点。 */
+export const API_V2_DATA: string = `${SERVER_ADDR}/v2/data`
+
+/**
+ * wonita V1 base URL。仅供尚未迁移的兼容边界使用；新 ServerPort 业务不得再从这里增加
+ * auth/community/data 调用。
+ */
 export const API_V1: string = `${SERVER_ADDR}/v1`

@@ -13,6 +13,9 @@ import {
   isSaneSyncTimestamp,
   MAX_FUTURE_SKEW_MS,
   TOMBSTONE_TTL_MS,
+  getSyncTelemetrySnapshot,
+  recordSyncTelemetry,
+  subscribeSyncTelemetry,
 } from "./sync"
 import type { Subscription } from "@protocol/subscription"
 
@@ -61,6 +64,57 @@ test("recordsEqual: 顺序无关相等 / 字段变 / 长度变", () => {
   assert.equal(recordsEqual(a, [sub("2", "Y", 1), sub("1", "X", 1)]), true)
   assert.equal(recordsEqual(a, [sub("1", "X2", 1), sub("2", "Y", 1)]), false)
   assert.equal(recordsEqual(a, [sub("1", "X", 1)]), false)
+})
+
+test("recordsEqual: 对象字段插入顺序不影响结构等价，数组顺序仍参与比较", () => {
+  const left = [
+    {
+      id: "nested",
+      createdAt: 1,
+      updatedAt: 2,
+      payload: { z: 1, a: { second: true, first: false } },
+      items: ["a", "b"],
+    },
+  ]
+  const reordered = [
+    {
+      items: ["a", "b"],
+      payload: { a: { first: false, second: true }, z: 1 },
+      updatedAt: 2,
+      createdAt: 1,
+      id: "nested",
+    },
+  ]
+  assert.equal(recordsEqual(left, reordered), true)
+  assert.equal(recordsEqual(left, [{ ...reordered[0], items: ["b", "a"] }]), false)
+})
+
+test("sync telemetry: 只发布最近一次非敏感结果并通知订阅者", () => {
+  let notifications = 0
+  const dispose = subscribeSyncTelemetry(() => {
+    notifications += 1
+  })
+  recordSyncTelemetry({
+    status: "failure",
+    startedAt: 10,
+    finishedAt: 30,
+    durationMs: 20,
+    total: null,
+    added: null,
+    failureCode: "network",
+  })
+  dispose()
+
+  assert.equal(notifications, 1)
+  assert.deepEqual(getSyncTelemetrySnapshot(), {
+    status: "failure",
+    startedAt: 10,
+    finishedAt: 30,
+    durationMs: 20,
+    total: null,
+    added: null,
+    failureCode: "network",
+  })
 })
 
 // ── 删除标记 (tombstone) 删除传播 / 恢复 (Low-6) ────────────────────────────────────────

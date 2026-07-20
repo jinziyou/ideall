@@ -5,18 +5,22 @@ import type { CurrentUser } from "./auth-api"
 import {
   LEGACY_PUBLIC_STORAGE_KEYS,
   SECURE_STORE_KEYS,
-  publicStorageGet,
+  publicStorageGetWithLegacy,
   publicStorageRemove,
+  publicStorageRemoveWithLegacy,
+  publicStorageSet,
   secureDelete,
   secureFallbackGet,
   secureFallbackStorageKey,
   secureGetWithLegacy,
   secureSet,
 } from "@/lib/secure-store"
+import { isTauri } from "@/lib/tauri"
 
 export const AUTH_TOKEN_STORAGE_KEY = LEGACY_PUBLIC_STORAGE_KEYS.AUTH_TOKEN
 export const AUTH_TOKEN_SECURE_KEY = SECURE_STORE_KEYS.AUTH_TOKEN
-export const AUTH_USER_STORAGE_KEY = "wonita:auth:user"
+export const AUTH_USER_STORAGE_KEY = "ideall:auth:user"
+export const LEGACY_AUTH_USER_STORAGE_KEY = "wonita:auth:user"
 const listeners = new Set<() => void>()
 
 export type Session = { token: string; user: CurrentUser } | null
@@ -32,7 +36,19 @@ function notify() {
 }
 
 function readTokenSync(): string | null {
-  return secureFallbackGet(AUTH_TOKEN_SECURE_KEY) ?? cachedTokenRaw
+  return (isTauri() ? null : secureFallbackGet(AUTH_TOKEN_SECURE_KEY)) ?? cachedTokenRaw
+}
+
+function isCurrentUser(value: unknown): value is CurrentUser {
+  if (!value || typeof value !== "object") return false
+  const user = value as Record<string, unknown>
+  return (
+    typeof user.id === "string" &&
+    user.id.length > 0 &&
+    typeof user.email === "string" &&
+    typeof user.name === "string" &&
+    (user.avatar === null || typeof user.avatar === "string")
+  )
 }
 
 export async function hydrateSessionTokenSecure(): Promise<string | null> {
@@ -55,7 +71,7 @@ export function getSession(): Session {
   const tokenRaw = readTokenSync()
   let userRaw: string | null = null
   try {
-    userRaw = publicStorageGet(AUTH_USER_STORAGE_KEY)
+    userRaw = publicStorageGetWithLegacy(AUTH_USER_STORAGE_KEY, LEGACY_AUTH_USER_STORAGE_KEY)
   } catch {
     return null
   }
@@ -63,7 +79,8 @@ export function getSession(): Session {
   let value: Session = null
   if (tokenRaw && userRaw) {
     try {
-      value = { token: tokenRaw, user: JSON.parse(userRaw) as CurrentUser }
+      const user = JSON.parse(userRaw) as unknown
+      value = isCurrentUser(user) ? { token: tokenRaw, user } : null
     } catch {
       value = null
     }
@@ -79,31 +96,24 @@ export function subscribeSession(cb: () => void): () => void {
   }
 }
 
-export function setSession(token: string, user: CurrentUser): void {
+export async function setSession(token: string, user: CurrentUser): Promise<void> {
+  await secureSet(AUTH_TOKEN_SECURE_KEY, token)
   cachedTokenRaw = token
   tokenHydrated = true
   cache = null
-  try {
-    localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user))
-  } catch {
-    /* 隐私模式 / 配额: 忽略 */
-  }
+  publicStorageSet(AUTH_USER_STORAGE_KEY, JSON.stringify(user))
+  publicStorageRemove(LEGACY_AUTH_USER_STORAGE_KEY)
   publicStorageRemove(AUTH_TOKEN_STORAGE_KEY)
-  void secureSet(AUTH_TOKEN_SECURE_KEY, token)
   notify()
 }
 
-export function clearSession(): void {
+export async function clearSession(): Promise<void> {
+  await secureDelete(AUTH_TOKEN_SECURE_KEY)
   cachedTokenRaw = null
   tokenHydrated = true
   cache = null
-  try {
-    localStorage.removeItem(AUTH_USER_STORAGE_KEY)
-  } catch {
-    /* ignore */
-  }
+  publicStorageRemoveWithLegacy(AUTH_USER_STORAGE_KEY, LEGACY_AUTH_USER_STORAGE_KEY)
   publicStorageRemove(AUTH_TOKEN_STORAGE_KEY)
-  void secureDelete(AUTH_TOKEN_SECURE_KEY)
   notify()
 }
 
@@ -117,9 +127,10 @@ if (typeof window !== "undefined") {
       e.key === null ||
       e.key === AUTH_TOKEN_STORAGE_KEY ||
       e.key === secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY) ||
-      e.key === AUTH_USER_STORAGE_KEY
+      e.key === AUTH_USER_STORAGE_KEY ||
+      e.key === LEGACY_AUTH_USER_STORAGE_KEY
     ) {
-      if (e.key === AUTH_USER_STORAGE_KEY) {
+      if (e.key === AUTH_USER_STORAGE_KEY || e.key === LEGACY_AUTH_USER_STORAGE_KEY) {
         cache = null
         notify()
         return
@@ -137,7 +148,7 @@ if (typeof window !== "undefined") {
         return
       }
       if (e.key === secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY)) {
-        cachedTokenRaw = secureFallbackGet(AUTH_TOKEN_SECURE_KEY)
+        cachedTokenRaw = isTauri() ? null : secureFallbackGet(AUTH_TOKEN_SECURE_KEY)
         tokenHydrated = true
         cache = null
         notify()

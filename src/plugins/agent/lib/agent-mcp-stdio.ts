@@ -7,6 +7,7 @@
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js"
 import { acpClose, acpSpawn, createAcpStream } from "@/lib/acp-transport"
+import { isTauri } from "@/lib/tauri"
 
 /** 一条已做 JSON 消息框定的双工管道 (一行 = 一条消息)。 */
 export interface StdioPipe {
@@ -21,15 +22,24 @@ let seq = 0
 
 /** 默认 spawner: 经 ACP Rust 桥 spawn 子进程 + NDJSON 行框定 (仅桌面)。 */
 const acpStdioSpawner: StdioSpawner = async (program, args, cwd) => {
+  if (!isTauri()) throw new Error("acp-unavailable: stdio MCP 仅桌面 App 可用")
   const id = `mcp-stdio-${Date.now().toString(36)}-${seq++}`
-  await acpSpawn(id, program, args, cwd)
   const { stream, dispose } = await createAcpStream(id)
+  try {
+    // 先注册事件监听再 spawn，短命进程的 initialize/错误消息也不会丢失。
+    await acpSpawn(id, program, args, cwd)
+  } catch (error) {
+    dispose()
+    await stream.readable.cancel().catch(() => {})
+    await acpClose(id).catch(() => {})
+    throw error
+  }
   return {
     readable: stream.readable as ReadableStream<unknown>,
     writable: stream.writable as WritableStream<unknown>,
     async close() {
-      dispose()
       await acpClose(id)
+      dispose()
     },
   }
 }
@@ -41,6 +51,7 @@ export class StdioMcpTransport implements Transport {
   onerror?: Transport["onerror"]
 
   private pipe?: StdioPipe
+  private reader?: ReadableStreamDefaultReader<unknown>
   private writer?: WritableStreamDefaultWriter<unknown>
   private closed = false
 
@@ -50,10 +61,12 @@ export class StdioMcpTransport implements Transport {
   ) {}
 
   async start(): Promise<void> {
+    if (this.pipe || this.closed) throw new Error("stdio MCP transport already started")
     const pipe = await this.spawner(this.opts.program, this.opts.args, this.opts.cwd)
     this.pipe = pipe
     this.writer = pipe.writable.getWriter()
     const reader = pipe.readable.getReader()
+    this.reader = reader
     // 读循环: 每条消息 → onmessage; 流结束/出错 → onclose。
     void (async () => {
       try {
@@ -71,7 +84,8 @@ export class StdioMcpTransport implements Transport {
   }
 
   async send(message: JSONRPCMessage): Promise<void> {
-    await this.writer?.write(message)
+    if (!this.writer) throw new Error("stdio MCP transport is not ready")
+    await this.writer.write(message)
   }
 
   async close(): Promise<void> {
@@ -80,6 +94,11 @@ export class StdioMcpTransport implements Transport {
       await this.writer?.close()
     } catch {
       /* writer 可能已关 */
+    }
+    try {
+      await this.reader?.cancel()
+    } catch {
+      /* reader 可能已结束 */
     }
     await this.pipe?.close()
   }

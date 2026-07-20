@@ -10,66 +10,49 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  checks:
-    name: ${{ matrix.name }}
+  quality:
+    name: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: format
-            command: pnpm format:check
-          - name: lint
-            command: pnpm lint
-          - name: workflow lint
-            command: pnpm lint:actions
-          - name: typecheck
-            command: pnpm typecheck
-          - name: test
-            command: pnpm test
-          - name: api drift
-            command: pnpm gen:api:check
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          version: 9.15.9
-      - uses: actions/setup-node@v5
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js
+      - name: Run quality checks
+        run: pnpm verify:checks
+      - name: Upload core coverage
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          node-version: 22
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      - name: Run ${{ matrix.name }}
-        run: ${{ matrix.command }}
+          name: core-coverage
+          path: node_modules/.cache/ideall/coverage
+          if-no-files-found: ignore
+          retention-days: 7
 
   build:
     name: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          version: 9.15.9
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
+          persist-credentials: false
+      - uses: ./.github/actions/setup-js
       - name: Restore Next cache
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .next/cache
           key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'next.config.ts', 'tsconfig.json', 'package.json') }}
           restore-keys: |
             ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-next-
-      - name: Install
-        run: pnpm install --frozen-lockfile
       - name: Build
-        run: pnpm build
+        run: pnpm app:export
 
 # 另两道门拆在独立工作流 (带 paths 过滤, 省 CI 分钟数):
 #   rust.yml  — clippy 零警告 + cargo test (仅 src-tauri/** 改动时跑)

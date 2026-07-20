@@ -1,9 +1,11 @@
 // 工作区标签模型 (现代面板式多标签工作区)。
 // kind 唯一决定标签内容 (registry 查表)；同 kind(+params) 复用同一标签实例 (id=tabKey)。
 
-// 工作区模式视图 (可切换): 本机/我的 = 只存本机的个人数据; 连接/发现 = 联网的发现/工具/AI。
-// 活动栏按当前 mode 过滤展示哪一簇模块 (见 modules modulesForMode); 顶栏 ModeSwitch 切换视图。
-export type WsMode = "local" | "connected"
+/** 工作区 Display 组合；切换时不改变文件、标签或根目录。 */
+export type WorkspaceKind = "files" | "audio" | "development"
+
+/** 开发工作区内当前展示的辅助工具。 */
+export type DevelopmentTool = "git" | "shell" | "database"
 
 export type ModuleId =
   | "home"
@@ -18,6 +20,7 @@ export type ModuleId =
   | "trash"
   | "info"
   | "community"
+  | "publications"
   | "browser"
   | "tool"
   | "agent"
@@ -34,6 +37,13 @@ export type TabDescriptor = {
   path?: string
   /** 预留: 带参标签 (如 info-entity ?label=&name=)，参与标签去重 key。 */
   params?: Record<string, string>
+  /** 打开该文件时所在的合成根子树；不参与标签身份。 */
+  rootId?: string
+  /**
+   * 打开文件时所跟随的 ideall 目录位置；仅用于符号链接高亮与恢复，不参与标签身份。
+   * 同一 FileRef + Engine 从另一条路径打开时仍复用当前标签并更新此位置。
+   */
+  navigationPath?: string
 }
 
 /** 已打开的标签实例。 */

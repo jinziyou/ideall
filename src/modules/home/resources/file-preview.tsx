@@ -1,18 +1,20 @@
 "use client"
 
-// 文件预览核心 (加载 + 按 mime 分派渲染) —— 供预览对话框 (file-preview-dialog, 模态) 与
-// 文件查看器 (workspace/viewers/file-viewer, 标签) 共用, 不 fork 预览逻辑。
+// 旧节点文件查看器的兼容预览核心；新入口统一由 FileRef 交给 Engine/Display 渲染。
 import * as React from "react"
 import dynamic from "next/dynamic"
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react"
+import type { FileRef } from "@protocol/file-system"
+import type { StoredFile } from "@protocol/files"
+import { readFile, statFile, watchFile } from "@/filesystem/registry"
+import { fileReadResultToBlob } from "@/filesystem/read-result"
+import { resourceFileRef } from "@/filesystem/resource-file-system"
 import { cn } from "@/lib/utils"
-import { StoredFile } from "@protocol/files"
-import { getFile } from "@/files/stores/files-store"
+import { TEXT_PREVIEW_LIMIT } from "@/lib/file-preview"
 import { formatBytes, fileTypeInfo } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import { Button } from "@/ui/button"
 
-export const TEXT_PREVIEW_LIMIT = 512 * 1024
 const JSON_FORMAT_LIMIT = 128 * 1024
 const CSV_ROW_LIMIT = 200
 const CSV_COLUMN_LIMIT = 64
@@ -29,6 +31,8 @@ const CodeEditor = dynamic(() => import("@/shared/code-editor"), {
 
 export type FilePreviewState = {
   file: StoredFile | null
+  ref: FileRef
+  version?: string
   url: string | null
   text: string | null
   textTruncated: boolean
@@ -37,38 +41,86 @@ export type FilePreviewState = {
   reload: () => void
 }
 
+const UI_METADATA_CONTEXT = { actor: "ui", permissions: [], intent: "metadata" } as const
+const UI_CONTENT_CONTEXT = { actor: "ui", permissions: [], intent: "content" } as const
+const UI_WATCH_CONTEXT = { actor: "ui", permissions: [], intent: "watch" } as const
+
+export function storedNodeFileRef(fileId: string): FileRef {
+  return resourceFileRef({ scheme: "node", kind: "file", id: fileId })
+}
+
+export async function readStoredNodeFile(fileId: string): Promise<{
+  file: StoredFile
+  ref: FileRef
+  version?: string
+} | null> {
+  const ref = storedNodeFileRef(fileId)
+  const metadata = await statFile(ref, UI_METADATA_CONTEXT)
+  if (!metadata) return null
+  const result = await readFile(ref, UI_CONTENT_CONTEXT, { encoding: "binary" })
+  const blob = fileReadResultToBlob(result)
+  const expectedSize = result.size ?? metadata.size ?? 0
+  if (blob.size === 0 && expectedSize > 0) {
+    throw new Error("文件内容过大，当前文件系统未返回可读取内容")
+  }
+  const tags = metadata.properties?.tags
+  return {
+    ref,
+    version: result.version ?? metadata.version,
+    file: {
+      id: fileId,
+      name: metadata.name,
+      type: metadata.mediaType,
+      size: metadata.size ?? blob.size,
+      blob,
+      createdAt: metadata.createdAt ?? 0,
+      tags: Array.isArray(tags) && tags.every((tag) => typeof tag === "string") ? [...tags] : [],
+    },
+  }
+}
+
 /**
  * 加载文件 + (文本类) 截断预览; 自动 createObjectURL / 卸载时 revoke。
  * key=fileId 重挂时由 useState 初值起步于 loading (调用方对切换文件用 key 重挂)。
  */
-export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
+export function useFilePreview(fileId: string, revision = 0, enabled = true): FilePreviewState {
+  const ref = React.useMemo(() => storedNodeFileRef(fileId), [fileId])
   const [reloadNonce, setReloadNonce] = React.useState(0)
   const [file, setFile] = React.useState<StoredFile | null>(null)
   const [url, setUrl] = React.useState<string | null>(null)
   const [text, setText] = React.useState<string | null>(null)
   const [textTruncated, setTextTruncated] = React.useState(false)
+  const [version, setVersion] = React.useState<string | undefined>()
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const reload = React.useCallback(() => setReloadNonce((v) => v + 1), [])
 
   React.useEffect(() => {
+    if (!enabled) return
     let active = true
+    let generation = 0
     let objectUrl: string | null = null
     setLoading(true)
     setError(null)
-    getFile(fileId)
-      .then(async (f) => {
-        if (!f) {
-          if (active) {
-            setFile(null)
-            setUrl(null)
-            setText(null)
-            setTextTruncated(false)
-            setLoading(false)
-          }
+    const load = async () => {
+      const currentGeneration = ++generation
+      let nextObjectUrl: string | null = null
+      try {
+        const loaded = await readStoredNodeFile(fileId)
+        if (!active || currentGeneration !== generation) return
+        if (!loaded) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl)
+          objectUrl = null
+          setFile(null)
+          setUrl(null)
+          setText(null)
+          setTextTruncated(false)
+          setVersion(undefined)
+          setLoading(false)
           return
         }
-        objectUrl = URL.createObjectURL(f.blob)
+        const f = loaded.file
+        nextObjectUrl = URL.createObjectURL(f.blob)
         let preview: string | null = null
         const type = fileTypeInfo(f.name, f.type)
         const canTextPreview =
@@ -77,33 +129,53 @@ export function useFilePreview(fileId: string, revision = 0): FilePreviewState {
           preview = await f.blob.slice(0, TEXT_PREVIEW_LIMIT).text()
         }
         if (!active) {
-          URL.revokeObjectURL(objectUrl)
+          URL.revokeObjectURL(nextObjectUrl)
           return
         }
+        if (currentGeneration !== generation) {
+          URL.revokeObjectURL(nextObjectUrl)
+          return
+        }
+        if (objectUrl) URL.revokeObjectURL(objectUrl)
+        objectUrl = nextObjectUrl
+        nextObjectUrl = null
         setFile(f)
         setUrl(objectUrl)
         setText(preview)
         setTextTruncated(f.size > TEXT_PREVIEW_LIMIT && preview !== null)
+        setVersion(loaded.version)
         setLoading(false)
-      })
-      .catch((e) => {
+      } catch (e) {
+        if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl)
+        if (!active || currentGeneration !== generation) return
         if (objectUrl) URL.revokeObjectURL(objectUrl)
+        objectUrl = null
         if (active) {
           setFile(null)
           setUrl(null)
           setText(null)
           setTextTruncated(false)
+          setVersion(undefined)
           setError(e instanceof Error ? e.message : "读取文件预览失败")
           setLoading(false)
         }
-      })
+      }
+    }
+    void load()
+    let watch: ReturnType<typeof watchFile> = null
+    try {
+      watch = watchFile(ref, UI_WATCH_CONTEXT, () => void load())
+    } catch {
+      // 首次读取仍可用于尚未实现 watch 的 provider。
+    }
     return () => {
       active = false
+      watch?.dispose()
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [fileId, revision, reloadNonce])
+  }, [enabled, fileId, ref, revision, reloadNonce])
 
-  return { file, url, text, textTruncated, loading, error, reload }
+  return { file, ref, version, url, text, textTruncated, loading, error, reload }
 }
 
 /** 预览框 (按 mime 分派)；不含标题/下载, 供模态与标签复用。fill=true 时填满父高 (标签场景)。 */

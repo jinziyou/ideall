@@ -4,8 +4,13 @@
 // note/thread 正文的私密读闸下沉到 host.files (见 scoped-host.ts); 本文件不再触达模块单例。
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
-import type { NewBookmark } from "@protocol/files"
 import { NODE_KINDS, type NodeKind } from "@protocol/node"
+import {
+  CAPTURE_BOOKMARK_DESCRIPTION_LIMIT,
+  CAPTURE_BOOKMARK_FAVICON_LIMIT,
+  CAPTURE_BOOKMARK_TITLE_LIMIT,
+  CAPTURE_BOOKMARK_URL_LIMIT,
+} from "@protocol/capture"
 import { getUiActions } from "@/lib/ui-actions"
 import { safeHref } from "@/lib/safe-url"
 import { webSearch, webFetch, WebError } from "@/lib/web-search"
@@ -20,7 +25,13 @@ import {
   isTauri,
 } from "@/lib/tauri"
 import { toast } from "sonner"
-import { TOOL, RESOURCE, type Permission } from "./protocol"
+import {
+  AGENT_CONFIG_SECTION_IDS,
+  TOOL,
+  RESOURCE,
+  type AgentConfigSection,
+  type Permission,
+} from "./protocol"
 import type { ScopedHost } from "./scoped-host"
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
@@ -35,6 +46,14 @@ function fail(code: number, message: string): ToolResult {
 // 关注类型白名单: 用 zod enum 让 handler 直接拿到领域联合 (SubscriptionType), 杜绝任意字符串写入脏关注。
 const subType = z.enum(["publisher", "entity", "tool", "search", "peer"])
 
+// Rust 服务端按 Unicode scalar value 计数；Zod 的 string.max() 按 UTF-16 code unit
+// 计数，会把 emoji 等非 BMP 字符算作两个，导致前端比 API 更早拒绝合法名称。
+const displayName = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => [...value].length <= 100, "发布名称最多 100 个字符")
+
 // 节点 kind 白名单 (fs.* 文件面)。缺省 kind = 列全部命名空间。
 // 从 @protocol/node 的唯一数据来源 NODE_KINDS 派生, 杜绝与 NodeKind 联合漂移 (红队 §should-fix)。
 const nodeKind = z.enum([...NODE_KINDS] as [NodeKind, ...NodeKind[]])
@@ -47,10 +66,13 @@ export interface HostToolsCtx {
   openTab?: (kind: NodeKind, id: string, title: string) => void
   /** 关闭节点标签 (ui.closeTab)。 */
   closeTab?: (kind: NodeKind, id: string) => void
+  /** Agent loopback 专用；普通 embed 宿主不注入，因此即使伪造 permission 也没有配置工具。 */
+  readAgentConfig?: (section: AgentConfigSection) => Promise<unknown>
 }
 
 /** host.navigate 允许的内部路由前缀 (白名单, §5.2)。仅宿主壳路由; 插件 SPA 内页 (/info/* 等) 不经此 API。 */
 const NAV_ALLOW = ["/home", "/auth", "/info", "/community", "/tool"]
+const agentConfigSection = z.enum([...AGENT_CONFIG_SECTION_IDS])
 
 export function registerGrantedTools(
   server: McpServer,
@@ -84,23 +106,22 @@ export function registerGrantedTools(
       },
     )
 
-    server.tool(TOOL.communityDeletePublication, { id: z.number() }, async (a) => {
+    server.tool(TOOL.communityDeletePublication, { id: z.string() }, async (a) => {
       const s = host.getSession()
       if (!s) return fail(-32002, "not-authenticated")
       const r = await host.server().deletePublication(s.token, a.id)
       return r.ok ? ok({ ok: true }) : fail(-32000, r.message)
     })
 
-    server.tool(
-      TOOL.meUpdateProfile,
-      { name: z.string().optional(), avatar: z.string().optional() },
-      async (a) => {
-        const s = host.getSession()
-        if (!s) return fail(-32002, "not-authenticated")
-        const r = await host.server().updateProfile(s.token, { name: a.name, avatar: a.avatar })
-        return r.ok ? ok({ ok: true }) : fail(-32000, r.message)
-      },
-    )
+    server.tool(TOOL.meUpdateProfile, { name: displayName }, async (a) => {
+      const s = host.getSession()
+      if (!s) return fail(-32002, "not-authenticated")
+      const r = await host.server().updateProfile(s.token, { name: a.name })
+      if (!r.ok) return fail(-32000, r.message)
+      if (!r.data) return fail(-32000, "invalid-profile-response")
+      await host.setSession(s.token, r.data)
+      return ok(r.data)
+    })
   }
 
   // ── hub / 本机私有数据 ──────────────────────────────────────────────────────
@@ -141,21 +162,22 @@ export function registerGrantedTools(
     server.tool(
       TOOL.hubAddBookmark,
       {
-        title: z.string(),
-        url: z.string(),
-        description: z.string().optional(),
-        favicon: z.string().optional(),
-        folderId: z.string().nullable().optional(),
-        tags: z.array(z.string()).optional(),
+        title: z.string().max(CAPTURE_BOOKMARK_TITLE_LIMIT),
+        url: z.string().max(CAPTURE_BOOKMARK_URL_LIMIT),
+        description: z.string().max(CAPTURE_BOOKMARK_DESCRIPTION_LIMIT).optional(),
+        favicon: z.string().max(CAPTURE_BOOKMARK_FAVICON_LIMIT).optional(),
       },
       async (a) => {
-        // 第三方嵌入页经 MCP 传入 url: 过协议白名单 (与 agent-tools 写入边界一致), 拦 javascript:/data: 伪协议入库。
+        // 一方嵌入页传入的 URL 仍先过协议白名单；实际写入由 UI action port 转交
+        // bookmarks FileSystem 的统一捕获 action，保证 canonical 去重、收件箱标签和同一回执。
         if (!safeHref(a.url)) return fail(-32602, "blocked-protocol")
-        // 去重: addBookmark 非幂等; 同 url 重复点会产生重复书签 (与 ideall SaveToMine 一致)。
-        const existing = await host.files.listBookmarks()
-        const dup = existing.find((b) => b.url === a.url)
-        if (dup) return ok(dup)
-        return ok(await host.files.addBookmark(a as NewBookmark))
+        const capture = getUiActions()?.captureBookmark
+        if (!capture) return fail(-32000, "capture-unavailable")
+        try {
+          return ok((await capture(a)).bookmark)
+        } catch {
+          return fail(-32000, "capture-failed")
+        }
       },
     )
   }
@@ -227,16 +249,22 @@ export function registerGrantedTools(
         tags: z.array(z.string()).optional(),
         content: z.unknown().optional(),
         parentId: z.string().nullable().optional(),
+        expectedVersion: z.string().optional(),
       },
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          const n = await host.files.updateNode(a.kind, a.id, {
-            title: a.title,
-            tags: a.tags,
-            content: a.content,
-            parentId: a.parentId,
-          })
+          const n = await host.files.updateNode(
+            a.kind,
+            a.id,
+            {
+              title: a.title,
+              tags: a.tags,
+              content: a.content,
+              parentId: a.parentId,
+            },
+            a.expectedVersion,
+          )
           return n ? ok(n) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
@@ -251,11 +279,18 @@ export function registerGrantedTools(
         id: z.string(),
         parentId: z.string().nullable(),
         afterSortKey: z.string().nullable().optional(),
+        expectedVersion: z.string().optional(),
       },
       async (a) => {
         if (!canWrite(a.kind)) return fail(-32003, "consent-required")
         try {
-          const n = await host.files.moveNode(a.kind, a.id, a.parentId, a.afterSortKey)
+          const n = await host.files.moveNode(
+            a.kind,
+            a.id,
+            a.parentId,
+            a.afterSortKey,
+            a.expectedVersion,
+          )
           return n ? ok(n) : fail(-32004, "not-found")
         } catch (e) {
           return fsWriteErr(e)
@@ -263,13 +298,30 @@ export function registerGrantedTools(
       },
     )
 
-    server.tool(TOOL.fsDelete, { kind: nodeKind, id: z.string() }, async (a) => {
-      if (!canWrite(a.kind)) return fail(-32003, "consent-required")
+    server.tool(
+      TOOL.fsDelete,
+      { kind: nodeKind, id: z.string(), expectedVersion: z.string().optional() },
+      async (a) => {
+        if (!canWrite(a.kind)) return fail(-32003, "consent-required")
+        try {
+          await host.files.deleteNode(a.kind, a.id, a.expectedVersion)
+          return ok({ ok: true })
+        } catch (e) {
+          return fsWriteErr(e)
+        }
+      },
+    )
+  }
+
+  // Agent 配置不是通用 fs.read 的旁路：只在一方 loopback 显式注入 registry adapter，且
+  // Grant 持专用 consent 位时出现。section 使用固定枚举，不接受任意 FileRef/路径。
+  if (has("agent.config:read") && ctx.readAgentConfig) {
+    server.tool(TOOL.agentConfigRead, { section: agentConfigSection }, async ({ section }) => {
       try {
-        await host.files.deleteNode(a.kind, a.id)
-        return ok({ ok: true })
-      } catch (e) {
-        return fsWriteErr(e)
+        return ok(await ctx.readAgentConfig!(section))
+      } catch {
+        // provider/store 的原始错误可能含路径或配置片段，不回显给模型。
+        return fail(-32000, "agent-config-read-failed")
       }
     })
   }

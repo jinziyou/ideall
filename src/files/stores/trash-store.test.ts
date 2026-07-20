@@ -3,11 +3,19 @@ import assert from "node:assert/strict"
 import type { Node, NodeOfKind } from "@protocol/node"
 import {
   countTrashItems,
+  emptyTrash,
   captureTrashSnapshot,
   listTrashItems,
+  restoreNoteTrashSubtreeWithRoot,
   restoreTrashItem,
+  restoreTrashItemWithNode,
   purgeTrashItem,
 } from "./trash-store"
+import { restoreNode, restoreNodeWithResult } from "./nodes-store"
+import { deleteBookmark, moveBookmark } from "./bookmarks-store"
+import { deleteFile, updateFileMeta } from "./files-store"
+import { removeSubscription } from "./subscriptions-store"
+import { NodeMutationConflictError, nodeMutationExpectation } from "./node-mutation"
 import { idbGet, idbPut, STORE_BLOBS, STORE_NODES, STORE_TRASH_SNAPSHOTS } from "@/lib/idb"
 
 type FakeStore = {
@@ -359,19 +367,230 @@ test("restoreTrashItem: 用快照恢复笔记、文件 Blob 与对话", async ()
   const restoredFileBlob = await idbGet<{ key: string; blob: Blob }>(STORE_BLOBS, fullFile.id)
   const restoredThread = await idbGet<NodeOfKind<"thread">>(STORE_NODES, fullThread.id)
   const restoredNoteBlock = restoredNote?.content[0] as
-    | { children?: Array<{ text?: string }> }
-    | undefined
+    { children?: Array<{ text?: string }> } | undefined
   const restoredThreadMessage = restoredThread?.content.messages[0] as
-    | { content?: string }
-    | undefined
+    { content?: string } | undefined
 
   assert.equal(restoredNote?.deletedAt, undefined)
+  assert.ok((restoredNote?.updatedAt ?? 0) > deletedAt)
   assert.equal(restoredNoteBlock?.children?.[0]?.text, "body-n-restore")
   assert.equal(await restoredFileBlob?.blob.text(), "file-body")
   assert.equal(restoredThreadMessage?.content, "message-t-restore")
+  assert.ok((restoredThread?.updatedAt ?? 0) > deletedAt)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, fullNote.id), undefined)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, fullFile.id), undefined)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, fullThread.id), undefined)
+})
+
+test("restoreTrashItemWithNode: 返回事务实际提交且完成父级修复的节点", async () => {
+  const snapshot = { ...noteNode("n-committed"), parentId: "missing-parent" }
+  const deletedAt = 600
+  await idbPut(STORE_NODES, {
+    ...snapshot,
+    content: [],
+    deletedAt,
+    updatedAt: deletedAt,
+  })
+  await captureTrashSnapshot(snapshot)
+
+  const committed = await restoreTrashItemWithNode(snapshot.id)
+  const stored = await idbGet<NodeOfKind<"note">>(STORE_NODES, snapshot.id)
+
+  assert.deepEqual(committed, stored)
+  assert.equal(committed?.parentId, null)
+  assert.equal(committed?.deletedAt, undefined)
+  assert.ok((committed?.updatedAt ?? 0) > deletedAt)
+  assert.deepEqual(committed?.content, snapshot.content)
+})
+
+test("restoreNoteTrashSubtreeWithRoot: 返回事务内修复后的 revived root", async () => {
+  const rootSnapshot = { ...noteNode("n-tree-root"), parentId: "missing-parent" }
+  const childSnapshot = { ...noteNode("n-tree-child"), parentId: rootSnapshot.id }
+  const deletedAt = 650
+  await idbPut(STORE_NODES, {
+    ...rootSnapshot,
+    content: [],
+    deletedAt,
+    updatedAt: deletedAt,
+  })
+  await idbPut(STORE_NODES, {
+    ...childSnapshot,
+    content: [],
+    deletedAt,
+    updatedAt: deletedAt,
+  })
+  await captureTrashSnapshot(rootSnapshot)
+  await captureTrashSnapshot(childSnapshot)
+
+  const committedRoot = await restoreNoteTrashSubtreeWithRoot(rootSnapshot.id)
+  const storedRoot = await idbGet<NodeOfKind<"note">>(STORE_NODES, rootSnapshot.id)
+  const storedChild = await idbGet<NodeOfKind<"note">>(STORE_NODES, childSnapshot.id)
+
+  assert.deepEqual(committedRoot, storedRoot)
+  assert.equal(committedRoot?.parentId, null)
+  assert.equal(committedRoot?.deletedAt, undefined)
+  assert.deepEqual(committedRoot?.content, rootSnapshot.content)
+  assert.equal(storedChild?.parentId, rootSnapshot.id)
+  assert.equal(storedChild?.deletedAt, undefined)
+  assert.deepEqual(storedChild?.content, childSnapshot.content)
+  assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, rootSnapshot.id), undefined)
+  assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, childSnapshot.id), undefined)
+})
+
+test("restoreNodeWithResult: 返回 committed root，并保留 boolean 兼容包装", async () => {
+  const committedSnapshot = threadNode("t-node-result")
+  const compatibleSnapshot = threadNode("t-node-boolean")
+  const deletedAt = 675
+  for (const snapshot of [committedSnapshot, compatibleSnapshot]) {
+    await idbPut(STORE_NODES, {
+      ...snapshot,
+      content: { messages: [] },
+      deletedAt,
+      updatedAt: deletedAt,
+    })
+    await captureTrashSnapshot(snapshot)
+  }
+
+  const committed = await restoreNodeWithResult("thread", committedSnapshot.id)
+  const stored = await idbGet<NodeOfKind<"thread">>(STORE_NODES, committedSnapshot.id)
+
+  assert.deepEqual(committed, stored)
+  assert.deepEqual(committed?.content, committedSnapshot.content)
+  assert.equal(await restoreNode("thread", compatibleSnapshot.id), true)
+  assert.equal(await restoreNode("thread", compatibleSnapshot.id), false)
+})
+
+test("updateFileMeta: 快速连续更新仍产生严格递增版本", async () => {
+  const initialVersion = Date.now() + 1_000_000
+  await idbPut(STORE_NODES, { ...fileNode("f-version"), updatedAt: initialVersion })
+
+  const updated = await updateFileMeta("f-version", { name: "first.md" })
+  const first = await idbGet<NodeOfKind<"file">>(STORE_NODES, "f-version")
+  await updateFileMeta("f-version", { name: "second.md" })
+  const second = await idbGet<NodeOfKind<"file">>(STORE_NODES, "f-version")
+
+  assert.equal(updated?.title, "first.md")
+  assert.equal(first?.updatedAt, initialVersion + 1)
+  assert.equal(second?.updatedAt, initialVersion + 2)
+})
+
+test("updateFileMeta: 空 patch 与 tombstone 均保持不变", async () => {
+  const live = fileNode("f-meta-noop")
+  const tombstone = fileNode("f-meta-deleted", 20)
+  await idbPut(STORE_NODES, live)
+  await idbPut(STORE_NODES, tombstone)
+
+  assert.equal(await updateFileMeta(live.id, {}), undefined)
+  assert.equal(await updateFileMeta(tombstone.id, { name: "must-not-change.md" }), undefined)
+
+  assert.deepEqual(await idbGet(STORE_NODES, live.id), live)
+  assert.deepEqual(await idbGet(STORE_NODES, tombstone.id), tombstone)
+})
+
+test("live mutation CAS: stale、missing、tombstone 与替换节点在写入前冲突", async () => {
+  const file = fileNode("f-cas")
+  const deletedFile = fileNode("f-cas-deleted", 20)
+  const replacedFile = noteNode("f-cas-replaced")
+  const bookmark = {
+    id: "bookmark-cas",
+    kind: "bookmark",
+    title: "bookmark",
+    parentId: null,
+    sortKey: "bookmark-cas",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 10,
+    content: { url: "https://example.com", description: "", favicon: "" },
+  } satisfies NodeOfKind<"bookmark">
+  const feed = {
+    id: "feed:publisher:cas.example",
+    kind: "feed",
+    title: "feed",
+    parentId: null,
+    sortKey: "feed-cas",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 10,
+    content: { type: "publisher", key: "cas.example", favicon: "" },
+  } satisfies NodeOfKind<"feed">
+  await idbPut(STORE_NODES, file)
+  await idbPut(STORE_NODES, deletedFile)
+  await idbPut(STORE_NODES, replacedFile)
+  await idbPut(STORE_NODES, bookmark)
+  await idbPut(STORE_NODES, feed)
+  const stale = <T extends Node>(node: T) => ({
+    ...nodeMutationExpectation(node),
+    updatedAt: node.updatedAt - 1,
+  })
+
+  await assert.rejects(
+    () => updateFileMeta(file.id, { name: "stale.md" }, stale(file)),
+    NodeMutationConflictError,
+  )
+  await assert.rejects(
+    () => moveBookmark(bookmark.id, null, undefined, stale(bookmark)),
+    NodeMutationConflictError,
+  )
+  await assert.rejects(
+    () => removeSubscription("publisher", "cas.example", stale(feed)),
+    NodeMutationConflictError,
+  )
+  await assert.rejects(
+    () =>
+      updateFileMeta(
+        "missing-file",
+        { name: "missing.md" },
+        { kind: "file", updatedAt: 1, deletedAt: null },
+      ),
+    NodeMutationConflictError,
+  )
+  await assert.rejects(
+    () =>
+      updateFileMeta(
+        deletedFile.id,
+        { name: "deleted.md" },
+        { kind: "file", updatedAt: 10, deletedAt: null },
+      ),
+    NodeMutationConflictError,
+  )
+  await assert.rejects(
+    () =>
+      updateFileMeta(
+        replacedFile.id,
+        { name: "replaced.md" },
+        { kind: "file", updatedAt: replacedFile.updatedAt, deletedAt: null },
+      ),
+    NodeMutationConflictError,
+  )
+
+  assert.deepEqual(await idbGet(STORE_NODES, file.id), file)
+  assert.deepEqual(await idbGet(STORE_NODES, deletedFile.id), deletedFile)
+  assert.deepEqual(await idbGet(STORE_NODES, replacedFile.id), replacedFile)
+  assert.deepEqual(await idbGet(STORE_NODES, bookmark.id), bookmark)
+  assert.deepEqual(await idbGet(STORE_NODES, feed.id), feed)
+})
+
+test("live mutation delete: 首次删除返回 true，幂等重试返回 false", async () => {
+  const file = fileNode("f-delete-result")
+  const bookmark = {
+    id: "bookmark-delete-result",
+    kind: "bookmark",
+    title: "bookmark",
+    parentId: null,
+    sortKey: "bookmark-delete-result",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 10,
+    content: { url: "https://example.com/delete", description: "", favicon: "" },
+  } satisfies NodeOfKind<"bookmark">
+  await idbPut(STORE_NODES, file)
+  await idbPut(STORE_BLOBS, { key: file.id, blob: new Blob(["body"]) })
+  await idbPut(STORE_NODES, bookmark)
+
+  assert.equal(await deleteFile(file.id, nodeMutationExpectation(file)), true)
+  assert.equal(await deleteFile(file.id), false)
+  assert.equal(await deleteBookmark(bookmark.id, nodeMutationExpectation(bookmark)), true)
+  assert.equal(await deleteBookmark(bookmark.id), false)
 })
 
 test("restoreTrashItem: 文件缺少 Blob 快照时不可恢复", async () => {
@@ -383,6 +602,24 @@ test("restoreTrashItem: 文件缺少 Blob 快照时不可恢复", async () => {
 
   assert.equal(item.restorable, false)
   await assert.rejects(() => restoreTrashItem(deletedFile.id), /文件内容快照不存在/)
+})
+
+test("listTrashItems: id/kind 不匹配的快照不得被声称为可恢复", async () => {
+  const deletedFile = fileNode("f-corrupt-snapshot", 710)
+  await idbPut(STORE_NODES, deletedFile)
+  await idbPut(STORE_TRASH_SNAPSHOTS, {
+    id: deletedFile.id,
+    node: noteNode("different-node"),
+    blob: new Blob(["wrong body"]),
+    capturedAt: 710,
+  })
+
+  const [item] = await listTrashItems()
+
+  assert.equal(item.id, deletedFile.id)
+  assert.equal(item.snapshot, false)
+  assert.equal(item.restorable, false)
+  await assert.rejects(() => restoreTrashItem(deletedFile.id), /文件内容快照不存在或不匹配/)
 })
 
 test("purgeTrashItem: 永久删除节点、Blob 与回收站快照", async () => {
@@ -397,4 +634,56 @@ test("purgeTrashItem: 永久删除节点、Blob 与回收站快照", async () =>
   assert.equal(await idbGet(STORE_BLOBS, deletedFile.id), undefined)
   assert.equal(await idbGet(STORE_TRASH_SNAPSHOTS, deletedFile.id), undefined)
   assert.equal(await countTrashItems(), 0)
+})
+
+test("purgeTrashItem: 恢复后的 live 节点不会被陈旧清理请求删除", async () => {
+  const live = noteNode("n-live")
+  await idbPut(STORE_NODES, live)
+  await captureTrashSnapshot({ ...live, deletedAt: 800 })
+
+  await purgeTrashItem(live.id)
+
+  assert.deepEqual(await idbGet(STORE_NODES, live.id), live)
+  assert.ok(await idbGet(STORE_TRASH_SNAPSHOTS, live.id))
+})
+
+test("emptyTrash: 事务内集合与确认快照不一致时不删除新一代墓碑", async () => {
+  const first = { ...noteNode("empty-first"), deletedAt: 100, updatedAt: 100 }
+  const late = { ...noteNode("empty-late"), deletedAt: 110, updatedAt: 110 }
+  await idbPut(STORE_NODES, first)
+  const expected = [
+    { id: first.id, kind: first.kind, updatedAt: first.updatedAt, deletedAt: first.deletedAt },
+  ]
+  await idbPut(STORE_NODES, late)
+
+  assert.equal(await emptyTrash(expected), null)
+  assert.ok(await idbGet(STORE_NODES, first.id))
+  assert.ok(await idbGet(STORE_NODES, late.id))
+
+  assert.equal(
+    await emptyTrash([
+      ...expected,
+      { id: late.id, kind: late.kind, updatedAt: late.updatedAt, deletedAt: late.deletedAt },
+    ]),
+    2,
+  )
+})
+
+test("emptyTrash: 同数量但身份已替换的墓碑集合不会被陈旧确认删除", async () => {
+  const confirmed = { ...noteNode("empty-confirmed"), deletedAt: 100, updatedAt: 100 }
+  const replacement = { ...noteNode("empty-replacement"), deletedAt: 110, updatedAt: 110 }
+  await idbPut(STORE_NODES, replacement)
+
+  assert.equal(
+    await emptyTrash([
+      {
+        id: confirmed.id,
+        kind: confirmed.kind,
+        updatedAt: confirmed.updatedAt,
+        deletedAt: confirmed.deletedAt,
+      },
+    ]),
+    null,
+  )
+  assert.deepEqual(await idbGet(STORE_NODES, replacement.id), replacement)
 })

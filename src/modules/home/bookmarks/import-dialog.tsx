@@ -13,9 +13,15 @@ import {
 } from "@/ui/dialog"
 import { Button } from "@/ui/button"
 import { Label } from "@/ui/label"
-import { BookmarkFolder } from "@protocol/files"
 import { parseBookmarksHtml, ParsedBookmark } from "@/files/bookmark-import"
-import { addFolder, bulkAddBookmarks } from "@/files/stores/bookmarks-store"
+import { CAPTURE_INBOX_TAG } from "@/files/web-snapshot"
+import { recordFirstCreatedCapture } from "@/lib/capture-onboarding"
+import { captureOnboardingToastGuide } from "@/shared/feeders/capture-bookmark-feedback"
+import {
+  createBookmarkFile,
+  createBookmarkFolder,
+  type FileBookmarkFolder,
+} from "./bookmark-file-system"
 
 export default function ImportDialog({
   open,
@@ -25,7 +31,7 @@ export default function ImportDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  folders: BookmarkFolder[]
+  folders: FileBookmarkFolder[]
   onImported: () => void
 }) {
   const [parsed, setParsed] = React.useState<ParsedBookmark[] | null>(null)
@@ -70,31 +76,38 @@ export default function ImportDialog({
     setImporting(true)
     try {
       // 把已有收藏夹按名建索引, 复用同名夹
-      const byName = new Map(folders.map((f) => [f.name, f.id]))
+      const byName = new Map(folders.map((folder) => [folder.name, folder]))
 
       const inputs = []
       for (const b of parsed) {
-        let folderId: string | null = null
+        let folder: FileBookmarkFolder | null = null
         if (keepFolders && b.folderPath.length) {
           // 用完整路径作为夹名 (如 "工作 / 文档"), 保证层级唯一
           const name = b.folderPath.join(" / ")
-          let id = byName.get(name)
-          if (!id) {
-            const folder = await addFolder(name)
-            id = folder.id
-            byName.set(name, id)
+          folder = byName.get(name) ?? null
+          if (!folder) {
+            folder = await createBookmarkFolder(name)
+            byName.set(name, folder)
           }
-          folderId = id
         }
-        inputs.push({
-          title: b.title,
-          url: b.url,
-          favicon: b.favicon,
-          folderId,
-        })
+        inputs.push({ bookmark: b, folder })
       }
-      await bulkAddBookmarks(inputs)
-      toast.success(`已导入 ${inputs.length} 个书签`)
+      for (const { bookmark, folder } of inputs) {
+        await createBookmarkFile(
+          {
+            title: bookmark.title,
+            url: bookmark.url,
+            favicon: bookmark.favicon,
+            tags: [CAPTURE_INBOX_TAG],
+          },
+          folder,
+        )
+        recordFirstCreatedCapture()
+      }
+      const guide = captureOnboardingToastGuide()
+      toast.success(`已导入 ${inputs.length} 个书签`, {
+        ...(guide.action ? { action: guide.action } : {}),
+      })
       onImported()
       handleOpenChange(false)
     } catch (e) {

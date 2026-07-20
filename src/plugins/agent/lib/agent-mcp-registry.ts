@@ -1,13 +1,16 @@
 // MCP server 注册表 (唯一数据来源) —— 连接器/外部数据与工具。
 // 内置「本地能力 (loopback)」固定一行 (映射 AGENT_PERMISSIONS 工具), 不可删; 其余为用户添加的外部 server。
-// 注: 外部传输 (stdio / SSE / Streamable-HTTP) 接缝预留, 实际连接随 ACP 落地 (见 acp-*.ts); 当前外部行仅存配置。
+// 外部传输 (stdio / SSE / Streamable-HTTP) 由 agent-mcp 建立按轮会话；连接健康与最近调用统一进入
+// agent-mcp-diagnostics 的本机内存快照，配置本身仍由本注册表持久化。
 // 本地优先 localStorage; 工作空间按 toolAllowlist 选用其工具 (见 agent-workspace.ts)。
 
 import { genId } from "@/lib/id"
 import { createCollection } from "./agent-collection"
+import type { McpConnectionDiagnostic } from "./agent-mcp-diagnostics"
 
 export type McpTransport = "loopback" | "stdio" | "sse" | "http"
-export type McpRunStatus = "connected" | "connecting" | "error" | "disabled" | "pending"
+export type McpRunStatus =
+  "connected" | "connecting" | "degraded" | "error" | "disabled" | "pending"
 
 export const MCP_TRANSPORTS: { value: McpTransport; label: string }[] = [
   { value: "stdio", label: "stdio (本地命令)" },
@@ -117,10 +120,30 @@ export function deleteMcpServer(id: string): void {
   store.remove(id)
 }
 
-/** 展示用运行状态: loopback 启用即「已连接」; 外部行传输 (stdio/SSE/streamable-http) 已实现, 但按运行
- *  时连接 (connectAgentMcp 每轮按需连), 无常驻连接可反映 → 静态显示「待接入」; 未启用 → 「已禁用」。 */
-export function runStatusOf(s: McpServer): McpRunStatus {
+/** 用公开配置快照替换注册表，同时守住内置 loopback 的身份与传输约束。 */
+export function replaceMcpServers(servers: readonly Partial<McpServer>[]): void {
+  const migrated = servers.map(migrate)
+  const suppliedLoopback = migrated.find((server) => server.id === LOOPBACK_ID)
+  const loopback = suppliedLoopback
+    ? {
+        ...suppliedLoopback,
+        id: LOOPBACK_ID,
+        transport: "loopback" as const,
+        builtin: true,
+      }
+    : loopbackRow()
+  const external = migrated.filter((server) => server.id !== LOOPBACK_ID && !server.builtin)
+  store.replaceAll([loopback, ...external])
+}
+
+/** 外部连接按统一诊断投影；诊断必须绑定当前 updatedAt，配置变化后旧健康状态立即失效。 */
+export function runStatusOf(s: McpServer, diagnostic?: McpConnectionDiagnostic): McpRunStatus {
   if (!s.enabled) return "disabled"
   if (s.transport === "loopback") return "connected"
+  if (!diagnostic || diagnostic.configRevision !== s.updatedAt) return "pending"
+  if (diagnostic.status === "checking") return "connecting"
+  if (diagnostic.status === "healthy" || diagnostic.status === "connected") return "connected"
+  if (diagnostic.status === "degraded") return "degraded"
+  if (diagnostic.status === "error") return "error"
   return "pending"
 }

@@ -8,20 +8,34 @@ export type ShellLine =
   | { type: "exit"; code: number }
   | { type: "error"; message: string }
 
-function defaultShell(): { program: string; args: string[] } {
+export type ShellOptions = {
+  cwd?: string
+}
+
+export function defaultShell(
+  userAgent = typeof window !== "undefined" ? window.navigator.userAgent : "",
+): { program: string; args: string[] } {
   // Tauri shell 插件不识别 $SHELL; capability 里我们允许 sh/bash/zsh/fish/cmd/powershell/pwsh。
   // 按平台选最稳的默认 shell。
-  if (typeof window !== "undefined" && window.navigator.userAgent.includes("Win")) {
+  if (userAgent.includes("Win")) {
     return { program: "powershell", args: ["-Command"] }
   }
   return { program: "bash", args: ["-c"] }
+}
+
+export function normalizeShellOptions(options: ShellOptions = {}): ShellOptions | undefined {
+  const cwd = options.cwd?.trim()
+  return cwd ? { cwd } : undefined
 }
 
 /**
  * 执行单条命令, 返回完整输出 (stdout + stderr + exit code)。
  * 适合短命令; 长耗时命令请用 executeStreaming。
  */
-export async function executeCommand(command: string): Promise<{
+export async function executeCommand(
+  command: string,
+  options: ShellOptions = {},
+): Promise<{
   stdout: string
   stderr: string
   code: number
@@ -31,7 +45,11 @@ export async function executeCommand(command: string): Promise<{
   }
   const { Command } = await import("@tauri-apps/plugin-shell")
   const { program, args } = defaultShell()
-  const result = await Command.create(program, [...args, command]).execute()
+  const result = await Command.create(
+    program,
+    [...args, command],
+    normalizeShellOptions(options),
+  ).execute()
   return {
     stdout: result.stdout,
     stderr: result.stderr,
@@ -46,6 +64,7 @@ export async function executeCommand(command: string): Promise<{
 export async function executeStreaming(
   command: string,
   onLine: (line: ShellLine) => void,
+  options: ShellOptions = {},
 ): Promise<() => void> {
   if (!isTauri()) {
     onLine({ type: "error", message: "终端仅在桌面 App 中可用" })
@@ -53,7 +72,7 @@ export async function executeStreaming(
   }
   const { Command } = await import("@tauri-apps/plugin-shell")
   const { program, args } = defaultShell()
-  const cmd = Command.create(program, [...args, command])
+  const cmd = Command.create(program, [...args, command], normalizeShellOptions(options))
 
   cmd.on("error", (message) => {
     onLine({ type: "error", message })

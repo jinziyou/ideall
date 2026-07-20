@@ -20,9 +20,14 @@ export type ResolverRegistration = { types: SubscriptionType[]; resolve: Content
 const resolvers = new Map<SubscriptionType, ContentResolver>()
 
 /** 注册某些关注类型的内容解析器 (组合根在启动时调用)。 */
-export function registerContentResolver(types: SubscriptionType[], fn: ContentResolver): void {
+export function registerContentResolver(
+  types: SubscriptionType[],
+  fn: ContentResolver,
+): () => void {
+  const previous = new Map<SubscriptionType, ContentResolver | undefined>()
   for (const t of types) {
     const prev = resolvers.get(t)
+    previous.set(t, prev)
     if (prev === fn) continue // HMR / StrictMode 重复 registerAll: 同函数幂等跳过
     if (process.env.NODE_ENV !== "production" && prev) {
       console.warn(
@@ -30,6 +35,13 @@ export function registerContentResolver(types: SubscriptionType[], fn: ContentRe
       )
     }
     resolvers.set(t, fn)
+  }
+  return () => {
+    for (const [type, prev] of previous) {
+      if (resolvers.get(type) !== fn) continue
+      if (prev) resolvers.set(type, prev)
+      else resolvers.delete(type)
+    }
   }
 }
 

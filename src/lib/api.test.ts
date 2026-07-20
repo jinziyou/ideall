@@ -57,6 +57,18 @@ test("apiFetch: !ok 且体含 detail → 提取 detail 作错误消息", async (
   }
 })
 
+test("apiFetch: !ok 且体为 wonita 统一错误包络 → 提取嵌套 message", async () => {
+  setFetch(() =>
+    resp(409, JSON.stringify({ error: { code: "conflict", message: "同步版本冲突" } })),
+  )
+  const r = await apiFetch("/x")
+  assert.equal(r.ok, false)
+  if (!r.ok) {
+    assert.equal(r.status, 409)
+    assert.equal(r.message, "同步版本冲突")
+  }
+})
+
 test("apiFetch: !ok 且体为纯文本 → 用文本作错误消息", async () => {
   setFetch(() => resp(500, "boom"))
   const r = await apiFetch("/x")
@@ -83,6 +95,13 @@ test("apiFetch: 空响应体 (204) → ok:true + data:null", async () => {
   const r = await apiFetch("/x")
   assert.equal(r.ok, true)
   if (r.ok) assert.equal(r.data, null)
+})
+
+test("apiFetch: 在 JSON.parse 前拒绝超过调用方预算的响应", async () => {
+  setFetch(() => resp(200, JSON.stringify({ data: "too large" })))
+  const result = await apiFetch("/x", { maxResponseBytes: 8 })
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.match(result.message, /超过客户端限制/)
 })
 
 test("apiFetch: json 选项 → 设 Content-Type 并序列化 body", async () => {

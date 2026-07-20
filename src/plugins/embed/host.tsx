@@ -15,6 +15,8 @@ import {
   HELLO_MESSAGE_TYPE,
   INIT_MESSAGE_TYPE,
   PROTOCOL_VERSION,
+  BACKEND_API_VERSION,
+  EMBED_CAPABILITIES,
   THEME_TOKEN_VARS,
   type ThemeTokens,
 } from "./protocol"
@@ -174,6 +176,8 @@ export function EmbedHost({ manifest }: { manifest: Manifest }) {
           appId: manifest.id,
           permissions: manifest.permissions,
           theme: currentTheme(),
+          backendApiVersion: BACKEND_API_VERSION,
+          capabilities: EMBED_CAPABILITIES,
         },
         entryOrigin,
         [mcp.port2, ui.port2],

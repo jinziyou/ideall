@@ -1,14 +1,14 @@
 import { configureStore, type Middleware } from "@reduxjs/toolkit"
 import { useDispatch, useSelector, type TypedUseSelectorHook } from "react-redux"
 import { workspaceSlice } from "@/workspace/workspace-slice"
-import { persistWorkspaceSnapshot } from "@/workspace/workspace-persist"
+import { scheduleWorkspaceSnapshotPersistence } from "@/workspace/workspace-persist"
 import { flowProgressSlice } from "@/lib/flow-progress-slice"
 
 const workspacePersistMiddleware: Middleware = (api) => (next) => (action) => {
   const result = next(action)
   if (workspaceSlice.actions.patch.match(action) || workspaceSlice.actions.hydrate.match(action)) {
     const ws = api.getState().workspace
-    persistWorkspaceSnapshot(ws, ws.hydrated)
+    scheduleWorkspaceSnapshotPersistence(ws, ws.hydrated)
   }
   return result
 }

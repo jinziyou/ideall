@@ -7,8 +7,12 @@ import type { NodeRef } from "@protocol/node"
 let getter: (() => NodeRef | null) | null = null
 
 /** app 启动时注册"当前激活节点"读取器。 */
-export function registerActiveNode(g: () => NodeRef | null): void {
+export function registerActiveNode(g: () => NodeRef | null): () => void {
+  const previous = getter
   getter = g
+  return () => {
+    if (getter === g) getter = previous
+  }
 }
 
 /** 取当前激活的节点引用 (无激活节点标签 / 未注册 → null)。 */

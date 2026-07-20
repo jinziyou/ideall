@@ -8,6 +8,7 @@
 //   程序   : node
 //   参数   : <本仓库绝对路径>/scripts/acp-echo-agent.mjs
 //   工作目录: 任意(可留空; 模块解析按脚本位置走, 不依赖 cwd)
+//   执行后端: 外部 ACP Agent（桌面）
 //
 // 重要: ACP 规定 agent 的 stdout 只能是协议消息 —— 故本脚本所有日志一律走 stderr(console.error)。
 import { Readable, Writable } from "node:stream"

@@ -1,8 +1,8 @@
 import nextConfig from "eslint-config-next"
 
 // 个人信息终端 · 分层边界。顶层目录即架构层:
-//   app(Next 路由薄标记) / shell(终端外壳) / workspace(一切皆标签) / files(一切皆文件·统一 Node 数据层) /
-//   modules(功能模块 home·info·community·tool) / plugins(agent·sync·embed) / protocol(契约/端口) /
+//   app(Next 路由薄标记) / shell(终端外壳) / workspace(Display) / filesystem(挂载层) / engines(引擎解析) / files(Node 数据层) /
+//   modules(功能模块 home·info·community·tool) / plugins(agent·sync·embed·code·git·shell·audio·database) / protocol(契约/端口) /
 //   ui(原语+编辑器) / shared(跨层共享 UI) / lib(纯工具)。
 // ESLint 强制五条边界:
 //  (1) protocol 纯度 —— 契约/端口层只依赖 @/lib 纯工具叶子, 不得 import 任何 frame/功能/UI 层。
@@ -24,12 +24,17 @@ const NO_APP = {
     "app/ 仅 Next 路由薄标记 (开标签); 复用/功能层不得反向 import 路由代码, 共享逻辑下沉 @/lib 或经 @protocol 端口注入",
 }
 
+const NO_UI_STORAGE_BYPASS = {
+  group: ["@/files/stores", "@/files/stores/**", "@/filesystem/resource-sources/registry"],
+  message:
+    "活动 UI 不得直接访问 store/resource-source registry; 数据与动作必须经 FileSystem，底层 store/source 只作为 provider、同步或 port 的内部实现",
+}
+
 const config = [
   ...nextConfig,
   {
     // @/lib/api/server.d.ts 是 openapi-typescript 生成物, 不该被 lint;
-    // src-tauri (Rust 工程 + target/gen 产物) / out (静态导出产物) / ds-bundle (design-sync 编译产物)
-    // 均非手写 JS 源, 不入 lint (三者已 gitignore)。
+    // src-tauri (Rust 工程 + target/gen 产物) / out (静态导出产物) 均非手写 JS 源, 不入 lint。
     ignores: [
       ".next/**",
       "node_modules/**",
@@ -37,7 +42,10 @@ const config = [
       "src/lib/api/**",
       "src-tauri/**",
       "out/**",
+      // 设计系统同步工具生成的自包含 bundle/vendor，不是应用手写源码。
       "ds-bundle/**",
+      ".ds-sync/**",
+      ".design-sync/**",
     ],
   },
 
@@ -54,6 +62,8 @@ const config = [
                 "@/app/**",
                 "@/shell/**",
                 "@/workspace/**",
+                "@/filesystem/**",
+                "@/engines/**",
                 "@/files/**",
                 "@/modules/**",
                 "@/plugins/**",
@@ -79,6 +89,22 @@ const config = [
     },
   },
 
+  // Display 与产品 UI 只能经 FileSystem 访问数据。测试可直接组装底层 provider 验证兼容边界。
+  {
+    files: [
+      "src/app/**/*.{ts,tsx}",
+      "src/shell/**/*.{ts,tsx}",
+      "src/workspace/**/*.{ts,tsx}",
+      "src/modules/**/*.{ts,tsx}",
+      "src/shared/**/*.{ts,tsx}",
+      "src/ui/**/*.{ts,tsx}",
+    ],
+    ignores: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [WIRE_DTO, NO_APP, NO_UI_STORAGE_BYPASS] }],
+    },
+  },
+
   // (4) modules 三应用互隔: info / community / tool 互不 import; 跨模块经 @protocol 协作 (内容解析在各自 manifest 注册)。
   ...[
     ["info", ["community", "tool"]],
@@ -93,6 +119,7 @@ const config = [
           patterns: [
             WIRE_DTO,
             NO_APP,
+            NO_UI_STORAGE_BYPASS,
             {
               group: siblings.flatMap((s) => [`@/modules/${s}`, `@/modules/${s}/**`]),
               message: `${self} 不得 import 其它应用模块 (${siblings.join("/")}); 三应用互隔, 跨模块经 @protocol 协作`,
@@ -118,7 +145,7 @@ const config = [
     },
   },
 
-  // (5) plugins ↛ shell/workspace: 插件 (agent·sync·embed) 经 @/lib/ui-actions / @/lib/active-node 端口与外壳交互;
+  // (5) plugins ↛ shell/workspace: 插件经 @/lib/ui-actions / @/lib/active-node 端口与外壳交互;
   //     禁反向 import 外壳/工作区, 防插件耦合具体 frame 实现 (§6.5 不变量, 机器强制)。
   {
     files: ["src/plugins/**/*.{ts,tsx}"],
@@ -133,6 +160,73 @@ const config = [
               group: ["@/shell", "@/shell/**", "@/workspace", "@/workspace/**"],
               message:
                 "插件不得反向 import 外壳/工作区 (@/shell·@/workspace); 触达工作区只准经 @/lib/ui-actions / @/lib/active-node 端口",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // 已完成 FileSystem 化的 Agent Display 不得重新直连 feature store/provider 实现。
+  // 这里重列 plugin frame 禁令，因为 flat config 的 no-restricted-imports 不跨块合并。
+  {
+    files: [
+      "src/plugins/agent/views/ai-settings.tsx",
+      "src/plugins/agent/views/agent-spaces.tsx",
+      "src/plugins/agent/views/agent-task-list.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            WIRE_DTO,
+            NO_APP,
+            NO_UI_STORAGE_BYPASS,
+            {
+              group: ["@/shell", "@/shell/**", "@/workspace", "@/workspace/**"],
+              message: "Agent Display 不得反向 import 外壳/工作区；触达工作区只准经 UI action port",
+            },
+            {
+              group: [
+                "../lib",
+                "../lib/**",
+                "@/plugins/agent/lib",
+                "@/plugins/agent/lib/**",
+                "@protocol/flowback",
+              ],
+              message:
+                "能力 Display 的读取、写入和订阅必须经 FileSystem registry；底层 store/catalog 只允许 provider 适配器访问",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // 基本设置 Display 同样只能消费文件文档；受控 shell 视图与 workspace 导航动作仍可复用。
+  {
+    files: ["src/modules/home/settings/settings-page.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            WIRE_DTO,
+            NO_APP,
+            NO_UI_STORAGE_BYPASS,
+            {
+              group: [
+                "@/modules/home/settings/settings-file-system",
+                "./settings-file-system",
+                "@/lib/theme",
+                "@/lib/sync-code",
+                "@protocol/auth",
+                "@/plugins/embed/connections",
+                "@/shell/runtime-extensions",
+              ],
+              message:
+                "SettingsPage 的读取、写入和订阅必须经 FileSystem registry；底层 store/catalog 只允许 provider 适配器访问",
             },
           ],
         },

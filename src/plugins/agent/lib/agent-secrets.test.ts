@@ -33,14 +33,15 @@ test("桌面密钥水合不再接受 localStorage 明文密钥值", async () => 
 
   assert.equal(resolveSecrets("${TOK}"), "${TOK}")
   assert.deepEqual(getSecrets(), [{ id: "TOK", value: "", secure: true }])
+  assert.equal(getSecrets(), getSecrets(), "useSyncExternalStore 快照引用保持稳定")
   assert.deepEqual(JSON.parse(mem.get(AGENT_SECRETS_STORAGE_KEY) ?? "[]"), [
     { id: "TOK", value: "", secure: true },
   ])
   delete (globalThis as unknown as { window?: Window }).window
 })
 
-test("${NAME} 解析: 命中替换, 未知名原样保留 (便于发现拼写错)", () => {
-  setSecret("TOK", "Bearer xyz")
+test("${NAME} 解析: 命中替换, 未知名原样保留 (便于发现拼写错)", async () => {
+  await setSecret("TOK", "Bearer xyz")
   assert.equal(resolveSecrets("${TOK}"), "Bearer xyz")
   assert.equal(resolveSecrets("前 ${TOK} 后"), "前 Bearer xyz 后")
   assert.equal(resolveSecrets("${UNKNOWN}"), "${UNKNOWN}")
@@ -50,6 +51,6 @@ test("${NAME} 解析: 命中替换, 未知名原样保留 (便于发现拼写错
     { id: "TOK", value: "", secure: true },
   ])
   assert.equal(mem.get(secureFallbackStorageKey("ideall:agent:secret:TOK")), "Bearer xyz")
-  deleteSecret("TOK")
+  await deleteSecret("TOK")
   assert.equal(resolveSecrets("${TOK}"), "${TOK}")
 })

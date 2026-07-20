@@ -107,7 +107,7 @@ export type NoteMeta = Omit<Note, "content"> & {
 /**
  * AI 智能体对话线程 (core 存储视角) —— 消息语义属 agent 插件域, 协议层以 unknown[] 表达
  * (同 NoteContent 不依赖编辑器实现)。插件经 FilesPort 读写, 在边界断言 messages 为其 AgentMessage[]。
- * 本地独占, 默认不跨端同步 (对象级 LWW 会截断 messages[]; 见 docs/design/ai-native-redesign.md §3 步 D)。
+ * 本地独占, 默认不跨端同步 (对象级 LWW 会截断 messages[]; 见 docs/design/archive/ai-native-redesign.md §3 步 D)。
  */
 export interface Thread {
   id: string
@@ -115,6 +115,95 @@ export interface Thread {
   messages: unknown[]
   createdAt: number
   updatedAt: number
+}
+
+/**
+ * 线程上的本机任务关系。正文仍属于 thread 文件；这里是独立的轻量索引行，和 thread
+ * 位于同一个 IndexedDB 中，因此创建/删除可由 Storage 层放进同一事务。
+ */
+export type ThreadTaskStatus = "active" | "running" | "done" | "failed"
+
+export interface ThreadTask {
+  /** 与对应 thread id 相同（1:1）。 */
+  id: string
+  workspaceId: string
+  status: ThreadTaskStatus
+  starred: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export const MAX_THREAD_TASK_ITEMS = 5_000
+
+/** task 集合的耐久索引头；revision 是跨窗口恢复与 CAS 共用的单调变更序号。 */
+export interface ThreadTaskIndexHead {
+  revision: number
+  count: number
+}
+
+export interface ThreadTaskSnapshot {
+  revision: number
+  tasks: ThreadTask[]
+}
+
+export interface ThreadTaskMutation {
+  revision: number
+  task?: ThreadTask
+}
+
+export type ThreadTaskDeleteExpectation = Readonly<{
+  /** 本次撤销只允许删除这个已提交 thread.updatedAt。 */
+  updatedAt: number
+}>
+
+export interface ThreadTaskMigration extends ThreadTaskSnapshot {
+  /** 本次调用是否执行了旧 localStorage 快照迁移；false 表示其它窗口已完成。 */
+  migrated: boolean
+  imported: number
+  skipped: number
+}
+
+export type ThreadTaskPatch = {
+  status?: ThreadTaskStatus
+  starred?: boolean
+  /** 刷新任务排序时间；由 Storage 层生成严格递增时间戳。 */
+  touch?: boolean
+}
+
+/** task 索引 revision 已变化；上层应重新读取 FileDocument 后再提交。 */
+export class ThreadTaskConflictError extends Error {
+  constructor() {
+    super("Agent task index changed concurrently")
+    this.name = "ThreadTaskConflictError"
+  }
+}
+
+/**
+ * thread/task 跨记录原子能力。实现属于 Storage 组合边界，FileSystem 外观只负责转发，
+ * 插件和 Display 不得直接依赖具体 IndexedDB store。
+ */
+export interface ThreadTaskStoragePort {
+  /** O(1) 读取持久化 revision/count；旧 state 行会由 Storage 层惰性修复。 */
+  readThreadTaskIndexHead(): Promise<ThreadTaskIndexHead>
+  listThreadTasks(): Promise<ThreadTaskSnapshot>
+  migrateLegacyThreadTasks(tasks: readonly ThreadTask[]): Promise<ThreadTaskMigration>
+  createTaskThread(workspaceId: string): Promise<{
+    thread: Thread
+    task: ThreadTask
+    revision: number
+  }>
+  attachThreadTask(workspaceId: string, threadId: string): Promise<ThreadTaskMutation>
+  updateThreadTask(id: string, patch: ThreadTaskPatch): Promise<ThreadTaskMutation>
+  /**
+   * 无论是否有关联 task，都幂等软删除 thread；有关联时在同一事务移除索引。
+   * expected 用于用户撤销新建任务：只有线程仍是本次提交版本时才允许删除。
+   */
+  deleteTaskThread(id: string, expected?: ThreadTaskDeleteExpectation): Promise<ThreadTaskMutation>
+  /** 原子替换轻量索引；引用不存在/已删除的 thread 时拒绝整次写入。 */
+  replaceThreadTasks(
+    tasks: readonly ThreadTask[],
+    expectedRevision?: number,
+  ): Promise<ThreadTaskSnapshot>
 }
 
 /** 新建笔记入参 (id/时间戳/sortKey 由实现补全; 均可选, content 缺省为空文档)。 */
@@ -129,20 +218,17 @@ export type NewNote = {
 }
 
 /**
- * 「我的」本地数据端口 —— core 实现 (包装 IndexedDB stores), 经 protocol 暴露给 plugin。
- * agent 插件经此读写用户的关注 / 书签 / 收藏夹 / 资源, 而非直接依赖 core 存储 (依赖反转)。
+ * 「我的」兼容领域端口 —— core 实现经 FileSystem registry 访问稳定 FileRef，再由 provider
+ * 分派到实际存储。agent/embed 可暂时沿用领域 DTO，而不绕过统一文件访问通路。
+ * tombstone 全量读与原子 bulk 写不属于本端口，独立收口在 StorageSyncPort。
  */
-export interface FilesPort {
+export interface FilesPort extends ThreadTaskStoragePort {
   // 关注
   /** 列出活跃关注 (过滤软删除标记)。UI / 插件读路径。 */
   listSubscriptions(): Promise<Subscription[]>
-  /** 列出全部关注含删除标记 —— 跨端同步合并用 (删除标记须进合并/上传才能传播删除)。 */
-  listAllSubscriptions(): Promise<Subscription[]>
   addSubscription(input: NewSubscription): Promise<Subscription>
   removeSubscription(type: SubscriptionType, key: string): Promise<void>
   isSubscribed(type: SubscriptionType, key: string): Promise<boolean>
-  /** 跨端同步落地: 写入合并 + GC 后的完整数据, 并物理清除集合外的过期删除标记 (一次事务批处理)。 */
-  bulkPutSubscriptions(subs: Subscription[]): Promise<void>
   // 书签 / 收藏夹
   listBookmarks(): Promise<Bookmark[]>
   addBookmark(input: NewBookmark): Promise<Bookmark>
@@ -159,10 +245,6 @@ export interface FilesPort {
   getNote(id: string): Promise<Note | undefined>
   /** 列出某父页下的活跃直接子页面 (元数据, 按同级序), 供树感知插件导航。 */
   listNoteChildren(parentId: string | null): Promise<NoteMeta[]>
-  /** 列出全部笔记含删除标记 + 完整正文 —— 跨端同步合并/上传用 (读路径另有 listNotes 过滤删除标记)。 */
-  listAllNotes(): Promise<Note[]>
-  /** 跨端同步落地: 写入合并 + GC 后的完整数据 (一次事务批处理)。 */
-  bulkPutNotes(notes: Note[]): Promise<void>
   // 对话线程 (agent 插件经此读写, 不直接依赖 core 存储; 本地独占, 默认不同步, 软删进回收站)
   /** 线程列表, 按最近更新倒序。 */
   listThreads(): Promise<Thread[]>
@@ -174,6 +256,8 @@ export interface FilesPort {
   /** 本机软删除 (线程默认不同步, 但仍进入统一回收站)。 */
   deleteThread(id: string): Promise<void>
   renameThread(id: string, title: string): Promise<void>
+  // 线程任务关系（本机独占）由 ThreadTaskStoragePort 提供；多实体写必须由底层
+  // Storage 在同一 IDB 事务内完成。
   // 统一 Node 文件面 (AI fs.* §6): 跨 kind 寻址读 (原始节点, 调用方按 kind gate / stripNode 净化)。
   /** 列出指定 kind 的活跃完整节点 (fs.list 后端)。 */
   fsListNodes(kinds: NodeKind[]): Promise<Node[]>
@@ -181,17 +265,23 @@ export interface FilesPort {
   fsGetNode(id: string): Promise<Node | undefined>
   /** fs.create 后端: 按 kind 新建, 回读为 Node (file 不可创建)。 */
   fsCreateNode(input: FsCreateInput): Promise<Node>
-  /** fs.write 后端: 按 kind 改字段, 回读为 Node。 */
-  fsUpdateNode(kind: NodeKind, id: string, patch: FsWritePatch): Promise<Node | undefined>
+  /** fs.write 后端: 按 kind 改字段, 回读为 Node；expectedVersion 绑定用户审批时快照。 */
+  fsUpdateNode(
+    kind: NodeKind,
+    id: string,
+    patch: FsWritePatch,
+    expectedVersion?: string,
+  ): Promise<Node | undefined>
   /** fs.move 后端: 改父 + 同级位置 (note 树 / bookmark 归夹)。 */
   fsMoveNode(
     kind: NodeKind,
     id: string,
     parentId: string | null,
     afterSortKey?: string | null,
+    expectedVersion?: string,
   ): Promise<Node | undefined>
-  /** fs.delete 后端: 按 kind 删 (软删 / 取消关注)。 */
-  fsDeleteNode(kind: NodeKind, id: string): Promise<void>
+  /** fs.delete 后端: 按 kind 删 (软删 / 取消关注)；expectedVersion 防止旧审批删除新版。 */
+  fsDeleteNode(kind: NodeKind, id: string, expectedVersion?: string): Promise<void>
   /** fs.readBlob 后端: 文件二进制 base64 (大文件不内联, base64 空)。 */
   fsReadBlob(id: string): Promise<{ mime: string; size: number; base64: string } | undefined>
 }
@@ -199,8 +289,12 @@ export interface FilesPort {
 let port: FilesPort | null = null
 
 /** core 在启动时注册其 FilesPort 实现。 */
-export function registerFilesPort(p: FilesPort): void {
+export function registerFilesPort(p: FilesPort): () => void {
+  const previous = port
   port = p
+  return () => {
+    if (port === p) port = previous
+  }
 }
 
 /** 取「我的」数据端口 (插件用); 未注册 (BootGate 未挂载) 时抛错。 */

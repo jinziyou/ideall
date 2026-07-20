@@ -25,9 +25,10 @@ export interface EmbedConnection {
 }
 
 type Listener = () => void
+type RegisteredConnection = Readonly<{ connection: EmbedConnection }>
 
 const EMPTY: EmbedConnection[] = []
-const connections = new Map<string, EmbedConnection>()
+const connections = new Map<string, RegisteredConnection>()
 const listeners = new Set<Listener>()
 let snapshot: EmbedConnection[] = EMPTY
 
@@ -35,26 +36,47 @@ function emit(): void {
   snapshot =
     connections.size === 0
       ? EMPTY
-      : [...connections.values()].sort((a, b) => a.grantedAt - b.grantedAt)
-  for (const l of listeners) l()
+      : [...connections.values()]
+          .map(({ connection }) => connection)
+          .sort((a, b) => a.grantedAt - b.grantedAt)
+  // 订阅者是 UI 侧的外部代码：单个坏监听器不能阻断其余订阅者，也不能让已完成的
+  // registry 变更以异常形式泄漏给调用方。复制集合也避免本轮通知受订阅增删影响。
+  for (const listener of [...listeners]) {
+    try {
+      listener()
+    } catch {
+      // Listener failures are isolated; the latest snapshot remains readable.
+    }
+  }
 }
 
 /** EmbedHost 建桥时登记一个连接; 返回 deregister (卸载时调, 幂等)。卸载 ≠ 吊销, 故不触发 revoke。 */
 export function registerConnection(c: EmbedConnection): () => void {
-  connections.set(c.id, c)
+  // registration identity 与 connection 对象分离：即使调用方复用同一对象重新注册，旧
+  // disposer 也不能删除后来占据同一 id 的 generation。
+  const registration: RegisteredConnection = { connection: c }
+  connections.set(c.id, registration)
   emit()
   return () => {
-    if (connections.delete(c.id)) emit()
+    if (connections.get(c.id) !== registration) return
+    connections.delete(c.id)
+    emit()
   }
 }
 
-/** 面板吊销一个连接: 移出注册表并执行其 revoke (幂等; 未知/已撤 id 安全 no-op)。 */
+/**
+ * 面板吊销一个连接（未知/已撤 id 安全 no-op）。
+ *
+ * 安全顺序必须是：先关闭真实能力面，再删除同一条 registry 记录，最后通知 UI。若能力
+ * 吊销失败，连接仍留在列表中供重试；订阅者异常则由 emit 隔离，不会反向影响吊销结果。
+ */
 export function revokeConnection(id: string): void {
-  const c = connections.get(id)
-  if (!c) return
+  const registration = connections.get(id)
+  if (!registration) return
+  registration.connection.revoke()
+  if (connections.get(id) !== registration) return
   connections.delete(id)
   emit()
-  c.revoke()
 }
 
 export function subscribeConnections(listener: Listener): () => void {

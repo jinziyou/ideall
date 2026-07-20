@@ -1,10 +1,12 @@
-// 官方 wonita 服务的 HTTP 适配器 —— `ServerPort` 的参考实现 (对接 wonita server)。
+// 官方 wonita 服务的 HTTP 适配器 —— `ServerPort` 的参考实现。
 //
-// **本文件是整个前端唯一允许 import wire DTO (`@/lib/api/server`, openapi 生成) 的地方**
-// (由 eslint 强制)。业务代码一律用 `@protocol/server-port` 的领域类型。
-// 同构: App 客户端直连 `NEXT_PUBLIC_SERVER_ADDR`, `pnpm dev` SSR 渲染期读 `SERVER_ADDR`
-// (见 lib/env.ts)。
-import { API_V1 } from "@/lib/env"
+// **本文件是整个前端唯一允许 import wire DTO (`@/lib/api/server`, OpenAPI 生成) 的地方**
+// (由 eslint 强制)。业务代码一律使用 `@protocol/server-port` 的领域类型。
+//
+// V2 App 端点承载 auth/community/profile 读写；V2 Data 的 corpus/graph/catalog 端点可匿名
+// 直连。匿名 corpus query 单次最多 50 条，适配器用 cursor 串联来保留领域层旧有
+// offset 语义，不向 renderer 暴露 service token。
+import { API_V2_APP, API_V2_DATA } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
 import type { components } from "@/lib/api/server"
 import type {
@@ -22,45 +24,231 @@ import type {
 } from "@protocol/server-port"
 
 type Wire = components["schemas"]
+type V2Envelope<T> = { data: T; meta: Wire["V2Meta"] }
 
-// ── v1 响应封装: 所有 v1 端点统一返回 `{ data, meta? }` (见 wonita infra/response.rs)。 ──────────────
-/** wonita v1 统一成功响应封装。`meta` 仅列表端点带 (分页/受限标记), 单资源端点省略。 */
-type Enveloped<T> = { data: T; meta?: Wire["Meta"] | null }
+const PUBLIC_QUERY_LIMIT = 50
+const DOMAIN_QUERY_LIMIT = 200
+const MAX_CURSOR_REQUESTS = 200
 
-/** 把 `{data, meta}` 封装的 ApiResult 解一层到 `data`; ok=false 透传, 空体 (204) → data:null。 */
-function unwrap<T>(res: ApiResult<Enveloped<T>>): ApiResult<T> {
-  if (!res.ok) return res
-  return { ok: true, data: res.data ? res.data.data : null }
+/** V2 session claims → ideall 当前用户。avatar 在 V2 无写入来源，领域边界统一补 null。 */
+export function normalizeCurrentUser(x: Wire["V2AppClaimsData"]): CurrentUser {
+  return {
+    id: x.account_id,
+    email: x.email,
+    name: x.display_name,
+    avatar: null,
+  }
 }
 
-/** 文章不透明 id = base64url(url) (URL-safe 无填充), 与 wonita `decode_article_id` 对称。 */
-function encodeArticleId(url: string): string {
-  const bytes = new TextEncoder().encode(url)
-  let binary = ""
-  for (const b of bytes) binary += String.fromCharCode(b)
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+/** V2 稳定文章 ID 使用的 URL 规范化，与 wonita `v2::ids::canonical_url` 对齐。 */
+export function canonicalArticleUrl(rawUrl: string): string {
+  const parsed = new URL(rawUrl.trim())
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new TypeError("文章 URL 必须使用 http(s)")
+  }
+  if (parsed.username || parsed.password) {
+    throw new TypeError("文章 URL 不得包含凭证")
+  }
+  // WHATWG URL 已处理 IDNA、主机名小写、默认端口与空路径；wonita 额外去掉域名尾点。
+  parsed.hostname = parsed.hostname.replace(/\.$/, "")
+  parsed.hash = ""
+  return parsed.toString()
 }
 
-// ── 漂移门 (编译期, 零运行时): wire DTO 必须仍可赋给 ideall 领域类型。 ────────────────────────────
-// wonita 服务改/删 ideall 依赖的字段 → `gen:api` 重生成 server.d.ts → 下面恒等映射的返回类型注解
-// 编译失败 → CI 红。这是「接口约定权威在 ideall」落到类型层的硬保证。
-// (InfoQuery→ArticleSearch 的漂移门见下方 `buildQueryBody` 的显式返回类型注解。)
-const _contractGates = {
-  info: (x: Wire["Info"]): Info => x,
-  relatedInfo: (x: Wire["RelatedInfo"]): RelatedInfo => x,
-  entityDetail: (x: Wire["EntityDetail"]): EntityDetail => x,
-  peerPublisher: (x: Wire["PeerPublisher"]): PeerPublisher => x,
-  publication: (x: Wire["Publication"]): Publication => x,
-  publishDraft: (x: PublishDraft): Wire["NewPublication"] => x,
-  authBody: (x: Wire["AuthBody"]): AuthBody => x,
-  authCredentials: (x: AuthCredentials): Wire["AuthPayload"] => x,
-  // GET /v1/auth/session 的 claims → CurrentUser: avatar 缺省规范化为 null, 保持领域「avatar 必有」的接口约定。
-  currentUser: (x: Wire["UserClaimsData"]): CurrentUser => ({ ...x, avatar: x.avatar ?? null }),
+/** `a:<sha256(canonical URL)>`，不再使用 V1 的 base64url(raw URL) 临时 ID。 */
+export async function articleIdV2(rawUrl: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error("当前运行时不支持 SHA-256")
+  const canonical = canonicalArticleUrl(rawUrl)
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonical),
+  )
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  )
+  return `a:${hex}`
 }
-void _contractGates
 
-// ── 运行时语义门 (缓解「结构对、含义错」: 字段名/类型不变但单位漂移, 见 info-timestamp-unit-ms 约定) ──
-/** 时间戳应为 epoch 毫秒。`0` 为「无时间」哨兵; 合法毫秒远大于 1e11 (秒级 ~1.7e9 会被识破)。 */
+function utcWeekStart(timestamp: number): number {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return timestamp
+  const date = new Date(timestamp)
+  date.setUTCHours(0, 0, 0, 0)
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7))
+  return date.getTime()
+}
+
+function utcMonthStart(timestamp: number): number {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return timestamp
+  const date = new Date(timestamp)
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
+}
+
+export function articleFromV2(article: Wire["V2DataArticle"]): Info {
+  return {
+    url: article.canonical_url,
+    title: article.title,
+    data: article.body,
+    language: article.language,
+    labels: (article.entities ?? []).map((entity) => ({
+      label: entity.label,
+      name: entity.surface || entity.canonical_name,
+      period: utcWeekStart(article.collected_at_ms),
+      // mention DTO 不携带词条目录字段；详情页会通过 entity catalog 获得真实值。
+      has_entry: false,
+      wikipedia_url: null,
+    })),
+    publisher: {
+      domain: article.publisher_domain,
+      // article DTO 只携带 domain；发布者名称在 catalog 详情中。
+      name: article.publisher_domain,
+      period: utcMonthStart(article.collected_at_ms),
+    },
+    collect_time: article.collected_at_ms,
+    publish_time: article.published_at_ms,
+  }
+}
+
+export function publicationFromV2(value: Wire["V2AppPublication"]): Publication {
+  return {
+    id: value.publication_id,
+    title: value.title,
+    url: value.url,
+    body: value.body,
+    created_at: value.created_at_ms,
+  }
+}
+
+export function peerPublisherFromV2(value: Wire["V2AppPublicAccount"]): PeerPublisher {
+  return {
+    id: value.account_id,
+    name: value.display_name,
+    publication_count: value.publication_count,
+  }
+}
+
+function relatedInfoFromV2(value: Wire["V2DataRelatedArticle"]): RelatedInfo {
+  return {
+    ...articleFromV2(value.article),
+    shared: value.shared_entities,
+    // V2 graph 已给出综合 score，但不再单独返回「有词条的共享实体数」。
+    shared_entry: 0,
+  }
+}
+
+function entityDetailFromV2(
+  entity: Wire["V2DataEntityDetail"],
+  neighbors: Wire["V2DataEntityNeighbor"][],
+): EntityDetail {
+  return {
+    label: entity.label,
+    name: entity.canonical_name,
+    mention_count: entity.mention_count,
+    first_seen: entity.first_seen_ms,
+    last_seen: entity.last_seen_ms,
+    has_entry: entity.has_entry,
+    wikipedia_url: entity.wikipedia_url,
+    co_entities: neighbors.map((neighbor) => ({
+      label: neighbor.entity.label,
+      name: neighbor.entity.canonical_name,
+      count: neighbor.shared_articles,
+      has_entry: neighbor.entity.has_entry,
+    })),
+    weekly: entity.weekly.map((period) => ({
+      count: period.mention_count,
+      period: period.period_ms,
+    })),
+  }
+}
+
+function withQuery(url: string, query: URLSearchParams): string {
+  const value = query.toString()
+  return value ? `${url}?${value}` : url
+}
+
+function requiredEnvelope<T>(
+  result: ApiResult<V2Envelope<T>>,
+  invalidMessage = "服务端返回了无效的 V2 响应",
+): ApiResult<V2Envelope<T>> {
+  if (!result.ok || result.data) return result
+  return { ok: false, message: invalidMessage }
+}
+
+function unwrapV2<T, R>(result: ApiResult<V2Envelope<T>>, map: (value: T) => R): ApiResult<R> {
+  const checked = requiredEnvelope(result)
+  if (!checked.ok) return checked
+  return { ok: true, data: checked.data ? map(checked.data.data) : null }
+}
+
+async function findV2Publisher(domain: string): Promise<Wire["V2DataPublisher"] | null> {
+  const query = new URLSearchParams({ q: domain, limit: "20" })
+  const result = requiredEnvelope(
+    await apiFetch<V2Envelope<Wire["V2DataPublisher"][]>>(
+      withQuery(`${API_V2_DATA}/catalog/publishers`, query),
+      { cache: "no-store", defaultErrorMessage: "解析发布者失败" },
+    ),
+  )
+  if (!result.ok) throw new Error(result.message)
+  const normalized = domain.trim().replace(/\.$/, "").toLowerCase()
+  return (
+    result.data?.data.find((publisher) => publisher.domain.toLowerCase() === normalized) ?? null
+  )
+}
+
+async function findV2Entity(label: string, name: string): Promise<Wire["V2DataEntity"] | null> {
+  const query = new URLSearchParams({ q: name, limit: "50" })
+  const result = requiredEnvelope(
+    await apiFetch<V2Envelope<Wire["V2DataEntity"][]>>(
+      withQuery(`${API_V2_DATA}/graph/entities`, query),
+      { cache: "no-store", defaultErrorMessage: "解析实体失败" },
+    ),
+  )
+  if (!result.ok) throw new Error(result.message)
+  const normalizedLabel = label.trim().toUpperCase()
+  const normalizedName = name.trim().toLocaleLowerCase()
+  return (
+    result.data?.data.find(
+      (entity) =>
+        entity.label.trim().toUpperCase() === normalizedLabel &&
+        [entity.canonical_name, entity.display_name]
+          .map((candidate) => candidate.trim().toLocaleLowerCase())
+          .includes(normalizedName),
+    ) ?? null
+  )
+}
+
+async function buildV2ArticleBody(params: InfoQuery): Promise<Wire["V2DataArticleQuery"]> {
+  const body: Wire["V2DataArticleQuery"] = {}
+  if (params.timestamp_from_to) {
+    body.from_ms = params.timestamp_from_to[0]
+    body.to_ms = params.timestamp_from_to[1]
+  }
+  if (params.publisher_domain) {
+    const publisher = await findV2Publisher(params.publisher_domain)
+    if (!publisher) throw new Error("V2 发布者目录中不存在该域名")
+    body.publisher_id = publisher.publisher_id
+  }
+  if (params.entity_label_name?.length) {
+    const entities = await Promise.all(
+      params.entity_label_name.map(([label, name]) => findV2Entity(label, name)),
+    )
+    if (entities.some((entity) => entity === null)) {
+      throw new Error("V2 实体目录中不存在筛选项")
+    }
+    body.entity_ids = entities.map((entity) => entity!.entity_id)
+  }
+  return body
+}
+
+function pageWindow(params: InfoQuery): { size: number; offset: number } {
+  const [rawSize, rawOffset] = params.page_size_offset ?? [DOMAIN_QUERY_LIMIT, 0]
+  const size = Number.isFinite(rawSize)
+    ? Math.min(DOMAIN_QUERY_LIMIT, Math.max(1, Math.trunc(rawSize)))
+    : DOMAIN_QUERY_LIMIT
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.trunc(rawOffset)) : 0
+  return { size, offset }
+}
+
+// ── 运行时语义门：时间戳必须保持 epoch 毫秒。 ─────────────────────────────────
 export function looksLikeMillis(t: number): boolean {
   return t === 0 || (Number.isFinite(t) && t > 1e11)
 }
@@ -68,119 +256,212 @@ export function looksLikeMillis(t: number): boolean {
 function warnIfNotMillis(where: string, t: number | undefined): void {
   if (process.env.NODE_ENV !== "production" && typeof t === "number" && !looksLikeMillis(t)) {
     console.warn(
-      `[server-adapter] ${where} 时间戳疑似非毫秒 (got ${t}); wonita 服务接口约定要求 epoch 毫秒 (info-timestamp-unit-ms)`,
+      `[server-adapter] ${where} 时间戳疑似非毫秒 (got ${t}); wonita V2 接口要求 epoch 毫秒`,
     )
   }
 }
 
-/** 默认分页: 单页 200 条 (= 服务端 limit 上限), 偏移 0 (历史口径)。 */
-const DEFAULT_PAGE_SIZE_OFFSET: [number, number] = [200, 0]
-
-/**
- * 领域 `InfoQuery` → wire `ArticleSearch` (POST /v1/articles/search 请求体)。
- * `page_size_offset` 元组拆成 `limit`/`offset` 两字段 (v1 接口约定口径)。
- * 返回类型显式标注 wire DTO = 编译期漂移门: wonita 改 ArticleSearch 字段 → gen:api 重生成 → 此处编译失败。
- */
-function buildQueryBody(params: InfoQuery): Wire["ArticleSearch"] {
-  const [limit, offset] = params.page_size_offset ?? DEFAULT_PAGE_SIZE_OFFSET
-  return {
-    entity_label_name: params.entity_label_name ?? null,
-    publisher_domain: params.publisher_domain ?? null,
-    timestamp_from_to: params.timestamp_from_to ?? null,
-    limit,
-    offset,
-  }
+// ── 编译期漂移门：生成 DTO 变化会在显式映射/请求体处使 typecheck 失败。 ────────────────
+const _contractGates = {
+  article: articleFromV2,
+  publication: publicationFromV2,
+  peerPublisher: peerPublisherFromV2,
+  currentUser: normalizeCurrentUser,
+  authBody: (value: Wire["AuthBody"]): AuthBody => value,
+  authCredentials: (value: AuthCredentials): Wire["AuthPayload"] => value,
+  publishDraft: (value: PublishDraft): Wire["V2AppNewPublication"] => ({
+    title: value.title,
+    url: value.url ?? "",
+    body: value.body ?? "",
+  }),
 }
+void _contractGates
 
 export const httpServerAdapter: ServerPort = {
   async queryInfo(params) {
-    // POST /v1/articles/search: 承载多实体过滤 (entity_label_name); 返回 {data:[Info], meta}。
-    const res = unwrap(
-      await apiFetch<Enveloped<Info[]>>(`${API_V1}/articles/search`, {
-        method: "POST",
-        json: buildQueryBody(params),
-        cache: "no-store",
-        defaultErrorMessage: "获取最新信息失败",
-      }),
-    )
-    if (res.ok && res.data?.[0]) warnIfNotMillis("Info.collect_time", res.data[0].collect_time)
-    return res
+    try {
+      const baseBody = await buildV2ArticleBody(params)
+      const { size, offset } = pageWindow(params)
+      // limit 必须在整条 cursor 链上保持一致（它参与服务端 filter hash）。
+      const requestLimit = Math.min(PUBLIC_QUERY_LIMIT, Math.max(1, size + offset))
+      let remainingSkip = offset
+      const output: Info[] = []
+      let cursor: string | undefined
+      const seenCursors = new Set<string>()
+
+      for (let request = 0; request < MAX_CURSOR_REQUESTS; request += 1) {
+        const body: Wire["V2DataArticleQuery"] = {
+          ...baseBody,
+          limit: requestLimit,
+          ...(cursor ? { cursor } : {}),
+        }
+        const result = requiredEnvelope(
+          await apiFetch<V2Envelope<Wire["V2DataArticle"][]>>(
+            `${API_V2_DATA}/corpus/articles/query`,
+            {
+              method: "POST",
+              json: body,
+              cache: "no-store",
+              defaultErrorMessage: "获取最新信息失败",
+            },
+          ),
+        )
+        if (!result.ok) return result
+        const envelope = result.data!
+        const rows = envelope.data
+        const start = Math.min(remainingSkip, rows.length)
+        remainingSkip -= start
+        if (remainingSkip === 0 && output.length < size) {
+          output.push(...rows.slice(start, start + size - output.length).map(articleFromV2))
+        }
+        if (output.length >= size || !envelope.meta.has_more) {
+          if (output[0]) warnIfNotMillis("Info.collect_time", output[0].collect_time)
+          return { ok: true, data: output }
+        }
+        const next = envelope.meta.next_cursor
+        if (!next || seenCursors.has(next)) {
+          return { ok: false, message: "服务端返回了无效的文章分页游标" }
+        }
+        seenCursors.add(next)
+        cursor = next
+      }
+      return { ok: false, message: "文章分页过深，请收窄查询条件" }
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "V2 查询参数无效",
+      }
+    }
   },
 
   async getRelatedInfo(url) {
-    const res = unwrap(
-      await apiFetch<Enveloped<RelatedInfo[]>>(
-        `${API_V1}/articles/${encodeArticleId(url)}/related`,
-        { cache: "no-store", defaultErrorMessage: "获取关联信息失败" },
-      ),
-    )
-    if (!res.ok) {
-      console.error("[getRelatedInfo]", res.message)
+    try {
+      const id = await articleIdV2(url)
+      const result = requiredEnvelope(
+        await apiFetch<V2Envelope<Wire["V2DataRelatedArticle"][]>>(
+          `${API_V2_DATA}/graph/articles/${encodeURIComponent(id)}/related`,
+          { cache: "no-store", defaultErrorMessage: "获取关联信息失败" },
+        ),
+      )
+      if (!result.ok) {
+        console.error("[getRelatedInfo]", result.message)
+        return []
+      }
+      return result.data!.data.map(relatedInfoFromV2)
+    } catch (error) {
+      console.error("[getRelatedInfo]", error)
       return []
     }
-    return Array.isArray(res.data) ? res.data : []
   },
 
   async getInfo(url) {
-    // 返回完整 ApiResult: 调用方 (全面报道整页) 须区分「取数失败 (可重试)」与「真不存在 (data:null)」。
-    // GET /v1/articles/{id} 命中 200{data}, 不存在 404 —— 故 404 规范化为 ok:true & data:null。
-    const res = await apiFetch<Enveloped<Info>>(`${API_V1}/articles/${encodeArticleId(url)}`, {
-      cache: "no-store",
-      defaultErrorMessage: "获取信息详情失败",
-    })
-    if (!res.ok) return res.status === 404 ? { ok: true, data: null } : res
-    return { ok: true, data: res.data ? res.data.data : null }
+    let id: string
+    try {
+      id = await articleIdV2(url)
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "文章 URL 无效" }
+    }
+    const result = await apiFetch<V2Envelope<Wire["V2DataArticle"]>>(
+      `${API_V2_DATA}/corpus/articles/${encodeURIComponent(id)}`,
+      { cache: "no-store", defaultErrorMessage: "获取信息详情失败" },
+    )
+    if (!result.ok) return result.status === 404 ? { ok: true, data: null } : result
+    if (!result.data) return { ok: false, message: "服务端返回了无效的文章详情" }
+    const info = articleFromV2(result.data.data)
+    warnIfNotMillis("Info.collect_time", info.collect_time)
+    return { ok: true, data: info }
   },
 
   async getEntityDetail(label, name) {
-    // GET /v1/entities/{label}/{name}: 实体不存在时服务端回 200 且 mention_count=0 (非 404)。
-    const res = unwrap(
-      await apiFetch<Enveloped<EntityDetail>>(
-        `${API_V1}/entities/${encodeURIComponent(label)}/${encodeURIComponent(name)}`,
-        { cache: "no-store", defaultErrorMessage: "获取实体详情失败" },
-      ),
-    )
-    if (!res.ok) {
-      console.error("[getEntityDetail]", res.message)
+    try {
+      const matched = await findV2Entity(label, name)
+      if (!matched) return null
+      const [entityResult, neighborResult] = await Promise.all([
+        apiFetch<V2Envelope<Wire["V2DataEntityDetail"]>>(
+          `${API_V2_DATA}/graph/entities/${encodeURIComponent(matched.entity_id)}`,
+          { cache: "no-store", defaultErrorMessage: "获取实体详情失败" },
+        ),
+        apiFetch<V2Envelope<Wire["V2DataEntityNeighbor"][]>>(
+          withQuery(
+            `${API_V2_DATA}/graph/entities/${encodeURIComponent(matched.entity_id)}/neighbors`,
+            new URLSearchParams({ limit: "20" }),
+          ),
+          { cache: "no-store", defaultErrorMessage: "获取相关实体失败" },
+        ),
+      ])
+      const detail = requiredEnvelope(entityResult)
+      if (!detail.ok) {
+        console.error("[getEntityDetail]", detail.message)
+        return null
+      }
+      const neighbors = requiredEnvelope(neighborResult)
+      return entityDetailFromV2(detail.data!.data, neighbors.ok ? (neighbors.data?.data ?? []) : [])
+    } catch (error) {
+      console.error("[getEntityDetail]", error)
       return null
     }
-    return res.data
   },
 
   async listPeers() {
-    return unwrap(
-      await apiFetch<Enveloped<PeerPublisher[]>>(`${API_V1}/peers`, {
-        cache: "no-store",
-        defaultErrorMessage: "获取社区发布者失败",
-      }),
-    )
+    const peers: PeerPublisher[] = []
+    let cursor: string | undefined
+    const seenCursors = new Set<string>()
+    for (let request = 0; request < MAX_CURSOR_REQUESTS; request += 1) {
+      const query = new URLSearchParams({ limit: "100" })
+      if (cursor) query.set("cursor", cursor)
+      const result = requiredEnvelope(
+        await apiFetch<V2Envelope<Wire["V2AppPublicAccount"][]>>(
+          withQuery(`${API_V2_APP}/community/accounts`, query),
+          { cache: "no-store", defaultErrorMessage: "获取社区发布者失败" },
+        ),
+      )
+      if (!result.ok) return result
+      peers.push(...result.data!.data.map(peerPublisherFromV2))
+      if (!result.data!.meta.has_more) return { ok: true, data: peers }
+      const next = result.data!.meta.next_cursor
+      if (!next || seenCursors.has(next)) {
+        return { ok: false, message: "服务端返回了无效的账户分页游标" }
+      }
+      seenCursors.add(next)
+      cursor = next
+    }
+    return { ok: false, message: "账户目录分页过深" }
   },
 
   async getPeerPublications(id) {
-    const res = unwrap(
-      await apiFetch<Enveloped<Publication[]>>(
-        `${API_V1}/peers/${encodeURIComponent(id)}/publications`,
+    const result = unwrapV2(
+      await apiFetch<V2Envelope<Wire["V2AppPublication"][]>>(
+        `${API_V2_APP}/community/accounts/${encodeURIComponent(id)}/publications`,
         { cache: "no-store", defaultErrorMessage: "获取发布失败" },
       ),
+      (values) => values.map(publicationFromV2),
     )
-    if (res.ok && res.data?.[0]) warnIfNotMillis("Publication.created_at", res.data[0].created_at)
-    return res
+    if (result.ok && result.data?.[0]) {
+      warnIfNotMillis("Publication.created_at", result.data[0].created_at)
+    }
+    return result
   },
 
   async publish(token, draft) {
-    return unwrap(
-      await apiFetch<Enveloped<Publication>>(`${API_V1}/me/publications`, {
+    const body: Wire["V2AppNewPublication"] = {
+      title: draft.title,
+      url: draft.url ?? "",
+      body: draft.body ?? "",
+    }
+    return unwrapV2(
+      await apiFetch<V2Envelope<Wire["V2AppPublication"]>>(`${API_V2_APP}/me/publications`, {
         method: "POST",
-        json: { title: draft.title, url: draft.url ?? "", body: draft.body ?? "" },
+        json: body,
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
         defaultErrorMessage: "发布失败",
       }),
+      publicationFromV2,
     )
   },
 
   async deletePublication(token, id) {
-    return apiFetch(`${API_V1}/me/publications/${id}`, {
+    return apiFetch(`${API_V2_APP}/me/publications/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
@@ -189,66 +470,69 @@ export const httpServerAdapter: ServerPort = {
   },
 
   async getServerPublicKey(clientId): Promise<ApiResult<string>> {
-    // GET /v1/auth/handshake/{clientId} → {data:{public_key}} (hex)。apiFetch 已经 resolveFetch 绕 CORS。
-    const res = unwrap(
-      await apiFetch<Enveloped<Wire["Handshake"]>>(
-        `${API_V1}/auth/handshake/${encodeURIComponent(clientId)}`,
+    const result = unwrapV2(
+      await apiFetch<V2Envelope<Wire["Handshake"]>>(
+        `${API_V2_APP}/auth/handshake/${encodeURIComponent(clientId)}`,
         { cache: "no-store", defaultErrorMessage: "获取密钥失败，请重试" },
       ),
+      (value) => value.public_key,
     )
-    if (!res.ok) return res
-    const key = res.data?.public_key
-    return key ? { ok: true, data: key } : { ok: false, message: "获取密钥失败，请重试" }
+    if (!result.ok) return result
+    return result.data ? result : { ok: false, message: "获取密钥失败，请重试" }
   },
 
   async login(payload) {
-    return unwrap(
-      await apiFetch<Enveloped<AuthBody>>(`${API_V1}/auth/login`, {
+    const body: Wire["AuthPayload"] = payload
+    return unwrapV2(
+      await apiFetch<V2Envelope<Wire["AuthBody"]>>(`${API_V2_APP}/auth/login`, {
         method: "POST",
-        json: payload,
+        json: body,
         cache: "no-store",
         defaultErrorMessage: "登录失败",
       }),
+      (value): AuthBody => value,
     )
   },
 
   async register(payload) {
-    return unwrap(
-      await apiFetch<Enveloped<AuthBody>>(`${API_V1}/auth/register`, {
+    const body: Wire["AuthPayload"] = payload
+    return unwrapV2(
+      await apiFetch<V2Envelope<Wire["AuthBody"]>>(`${API_V2_APP}/auth/register`, {
         method: "POST",
-        json: payload,
+        json: body,
         cache: "no-store",
         defaultErrorMessage: "注册失败",
       }),
+      (value): AuthBody => value,
     )
   },
 
   async getMe(token) {
-    // GET /v1/auth/session → {data: UserClaimsData}; 映射到 CurrentUser (avatar 缺省规范化为 null)。
-    const res = await apiFetch<Enveloped<Wire["UserClaimsData"]>>(`${API_V1}/auth/session`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-      defaultErrorMessage: "获取用户信息失败",
-    })
-    if (!res.ok) return res
-    const u = res.data?.data
-    return {
-      ok: true,
-      data: u ? { id: u.id, email: u.email, name: u.name, avatar: u.avatar ?? null } : null,
-    }
+    return unwrapV2(
+      await apiFetch<V2Envelope<Wire["V2AppClaimsData"]>>(`${API_V2_APP}/auth/session`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        defaultErrorMessage: "获取用户信息失败",
+      }),
+      normalizeCurrentUser,
+    )
   },
 
   async updateProfile(token, patch) {
-    // PUT /v1/me/profile —— apiserver 仅支持改 name (见 ProfileUpdate); avatar 预留。204 无响应体。
-    // 漂移门: 请求体显式标注 Wire["ProfileUpdate"] (同 buildQueryBody 口径) —— wonita 改 profile
-    // 字段 (改名/加必填) → gen:api 重生成 → 此处编译失败 → CI 红, 杜绝漂移静默逃逸到运行时。
-    const body: Wire["ProfileUpdate"] = { name: patch.name ?? "" }
-    return apiFetch(`${API_V1}/me/profile`, {
-      method: "PUT",
-      json: body,
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-      defaultErrorMessage: "更新资料失败",
-    })
+    const displayName = patch.name.trim()
+    if (!displayName || [...displayName].length > 100) {
+      return { ok: false, status: 400, message: "发布名称必须为 1–100 个字符" }
+    }
+    const body: Wire["V2AppProfileUpdate"] = { display_name: displayName }
+    return unwrapV2(
+      await apiFetch<V2Envelope<Wire["V2AppClaimsData"]>>(`${API_V2_APP}/me/profile`, {
+        method: "PUT",
+        json: body,
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        defaultErrorMessage: "更新资料失败",
+      }),
+      normalizeCurrentUser,
+    )
   },
 }

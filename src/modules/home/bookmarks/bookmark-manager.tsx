@@ -33,17 +33,17 @@ import {
 import { ConfirmDialog, TextPromptDialog } from "@/shared/prompt-dialog"
 import { cn } from "@/lib/utils"
 import { safeHref, openExternal } from "@/lib/safe-url"
-import { Bookmark, BookmarkFolder } from "@protocol/files"
 import {
-  addFolder,
-  deleteBookmark,
-  deleteFolder,
-  listBookmarks,
-  listFolders,
-  renameFolder,
-  restoreBookmark,
-  updateBookmark,
-} from "@/files/stores/bookmarks-store"
+  createBookmarkFolder,
+  deleteBookmarkFile,
+  deleteBookmarkFolder,
+  listBookmarkFiles,
+  moveBookmarkFile,
+  renameBookmarkFolder,
+  restoreBookmarkFile,
+  type FileBookmark,
+  type FileBookmarkFolder,
+} from "./bookmark-file-system"
 import { formatTime } from "@/lib/format"
 import { undoableDeleteToast } from "@/lib/undo-toast"
 import BookmarkDialog from "./bookmark-dialog"
@@ -54,23 +54,23 @@ import { useIncrementalList } from "@/lib/use-incremental-list"
 type FolderFilter = "all" | "none" | string
 
 export default function BookmarkManager() {
-  const [folders, setFolders] = React.useState<BookmarkFolder[]>([])
-  const [bookmarks, setBookmarks] = React.useState<Bookmark[]>([])
+  const [folders, setFolders] = React.useState<FileBookmarkFolder[]>([])
+  const [bookmarks, setBookmarks] = React.useState<FileBookmark[]>([])
   const [active, setActive] = React.useState<FolderFilter>("all")
   const [query, setQuery] = React.useState("")
   const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [editing, setEditing] = React.useState<Bookmark | null>(null)
+  const [editing, setEditing] = React.useState<FileBookmark | null>(null)
   const [importOpen, setImportOpen] = React.useState(false)
   // 收藏夹对话框状态 (替代 window.prompt/confirm): 重命名/删除以目标夹对象控制 open
   const [newFolderOpen, setNewFolderOpen] = React.useState(false)
-  const [renameTarget, setRenameTarget] = React.useState<BookmarkFolder | null>(null)
-  const [deleteTarget, setDeleteTarget] = React.useState<BookmarkFolder | null>(null)
+  const [renameTarget, setRenameTarget] = React.useState<FileBookmarkFolder | null>(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<FileBookmarkFolder | null>(null)
 
   const refresh = React.useCallback(async () => {
     try {
-      const [f, b] = await Promise.all([listFolders(), listBookmarks()])
-      setFolders(f)
-      setBookmarks(b)
+      const result = await listBookmarkFiles()
+      setFolders(result.folders)
+      setBookmarks(result.bookmarks)
     } catch (e) {
       toast.error("读取书签失败", { description: String(e) })
     }
@@ -81,10 +81,10 @@ export default function BookmarkManager() {
     let active = true
     async function load() {
       try {
-        const [f, b] = await Promise.all([listFolders(), listBookmarks()])
+        const result = await listBookmarkFiles()
         if (active) {
-          setFolders(f)
-          setBookmarks(b)
+          setFolders(result.folders)
+          setBookmarks(result.bookmarks)
         }
       } catch (e) {
         toast.error("读取书签失败", { description: String(e) })
@@ -132,14 +132,14 @@ export default function BookmarkManager() {
     setDialogOpen(true)
   }
 
-  function openEdit(b: Bookmark) {
+  function openEdit(b: FileBookmark) {
     setEditing(b)
     setDialogOpen(true)
   }
 
   async function handleNewFolder(name: string) {
     try {
-      const folder = await addFolder(name)
+      const folder = await createBookmarkFolder(name)
       await refresh()
       setActive(folder.id)
     } catch (e) {
@@ -147,19 +147,19 @@ export default function BookmarkManager() {
     }
   }
 
-  async function handleRenameFolder(folder: BookmarkFolder, name: string) {
+  async function handleRenameFolder(folder: FileBookmarkFolder, name: string) {
     if (name === folder.name) return
     try {
-      await renameFolder(folder.id, name)
+      await renameBookmarkFolder(folder, name)
       await refresh()
     } catch (e) {
       toast.error("重命名失败", { description: String(e) })
     }
   }
 
-  async function handleDeleteFolder(folder: BookmarkFolder) {
+  async function handleDeleteFolder(folder: FileBookmarkFolder) {
     try {
-      await deleteFolder(folder.id)
+      await deleteBookmarkFolder(folder)
       if (active === folder.id) setActive("all")
       await refresh()
     } catch (e) {
@@ -167,26 +167,29 @@ export default function BookmarkManager() {
     }
   }
 
-  async function handleDeleteBookmark(b: Bookmark) {
+  async function handleDeleteBookmark(b: FileBookmark) {
     try {
-      await deleteBookmark(b.id)
+      await deleteBookmarkFile(b)
       setBookmarks((prev) => prev.filter((x) => x.id !== b.id))
       undoableDeleteToast(b.title, async () => {
-        await restoreBookmark(b)
-        setBookmarks((prev) =>
-          [b, ...prev.filter((x) => x.id !== b.id)].sort((a, c) => c.createdAt - a.createdAt),
-        )
+        await restoreBookmarkFile(b)
+        // restore 会提交新的 tombstone generation/version；重新读取，不能把删除前快照放回状态。
+        await refresh()
       })
     } catch (e) {
       toast.error("删除失败", { description: String(e) })
     }
   }
 
-  async function handleMove(b: Bookmark, folderId: string | null) {
+  async function handleMove(b: FileBookmark, folderId: string | null) {
     if (b.folderId === folderId) return
     try {
-      await updateBookmark(b.id, { folderId })
-      setBookmarks((prev) => prev.map((x) => (x.id === b.id ? { ...x, folderId } : x)))
+      const folder =
+        folderId === null ? null : (folders.find((item) => item.id === folderId) ?? null)
+      if (folderId !== null && !folder) throw new Error("目标收藏夹不存在")
+      await moveBookmarkFile(b, folder)
+      // move 推进版本；用 committed 后的目录快照替换旧 DTO，避免下一次动作携带旧版本。
+      await refresh()
     } catch (e) {
       toast.error("移动失败", { description: String(e) })
     }
@@ -417,8 +420,8 @@ function BookmarkCard({
   onDelete,
   onMove,
 }: {
-  bookmark: Bookmark
-  folders: BookmarkFolder[]
+  bookmark: FileBookmark
+  folders: FileBookmarkFolder[]
   onEdit: () => void
   onDelete: () => void
   onMove: (folderId: string | null) => void

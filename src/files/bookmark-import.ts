@@ -6,7 +6,7 @@
 //       <DT><A HREF="https://..." ADD_DATE="..." ICON="data:...">标题</A>
 //     </DL><p>
 //   </DL><p>
-import { NewBookmark } from "@/files/stores/bookmarks-store"
+import type { NewBookmark } from "@protocol/files"
 
 export type ParsedBookmark = NewBookmark & {
   /** 该书签在导出文件中所属的文件夹路径 (顶层在前), 用于重建收藏夹 */
@@ -31,7 +31,9 @@ export function parseBookmarksHtml(html: string): ParsedBookmark[] {
       if (h3) {
         // 文件夹: 紧随其后的 DL 是其内容
         const name = (h3.textContent ?? "").trim() || "未命名"
-        const childDl = dt.querySelector(":scope > dl")
+        const nestedDl = dt.querySelector(":scope > dl")
+        const siblingDl = dt.nextElementSibling?.tagName === "DL" ? dt.nextElementSibling : null
+        const childDl = nestedDl ?? siblingDl
         if (childDl) walk(childDl, [...path, name])
       } else if (anchor) {
         const url = anchor.getAttribute("href") ?? ""

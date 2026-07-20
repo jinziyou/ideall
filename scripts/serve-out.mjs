@@ -7,8 +7,17 @@ import { createServer } from "node:http"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "out")
+const SCRIPT_PATH = fileURLToPath(import.meta.url)
+const ROOT = path.join(path.dirname(SCRIPT_PATH), "..", "out")
 const PORT = Number(process.env.PORT || 5030)
+const HELP = `用法:
+  pnpm serve:out
+  PORT=5031 node scripts/serve-out.mjs
+
+说明:
+  从 out/ 启动静态导出预览服，路由解析顺序为:
+  /x -> out/x -> out/x.html -> out/x/index.html -> 404.html
+`
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -24,29 +33,45 @@ const MIME = {
 }
 
 /** URL 路径 → 磁盘文件 (查不到返回 null)。含路径穿越防护。 */
-function resolveFile(urlPath) {
-  const clean = decodeURIComponent(urlPath.split("?")[0]).replace(/\/+$/, "") || "/"
+export function resolveFile(urlPath, root = ROOT) {
+  let clean
+  try {
+    clean = decodeURIComponent(urlPath.split("?")[0]).replace(/\/+$/, "") || "/"
+  } catch {
+    return null
+  }
   const rel = clean === "/" ? "index.html" : clean.slice(1)
-  const abs = path.resolve(ROOT, rel)
-  if (!abs.startsWith(ROOT + path.sep) && abs !== ROOT) return null
+  const normalizedRoot = path.resolve(root)
+  const abs = path.resolve(normalizedRoot, rel)
+  if (!abs.startsWith(normalizedRoot + path.sep) && abs !== normalizedRoot) return null
   for (const candidate of [abs, `${abs}.html`, path.join(abs, "index.html")]) {
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate
   }
   return null
 }
 
-if (!existsSync(path.join(ROOT, "index.html"))) {
-  console.error("out/ 不存在或为空 —— 先 pnpm build 生成静态导出")
-  process.exit(1)
+function main() {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    console.log(HELP.trimEnd())
+    return
+  }
+
+  if (!existsSync(path.join(ROOT, "index.html"))) {
+    console.error("out/ 不存在或为空 —— 先 pnpm build 生成静态导出")
+    process.exitCode = 1
+    return
+  }
+
+  createServer((req, res) => {
+    const hit = resolveFile(req.url || "/")
+    const file = hit ?? path.join(ROOT, "404.html")
+    res.writeHead(hit ? 200 : 404, {
+      "content-type": MIME[path.extname(file)] ?? "application/octet-stream",
+    })
+    createReadStream(file).pipe(res)
+  }).listen(PORT, () => {
+    console.log(`▶ 静态导出预览: http://localhost:${PORT}  (根 = out/, Ctrl+C 退出)`)
+  })
 }
 
-createServer((req, res) => {
-  const hit = resolveFile(req.url || "/")
-  const file = hit ?? path.join(ROOT, "404.html")
-  res.writeHead(hit ? 200 : 404, {
-    "content-type": MIME[path.extname(file)] ?? "application/octet-stream",
-  })
-  createReadStream(file).pipe(res)
-}).listen(PORT, () => {
-  console.log(`▶ 静态导出预览: http://localhost:${PORT}  (根 = out/, Ctrl+C 退出)`)
-})
+if (process.argv[1] && path.resolve(process.argv[1]) === SCRIPT_PATH) main()

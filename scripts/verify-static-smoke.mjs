@@ -1,90 +1,48 @@
-import { spawn } from "node:child_process"
-import { createServer } from "node:net"
+import {
+  NODE,
+  installShutdownHandlers,
+  isPortAvailable,
+  runCommand,
+  runPnpm,
+  spawnDetached,
+  stopChildProcess,
+  waitForHttpReady,
+} from "./script-utils.mjs"
 
-const PNPM = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
-const NODE = process.execPath
 const PORTS = [5030, 5031, 5032, 5033]
 const READY_TIMEOUT_MS = 45_000
-const SHUTDOWN_TIMEOUT_MS = 5_000
+const HELP = `用法:
+  pnpm verify:smoke:static
+  node scripts/verify-static-smoke.mjs [--no-build] [smoke:notes|smoke:files|smoke:files:preview|smoke:plugins|smoke:trash ...]
+
+说明:
+  以生产形态运行浏览器冒烟：可选执行 pnpm app:export，检查 out/，启动静态预览服，再运行指定 smoke 脚本。
+
+环境变量:
+  SMOKE_LEVEL=core|full  控制部分冒烟脚本的覆盖深度，默认 full。
+`
 
 let staticServer = null
 
-function runCommand(command, args, { env = process.env } = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, stdio: "inherit" })
-    child.on("error", reject)
-    child.on("exit", (code, signal) => {
-      if (code === 0) {
-        resolve()
-        return
-      }
-      reject(new Error(`${command} ${args.join(" ")} exited with ${signal ?? code}`))
-    })
-  })
-}
-
-function isPortAvailable(port) {
-  return new Promise((resolve) => {
-    const server = createServer()
-    server.once("error", () => resolve(false))
-    server.once("listening", () => server.close(() => resolve(true)))
-    server.listen(port)
-  })
-}
-
 function startStaticServer(port) {
-  return spawn(NODE, ["scripts/serve-out.mjs"], {
-    detached: process.platform !== "win32",
+  return spawnDetached(NODE, ["scripts/serve-out.mjs"], {
     env: { ...process.env, PORT: String(port) },
-    stdio: "inherit",
   })
 }
 
 async function waitForServer(baseUrl, child) {
-  const end = Date.now() + READY_TIMEOUT_MS
-  while (Date.now() < end) {
-    if (child.exitCode != null || child.signalCode != null) return false
-    try {
-      const response = await fetch(`${baseUrl}/home/notes`, {
-        signal: AbortSignal.timeout(2_000),
-      })
-      if (response.status < 500) return true
-    } catch {
-      // Static server may still be starting.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_000))
-  }
-  throw new Error(`static server did not become ready at ${baseUrl}`)
+  return waitForHttpReady({
+    url: `${baseUrl}/home/notes`,
+    child,
+    timeoutMs: READY_TIMEOUT_MS,
+    timeoutMessage: `static server did not become ready at ${baseUrl}`,
+  })
 }
 
 async function stopStaticServer() {
   const child = staticServer
-  if (!child || child.exitCode != null || child.signalCode != null) return
   staticServer = null
-
-  await new Promise((resolve) => {
-    const killTimer = setTimeout(() => {
-      try {
-        if (process.platform === "win32") child.kill("SIGKILL")
-        else process.kill(-child.pid, "SIGKILL")
-      } catch {
-        // Already exited.
-      }
-    }, SHUTDOWN_TIMEOUT_MS)
-
-    child.once("exit", () => {
-      clearTimeout(killTimer)
-      resolve()
-    })
-
-    try {
-      if (process.platform === "win32") child.kill("SIGTERM")
-      else process.kill(-child.pid, "SIGTERM")
-    } catch {
-      clearTimeout(killTimer)
-      resolve()
-    }
-  })
+  await stopChildProcess(child)
 }
 
 async function startReadyStaticServer() {
@@ -108,6 +66,11 @@ async function startReadyStaticServer() {
 
 async function main() {
   const args = process.argv.slice(2)
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(HELP.trimEnd())
+    return
+  }
+
   const noBuild = args.includes("--no-build")
   const smokeLevel = (process.env.SMOKE_LEVEL || "full").toLowerCase() === "core" ? "core" : "full"
   const defaultSmokeScripts = ["smoke:notes", "smoke:plugins", "smoke:trash", "smoke:files"]
@@ -120,11 +83,11 @@ async function main() {
   }
 
   if (!noBuild) {
-    console.log("[verify:static-smoke] running static export build")
-    await runCommand(PNPM, ["build"])
+    console.log("[verify:static-smoke] building and validating the static export")
+    await runPnpm(["app:export"])
+  } else {
+    await runCommand(NODE, ["scripts/check-static-export.mjs"])
   }
-
-  await runCommand(NODE, ["scripts/check-static-export.mjs"])
 
   const baseUrl = await startReadyStaticServer()
   const env = { ...process.env, BASE: baseUrl, SMOKE_LEVEL: smokeLevel }
@@ -134,22 +97,14 @@ async function main() {
       console.log(
         `\n[verify:static-smoke] running ${script} against ${baseUrl} (level=${smokeLevel})`,
       )
-      await runCommand(PNPM, [script], { env })
+      await runPnpm([script], { env })
     }
   } finally {
     await stopStaticServer()
   }
 }
 
-process.on("SIGINT", async () => {
-  await stopStaticServer()
-  process.exit(130)
-})
-
-process.on("SIGTERM", async () => {
-  await stopStaticServer()
-  process.exit(143)
-})
+installShutdownHandlers(stopStaticServer)
 
 main().catch(async (error) => {
   await stopStaticServer()

@@ -1,12 +1,12 @@
 /**
  * NER 命名实体 label → 中文 的全站统一口径。
  *
- * 同时服务 home 关注流 (subscription-feed) 与 (discover)/info 模块 (实体页 / 关系图谱),
+ * 同时服务 home 关注流 (subscription-feed) 与 (connected)/info 模块 (实体页 / 关系图谱),
  * 故放在 `src/lib/` 供跨模块复用, 避免各处各写一份导致文案漂移。
  */
 
 /** 命名实体 label → 中文。覆盖后端 (wonita 服务) 返回的全部实体类别。 */
-export const NER_LABEL_TEXT: Record<string, string> = {
+const NER_LABEL_TEXT: Record<string, string> = {
   PER: "人物",
   LOC: "地区",
   ORG: "组织",
