@@ -336,6 +336,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/extensions/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /v1/extensions/registry — ideall 官方签名扩展目录页。 */
+        get: operations["get_extension_registry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/geo/ip": {
         parameters: {
             query?: never;
@@ -1392,6 +1409,14 @@ export interface components {
             ] | null;
             /** @description 主题议题过滤 (closed set, 见 docs/news-classification.md §3.1); 命中数组中任意一个即匹配。 */
             topics?: string[] | null;
+        };
+        ExtensionRegistryEnvelope: {
+            /** @description 由官方 Minisign 根签名的精确 JSON UTF-8 字符串。 */
+            payload: string;
+            /** Format: int32 */
+            schemaVersion: number;
+            /** @description Tauri/minisign 的 Base64 签名文件文本。 */
+            signature: string;
         };
         /** @description `GET /v1/auth/handshake/{client_id}` 响应: 服务端临时 X25519 公钥 (hex)。 */
         Handshake: {
@@ -3042,6 +3067,45 @@ export interface operations {
             };
             /** @description 数据查询失败 */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_extension_registry: {
+        parameters: {
+            query: {
+                /** @description 固定页大小；当前协议只接受 64。 */
+                limit: number;
+                /** @description 前一签名页给出的不透明游标。 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 官方 Minisign 签名的扩展目录信封 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionRegistryEnvelope"];
+                };
+            };
+            /** @description limit 或 cursor 无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 签名目录发布通道暂不可用 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

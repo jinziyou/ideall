@@ -1165,6 +1165,55 @@
         }
       }
     },
+    "/v1/extensions/registry": {
+      "get": {
+        "tags": [
+          "extensions"
+        ],
+        "summary": "GET /v1/extensions/registry — ideall 官方签名扩展目录页。",
+        "operationId": "get_extension_registry",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "固定页大小；当前协议只接受 64。",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "前一签名页给出的不透明游标。",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "官方 Minisign 签名的扩展目录信封",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionRegistryEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "limit 或 cursor 无效"
+          },
+          "503": {
+            "description": "签名目录发布通道暂不可用"
+          }
+        }
+      }
+    },
     "/v1/geo/ip": {
       "get": {
         "tags": [
@@ -6397,6 +6446,30 @@
           }
         }
       },
+      "ExtensionRegistryEnvelope": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "payload",
+          "signature"
+        ],
+        "properties": {
+          "payload": {
+            "type": "string",
+            "description": "由官方 Minisign 根签名的精确 JSON UTF-8 字符串。"
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "signature": {
+            "type": "string",
+            "description": "Tauri/minisign 的 Base64 签名文件文本。"
+          }
+        },
+        "additionalProperties": false
+      },
       "Handshake": {
         "type": "object",
         "description": "`GET /v1/auth/handshake/{client_id}` 响应: 服务端临时 X25519 公钥 (hex)。",
@@ -9025,6 +9098,10 @@
     {
       "name": "integration",
       "description": "对外集成 feed (apiserver 直读 typed 数据)"
+    },
+    {
+      "name": "extensions",
+      "description": "ideall 官方签名扩展目录"
     },
     {
       "name": "data-v2",
