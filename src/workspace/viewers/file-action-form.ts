@@ -184,7 +184,7 @@ export function parseFileActionInput(
 }
 
 export function fileActionRisk(action: FileAction): FileActionRisk {
-  return action.risk ?? (action.destructive ? "destructive" : "safe")
+  return action.risk ?? "safe"
 }
 
 export function capturePendingFileAction(

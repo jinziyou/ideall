@@ -6,7 +6,6 @@ import { AGENT_TASKS_FILE_REF } from "@/filesystem/builtin-app-roots"
 import { withFileWriteLock } from "@/filesystem/write-lock"
 import { MAX_AGENT_TASK_ITEMS } from "../agent-management-file-contract"
 import {
-  AGENT_TASKS_STORAGE_KEY,
   attachTaskRaw,
   createTaskThreadRaw,
   deleteTaskOrThreadRaw,
@@ -40,30 +39,6 @@ function task(index: number, patch: Partial<AgentTask> = {}): AgentTask {
 
 function thread(id: string): Thread {
   return { id, title: "新对话", messages: [], createdAt: 1, updatedAt: 1 }
-}
-
-function installStorage(raw: string | null): { removed: string[]; restore: () => void } {
-  const previous = globalThis.localStorage
-  const removed: string[] = []
-  Object.defineProperty(globalThis, "localStorage", {
-    value: {
-      getItem(key: string) {
-        return key === AGENT_TASKS_STORAGE_KEY ? raw : null
-      },
-      removeItem(key: string) {
-        removed.push(key)
-      },
-    } as unknown as Storage,
-    configurable: true,
-  })
-  return {
-    removed,
-    restore() {
-      if (previous === undefined) Reflect.deleteProperty(globalThis, "localStorage")
-      else
-        Object.defineProperty(globalThis, "localStorage", { value: previous, configurable: true })
-    },
-  }
 }
 
 function installWindow(): { target: EventTarget; restore: () => void } {
@@ -101,14 +76,13 @@ async function flushPromises(): Promise<void> {
 }
 
 test("agent tasks: subscribe initial hydration waits for the canonical tasks lock", async () => {
-  const storage = installStorage(null)
-  const migrationEntered = deferred<void>()
-  let migrationCalls = 0
+  const readEntered = deferred<void>()
+  let readCalls = 0
   const unregister = registerFilesPort({
-    async migrateLegacyThreadTasks() {
-      migrationCalls += 1
-      migrationEntered.resolve()
-      throw new Error("expected initial migration failure")
+    async listThreadTasks() {
+      readCalls += 1
+      readEntered.resolve()
+      return { revision: nextRevision(), tasks: [] }
     },
   } as unknown as FilesPort)
   const lockEntered = deferred<void>()
@@ -123,71 +97,18 @@ test("agent tasks: subscribe initial hydration waits for the canonical tasks loc
     await lockEntered.promise
     unsubscribe = subscribeTasks(() => {})
     await flushPromises()
-    assert.equal(migrationCalls, 0, "subscribe must not hydrate outside the tasks lock")
+    assert.equal(readCalls, 0, "subscribe must not hydrate outside the tasks lock")
 
     releaseLock.resolve()
     await holder
-    await migrationEntered.promise
+    await readEntered.promise
     await flushPromises()
-    assert.equal(migrationCalls, 1)
+    assert.equal(readCalls, 1)
   } finally {
     releaseLock.resolve()
     await holder
     unsubscribe()
     unregister()
-    storage.restore()
-  }
-})
-
-test("agent tasks: legacy snapshot is normalized and only removed after migration commits", async () => {
-  const persisted = Array.from(
-    { length: MAX_AGENT_TASK_ITEMS + 1 },
-    (_, index): Record<string, unknown> => ({ ...task(index) }),
-  )
-  persisted.push({
-    ...task(0),
-    workspaceId: "workspace-newer",
-    status: "unexpected-status",
-    updatedAt: MAX_AGENT_TASK_ITEMS + 2,
-  })
-  persisted.push({ workspaceId: "missing-id", updatedAt: 99 })
-
-  const storage = installStorage(JSON.stringify(persisted))
-  let attempts = 0
-  let input: readonly ThreadTask[] = []
-  const migratedRevision = nextRevision()
-  const unregister = registerFilesPort({
-    async migrateLegacyThreadTasks(tasks: readonly ThreadTask[]) {
-      attempts += 1
-      input = tasks
-      if (attempts === 1) throw new Error("migration transaction aborted")
-      return {
-        revision: migratedRevision,
-        tasks: [...tasks],
-        migrated: true,
-        imported: tasks.length,
-        skipped: 0,
-      }
-    },
-  } as unknown as FilesPort)
-
-  try {
-    const before = getTasks()
-    await assert.rejects(ensureTasksReady(), /transaction aborted/)
-    assert.strictEqual(getTasks(), before)
-    assert.deepEqual(storage.removed, [])
-
-    await ensureTasksReady()
-    assert.equal(input.length, MAX_AGENT_TASK_ITEMS)
-    assert.equal(new Set(input.map((item) => item.id)).size, input.length)
-    assert.equal(input[0]?.id, "thread-0")
-    assert.equal(input[0]?.workspaceId, "workspace-newer")
-    assert.equal(input[0]?.status, "active")
-    assert.deepEqual(storage.removed, [AGENT_TASKS_STORAGE_KEY])
-    assert.deepEqual(getTasks(), input)
-  } finally {
-    unregister()
-    storage.restore()
   }
 })
 

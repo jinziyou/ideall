@@ -36,7 +36,6 @@ import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 
 export const WORKSPACE_ARCHIVE_PACKAGE_KIND = "ideall.workspace-archive"
 export const WORKSPACE_ARCHIVE_PACKAGE_VERSION = 2
-export const WORKSPACE_ARCHIVE_LEGACY_VERSION = 1
 
 const WORKSPACE_ARCHIVE_ID = "workspace-archive"
 const WORKSPACE_ARCHIVE_LABEL = "完整工作区"
@@ -91,17 +90,10 @@ type WorkspaceArchivePayload = {
   plugins: WorkspaceBackupPackage
 }
 
-export type WorkspaceArchivePackage = WorkspaceArchivePayload &
-  (
-    | {
-        version: typeof WORKSPACE_ARCHIVE_PACKAGE_VERSION
-        manifest: WorkspaceArchiveManifest
-      }
-    | {
-        version: typeof WORKSPACE_ARCHIVE_LEGACY_VERSION
-        manifest?: never
-      }
-  )
+export type WorkspaceArchivePackage = WorkspaceArchivePayload & {
+  version: typeof WORKSPACE_ARCHIVE_PACKAGE_VERSION
+  manifest: WorkspaceArchiveManifest
+}
 
 export type WorkspaceArchiveImportPreview = PluginDataImportPreview & {
   encrypted?: boolean
@@ -497,10 +489,7 @@ export function parseWorkspaceArchivePackage(
   if (parsed.kind !== WORKSPACE_ARCHIVE_PACKAGE_KIND) {
     throw new Error("不支持的工作区归档 JSON 版本")
   }
-  if (
-    parsed.version !== WORKSPACE_ARCHIVE_PACKAGE_VERSION &&
-    parsed.version !== WORKSPACE_ARCHIVE_LEGACY_VERSION
-  ) {
+  if (parsed.version !== WORKSPACE_ARCHIVE_PACKAGE_VERSION) {
     throw new Error("不支持的工作区归档 JSON 版本")
   }
   if (!isRecord(parsed.core)) throw new Error("工作区归档缺少 core")
@@ -547,9 +536,6 @@ export function parseWorkspaceArchivePackage(
       workspace: normalizeWorkspaceSnapshot(core.workspace),
     },
     plugins: parseWorkspaceBackupPackage(JSON.stringify(parsed.plugins)),
-  }
-  if (parsed.version === WORKSPACE_ARCHIVE_LEGACY_VERSION) {
-    return { ...normalized, version: WORKSPACE_ARCHIVE_LEGACY_VERSION }
   }
   const expectedManifest = workspaceArchiveManifest(exportedAt, normalized.core, normalized.plugins)
   expectedManifest.checksum = crc32(

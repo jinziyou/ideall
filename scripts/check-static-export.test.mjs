@@ -21,7 +21,6 @@ const REQUIRED_FILES = [
   "settings/basic.html",
   "settings/ai.html",
   "code.html",
-  "trash.html",
 ]
 const tempRoots = []
 
@@ -79,7 +78,7 @@ test("check-static-export requires regular HTML and JavaScript files", async () 
   assert.equal(chunkResult.status, 1)
 })
 
-test("check-static-export requires canonical navigation pages and retains legacy entry checks", async () => {
+test("check-static-export requires canonical navigation pages", async () => {
   for (const relative of [
     "home/following.html",
     "activity/spaces.html",
@@ -89,7 +88,6 @@ test("check-static-export requires canonical navigation pages and retains legacy
     "settings/basic.html",
     "settings/ai.html",
     "home/resources.html",
-    "trash.html",
   ]) {
     const root = await createFixture()
     await rm(path.join(root, "out", relative))

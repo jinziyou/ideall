@@ -739,7 +739,7 @@ export function createResourceFileSystem(): FileSystemProvider {
           const base = {
             id: action.id,
             label: action.label,
-            risk: action.destructive ? ("destructive" as const) : ("safe" as const),
+            risk: action.risk ?? ("safe" as const),
             requires: action.requires?.map((capability) => `resource:${capability}`),
           }
           if (action.invocation === "display") return { ...base, kind: "display" }

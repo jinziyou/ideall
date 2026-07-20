@@ -88,20 +88,21 @@ test("capability surfaces: 旧 panel/static 仅作为真实文件 alias", () => 
   )
 })
 
-test("capability surfaces: 规范路径、后代路径与旧 URL 的匹配边界明确", () => {
+test("capability surfaces: 只匹配规范路径及其后代", () => {
   const fixtures = [
-    ["/activity/spaces", "/activity/spaces/item", null, "agent-spaces"],
-    ["/activity/tasks", "/activity/tasks/item", null, "agent-tasks"],
-    ["/settings/basic", "/settings/basic/item", "/home/settings", "settings"],
-    ["/settings/ai", "/settings/ai/item", "/ai", "agent-settings"],
+    ["/activity/spaces", "/activity/spaces/item", "agent-spaces"],
+    ["/activity/tasks", "/activity/tasks/item", "agent-tasks"],
+    ["/settings/basic", "/settings/basic/item", "settings"],
+    ["/settings/ai", "/settings/ai/item", "agent-settings"],
   ] as const
 
-  for (const [canonical, descendant, legacy, surfaceId] of fixtures) {
+  for (const [canonical, descendant, surfaceId] of fixtures) {
     assert.equal(capabilitySurfaceForPath(canonical)?.id, surfaceId)
     assert.equal(capabilitySurfaceForPath(descendant)?.id, surfaceId)
-    if (legacy) assert.equal(capabilitySurfaceForPath(legacy)?.id, surfaceId)
   }
 
+  assert.equal(capabilitySurfaceForPath("/home/settings"), null)
+  assert.equal(capabilitySurfaceForPath("/ai"), null)
   assert.equal(capabilitySurfaceForPath("/activity/spaceship"), null)
   assert.equal(capabilitySurfaceForPath("/settings/advanced"), null)
   assert.equal(capabilitySurfaceForPath("/ai-mcp"), null)

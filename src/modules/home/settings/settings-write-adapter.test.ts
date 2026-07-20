@@ -116,9 +116,6 @@ function fixture(overrides: Partial<SettingsFileSystemDeps> = {}) {
     selfTestSecureStore() {
       return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
     },
-    migrateSecureStore() {
-      return { available: true, migrated: 0, removedPlaintext: 0, failed: 0, remaining: 0 }
-    },
     revokeConnection(id) {
       return connectionIds.delete(id)
     },

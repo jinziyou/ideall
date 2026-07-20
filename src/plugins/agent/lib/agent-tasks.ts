@@ -1,5 +1,5 @@
 // Agent 任务客户端缓存。任务关系与线程正文的耐久真值均由 FilesPort 背后的 IndexedDB 持有；
-// 本模块只维护 useSyncExternalStore 所需的稳定同步快照。旧 localStorage key 仅作一次性迁移输入。
+// 本模块只维护 useSyncExternalStore 所需的稳定同步快照。
 
 import {
   getFilesPort,
@@ -85,29 +85,6 @@ function normalizeTasks(items: readonly Partial<AgentTask>[]): AgentTask[] {
     .slice(0, MAX_AGENT_TASK_ITEMS)
 }
 
-function parseLegacyTasks(raw: string): AgentTask[] {
-  try {
-    const value: unknown = JSON.parse(raw)
-    if (!Array.isArray(value)) return []
-    return normalizeTasks(
-      value.filter(
-        (item): item is Partial<AgentTask> =>
-          item !== null && typeof item === "object" && !Array.isArray(item),
-      ),
-    )
-  } catch {
-    return []
-  }
-}
-
-function legacyStorage(): Storage | undefined {
-  try {
-    return typeof globalThis.localStorage === "undefined" ? undefined : globalThis.localStorage
-  } catch {
-    return undefined
-  }
-}
-
 function sameTasks(left: readonly AgentTask[], right: readonly AgentTask[]): boolean {
   if (left.length !== right.length) return false
   return left.every((task, index) => {
@@ -157,48 +134,22 @@ function toAgentThread(thread: Thread): AgentThread {
 }
 
 /**
- * 无 FileRef 锁的首次水合原语。浏览器环境下可能把旧 localStorage 快照
- * 幂等迁移到 IDB；只能在调用方已持有 config:tasks 锁时直接使用。
+ * 无 FileRef 锁的首次水合原语；只能在调用方已持有 config:tasks 锁时直接使用。
  */
 export function ensureTasksReadyRaw(): Promise<void> {
   if (ready) return Promise.resolve()
   if (hydration) return hydration
 
   hydration = (async () => {
-    const storage = legacyStorage()
-    if (!storage) {
-      const current = await getFilesPort().listThreadTasks()
-      publish(current.revision, current.tasks)
-      return
-    }
-
-    let raw: string | null
-    try {
-      raw = storage.getItem(AGENT_TASKS_STORAGE_KEY)
-    } catch {
-      const current = await getFilesPort().listThreadTasks()
-      publish(current.revision, current.tasks)
-      return
-    }
-
-    const migrated = await getFilesPort().migrateLegacyThreadTasks(
-      raw === null ? [] : parseLegacyTasks(raw),
-    )
-    publish(migrated.revision, migrated.tasks)
-    if (raw !== null) {
-      try {
-        storage.removeItem(AGENT_TASKS_STORAGE_KEY)
-      } catch {
-        // IDB 事务已经提交；遗留 key 删除失败不应把真值回退到 localStorage。
-      }
-    }
+    const current = await getFilesPort().listThreadTasks()
+    publish(current.revision, current.tasks)
   })().finally(() => {
     hydration = null
   })
   return hydration
 }
 
-/** 公开水合入口；可能发生的 legacy migration 与所有 task writer 共用锁。 */
+/** 公开水合入口；首次耐久读取与所有 task writer 共用锁。 */
 export function ensureTasksReady(): Promise<void> {
   return withFileWriteLock(AGENT_TASKS_FILE_REF, ensureTasksReadyRaw)
 }

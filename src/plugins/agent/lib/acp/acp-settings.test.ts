@@ -1,25 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import {
-  ACP_SETTINGS_STORAGE_KEY,
-  LEGACY_ACP_SETTINGS_STORAGE_KEY,
-  DEFAULT_ACP_SETTINGS,
-  getAcpSettings,
-  parseAcpSettings,
-} from "./acp-settings"
-
-const mem = new Map<string, string>()
-const localStorageStub: Storage = {
-  getItem: (key: string) => (mem.has(key) ? mem.get(key)! : null),
-  setItem: (key: string, value: string) => void mem.set(key, value),
-  removeItem: (key: string) => void mem.delete(key),
-  clear: () => mem.clear(),
-  key: (i: number) => [...mem.keys()][i] ?? null,
-  get length() {
-    return mem.size
-  },
-}
-Object.defineProperty(globalThis, "localStorage", { value: localStorageStub, configurable: true })
+import { DEFAULT_ACP_SETTINGS, parseAcpSettings } from "./acp-settings"
 
 test("null / 空串 → 默认", () => {
   assert.deepEqual(parseAcpSettings(null), DEFAULT_ACP_SETTINGS)
@@ -72,39 +53,4 @@ test("allowEditorConnect 强制布尔", () => {
     parseAcpSettings(JSON.stringify({ allowEditorConnect: 0 })).allowEditorConnect,
     false,
   )
-})
-
-test("ACP settings: 旧公开设置迁移到 ideall 命名空间并删除旧键", () => {
-  mem.clear()
-  const legacySettings = {
-    allowEditorConnect: true,
-    listenPort: 3210,
-    externalAgent: { program: "npx", args: "acp --stdio", cwd: "/tmp/legacy" },
-  }
-  const normalized = { ...legacySettings, executionBackend: "model" }
-  mem.set(LEGACY_ACP_SETTINGS_STORAGE_KEY, JSON.stringify(legacySettings))
-
-  assert.deepEqual(getAcpSettings(), normalized)
-  assert.equal(mem.get(ACP_SETTINGS_STORAGE_KEY), JSON.stringify(normalized))
-  assert.equal(mem.get(LEGACY_ACP_SETTINGS_STORAGE_KEY), undefined)
-})
-
-test("ACP settings: 新旧公开设置同时存在时 canonical 设置胜出", () => {
-  mem.clear()
-  const canonicalSettings = {
-    allowEditorConnect: false,
-    listenPort: 9876,
-    externalAgent: { program: "canonical-acp", args: "--serve", cwd: "/tmp/canonical" },
-    executionBackend: "external-acp" as const,
-  }
-  const legacySettings = {
-    allowEditorConnect: true,
-    listenPort: 1111,
-    externalAgent: { program: "legacy-acp", args: "--stdio", cwd: "/tmp/legacy" },
-  }
-  mem.set(ACP_SETTINGS_STORAGE_KEY, JSON.stringify(canonicalSettings))
-  mem.set(LEGACY_ACP_SETTINGS_STORAGE_KEY, JSON.stringify(legacySettings))
-
-  assert.deepEqual(getAcpSettings(), canonicalSettings)
-  assert.equal(mem.get(LEGACY_ACP_SETTINGS_STORAGE_KEY), undefined)
 })

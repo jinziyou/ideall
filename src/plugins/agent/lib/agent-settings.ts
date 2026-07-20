@@ -21,7 +21,6 @@ import {
 export { PROVIDER_PRESETS } from "../agent-settings-file-contract"
 
 export const AGENT_SETTINGS_STORAGE_KEY = "ideall:agent:settings"
-export const LEGACY_AGENT_SETTINGS_STORAGE_KEY = "wonita:agent:settings"
 /** 仅记录成功凭据 mutation 次数；不包含、派生或暴露任何 API Key 内容。 */
 export const AGENT_SETTINGS_CREDENTIAL_REVISION_STORAGE_KEY =
   "ideall:agent:settings:credential-revision"
@@ -94,24 +93,13 @@ function advanceCredentialRevision(): string {
   return String(next)
 }
 
-/** FileSystem version 使用的不透明单调值；缺失旧数据兼容为当前进程基线。 */
+/** FileSystem version 使用的不透明单调值。 */
 export function agentSettingsCredentialRevisionSnapshot(): string {
   return String(readCredentialRevision())
 }
 
 function readPublicSettingsRaw(s: Storage): string | null {
-  const raw = s.getItem(AGENT_SETTINGS_STORAGE_KEY)
-  const legacy = s.getItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
-  if (raw !== null) {
-    if (legacy !== null) s.removeItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
-    return raw
-  }
-  if (legacy !== null) {
-    s.setItem(AGENT_SETTINGS_STORAGE_KEY, legacy)
-    s.removeItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
-    return legacy
-  }
-  return null
+  return s.getItem(AGENT_SETTINGS_STORAGE_KEY)
 }
 
 function parseSettings(raw: string | null): AgentSettings {
@@ -144,7 +132,6 @@ function persistSettings(next: AgentSettings): void {
   try {
     const s = storage()
     s?.setItem(AGENT_SETTINGS_STORAGE_KEY, JSON.stringify(publicSettings(next)))
-    s?.removeItem(LEGACY_AGENT_SETTINGS_STORAGE_KEY)
   } catch {
     /* 隐私模式 / 存储受限时忽略写入 */
   }
@@ -174,8 +161,6 @@ export function getAgentSettings(): AgentSettings {
   const secureFallback = isTauri() ? null : secureFallbackGet(API_KEY_SECURE_KEY)
   if (secureFallback) {
     cachedApiKey = secureFallback
-  } else if (!isTauri() && parsed.apiKey) {
-    cachedApiKey = parsed.apiKey
   }
   lastParsed = { ...parsed, apiKey: cachedApiKey }
   if (!secureHydrated) void hydrateAgentSettingsSecure()

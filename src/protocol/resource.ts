@@ -120,24 +120,7 @@ export function parseResourceKey(raw: string | null | undefined): ResourceRef | 
   }
 }
 
-export function parseLegacyNodeResource(raw: string | null | undefined): NodeResourceRef | null {
-  if (!raw) return null
-  const i = raw.indexOf(":")
-  if (i <= 0) return null
-  const kind = raw.slice(0, i)
-  let id: string
-  try {
-    id = decodeURIComponent(raw.slice(i + 1))
-  } catch {
-    return null
-  }
-  if (!isNodeKind(kind) || !id) return null
-  return { scheme: "node", kind, id }
-}
-
 export function parseResourceSearch(search: string): ResourceRef | null {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
-  const resource = parseResourceKey(params.get("resource"))
-  if (resource) return resource
-  return parseLegacyNodeResource(params.get("node"))
+  return parseResourceKey(params.get("resource"))
 }

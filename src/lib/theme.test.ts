@@ -1,12 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import {
-  LEGACY_THEME_KEY,
-  THEME_KEY,
-  getThemeChoice,
-  setThemeChoice,
-  subscribeThemeChoice,
-} from "./theme"
+import { THEME_KEY, getThemeChoice, setThemeChoice, subscribeThemeChoice } from "./theme"
 
 const mem = new Map<string, string>()
 const localStorageStub: Storage = {
@@ -21,23 +15,19 @@ const localStorageStub: Storage = {
 }
 Object.defineProperty(globalThis, "localStorage", { value: localStorageStub, configurable: true })
 
-test("theme: 旧主题键迁移到 ideall 命名空间并删除旧键", () => {
+test("theme: 读取当前主题键", () => {
   mem.clear()
-  mem.set(LEGACY_THEME_KEY, "dark")
+  mem.set(THEME_KEY, "dark")
 
   assert.equal(getThemeChoice(), "dark")
   assert.equal(mem.get(THEME_KEY), "dark")
-  assert.equal(mem.get(LEGACY_THEME_KEY), undefined)
 })
 
-test("theme: 新旧主题键同时存在时 canonical 主题胜出", () => {
+test("theme: 非法主题回退 system", () => {
   mem.clear()
-  mem.set(THEME_KEY, "light")
-  mem.set(LEGACY_THEME_KEY, "dark")
+  mem.set(THEME_KEY, "sepia")
 
-  assert.equal(getThemeChoice(), "light")
-  assert.equal(mem.get(THEME_KEY), "light")
-  assert.equal(mem.get(LEGACY_THEME_KEY), undefined)
+  assert.equal(getThemeChoice(), "system")
 })
 
 test("theme: 同进程 choice 改变即使没有 DOM class 变化也通知观察者", () => {

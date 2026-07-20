@@ -636,22 +636,16 @@ test("public config data port: task writes retain the caller lock until Storage 
   const replaceEntered = deferred<void>()
   const replaceResult = deferred<{ revision: number; tasks: ThreadTask[] }>()
   const unregister = registerFilesPort({
-    async migrateLegacyThreadTasks(tasks) {
-      return {
-        revision: 41,
-        tasks: [...tasks],
-        migrated: false,
-        imported: 0,
-        skipped: tasks.length,
-      }
+    async listThreadTasks() {
+      return { revision: 41, tasks: [] }
     },
-    async replaceThreadTasks(tasks, expectedRevision) {
+    async replaceThreadTasks(tasks: readonly ThreadTask[], expectedRevision?: number) {
       assert.equal(expectedRevision, 41)
       assert.deepEqual(tasks, [task])
       replaceEntered.resolve()
       return replaceResult.promise
     },
-  } as FilesPort)
+  } as unknown as FilesPort)
 
   let writeSettled = false
   let competingWriterEntered = false

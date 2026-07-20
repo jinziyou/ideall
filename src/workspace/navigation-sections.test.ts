@@ -36,11 +36,16 @@ test("navigation sections: 可见名称与路径由根目录 link 覆盖", () =>
   assert.equal(section?.path, "/home")
 })
 
-test("navigation sections: 旧根迁入五分区", () => {
-  assert.equal(navigationSectionIdForRoot("subscriptions"), "home")
-  assert.equal(navigationSectionIdForRoot("workspace"), "activity")
-  assert.equal(navigationSectionIdForRoot("community"), "browse")
-  assert.equal(navigationSectionIdForRoot("tool"), "apps")
-  assert.equal(navigationSectionIdForRoot("system"), "settings")
+test("navigation sections: 只接受当前分区与动态挂载根", () => {
+  assert.equal(navigationSectionIdForRoot("home"), "home")
+  assert.equal(navigationSectionIdForRoot("activity"), "activity")
+  assert.equal(navigationSectionIdForRoot("browse"), "browse")
+  assert.equal(navigationSectionIdForRoot("apps"), "apps")
+  assert.equal(navigationSectionIdForRoot("settings"), "settings")
   assert.equal(navigationSectionIdForRoot("mount:app.audio"), "apps")
+  assert.equal(navigationSectionIdForRoot("subscriptions"), "home")
+  assert.equal(navigationSectionIdForRoot("workspace"), "home")
+  assert.equal(navigationSectionIdForRoot("community"), "home")
+  assert.equal(navigationSectionIdForRoot("tool"), "home")
+  assert.equal(navigationSectionIdForRoot("system"), "home")
 })

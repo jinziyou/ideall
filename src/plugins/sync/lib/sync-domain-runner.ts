@@ -26,7 +26,6 @@ import { bytesToHex } from "@/lib/hex"
 import {
   commitSyncManifest,
   discardSyncGeneration,
-  getLegacySyncBlob,
   getSyncGenerationPart,
   getSyncManifest,
   putSyncGenerationPart,
@@ -272,34 +271,7 @@ async function loadRemote<T extends SyncRecord>(
   }
   if (manifestResult.data) return loadPartitionedRemote(ctx, config, manifestResult.data)
 
-  const legacyResult = await getLegacySyncBlob(ctx.storageId)
-  if (!legacyResult.ok) throw new SyncTransportError(legacyResult.message, legacyResult.status)
-  if (!legacyResult.data) {
-    return { records: [], dirty: false, version: 0, needsMigration: false }
-  }
-  const decoded = await decryptRemote(() =>
-    decryptJson<unknown[]>(
-      ctx.key,
-      legacyResult.data!.iv,
-      legacyResult.data!.ciphertext,
-      config.budget,
-    ),
-  )
-  if (!Array.isArray(decoded)) {
-    return { records: [], dirty: true, version: 0, needsMigration: true }
-  }
-  if (decoded.length > config.budget.maxRecords) {
-    throw new SyncBlockLimitError(
-      `远端同步记录超过域上限（${decoded.length} 条，最大 ${config.budget.maxRecords} 条）`,
-    )
-  }
-  const records = decoded.filter((value) => config.isValidRemote(value, ctx.now))
-  return {
-    records,
-    dirty: records.length !== decoded.length,
-    version: 0,
-    needsMigration: true,
-  }
+  return { records: [], dirty: false, version: 0, needsMigration: false }
 }
 
 function snapshotBytes<T extends SyncRecord>(records: T[], budget: SyncBlockBudget) {

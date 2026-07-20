@@ -34,6 +34,7 @@ import { fileTypeInfo, formatBytes, formatTime } from "@/lib/format"
 import { FileTypeBadge, FileTypeIcon } from "@/shared/file-type-icon"
 import { useIncrementalList } from "@/lib/use-incremental-list"
 import { EmptyState } from "@/ui/empty-state"
+import { AsyncState } from "@/ui/async-state"
 import { fileUploadFeedback, saveUploadedFiles } from "./file-upload"
 import { downloadStoredFile, readStoredNodeFile, storedNodeFileRef } from "./file-preview"
 import { getThumbnail } from "@/lib/thumbnail-cache"
@@ -424,10 +425,7 @@ export default function FileManager() {
 
       {/* 列表 */}
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          加载中…
-        </div>
+        <AsyncState status="loading" loadingLabel="正在加载文件…" />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={files.length === 0 ? FileIcon : undefined}

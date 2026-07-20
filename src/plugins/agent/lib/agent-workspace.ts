@@ -133,7 +133,6 @@ const REVISION_DIGITS = 64
 const REVISION_PATTERN = new RegExp(`^(0|[1-9]\\d{0,${REVISION_DIGITS - 1}})$`)
 const MAX_REVISION = 10n ** BigInt(REVISION_DIGITS) - 1n
 const SERVER_STATE: WorkspacesState = { workspaces: [], activeId: "" }
-const LEGACY_WORKSPACE_CREDENTIAL_RECORD_VERSION = 1
 const WORKSPACE_CREDENTIAL_RECORD_VERSION = 2
 
 type WorkspaceCredentialRecord = Readonly<{
@@ -144,17 +143,8 @@ type WorkspaceCredentialRecord = Readonly<{
   revision: string
 }>
 
-type LegacyWorkspaceCredentialRecord = Readonly<{
-  version: typeof LEGACY_WORKSPACE_CREDENTIAL_RECORD_VERSION
-  target: string | null
-  apiKey: string
-}>
-
 type ParsedWorkspaceCredential =
-  | Readonly<{ kind: "record"; record: WorkspaceCredentialRecord }>
-  | Readonly<{ kind: "legacy-record"; record: LegacyWorkspaceCredentialRecord }>
-  | Readonly<{ kind: "legacy"; apiKey: string }>
-  | Readonly<{ kind: "invalid" }>
+  Readonly<{ kind: "record"; record: WorkspaceCredentialRecord }> | Readonly<{ kind: "invalid" }>
 
 /**
  * Workspace 凭据的稳定目标：仅允许 http(s)，并清除 URL userinfo、query 与 fragment。
@@ -201,7 +191,7 @@ function parseWorkspaceCredential(value: string | null): ParsedWorkspaceCredenti
   try {
     const parsed = JSON.parse(value) as unknown
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { kind: "legacy", apiKey: value }
+      return { kind: "invalid" }
     }
     const record = parsed as Record<string, unknown>
     const keys = Object.keys(record).sort()
@@ -232,25 +222,9 @@ function parseWorkspaceCredential(value: string | null): ParsedWorkspaceCredenti
         },
       }
     }
-    if (
-      keys.length === 3 &&
-      keys[0] === "apiKey" &&
-      keys[1] === "target" &&
-      keys[2] === "version" &&
-      record.version === LEGACY_WORKSPACE_CREDENTIAL_RECORD_VERSION
-    ) {
-      return {
-        kind: "legacy-record",
-        record: {
-          version: LEGACY_WORKSPACE_CREDENTIAL_RECORD_VERSION,
-          target: record.target as string | null,
-          apiKey: record.apiKey,
-        },
-      }
-    }
     return { kind: "invalid" }
   } catch {
-    return { kind: "legacy", apiKey: value }
+    return { kind: "invalid" }
   }
 }
 
@@ -719,8 +693,6 @@ export function createAgentWorkspaceStore(deps: AgentWorkspaceStoreDeps): AgentW
         const authoritativeCredential = fallbackRaw !== null ? fallbackCredential : secureCredential
         const authoritativeRecord =
           authoritativeCredential?.kind === "record" ? authoritativeCredential.record : null
-        const legacyRecord =
-          authoritativeCredential?.kind === "legacy-record" ? authoritativeCredential.record : null
         const target = workspace.model.useGlobal ? null : modelEndpoint(workspace.model.baseURL)
         const plaintext = workspace.model.apiKey
         const recordAhead =
@@ -749,28 +721,13 @@ export function createAgentWorkspaceStore(deps: AgentWorkspaceStoreDeps): AgentW
             authoritativeRecord.target === null
               ? encodeWorkspaceCredentialTombstone(BigInt(authoritativeRecord.revision))
               : encodeWorkspaceCredentialTombstone(intendedRevision())
-        } else if (legacyRecord) {
-          // v1 没有 crash marker；仅为兼容旧版本，在 canonical 锁内迁移为 v2。
-          if (legacyRecord.target === target && legacyRecord.apiKey) {
-            apiKey = legacyRecord.apiKey
-            desired = encodeWorkspaceCredential(target, apiKey, intendedRevision())
-          } else {
-            desired = encodeWorkspaceCredentialTombstone(intendedRevision())
-          }
         } else if (plaintext) {
-          // Persisted plaintext carries its endpoint in the same atomic envelope. Bind and scrub it
-          // under the canonical workspace lock, even when the envelope already has a revision.
+          // Current mutation input may temporarily carry the key in memory. Bind it to the endpoint
+          // and scrub it before the public workspace envelope is persisted.
           apiKey = plaintext
           desired = encodeWorkspaceCredential(target, apiKey, intendedRevision())
-        } else {
-          const legacy =
-            authoritativeCredential?.kind === "legacy" ? authoritativeCredential.apiKey : ""
-          if (legacy) {
-            apiKey = legacy
-            desired = encodeWorkspaceCredential(target, apiKey, intendedRevision())
-          } else if (authoritativeCredential?.kind === "invalid") {
-            desired = encodeWorkspaceCredentialTombstone(intendedRevision())
-          }
+        } else if (authoritativeCredential?.kind === "invalid") {
+          desired = encodeWorkspaceCredentialTombstone(intendedRevision())
         }
 
         if (

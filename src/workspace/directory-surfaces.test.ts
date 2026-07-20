@@ -94,21 +94,23 @@ test("directory surfaces: 旧 panel FileRef 只作为指向真实 root 的 alias
   )
 })
 
-test("directory surfaces: 新深链、规范后代路径和旧 alias 的匹配边界明确", () => {
+test("directory surfaces: 只匹配规范路径及其后代", () => {
   const fixtures = [
-    ["/home/following", "/home/following/item", "/home/subscriptions", "subscriptions"],
-    ["/home/bookmarks", "/home/bookmarks/item", null, "bookmarks"],
-    ["/home/resources", "/home/resources/item", null, "resources"],
-    ["/activity/deleted", "/activity/deleted/item", "/trash", "trash"],
-    ["/apps/local-apps", "/apps/local-apps/item", "/apps", "installed-apps"],
+    ["/home/following", "/home/following/item", "subscriptions"],
+    ["/home/bookmarks", "/home/bookmarks/item", "bookmarks"],
+    ["/home/resources", "/home/resources/item", "resources"],
+    ["/activity/deleted", "/activity/deleted/item", "trash"],
+    ["/apps/local-apps", "/apps/local-apps/item", "installed-apps"],
   ] as const
 
-  for (const [canonical, descendant, legacy, surfaceId] of fixtures) {
+  for (const [canonical, descendant, surfaceId] of fixtures) {
     assert.equal(directorySurfaceForPath(canonical)?.id, surfaceId)
     assert.equal(directorySurfaceForPath(descendant)?.id, surfaceId)
-    if (legacy) assert.equal(directorySurfaceForPath(legacy)?.id, surfaceId)
   }
 
+  assert.equal(directorySurfaceForPath("/home/subscriptions"), null)
+  assert.equal(directorySurfaceForPath("/trash"), null)
+  assert.equal(directorySurfaceForPath("/apps"), null)
   assert.equal(directorySurfaceForPath("/home/following-up"), null)
   assert.equal(directorySurfaceForPath("/trash/item"), null)
   assert.equal(directorySurfaceForPath("/apps-store"), null)

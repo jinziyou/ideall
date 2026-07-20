@@ -524,9 +524,6 @@ export function createFileSystemFilesPort(
     async listThreadTasks() {
       return requireThreadTasks().listThreadTasks()
     },
-    async migrateLegacyThreadTasks(tasks) {
-      return requireThreadTasks().migrateLegacyThreadTasks(tasks)
-    },
     async createTaskThread(workspaceId) {
       return requireThreadTasks().createTaskThread(workspaceId)
     },

@@ -117,7 +117,7 @@ test("syncNow: 空服务端 → 上传本地, 统计正确", async () => {
   assert.ok(server.blob, "服务端应已写入密文")
   assert.equal(server.partPutCount, 1)
   assert.equal(server.putCount, 1)
-  assert.deepEqual(server.fallbackGetOrder, ["manifest", "v2-single", "v1-legacy"])
+  assert.equal(server.manifestGetCount, 1)
 })
 
 test("domain sync: 本地记录数与远端密文在处理前受单块预算限制", async () => {

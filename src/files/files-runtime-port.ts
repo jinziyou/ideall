@@ -7,7 +7,6 @@ import {
   createTaskThread,
   deleteTaskThread as deleteTaskThreadAtomic,
   listThreadTasks,
-  migrateLegacyThreadTasks,
   readThreadTaskIndexHead,
   replaceThreadTasks,
   updateThreadTask,
@@ -16,7 +15,6 @@ import {
 const threadTasks = {
   readThreadTaskIndexHead,
   listThreadTasks,
-  migrateLegacyThreadTasks,
   createTaskThread,
   attachThreadTask,
   updateThreadTask,

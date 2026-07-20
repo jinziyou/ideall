@@ -3,7 +3,6 @@ import assert from "node:assert/strict"
 import {
   isResourceKindForScheme,
   isResourceScheme,
-  parseLegacyNodeResource,
   parseResourceKey,
   parseResourceSearch,
   resourceKey,
@@ -42,20 +41,7 @@ test("parseResourceKey: 非法 scheme/kind/id 拒收", () => {
 test("parseResourceSearch: 新 resource 优先, 兼容旧 node 查询", () => {
   const next: ResourceRef = { scheme: "info", kind: "publisher", id: "example.com" }
   assert.deepEqual(parseResourceSearch(`?node=note:old&resource=${resourceQueryValue(next)}`), next)
-  assert.deepEqual(parseResourceSearch("?node=thread:t1"), {
-    scheme: "node",
-    kind: "thread",
-    id: "t1",
-  })
-})
-
-test("parseLegacyNodeResource: 只接受合法 NodeKind", () => {
-  assert.deepEqual(parseLegacyNodeResource("bookmark:b1"), {
-    scheme: "node",
-    kind: "bookmark",
-    id: "b1",
-  })
-  assert.equal(parseLegacyNodeResource("info:x"), null)
+  assert.equal(parseResourceSearch("?node=thread:t1"), null)
 })
 
 test("resource kind guards: scheme 与 kind 均为闭合集合", () => {

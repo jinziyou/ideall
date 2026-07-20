@@ -3,8 +3,9 @@
 // 节点查看器: 关注 (feed)。经 FileSystem 取数 + 经协议内容解析 (resolveSubscription) 拉取单源最新条目。
 // tool 类关注无内容流, 改为「打开工具」启动入口。条目外链经 safeHref 协议白名单 (防伪协议 XSS)。
 import * as React from "react"
-import { ExternalLink, Loader2, Rss } from "lucide-react"
+import { ExternalLink, Rss } from "lucide-react"
 import { Button } from "@/ui/button"
+import { AsyncState } from "@/ui/async-state"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref, openExternal } from "@/lib/safe-url"
 import { resolveSubscription, type FeedItem } from "@protocol/content"
@@ -46,6 +47,7 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
   }, [node])
   const [items, setItems] = React.useState<FeedItem[] | null>(null)
   const [error, setError] = React.useState(false)
+  const [reloadKey, setReloadKey] = React.useState(0)
 
   React.useEffect(() => {
     if (!sub) return
@@ -75,7 +77,7 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
     return () => {
       alive = false
     }
-  }, [nodeId, sub])
+  }, [nodeId, reloadKey, sub])
 
   if (missing) {
     return <div className="p-6 text-sm text-muted-foreground">该关注不存在或已取消。</div>
@@ -84,11 +86,7 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
     return <div className="p-6 text-sm text-muted-foreground">关注读取失败。</div>
   }
   if (loading || !sub) {
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-      </div>
-    )
+    return <AsyncState status="loading" loadingLabel="正在读取关注…" className="h-full" />
   }
 
   return (
@@ -115,41 +113,42 @@ export default function FeedViewer({ nodeId }: NodeViewerProps) {
             打开工具
           </Button>
         </div>
-      ) : items === null ? (
-        <div className="flex justify-center py-8 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      ) : error ? (
-        <p className="text-sm text-muted-foreground">内容加载失败。</p>
-      ) : items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">暂无最新内容。</p>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {items.map((it) => (
-            <li key={it.key} className="flex flex-col gap-0.5 border-b pb-3 last:border-0">
-              {/* it.url 来自其他社区用户发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
-              <div className="flex items-start gap-1">
-                {safeHref(it.url) ? (
-                  <a
-                    href={safeHref(it.url)}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="min-w-0 flex-1 text-sm font-medium hover:underline"
-                  >
-                    {it.title}
-                  </a>
-                ) : (
-                  <span className="min-w-0 flex-1 text-sm font-medium">{it.title}</span>
+        <AsyncState
+          status={items === null ? "loading" : error ? "error" : items.length ? "ready" : "empty"}
+          loadingLabel="正在加载最新内容…"
+          emptyTitle="暂无最新内容"
+          errorTitle="内容加载失败"
+          onRetry={() => setReloadKey((value) => value + 1)}
+          compact
+        >
+          <ul className="flex flex-col gap-3">
+            {(items ?? []).map((it) => (
+              <li key={it.key} className="flex flex-col gap-0.5 border-b pb-3 last:border-0">
+                {/* it.url 来自其他社区用户发布 (跨用户内容), 必须过协议白名单防伪协议 XSS */}
+                <div className="flex items-start gap-1">
+                  {safeHref(it.url) ? (
+                    <a
+                      href={safeHref(it.url)}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="min-w-0 flex-1 text-sm font-medium hover:underline"
+                    >
+                      {it.title}
+                    </a>
+                  ) : (
+                    <span className="min-w-0 flex-1 text-sm font-medium">{it.title}</span>
+                  )}
+                  <CaptureLinkButton title={it.title} url={it.url ?? ""} description={it.body} />
+                </div>
+                {it.body && (
+                  <span className="line-clamp-2 text-xs text-muted-foreground">{it.body}</span>
                 )}
-                <CaptureLinkButton title={it.title} url={it.url ?? ""} description={it.body} />
-              </div>
-              {it.body && (
-                <span className="line-clamp-2 text-xs text-muted-foreground">{it.body}</span>
-              )}
-              <span className="text-xs text-muted-foreground">{formatTimestamp(it.time)}</span>
-            </li>
-          ))}
-        </ul>
+                <span className="text-xs text-muted-foreground">{formatTimestamp(it.time)}</span>
+              </li>
+            ))}
+          </ul>
+        </AsyncState>
       )}
     </div>
   )

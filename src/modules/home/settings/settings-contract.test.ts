@@ -14,7 +14,6 @@ import {
   decodeSettingsDataImportResult,
   decodeSettingsDataPersistenceResult,
   decodeSettingsDataSecureStoreSelfTestResult,
-  decodeSettingsDataSecureStoreMigrationResult,
 } from "./settings-contract"
 
 test("settings contract decodes the five bounded JSON projections", () => {
@@ -345,16 +344,6 @@ test("settings contract decodes the five bounded JSON projections", () => {
       cleanedUp: true,
     }),
     { backend: "system-keychain", roundTrip: true, cleanedUp: true },
-  )
-  assert.deepEqual(
-    decodeSettingsDataSecureStoreMigrationResult({
-      available: true,
-      migrated: 1,
-      removedPlaintext: 2,
-      failed: 0,
-      remaining: 0,
-    }),
-    { available: true, migrated: 1, removedPlaintext: 2, failed: 0, remaining: 0 },
   )
 })
 

@@ -6,7 +6,6 @@ import {
   type Thread,
   type ThreadTask,
   type ThreadTaskIndexHead,
-  type ThreadTaskMigration,
   type ThreadTaskMutation,
   type ThreadTaskPatch,
   type ThreadTaskSnapshot,
@@ -43,7 +42,6 @@ type StateRow = {
   type: "state"
   revision: number
   count: number
-  legacyMigrated: boolean
 }
 
 type TaskRow = {
@@ -70,7 +68,6 @@ const INITIAL_STATE: StateRow = {
   type: "state",
   revision: 0,
   count: 0,
-  legacyMigrated: false,
 }
 
 function taskKey(id: string): string {
@@ -143,7 +140,6 @@ function readStateValue(value: unknown, fallbackCount = 0): StateRow {
     type: "state",
     revision: value.revision as number,
     count: hasStoredCount(value) ? (value.count as number) : fallbackCount,
-    legacyMigrated: value.legacyMigrated === true,
   }
 }
 
@@ -189,15 +185,11 @@ function nextRevision(state: StateRow): number {
   return state.revision + 1
 }
 
-function bumpedState(
-  state: StateRow,
-  options: { count?: number; legacyMigrated?: boolean } = {},
-): StateRow {
+function bumpedState(state: StateRow, options: { count?: number } = {}): StateRow {
   return {
     ...state,
     revision: nextRevision(state),
     count: options.count ?? state.count,
-    legacyMigrated: options.legacyMigrated ?? state.legacyMigrated,
   }
 }
 
@@ -382,117 +374,6 @@ export async function readThreadTaskIndexHead(): Promise<ThreadTaskIndexHead> {
       )
     },
   )
-}
-
-/**
- * 一次性导入旧 localStorage task 快照。marker 与导入行同事务提交；无 live thread、重复、
- * 损坏或超容量的记录都会被跳过，避免产生 dangling task。
- */
-export async function migrateLegacyThreadTasks(
-  legacyTasks: readonly ThreadTask[],
-): Promise<ThreadTaskMigration> {
-  const outcome = await idbRunTransaction<TransactionOutcome<ThreadTaskMigration>>(
-    [STORE_AGENT_TASKS, STORE_NODES],
-    "readwrite",
-    (transaction, setResult, abort) => {
-      const taskStore = transaction.objectStore(STORE_AGENT_TASKS)
-      const nodeStore = transaction.objectStore(STORE_NODES)
-      const rowsRequest = taskStore.getAll()
-      const deletedRequest = nodeStore.index(INDEX_NODES_DELETED_AT).getAllKeys()
-      let rows: unknown[] | undefined
-      let metadataKeys: IDBValidKey[] | undefined
-      let deletedKeys: IDBValidKey[] | undefined
-
-      const finish = () => {
-        if (!rows || !metadataKeys || !deletedKeys) return
-        try {
-          const current = readTasks(rows)
-          const rawState = stateValue(rows)
-          const decodedState = readStateValue(rawState, current.length)
-          const state = { ...decodedState, count: current.length }
-          const stateNeedsRepair =
-            !hasStoredCount(rawState) || decodedState.count !== current.length
-          if (state.legacyMigrated) {
-            if (stateNeedsRepair) taskStore.put(state)
-            setResult({
-              value: {
-                revision: state.revision,
-                tasks: current,
-                migrated: false,
-                imported: 0,
-                skipped: 0,
-              },
-              changed: false,
-            })
-            return
-          }
-
-          const candidates = new Map<string, ThreadTask>()
-          for (const value of legacyTasks) {
-            try {
-              const task = validateTask(value)
-              const previous = candidates.get(task.id)
-              if (!previous || task.updatedAt > previous.updatedAt) candidates.set(task.id, task)
-            } catch {
-              // 旧 localStorage 可能被手工改坏；由 skipped 计数暴露，不阻塞其余迁移。
-            }
-          }
-
-          const liveIds = liveThreadIds(metadataKeys, deletedKeys)
-          const byId = new Map(current.map((task) => [task.id, task]))
-          const imported: ThreadTask[] = []
-          const orderedCandidates = sortTasks([...candidates.values()])
-          for (const task of orderedCandidates) {
-            if (byId.has(task.id) || !liveIds.has(task.id) || byId.size >= MAX_THREAD_TASK_ITEMS) {
-              continue
-            }
-            byId.set(task.id, task)
-            imported.push(task)
-          }
-
-          const nextState =
-            imported.length > 0
-              ? bumpedState(state, { count: byId.size, legacyMigrated: true })
-              : {
-                  ...state,
-                  key: STATE_KEY,
-                  type: "state" as const,
-                  count: byId.size,
-                  legacyMigrated: true,
-                }
-          taskStore.put(nextState)
-          for (const task of imported) taskStore.put(taskRow(task))
-          setResult({
-            value: {
-              revision: nextState.revision,
-              tasks: sortTasks([...byId.values()]),
-              migrated: true,
-              imported: imported.length,
-              skipped: legacyTasks.length - imported.length,
-            },
-            changed: imported.length > 0,
-          })
-        } catch (error) {
-          abort(error)
-        }
-      }
-
-      rowsRequest.onsuccess = () => {
-        rows = rowsRequest.result as unknown[]
-        finish()
-      }
-      collectIndexKeys(nodeStore.index(INDEX_NODES_THREAD_METADATA), (keys) => {
-        metadataKeys = keys
-        finish()
-      })
-      deletedRequest.onsuccess = () => {
-        deletedKeys = deletedRequest.result
-        finish()
-      }
-    },
-  )
-  if (outcome.changed) notifyFilesUpdated({ kind: "thread" })
-  return outcome.value
 }
 
 /** 新建空 thread 与 task；节点、任务行和 revision 同事务生效。 */

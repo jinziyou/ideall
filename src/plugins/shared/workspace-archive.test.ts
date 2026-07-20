@@ -83,22 +83,6 @@ test("workspace archive: 固定格式并可预检完整工作区归档", async (
   assert.equal("mode" in (parsed.core.workspace ?? {}), false)
   assert.equal(parsed.plugins.plugins[0].plugin.id, "git")
 
-  const legacy = JSON.parse(raw) as {
-    version: number
-    manifest?: unknown
-    core: { workspace: Record<string, unknown> }
-  }
-  legacy.version = 1
-  delete legacy.manifest
-  assert.equal("mode" in legacy.core.workspace, false)
-  delete legacy.core.workspace.workspaceKind
-  delete legacy.core.workspace.developmentTool
-  legacy.core.workspace.mode = "connected"
-  const parsedLegacy = parseWorkspaceArchivePackage(JSON.stringify(legacy))
-  assert.equal(parsedLegacy.core.workspace?.workspaceKind, "files")
-  assert.equal(parsedLegacy.core.workspace?.developmentTool, "git")
-  assert.equal("mode" in (parsedLegacy.core.workspace ?? {}), false)
-
   const preview = await previewWorkspaceArchiveImport(raw, "workspace.json", gitManifest.dataPorts)
   assert.equal(preview.ok, true)
   assert.equal(preview.target?.pluginLabel, "完整工作区")
@@ -117,7 +101,7 @@ test("workspace archive: 拒绝非归档格式", () => {
   )
 })
 
-test("workspace archive: v2 清单拒绝正文篡改并继续接受 v1", () => {
+test("workspace archive: v2 清单拒绝正文篡改和旧版归档", () => {
   const pack = createWorkspaceArchivePackage(
     {
       core: { nodes: [noteNode], blobs: [], trashSnapshots: [], workspace: null },
@@ -135,7 +119,10 @@ test("workspace archive: v2 清单拒绝正文篡改并继续接受 v1", () => {
 
   tampered.version = 1
   delete tampered.manifest
-  assert.equal(parseWorkspaceArchivePackage(JSON.stringify(tampered)).version, 1)
+  assert.throws(
+    () => parseWorkspaceArchivePackage(JSON.stringify(tampered)),
+    /不支持的工作区归档 JSON 版本/,
+  )
 })
 
 test("workspace archive: 拒绝畸形核心节点与 Blob", () => {

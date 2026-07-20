@@ -20,13 +20,11 @@ export type CapabilitySurface = Readonly<{
   module: ModuleId
   rootId: "activity" | "settings"
   navigationPath: IdeallPath
-  /** 旧 URL 仅在深链读取边界解析；新入口一律生成 navigationPath。 */
-  legacyPaths: readonly IdeallPath[]
 }>
 
 /**
  * 管理能力的真实文件与 Display 位置。与 directory-surfaces 不同，这些目标是普通配置文件
- * 或能力根；旧 panel/static/URL 只在打开和水合边界解引用。
+ * 或能力根；每个能力只生成并接受当前规范路径。
  */
 export const CAPABILITY_SURFACES: readonly CapabilitySurface[] = [
   {
@@ -38,7 +36,6 @@ export const CAPABILITY_SURFACES: readonly CapabilitySurface[] = [
     module: "agent",
     rootId: "activity",
     navigationPath: "/activity/spaces",
-    legacyPaths: [],
   },
   {
     id: "agent-tasks",
@@ -49,7 +46,6 @@ export const CAPABILITY_SURFACES: readonly CapabilitySurface[] = [
     module: "agent",
     rootId: "activity",
     navigationPath: "/activity/tasks",
-    legacyPaths: [],
   },
   {
     id: "settings",
@@ -60,7 +56,6 @@ export const CAPABILITY_SURFACES: readonly CapabilitySurface[] = [
     module: "home",
     rootId: "settings",
     navigationPath: "/settings/basic",
-    legacyPaths: ["/home/settings"],
   },
   {
     id: "agent-settings",
@@ -71,7 +66,6 @@ export const CAPABILITY_SURFACES: readonly CapabilitySurface[] = [
     module: "agent",
     rootId: "settings",
     navigationPath: "/settings/ai",
-    legacyPaths: ["/ai"],
   },
 ] as const
 
@@ -101,10 +95,6 @@ function isPathAtOrBelow(pathname: string, path: IdeallPath): boolean {
 
 export function capabilitySurfaceForPath(pathname: string): CapabilitySurface | null {
   return (
-    CAPABILITY_SURFACES.find((surface) => isPathAtOrBelow(pathname, surface.navigationPath)) ??
-    CAPABILITY_SURFACES.find((surface) =>
-      surface.legacyPaths.some((path) => isPathAtOrBelow(pathname, path)),
-    ) ??
-    null
+    CAPABILITY_SURFACES.find((surface) => isPathAtOrBelow(pathname, surface.navigationPath)) ?? null
   )
 }

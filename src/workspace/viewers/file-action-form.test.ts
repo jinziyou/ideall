@@ -48,15 +48,15 @@ test("file action form: coerces and validates a declared object schema", () => {
   })
 })
 
-test("file action form: destructive compatibility maps to risk", () => {
-  const legacy = {
+test("file action form: explicit risk is authoritative", () => {
+  const action = {
     id: "delete",
     label: "删除",
     kind: "invoke",
-    destructive: true,
+    risk: "destructive",
   } satisfies FileAction
-  assert.equal(fileActionRisk(legacy), "destructive")
-  assert.equal(fileActionRisk({ ...legacy, risk: "caution" }), "caution")
+  assert.equal(fileActionRisk(action), "destructive")
+  assert.equal(fileActionRisk({ id: "open", label: "打开", kind: "invoke" }), "safe")
 })
 
 test("file action form: pending target includes ref and version", () => {
