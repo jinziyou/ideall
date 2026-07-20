@@ -54,7 +54,10 @@ export class GitHubReleaseClient {
     this.apiUrl = apiUrl.replace(/\/$/, "")
   }
 
-  async request(endpoint, { method = "GET", body, allow404 = false } = {}) {
+  async request(
+    endpoint,
+    { method = "GET", body, allow404 = false, allowMissingReference = false } = {},
+  ) {
     const response = await fetch(`${this.apiUrl}${endpoint}`, {
       method,
       signal: AbortSignal.timeout(30_000),
@@ -70,6 +73,13 @@ export class GitHubReleaseClient {
     if (allow404 && response.status === 404) return null
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 1_000)
+      if (allowMissingReference && response.status === 422) {
+        try {
+          if (JSON.parse(detail)?.message === "Reference does not exist") return null
+        } catch {
+          // Preserve the original GitHub API error below when the body is not JSON.
+        }
+      }
       throw new Error(`${method} ${endpoint} -> ${response.status}: ${detail}`)
     }
     if (response.status === 204) return null
@@ -103,6 +113,7 @@ export class GitHubReleaseClient {
     return this.request(this.repoEndpoint(`/git/refs/tags/${encodeURIComponent(tag)}`), {
       method: "DELETE",
       allow404: true,
+      allowMissingReference: true,
     })
   }
 
