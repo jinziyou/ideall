@@ -116,11 +116,10 @@ pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026"}}'
 
 ## CI / 发布
 
-CI 分三层：
+CI 分两层日常门禁 + 一层发布：
 
-- `.github/workflows/ci.yml`：单一 quality job 运行 `verify:checks`，build job 独立复用 Next 缓存并运行 `app:export`，避免每项检查重复安装依赖，同时锁住静态入口和 bundle 预算。
-- `.github/workflows/rust.yml`：`src-tauri/**` 改动时跑 rustfmt、cargo check、clippy 零警告和 cargo test。
-- `.github/workflows/smoke.yml`：应用面改动时跑静态导出生产形态的浏览器冒烟；本地等价入口是 `pnpm verify:smoke:static`。
+- `.github/workflows/ci.yml`：单 job 跑 `verify:base`（`verify:checks` + `app:export`），应用面改动时接着跑浏览器冒烟（本地等价：`pnpm verify:smoke:static`）。
+- `.github/workflows/rust.yml`：`src-tauri/**` 改动时在 Linux 跑 rustfmt、clippy 零警告和 cargo test；Win/macOS 编译由 `app-build` 桌面 matrix 覆盖。
 
 App 发布由 `.github/workflows/app-build.yml` 负责：
 
@@ -129,7 +128,7 @@ App 发布由 `.github/workflows/app-build.yml` 负责：
 - workflow_dispatch → 仅允许从 `main` 手动构建 `app-edge`。
 - 桌面 matrix 的四个构建目标（macOS arm64 / x64、Linux x64、Windows x64）先上传 1 天保留的 workflow artifacts，不直接写 GitHub Release。最终 publish job 要求这些目标的安装包、updater 签名、`latest.json` 与 `SHA256SUMS` 全部校验通过，才创建正式 draft 或切换 `app-edge`。
 - Android 仅 tag / 手动时产出 debug APK；iOS 需 Apple 证书与 macOS 构建机，未纳入 CI。
-- 所有 edge/tag 构建都会重新执行 JavaScript 质量门禁；tag、手动构建及涉及 `src-tauri/**` 的 push 还会执行 Rust 门禁。tag 另会确认提交已包含在 `main`。
+- `gate` 兼做发版预检（签名密钥 / updater 配置、tag 在 main 上）；JS/Rust 质量门由 CI / rust.yml 覆盖。
 - 发布采用 artifact-first：平台构建或 staging 上传失败不会改动旧 `app-edge`；最终切换使用备份 tag，并在 promotion 失败时回滚旧 Release。正式 tag 仍保持 draft，edge 仍保持 prerelease。
 
 静态导出地址由 GitHub 仓库变量注入；未设置时回退到生产默认：
