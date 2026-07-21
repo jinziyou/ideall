@@ -319,7 +319,7 @@ export interface paths {
         };
         /**
          * GET /v2/data/analytics/corpus — 语料真实聚合: 总量 + 近 N 小时按小时入库量
-         *     (供 admin 仪表盘)。需 `analytics:read` scope。
+         *     (与 `/v1/stats/corpus` 同口径, 供 admin 仪表盘)。需 `analytics:read` scope。
          */
         get: operations["corpus_analytics"];
         put?: never;

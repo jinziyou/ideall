@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "source": {
     "repository": "jinziyou/wonita",
-    "commit": "8150b5a9e094bf15bb5c1aa34bb6407c99af0e5f",
+    "commit": "9709f0f6ed438dde7830c8b9578e5eaed2973350",
     "path": "apiserver/openapi.json"
   },
   "artifact": {
     "path": "openapi/server.json",
-    "sha256": "6307c3c4bfc6d6c0704b1dcc08f7a7a32f0dc6a49394e736d05de9189b8332d0"
+    "sha256": "1eee7fae03e1fb0a564925f58097315e73988d8a7779d9e7e0b3e72acf934153"
   }
 }
