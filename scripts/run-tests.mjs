@@ -4,7 +4,7 @@ import { availableParallelism } from "node:os"
 import { readdirSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { runCapturedProcess } from "./script-utils.mjs"
+import { runCapturedProcess } from "./lib/process.mjs"
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url)
 const SRC_DIR = path.join(path.dirname(SCRIPT_PATH), "..", "src")

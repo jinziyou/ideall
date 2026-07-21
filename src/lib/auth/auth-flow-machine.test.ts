@@ -1,7 +1,8 @@
 // auth-flow XState 编排单测 —— mock ServerPort, 覆盖校验失败与 login 成功路径。
 import { test, afterEach } from "node:test"
 import assert from "node:assert/strict"
-import { registerServerPort, type ServerPort } from "@protocol/server-port"
+import type { ServerPort } from "@protocol/server-port"
+import { registerServerPort } from "@/lib/server/port-registry"
 import { runAuthFlow } from "./auth-flow-machine"
 import { runAuthHandshake } from "./auth-flow-runner"
 

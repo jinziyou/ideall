@@ -14,8 +14,9 @@ import {
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
-import { getSession, subscribeSession } from "@protocol/auth"
-import { getPeerPublications, type Publication } from "@protocol/peer"
+import type { Publication } from "@protocol/server-port"
+import { getSession, subscribeSession } from "@/lib/auth/auth-store"
+import { getPeerPublications } from "@/lib/server/community-api"
 import { formatTimestamp } from "@/lib/format"
 import { safeHref } from "@/lib/safe-url"
 import { ConfirmDialog } from "@/shared/prompt-dialog"

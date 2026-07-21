@@ -4,7 +4,7 @@ import type { SubscriptionType } from "@protocol/subscription"
 import type { ContentResolver, FeedItem, ResolverRegistration } from "@protocol/content"
 
 const resolve: ContentResolver = async (sub, ctx) => {
-  const { getPeerPublications } = await import("@protocol/peer")
+  const { getPeerPublications } = await import("@/lib/server/community-api")
   const res = await getPeerPublications(sub.key)
   if (!res.ok) return { items: [], error: true }
   const items: FeedItem[] = [...(res.data ?? [])]

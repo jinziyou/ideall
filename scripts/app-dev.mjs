@@ -10,7 +10,7 @@ import {
   spawnDetached,
   stopChildProcess,
   waitForChildExit,
-} from "./script-utils.mjs"
+} from "./lib/process.mjs"
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url)
 const DEFAULT_DEV_URL = "http://localhost:5020"

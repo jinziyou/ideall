@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-export const PROJECT_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
+export const PROJECT_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 
 const VERSION_RE =
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/

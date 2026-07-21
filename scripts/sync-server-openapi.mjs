@@ -21,7 +21,7 @@ import {
   DEFAULT_SERVER_ARTIFACT_PATH,
   DEFAULT_SERVER_SOURCE_PATH,
   DEFAULT_SERVER_SOURCE_REPOSITORY,
-} from "./server-openapi-provenance.mjs"
+} from "./lib/server-openapi-provenance.mjs"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)

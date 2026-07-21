@@ -1,4 +1,4 @@
-// M-4 ServerPort 解耦 / 后端可换性测试 (node:test + tsx)。
+// ServerPort 运行时注册与后端可换性测试 (node:test + tsx)。
 //
 // 后端可换 / 可自建是 ideall 的核心能力 (战略方向 D): 「wonita 只是默认与参考实现」。
 // 本测试把这条主张落到可执行保证上, 三件事:
@@ -11,18 +11,12 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 
-import {
-  getServerPort,
-  registerServerPort,
-  type ServerPort,
-  type Info,
-  type Publication,
-} from "./server-port"
-// 缺省回退断言需引用参考适配器 —— protocol 规则允许依赖 @/lib/** 叶子 (见 eslint 配置)。
-import { httpServerAdapter } from "@/lib/server/http-adapter"
+import type { Info, Publication, ServerPort } from "@protocol/server-port"
+import { httpServerAdapter } from "./http-adapter"
+import { getServerPort, registerServerPort } from "./port-registry"
 // 经真实业务 facade 驱动写/鉴权路径, 证明消费方 (不止端口) 也不与 wonita 绑死 (读路径解耦见 info/data.test.ts)。
-import { publish, deletePublication, getPeerPublications } from "@/lib/peer-api"
-import { login } from "@/lib/auth/auth-api"
+import { deletePublication, getPeerPublications, publish } from "./community-api"
+import { login } from "../auth/auth-api"
 
 // ── 一个完全独立于 wonita 的内存后端 (后端可换的可执行证明) ──────────────────────────────────────
 // 仅用 @protocol/server-port 的领域类型, 不碰任何 wire DTO / HTTP / 官方端点。
@@ -170,7 +164,7 @@ test("后端可换·端到端: 零 wonita 后端经真实业务 facade 驱动取
   const token = auth.ok && auth.data ? auth.data.token : ""
   assert.equal(token, "mem-token")
 
-  // 发布完整流程: 经 peer-api facade 发布 → 列表可见 → 删除; 证明写路径全程走 getServerPort()
+  // 发布完整流程：经 community facade 发布 → 列表可见 → 删除，证明写路径全程走 getServerPort()。
   const pub = await publish(token, { title: "来自内存后端" })
   assert.ok(pub.ok && pub.data)
   const pubId = pub.ok && pub.data ? pub.data.id : ""

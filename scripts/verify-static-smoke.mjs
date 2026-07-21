@@ -7,7 +7,7 @@ import {
   spawnDetached,
   stopChildProcess,
   waitForHttpReady,
-} from "./script-utils.mjs"
+} from "./lib/process.mjs"
 
 const PORTS = [5030, 5031, 5032, 5033]
 const READY_TIMEOUT_MS = 45_000

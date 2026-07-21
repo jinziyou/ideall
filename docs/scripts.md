@@ -140,7 +140,10 @@ pnpm app:build
 ## 新增脚本约定
 
 - 新增对外命令时先在 `package.json` 暴露清晰名称，再把实现放到 `scripts/`。
-- 需要启动子进程、探测端口、等待 HTTP 就绪或清理进程时，优先复用 `scripts/script-utils.mjs`。
+- 需要启动子进程、探测端口、等待 HTTP 就绪或清理进程时，优先复用
+  `scripts/lib/process.mjs`。
+- `scripts/` 根目录只放可执行入口及其 `*.test.mjs`；无独立命令行入口的共享模块统一放在
+  `scripts/lib/`，避免维护入口与实现细节混排。
 - 长流程脚本应支持 `--help`，并在失败时输出可定位的脚本名前缀。
 - 冒烟脚本应支持 `BASE`，避免把端口写死在脚本内部。
 - 不要在 npm script 中使用平台专属 shell 命令；需要文件清理或路径处理时用 Node 脚本。

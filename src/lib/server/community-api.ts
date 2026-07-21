@@ -1,6 +1,7 @@
 // 用户(peer)发布层取数 facade —— 公开内容由 remote.server FileSystem 读取，
 // 发布与删除经同一 provider 的显式 action 执行。
 import type { Publication, PublishDraft } from "@protocol/server-port"
+import type { ApiResult } from "@protocol/api-result"
 import {
   invokeRemoteServerAction,
   readRemoteServerFile,
@@ -9,7 +10,6 @@ import {
   type RemotePeerPublicationsResult,
   type RemotePeersResult,
 } from "@/filesystem/remote-server-file-system"
-import type { ApiResult } from "@/lib/api"
 
 export type { Publication, PeerPublisher } from "@protocol/server-port"
 

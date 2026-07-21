@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { validateServerOpenApiProvenance } from "./server-openapi-provenance.mjs"
+import { validateServerOpenApiProvenance } from "./lib/server-openapi-provenance.mjs"
 
 const SCRIPT_PATH = fileURLToPath(import.meta.url)
 const APP_ROOT = path.resolve(path.dirname(SCRIPT_PATH), "..")

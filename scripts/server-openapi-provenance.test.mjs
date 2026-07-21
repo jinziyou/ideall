@@ -7,7 +7,7 @@ import { checkServerOpenApiProvenance } from "./check-server-openapi-provenance.
 import {
   createServerOpenApiProvenance,
   validateServerOpenApiProvenance,
-} from "./server-openapi-provenance.mjs"
+} from "./lib/server-openapi-provenance.mjs"
 import { syncServerOpenApi } from "./sync-server-openapi.mjs"
 
 const tempRoots = []

@@ -5,7 +5,7 @@ import {
   loadProjectVersionState,
   prepareProjectVersionUpdate,
   validateProjectVersion,
-} from "./project-version.mjs"
+} from "./lib/project-version.mjs"
 
 const HELP = `用法:
   pnpm bump <x.y.z>

@@ -9,7 +9,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, test } from "node:test"
 import { parseAppDevArgs } from "./app-dev.mjs"
-import { sleep, spawnCaptured, stopChildProcess, waitForChildExit } from "./script-utils.mjs"
+import { sleep, spawnCaptured, stopChildProcess, waitForChildExit } from "./lib/process.mjs"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const APP_DEV = path.join(ROOT, "scripts", "app-dev.mjs")

@@ -4,13 +4,9 @@
 // 任何实现了 `ServerPort` 的节点 (官方 wonita 服务、第三方、未来嵌入式/局域网 peer)
 // 都能服务 ideall。HTTP → wonita 服务只是「其中一个适配器」(见 src/lib/server/http-adapter)。
 //
-// 与 FilesPort / SyncPort / ContentPort 一脉相承 (端口 + register/get), 但有一点不同:
-// ServerPort 是**同构**的 (SSR 预渲染期也要取数 —— `pnpm dev` 与导出前预渲染, 此时客户端启动前置步骤 BootGate 尚未运行),
-// 故 `getServerPort()` 默认回退到官方 HTTP 适配器; App 形态 / 测试 / 未来其它节点可经
-// `registerServerPort()` 覆盖。领域类型在此自有定义, **不依赖** wonita 服务的 wire DTO
-// (openapi 生成的 `lib/api/server.d.ts`); wire→domain 的映射与漂移门收敛在 HTTP 适配器内。
-import type { ApiResult } from "@/lib/api"
-import { httpServerAdapter } from "@/lib/server/http-adapter"
+// 领域类型在此自有定义，不依赖 wonita wire DTO 或任何运行时实现。默认适配器与可替换实例的
+// 注册逻辑位于 `src/lib/server/port-registry.ts`，wire→domain 映射收敛在 HTTP 适配器内。
+import type { ApiResult } from "./api-result"
 
 // ── 领域类型 (ideall 自有; 与 wonita 服务 wire DTO 在适配器内做编译期漂移门校验) ──────────────
 
@@ -182,23 +178,4 @@ export interface ServerPort {
   getMe(token: string): Promise<ApiResult<CurrentUser>>
   /** 更新发布名称 (PUT /v2/app/me/profile)。V2 不提供 avatar 写入能力。 */
   updateProfile(token: string, patch: { name: string }): Promise<ApiResult<CurrentUser>>
-}
-
-let override: ServerPort | null = null
-
-/**
- * 覆盖默认的 wonita 服务适配器。
- * App 形态 (嵌入式/局域网节点)、测试、或对接非官方 ServerPort 实现时调用; 默认无需注册 (见下)。
- * 传 `null` 清除覆盖、回退默认 (测试复位用)。
- */
-export function registerServerPort(p: ServerPort | null): void {
-  override = p
-}
-
-/**
- * 取 ServerPort 端口。默认回退到官方 HTTP 适配器 (对接 wonita 服务),
- * 故 SSR 预渲染期 (BootGate 未运行) 也可用; `registerServerPort()` 可覆盖。
- */
-export function getServerPort(): ServerPort {
-  return override ?? httpServerAdapter
 }

@@ -1,8 +1,8 @@
 import type { FileRef, IdeallFile } from "@protocol/file-system"
 import type { NoteContent } from "@protocol/files"
 import type { NodeOfKind } from "@protocol/node"
-import type { Publication } from "@protocol/peer"
-import { deletePublication, publish } from "@protocol/peer"
+import type { Publication } from "@protocol/server-port"
+import { deletePublication, publish } from "@/lib/server/community-api"
 import { noteText } from "@/files/note-text"
 import {
   WEB_EXCERPT_TAG,

@@ -77,16 +77,16 @@ Settings section 与 Agent config 的文件版本分别固定为 `settings-v2:<s
 | **files** | `@/files/*` | 一切皆文件——统一 Node 数据层。`stores/`（各 kind store + `nodes-store` 跨 kind 协调层）；顶层 Node 原语：note-blocks / sort-key / notes-tree-util / note-write-queue / flowback / feed-node（关注↔feed 节点投影）/ `files-port`（经 FileSystem registry 的兼容外观）/ `storage-sync-port`（同步专用原子存储面）/ bookmark-import |
 | **modules** | `@/modules/*` | 功能模块——`home`（“我的”：本机笔记/书签/资源/关注/对话的功能 UI = overview/notes/bookmarks/resources/publications/subscriptions）/ `info` / `community` / `tool` / `apps`（本机已安装应用启动器，Tauri 桌面专属；由 `src-tauri/src/installed_apps.rs` + `src/lib/installed-apps.ts` 支撑） |
 | **plugins** | `@/plugins/*` | 插件——`agent`（AI 环境层，BYO-key）/ `sync`（跨端 E2E 同步）/ `embed`（嵌入页 + AI 共用的 Grant→`createLocalMcpServer` 能力链路）/ `code` / `git` / `shell` / `audio` / `database`；公共插件数据能力在 `plugins/shared` |
-| **protocol** | `@protocol/*` | 契约 / 端口（纯类型 / 纯函数，不含 UI）：file-system / engine / node / files（FilesPort 兼容领域外观）/ storage-sync / note-merge / subscription / content / flowback / sync / server-port / peer / auth |
+| **protocol** | `@protocol/*` | 契约 / 端口（纯类型 / 纯函数，不含运行时实现与 UI）：file-system / engine / node / files（FilesPort 兼容领域外观）/ storage-sync / note-merge / subscription / content / flowback / sync / api-result / server-port |
 | **ui** | `@/ui/*` | shadcn 原语 + 块编辑器（`editor/`） |
 | **shared** | `@/shared/*` | 跨层共享 UI；`feeders/` 仅保留工具固定按钮 `PinToolButton` 与统一回流提示 `flowbackToast` |
-| **lib** | `@/lib/*` | 纯工具——utils/format/idb/id/sync-crypto/auth/api（wire DTO 生成物）/server（HTTP 适配器）/ui-actions/active-node/safe-url/theme/env/tauri/updater 等 |
+| **lib** | `@/lib/*` | 工具与运行时适配——utils/format/idb/id/sync-crypto/auth/api（wire DTO 生成物）/server（HTTP 适配器、端口 registry 与社区 facade）/ui-actions/active-node/safe-url/theme/env/tauri/updater 等 |
 
 **别名**：`@/*` → `src/*`；`@protocol/*` → `src/protocol/*`（其余层一律使用 `@/<layer>/...`；app 路由使用 `@/app/*`、`@/app/globals.css`）。
 
 ESLint 强制五条边界：
 
-1. **protocol 纯度**：契约层只可依赖 `@/lib` 纯工具，不得 import UI 或页面代码。
+1. **protocol 纯度**：契约层只可使用同目录相对依赖，不得 import `lib` 运行时、功能层或 UI。
 2. **wire DTO 边界**：后端数据服务的 OpenAPI 生成类型（`@/lib/api/server`）仅允许 `@/lib/server` 与 `@/lib/api` import；protocol 与业务代码一律使用 `@protocol/server-port` 领域类型。
 3. **app 路由不可被反向 import**（路由层只分发打开目标或工作区命令）。
 4. **modules 三应用 info/community/tool 互隔**（互不 import）。
@@ -98,7 +98,10 @@ ESLint 强制五条边界：
 - **本机文件数据**：`@/shared/feeders/pin-tool-button` 与 agent 插件经 `@protocol/files` 的 `getFilesPort()`
   使用兼容领域 DTO；普通 CRUD 由该外观继续分派到 FileSystem registry，不直接依赖底层 Node 存储。只有 sync 经 `StorageSyncPort` 使用含墓碑全量、快照 CAS 与原子 bulk；bulk 返回 Storage 规范化后的实际提交快照。
 - **跨端同步**：“我的”同步面板调用 `@protocol/sync` 的 `getSyncPort()`；sync 插件 `manifest.ts` 注册 SyncPort。
-- **后端取数（wonita 服务数据服务）**：所有信息、发布和鉴权取数经 `@protocol/server-port` 的 `getServerPort()`（ServerPort = 后端数据服务契约 + 自有领域类型）。默认实现是 `@/lib/server` 的 HTTP 适配器，对接 wonita server（后端数据服务的一个实现），也是**唯一** import wire DTO 的位置。ServerPort 是同构端口，SSR 预渲染期（`pnpm dev` 与导出前预渲染）也会取数，因此 `getServerPort()` 默认回退该 HTTP 适配器；App、嵌入式、局域网节点和测试可经 `registerServerPort()` 覆盖。这是 ideall 作为外部消费方、不被单一后端绑死的支点。
+- **后端取数（wonita 服务数据服务）**：`@protocol/server-port` 只定义 ServerPort 与自有领域类型；
+  运行时通过 `@/lib/server/port-registry` 的 `getServerPort()` 取实现。默认 HTTP 适配器对接 wonita
+  server，也是**唯一** import wire DTO 的位置；App、嵌入式、局域网节点和测试可经
+  `registerServerPort()` 覆盖。这是 ideall 作为外部消费方、不被单一后端绑死的支点。
 - 启动注册由 `@/shell/boot-gate.tsx`（客户端启动闸，挂在根 layout）调用 `boot.ts#registerAll()` 完成（组合根，import 各模块 manifest）。
 
 ## Common commands
@@ -154,7 +157,9 @@ ideall 仅以 App 形态分发（当前流程见 [app.md](app.md)，历史迁移
 
 - 默认使用 Server Component，仅交互组件添加 `"use client"`。
 - UI 复用 `src/ui` 的 shadcn 原语，禁止引入并行 UI 库；视觉决策（阴影 / 颜色 / 圆角 / 间距 / 公共组件）以 [docs/design/ui-style.md](design/ui-style.md) 为准。
-- 脚本公共能力集中在 `scripts/script-utils.mjs`；新增验证/冒烟脚本时优先复用其中的命令执行、端口探测、HTTP 就绪等待与子进程清理逻辑；对外长流程脚本应支持 `--help`。
+- 脚本公共能力集中在 `scripts/lib/`；新增验证/冒烟脚本时优先复用 `process.mjs` 中的命令执行、
+  端口探测、HTTP 就绪等待与子进程清理逻辑。`scripts/` 根目录只放可执行入口和对应测试，
+  对外长流程脚本应支持 `--help`。
 - TypeScript strict；后端取数与 DTO 一律经 `@protocol/server-port`（ServerPort + ideall 自有领域类型）。**业务/protocol 代码禁止 import wire DTO**（`@/lib/api/server`），它仅供 `@/lib/server` 适配器消费。
 - 所有 fetch / 数据访问函数必须 `try-catch` + `res.ok` 检查
 - 用户可见文案与代码注释均使用简体中文

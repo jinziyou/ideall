@@ -3,9 +3,9 @@ import nextConfig from "eslint-config-next"
 // 个人信息终端 · 分层边界。顶层目录即架构层:
 //   app(Next 路由薄标记) / shell(终端外壳) / workspace(Display) / filesystem(挂载层) / engines(引擎解析) / files(Node 数据层) /
 //   modules(功能模块 home·info·community·tool) / plugins(agent·sync·embed·code·git·shell·audio·database) / protocol(契约/端口) /
-//   ui(原语+编辑器) / shared(跨层共享 UI) / lib(纯工具)。
+//   ui(原语+编辑器) / shared(跨层共享 UI) / lib(工具与运行时适配)。
 // ESLint 强制五条边界:
-//  (1) protocol 纯度 —— 契约/端口层只依赖 @/lib 纯工具叶子, 不得 import 任何 frame/功能/UI 层。
+//  (1) protocol 纯度 —— 契约/端口层只使用同目录相对依赖，不加载任何运行时实现或 UI 层。
 //  (2) wire DTO 边界 —— 后端 openapi 生成类型 (@/lib/api/server) 仅 HTTP 适配器 (@/lib/server) 可 import。
 //  (3) app 路由不可被反向 import —— app/ 仅是「开标签」薄标记, 复用/功能层经 @protocol 端口协作。
 //  (4) modules 三应用互隔 —— info/community/tool 互不 import, 跨模块一律经 @protocol。
@@ -49,7 +49,7 @@ const config = [
     ],
   },
 
-  // (1) protocol: 纯契约/端口/纯函数, 只依赖 @/lib 纯工具叶子; 不得 import frame/功能/UI 层, 也不得碰 wire DTO。
+  // (1) protocol: 纯契约/端口/纯函数，只允许同目录相对依赖；运行时 registry 与 adapter 留在 lib。
   {
     files: ["src/protocol/**/*.{ts,tsx}"],
     rules: {
@@ -58,20 +58,9 @@ const config = [
         {
           patterns: [
             {
-              group: [
-                "@/app/**",
-                "@/shell/**",
-                "@/workspace/**",
-                "@/filesystem/**",
-                "@/engines/**",
-                "@/files/**",
-                "@/modules/**",
-                "@/plugins/**",
-                "@/ui/**",
-                "@/shared/**",
-              ],
+              group: ["@/**", "@protocol/**"],
               message:
-                "protocol 是纯契约/端口层, 只依赖 @/lib 纯工具; 不得 import frame/功能/UI 层 (领域类型自有定义)",
+                "protocol 是纯契约层，只允许同目录相对依赖；运行时 registry、adapter 与 UI 必须留在所属层",
             },
             WIRE_DTO,
           ],
@@ -221,7 +210,7 @@ const config = [
                 "./settings-file-system",
                 "@/lib/theme",
                 "@/lib/sync-code",
-                "@protocol/auth",
+                "@/lib/auth/auth-store",
                 "@/plugins/embed/connections",
                 "@/shell/runtime-extensions",
               ],
