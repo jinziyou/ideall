@@ -1,11 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import {
-  getServerPort,
-  registerServerPort,
-  type Info,
-  type ServerPort,
-} from "@protocol/server-port"
+import { type Info, type ServerPort } from "@protocol/server-port"
+import { getServerPort, registerServerPort } from "@/lib/server/port-registry"
 import {
   readRemoteServerFile,
   remoteCommunityDirectoryRef,

@@ -7,7 +7,7 @@
 1. `ideall` 仓库的 `.github/workflows/extension-registry.yml` 读取
    `registry/extensions.json`，以既有 Tauri updater Minisign Secret 对每页精确 payload 签名，
    并通过 staging Release 原子切换 `extension-registry` 固定通道。
-2. `wonita` apiserver 的 `GET /v1/extensions/registry` 从该固定公开 Release 读取资产，限制
+2. `wonita` apiserver 的 `GET /v2/extensions/registry` 从该固定公开 Release 读取资产，限制
    `limit`、cursor、响应大小和 JSON 外形后短时缓存。服务端没有签名私钥，也不替代桌面验签。
 3. 桌面端使用内置官方根重新验证每页，并拒绝序列回退、同序列不同信封、过期分页和条目约束
    违规。发现目录和扩展包下载/安装仍是两条独立验签链。
@@ -78,10 +78,12 @@ pnpm registry:verify
 
 发布顺序是：先让 `extension-registry` Release 成功，再部署包含代理路由的 wonita apiserver。验收：
 
-当前状态（2026-07-20）：首次空目录 Release 已发布并通过下载摘要与 Minisign 独立验收；Wonita 代理代码已合并，生产端点仍返回 HTTP 404，等待生产部署。
+当前状态（2026-07-21）：首次空目录 Release 已发布并通过下载摘要与 Minisign 独立验收；Wonita
+已将代理路由迁移到 V2，桌面端与服务端统一使用下列固定端点；生产端点已返回 HTTP 200 和有效的
+签名空目录信封。
 
 ```bash
-curl -fsS 'https://api.wonita.link/v1/extensions/registry?limit=64'
+curl -fsS 'https://api.wonita.link/v2/extensions/registry?limit=64'
 ```
 
 然后在桌面设置页点击“刷新目录”。HTTP 200 只代表代理可用；必须看到客户端来源为 network、状态为

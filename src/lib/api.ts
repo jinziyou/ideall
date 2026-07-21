@@ -11,9 +11,7 @@
  * Origin, App webview 的 `tauri://localhost` 等 Origin 会被挡); 纯浏览器 / SSR 用标准 fetch。
  */
 import { resolveFetch } from "@/lib/tauri"
-
-export type ApiResult<T> =
-  { ok: true; data: T | null } | { ok: false; message: string; status?: number }
+import type { ApiResult } from "@protocol/api-result"
 
 export interface ApiFetchOptions extends RequestInit {
   defaultErrorMessage?: string

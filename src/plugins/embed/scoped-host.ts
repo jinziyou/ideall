@@ -14,7 +14,8 @@ import {
   type FsWritePatch,
 } from "@protocol/node"
 import { getFilesPort, type FilesPort } from "@protocol/files"
-import { getServerPort, type ServerPort } from "@protocol/server-port"
+import type { ServerPort } from "@protocol/server-port"
+import { getServerPort } from "@/lib/server/port-registry"
 import { getSession, setSession, type Session } from "@/lib/auth/auth-store"
 import type { Permission } from "./protocol"
 

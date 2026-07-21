@@ -6,7 +6,6 @@ import {
   type IdeallFile,
 } from "@protocol/file-system"
 import {
-  getServerPort,
   type EntityDetail,
   type Info,
   type InfoQuery,
@@ -15,7 +14,8 @@ import {
   type PublishDraft,
   type RelatedInfo,
 } from "@protocol/server-port"
-import type { ApiResult } from "@/lib/api"
+import type { ApiResult } from "@protocol/api-result"
+import { getServerPort } from "@/lib/server/port-registry"
 import type {
   DirectoryPage,
   FileAction,

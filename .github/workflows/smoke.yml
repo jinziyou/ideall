@@ -15,12 +15,13 @@ on:
       - "next.config.ts"
       - "tsconfig.json"
       - "scripts/smoke/**"
-      - "scripts/script-utils.mjs"
+      - "scripts/lib/process.mjs"
       - "scripts/check-static-export.mjs"
       - "scripts/verify-full.mjs"
       - "scripts/verify-static-smoke.mjs"
       - "scripts/serve-out.mjs"
       - ".github/actions/setup-js/**"
+      - ".github/actions/setup-next-cache/**"
       - ".github/workflows/smoke.yml"
   push:
     branches: [main, dev]
@@ -32,12 +33,13 @@ on:
       - "next.config.ts"
       - "tsconfig.json"
       - "scripts/smoke/**"
-      - "scripts/script-utils.mjs"
+      - "scripts/lib/process.mjs"
       - "scripts/check-static-export.mjs"
       - "scripts/verify-full.mjs"
       - "scripts/verify-static-smoke.mjs"
       - "scripts/serve-out.mjs"
       - ".github/actions/setup-js/**"
+      - ".github/actions/setup-next-cache/**"
       - ".github/workflows/smoke.yml"
   schedule:
     - cron: "17 19 * * 0"
@@ -60,14 +62,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js
-      - name: Restore Next cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .next/cache
-          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'next.config.ts', 'tsconfig.json', 'package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml') }}-
-            ${{ runner.os }}-next-
+      - uses: ./.github/actions/setup-next-cache
       - name: Build static export
         run: pnpm build
       - name: Upload static export

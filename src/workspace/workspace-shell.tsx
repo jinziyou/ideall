@@ -50,7 +50,7 @@ function routeProvidesInitialView(pathname: string | null, search: string): bool
   if (parseFileEngineSearch(search) || descriptorForResource(search)) return true
   const path = pathname || "/"
   if (workspaceCommandForPath(path)) return false
-  if (path === "/" || path === "/home" || path.startsWith("/home/agent")) return false
+  if (path === "/" || path === "/home") return false
   return Boolean(defaultFileForPath(path) || descriptorForPath(path))
 }
 
@@ -87,12 +87,6 @@ function UrlSync() {
     if (getRouteOpenPending()) return
     const liveTabs = getTabs()
     const liveActiveId = getActiveId()
-    // /home/agent = 「打开右侧 AI 栏」虚拟命令路由 (无对应标签): 开栏后弹回激活标签 (或 /home)。
-    if (pathname?.startsWith("/home/agent")) {
-      const at = liveTabs.find((x) => x.id === liveActiveId)
-      router.replace(at?.path ?? "/home")
-      return
-    }
     if (liveTabs.length === 0) {
       // 深链 / 刷新挂载期: hydrate 可能先于路由标记 openTab (tabs 仍空)。
       // 若当前路径 / ?resource= 能解析成标签 → 不抢，保住深链；

@@ -10,11 +10,14 @@
   },
   "pnpm": {
     "overrides": {
+      "adm-zip": "0.6.0",
       "postcss@<8.5.10": ">=8.5.10",
       "@babel/core@<=7.29.0": ">=7.29.6",
-      "brace-expansion@>=5.0.0 <5.0.6": "5.0.7",
+      "brace-expansion@<2.0.0": "1.1.16",
+      "brace-expansion@>=2.0.0 <3.0.0": "2.1.2",
+      "brace-expansion@>=5.0.0 <5.0.7": "5.0.7",
       "esbuild@>=0.27.3 <0.28.1": "0.28.1",
-      "js-yaml@>=4.0.0 <=4.1.1": "4.3.0"
+      "js-yaml": "4.3.0"
     }
   },
   "scripts": {
@@ -31,10 +34,11 @@
     "lint:actions": "node scripts/lint-actions.mjs",
     "lint:storage": "node scripts/lint-storage-access.mjs",
     "lint:deps": "knip --include dependencies,devDependencies,unlisted --no-progress",
+    "lint:dead-code": "knip --include files --no-progress",
     "lint:docs": "node scripts/check-docs.mjs",
     "typecheck": "tsc --noEmit",
     "verify": "pnpm verify:base",
-    "verify:checks": "pnpm format:check && pnpm lint && pnpm lint:actions && pnpm lint:storage && pnpm lint:deps && pnpm lint:docs && pnpm version:check && pnpm clean:next && pnpm typecheck && pnpm test:coverage && pnpm test:scripts && pnpm gen:api:check",
+    "verify:checks": "pnpm format:check && pnpm lint && pnpm lint:actions && pnpm lint:storage && pnpm lint:deps && pnpm lint:dead-code && pnpm lint:docs && pnpm version:check && pnpm clean:next && pnpm typecheck && pnpm test:coverage && pnpm test:scripts && pnpm gen:api:check",
     "verify:base": "pnpm verify:checks && pnpm app:export",
     "verify:bundle": "node scripts/check-bundle-budget.mjs",
     "verify:semantic-runtime": "node scripts/check-semantic-runtime-budget.mjs",

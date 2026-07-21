@@ -7,7 +7,7 @@ import {
   assertProjectVersions,
   loadProjectVersionState,
   prepareProjectVersionUpdate,
-} from "./project-version.mjs"
+} from "./lib/project-version.mjs"
 
 const roots = []
 

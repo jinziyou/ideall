@@ -1,4 +1,4 @@
-import { assertProjectVersions, loadProjectVersionState } from "./project-version.mjs"
+import { assertProjectVersions, loadProjectVersionState } from "./lib/project-version.mjs"
 
 const HELP = `用法:
   node scripts/check-version.mjs

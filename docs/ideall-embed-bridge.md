@@ -65,7 +65,7 @@
                      │ 带 token 的写                                                │ 公共读 (读开放)
                      ▼                                                              ▼
               ┌────────────────────────  wonita apiserver (api.wonita.link)  ─────────────────────────┐
-              │  /v1/articles* /v1/peers* (读开放)   /v1/me/publications (JWT)   /v1/auth/* (X25519)  │
+              │  /v2/data/** (公共读)   /v2/app/me/publications (JWT)   /v2/app/auth/* (X25519)   │
               └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -185,7 +185,7 @@ export class MessagePortTransport implements Transport {
 | `identity.me` | — | `CurrentUser \| null` | `identity:read` | `ScopedHost.getSession()` |
 | `community.publish` | `{title:string, url?:string, body?:string}` | `Publication` | `identity.publish` | `ServerPort.publish(hostToken, draft)` |
 | `community.deletePublication` | `{id:number}` | `{ok:true}` | `identity.publish` | `ServerPort.deletePublication(hostToken, id)` |
-| `me.updateProfile` | `{name?:string, avatar?:string}` | `{ok:true}` | `identity.publish` | ✅ 已由 `ServerPort.updateProfile(token, patch)` 提供（封装 `PUT /v1/me/profile`，204 无响应体） |
+| `me.updateProfile` | `{name?:string, avatar?:string}` | `{ok:true}` | `identity.publish` | ✅ 已由 `ServerPort.updateProfile(token, patch)` 提供（封装 `PUT /v2/app/me/profile`，204 无响应体） |
 
 > `community.publish` 入参 schema 复用 `PublishDraft`（`server-port.ts`，已有）。`community.publish` / `deletePublication` 对应的 `ServerPort.publish/deletePublication` 已存在；`me.updateProfile` 对应的 `ServerPort.updateProfile` 亦已补齐。页面**不传 token**；宿主从 `auth-store` 取。未登录时宿主返回 `-32002 not-authenticated`，页面据此提示"在 ideall 中登录"。
 
@@ -372,14 +372,14 @@ function startBridge(manifest: Manifest, iframe: HTMLIFrameElement) {
 ```ts
 const ideall = await IdeallEmbed.tryConnect({ timeoutMs: 800 })  // 嵌入则连上, 否则 null
 
-// 公共语料: 两态都直连 wonita apiserver v1
+// 公共语料: 两态都直连 wonita apiserver v2
 export const queryInfo = (p) =>
-  fetch(`${API}/v1/articles/search`, { method: "POST", body: JSON.stringify(p) }).then((r) => r.json())
+  fetch(`${API}/v2/data/corpus/articles/query`, { method: "POST", body: JSON.stringify(p) }).then((r) => r.json())
 
 // 发布: 嵌入态经 host(无 token), 独立态用自己的登录
 export const publish = (d) =>
   ideall ? ideall.call("community.publish", d)
-         : fetch(`${API}/v1/me/publications`, { headers: authHeader(), method: "POST", body: JSON.stringify(d) })
+         : fetch(`${API}/v2/app/me/publications`, { headers: authHeader(), method: "POST", body: JSON.stringify(d) })
 
 export const me = () => ideall ? ideall.call("identity.me") : fetchMeStandalone()
 export const canPublish = ideall ? ideall.permissions.includes("identity.publish") : isLoggedIn()

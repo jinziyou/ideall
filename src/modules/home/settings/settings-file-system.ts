@@ -1,5 +1,4 @@
 import { fileRefKey, sameFileRef, type FileRef, type IdeallFile } from "@protocol/file-system"
-import { getSession, subscribeSession } from "@protocol/auth"
 import { getSyncTelemetrySnapshot, subscribeSyncTelemetry } from "@protocol/sync"
 import {
   WORKSPACE_ARCHIVE_LIMITS,
@@ -20,6 +19,7 @@ import type {
 } from "@/filesystem/types"
 import { FileSystemError } from "@/filesystem/types"
 import { sha256SemanticVersion } from "@/lib/semantic-version"
+import { getSession, subscribeSession } from "@/lib/auth/auth-store"
 import { getSyncCode, subscribeSyncCode } from "@/lib/sync-code"
 import { getThemeChoice, setThemeChoice, subscribeThemeChoice } from "@/lib/theme"
 import {

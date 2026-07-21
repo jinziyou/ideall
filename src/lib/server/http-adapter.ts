@@ -7,7 +7,8 @@
 // 直连。匿名 corpus query 单次最多 50 条，适配器用 cursor 串联来保留领域层旧有
 // offset 语义，不向 renderer 暴露 service token。
 import { API_V2_APP, API_V2_DATA } from "@/lib/env"
-import { apiFetch, type ApiResult } from "@/lib/api"
+import type { ApiResult } from "@protocol/api-result"
+import { apiFetch } from "@/lib/api"
 import type { components } from "@/lib/api/server"
 import type {
   ServerPort,

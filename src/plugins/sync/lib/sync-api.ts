@@ -2,7 +2,8 @@
 // 不可变 generation parts，全部成功后再 CAS 提交 manifest，读取方因此永远只看到完整快照。
 
 import { API_V2_APP } from "@/lib/env"
-import { apiFetch, type ApiResult } from "@/lib/api"
+import type { ApiResult } from "@protocol/api-result"
+import { apiFetch } from "@/lib/api"
 import { getSession } from "@/lib/auth/auth-store"
 import { SYNC_MAX_RESPONSE_BYTES, type SyncGenerationPart, type SyncManifest } from "@protocol/sync"
 

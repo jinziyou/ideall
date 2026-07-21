@@ -11,7 +11,14 @@
     "src/workspace/store/**/*.ts",
     "src/plugins/shared/**/*.ts"
   ],
-  "exclude": ["**/*.test.ts", "**/*.test.tsx"],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "src/protocol/api-result.ts",
+    "src/protocol/engine.ts",
+    "src/protocol/server-port.ts",
+    "src/shell/runtime-extensions/types.ts"
+  ],
   "check-coverage": true,
   "statements": 80,
   "branches": 75,

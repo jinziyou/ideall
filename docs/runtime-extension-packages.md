@@ -150,7 +150,7 @@ connector 进程使用清理后的环境，只保留平台启动所需的 `PATH`
 
 ## 6. 联网 Registry 协议
 
-桌面宿主只访问固定端点 `https://api.wonita.link/v1/extensions/registry`，不接受渲染层传入 Registry URL，不跟随重定向，也不发送身份凭据。首次请求带 `limit=64`，后续只附加上一签名页给出的 opaque cursor。
+桌面宿主只访问固定端点 `https://api.wonita.link/v2/extensions/registry`，不接受渲染层传入 Registry URL，不跟随重定向，也不发送身份凭据。首次请求带 `limit=64`，后续只附加上一签名页给出的 opaque cursor。
 
 每个 HTTP 页是严格 JSON 信封，`payload` 的精确 UTF-8 字节由官方 Minisign 根签名：
 
@@ -172,7 +172,7 @@ payload 条目包含 `id`、`label`、`summary`、`version`、`publisher`、`pub
 
 设置页读取只加载本地缓存，不在冷启动或普通浏览时隐式联网。用户点击“刷新目录”才访问 Registry；失败且存在可信缓存时返回缓存与稳定故障码。未安装条目仍可打开外部包地址；已安装且版本落后的条目显示“下载并检查更新”，由上述两阶段事务完成安全下载、权限差异确认与原子安装。当前没有后台静默检查或自动安装。
 
-客户端协议和安全回退已经落地。生产发布链使用既有 updater Minisign Secret 每日生成短期有效信封，并通过 staging GitHub Release 原子切换固定通道；首次空目录 Release 已绑定稳定 main，下载摘要与 Minisign 独立验收通过。Wonita apiserver 只代理公开签名资产，不持有私钥；代理代码已合并但尚未生产部署，因此固定端点继续安全返回 HTTP 404。运维流程见 [Extension Registry 发布运维](extension-registry-operations.md)。
+客户端协议和安全回退已经落地。生产发布链使用既有 updater Minisign Secret 每日生成短期有效信封，并通过 staging GitHub Release 原子切换固定通道；首次空目录 Release 已绑定稳定 main，下载摘要与 Minisign 独立验收通过。Wonita apiserver 只代理公开签名资产，不持有私钥；代理路由与桌面消费端现已统一为 V2，生产端点已返回有效的签名空目录信封。运维流程见 [Extension Registry 发布运维](extension-registry-operations.md)。
 
 ## 7. 安全边界与已知限制
 

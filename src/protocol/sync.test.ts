@@ -17,7 +17,7 @@ import {
   recordSyncTelemetry,
   subscribeSyncTelemetry,
 } from "./sync"
-import type { Subscription } from "@protocol/subscription"
+import type { Subscription } from "./subscription"
 
 function sub(id: string, title: string, updatedAt: number): Subscription {
   return { id, type: "publisher", key: id, title, favicon: "", createdAt: 1000, updatedAt }

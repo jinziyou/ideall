@@ -11,9 +11,9 @@ ideall 是基于 Next.js 与 Tauri 的本地优先个人信息终端。源码位
 - `pnpm app:dev`：启动 Tauri 桌面壳，并加载开发服务。
 - `pnpm build` 或 `pnpm app:export`：生成用于 App 打包的静态导出。
 - `pnpm app:build`：构建 Tauri App；需要 Rust 与平台工具链。
-- `pnpm lint`、`pnpm lint:deps`、`pnpm lint:docs`、`pnpm typecheck`、`pnpm test`：分别运行架构边界、依赖使用、文档链接、TypeScript 与业务测试。
+- `pnpm lint`、`pnpm lint:deps`、`pnpm lint:dead-code`、`pnpm lint:docs`、`pnpm typecheck`、`pnpm test`：分别运行架构边界、依赖使用、孤立文件、文档链接、TypeScript 与业务测试。
 - `pnpm test:coverage`：为选定的核心源码生成 c8 text/lcov 报告，并执行仓库基线覆盖率门槛。
-- `pnpm verify:checks`：运行不含生产构建的 CI 质量门禁，包含依赖 lint；`pnpm version:check` 校验四处项目版本一致。
+- `pnpm verify:checks`：运行不含生产构建的 CI 质量门禁，包含依赖与孤立文件 lint；`pnpm version:check` 校验四处项目版本一致。
 - `pnpm verify:bundle`：检查已有 `out/` 中 JavaScript chunk 的 raw/gzip bundle 预算，应在生产构建后运行。
 - `pnpm verify`：等同 `pnpm verify:base`，依次运行 `verify:checks`、生产构建和 `verify:bundle`。
 

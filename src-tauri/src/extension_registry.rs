@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::runtime_extensions::OFFICIAL_MINISIGN_KEY;
 
-const REGISTRY_URL: &str = "https://api.wonita.link/v1/extensions/registry";
+const REGISTRY_URL: &str = "https://api.wonita.link/v2/extensions/registry";
 const REGISTRY_ID: &str = "ideall.official";
 const CACHE_FILE: &str = "extension-registry-cache.json";
 const MAX_PAGE_BYTES: usize = 256 * 1024;
@@ -730,6 +730,14 @@ pub(crate) async fn runtime_extension_registry_refresh(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_endpoint_uses_public_v2_contract() {
+        let endpoint = reqwest::Url::parse(REGISTRY_URL).unwrap();
+        assert_eq!(endpoint.scheme(), "https");
+        assert_eq!(endpoint.host_str(), Some("api.wonita.link"));
+        assert_eq!(endpoint.path(), "/v2/extensions/registry");
+    }
 
     fn entry(id: &str) -> RegistryEntry {
         RegistryEntry {

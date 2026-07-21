@@ -1,6 +1,7 @@
-// 鉴权取数 facade —— 经 `@protocol/server-port` 的 ServerPort (官方实现为 HTTP 适配器)。
+// 鉴权取数 facade —— 经可替换 ServerPort（官方实现为 HTTP 适配器）。
 // 只经手密文 (密码在浏览器已 X25519 加密), 看不到明文密码。
-import { getServerPort, type AuthCredentials } from "@protocol/server-port"
+import type { AuthCredentials } from "@protocol/server-port"
+import { getServerPort } from "@/lib/server/port-registry"
 
 export type { AuthBody, CurrentUser } from "@protocol/server-port"
 /** 注册/登录请求体 (= ServerPort 的 AuthCredentials)。 */

@@ -228,8 +228,6 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   // 精确匹配
   const exact = ALL_ENTRIES.find((entry) => entry.descriptor.path?.split("?", 1)[0] === pathname)
   if (exact) return exact.descriptor
-  // /home/agent 是「打开右侧 AI 栏」的虚拟命令路由, 不对应任何标签 → 显式 null。
-  if (pathname.startsWith("/home/agent")) return null
   // 规范子路径回退；入口优先使用上方精确 File+Engine descriptor。
   if (pathname.startsWith("/home")) return homeEntries[0].descriptor
   if (pathname.startsWith("/info")) return tabDescriptor("info")

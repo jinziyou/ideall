@@ -1,7 +1,7 @@
 "use client"
 
 // 路由页标记: 不渲染 UI, 按当前路径 / query 打开目标或执行工作区命令。
-// 所有 page.tsx 都 re-export 它, 使深链 / 刷新 / ⌘K / 侧栏 / 移动底栏统一分发。
+// 工作区可选 catch-all 页面渲染它，使深链 / 刷新 / ⌘K / 侧栏 / 移动底栏统一分发。
 // 标签内容由 WorkspaceShell → TabHost 渲染；Dock 命令则切换持久挂载的工作区工具。
 
 import * as React from "react"
@@ -16,7 +16,6 @@ import {
   openRouteFileTarget,
   openTab,
   setDevelopmentTool,
-  setRightPanel,
   setWorkspaceKind,
   useHydrated,
 } from "./store"
@@ -38,11 +37,6 @@ function OpenWorkspaceTabInner() {
       const p = pathname || "/"
       const stateTabs = getTabs()
       const activeTab = stateTabs.find((tab) => tab.id === getActiveId())
-      // /home/agent: AI 是右侧常驻对话栏, 不开标签 —— 呼出右栏即可。
-      if (p.startsWith("/home/agent")) {
-        setRightPanel(true)
-        return
-      }
       const workspaceCommand = workspaceCommandForPath(p)
       if (workspaceCommand) {
         setWorkspaceKind(workspaceCommand.workspace)
