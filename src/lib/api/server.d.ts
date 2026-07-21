@@ -38,567 +38,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/altdata/series": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/altdata/series — 另类数据时间序列观测, `{data:[AltDataObservation], meta}`。 */
-        get: operations["list_altdata_series"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/articles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/articles — 文章列表 (最新/按条件), `{data:[Info], meta}`。 */
-        get: operations["list_articles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/articles/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** POST /v1/articles/search — 复杂文章检索 (多实体过滤), `{data:[Info], meta}`。 */
-        post: operations["search_articles"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/articles/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/articles/{id} — 单篇文章 (id = base64url(url)), `{data:Info}`。 */
-        get: operations["get_article"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/articles/{id}/related": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/articles/{id}/related — 关联文章 (Info 平铺 + shared/shared_entry), `{data:[RelatedInfo], meta}`。 */
-        get: operations["get_article_related"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/handshake/{client_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/auth/handshake/{client_id} — 下发服务端临时 X25519 公钥, `{data:{public_key}}` (hex)。 */
-        get: operations["get_server_public_key"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** POST /v1/auth/login — 登录并签发 JWT。 */
-        post: operations["login"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** POST /v1/auth/register — 注册账号并签发 JWT。 */
-        post: operations["register"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/session": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/auth/session — 校验 JWT 并回显当前用户 claims 数据。 */
-        get: operations["get_session"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/community/presence": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/community/presence — 当前实时在线的城市级聚合快照 (公开只读)。 */
-        get: operations["get_presence"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/community/presence/beat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * POST /v1/community/presence/beat — 心跳: 记录本次在线 (定位成功才记自身) 并回当前快照。
-         * @description 访客匿名 (城市级计数); **登录成员公开其 user_id + 名称 + 所在城市** (供地图按人点选查看发布),
-         *     但不存原始 IP。成员身份: 独立态取自校验后的 token (权威); 嵌入态由客户端 (`member` +
-         *     `user_id`/`user_name`, 宿主 MCP `identity.me` 得到) 给出 —— **非权威、可伪造**。
-         *     ⚠ 定位/身份/计数均**仅用于地图视图, 不可用于任何安全决策** (鉴权/限流/访问控制)。
-         */
-        post: operations["presence_beat"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/entities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/entities?q=&limit= — 实体搜索, `{data:[EntityBrief], meta}`。 */
-        get: operations["search_entities"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/entities/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/entities/stats?window= — 近 N 小时五类实体频次, `{data:EntityStats}`。 */
-        get: operations["get_entity_stats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/entities/{label}/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/entities/{label}/{name} — 实体详情聚合, `{data:EntityDetail}`。 */
-        get: operations["get_entity_detail"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/events — 同事件聚类 (简单过滤), `{data:[InfoEvent], meta}`。 */
-        get: operations["list_events"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/events/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** POST /v1/events/search — 复杂同事件聚类检索 (多实体过滤)。 */
-        post: operations["search_events"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/events/top": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * GET /v1/events/top?window=24h — 关键事件榜 (form 预计算, 按时间衰减热度排序), `{data:[TopEvent], meta}`。
-         *     榜未生成 (功能未启用 / 首轮未跑) 时返回空 `data` —— 前端增强块无数据即隐藏, 不影响资讯主链路。
-         */
-        get: operations["get_top_events"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/extensions/registry": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/extensions/registry — ideall 官方签名扩展目录页。 */
-        get: operations["get_extension_registry"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/geo/ip": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * GET /v1/geo/ip[?ip=] — 定位访问者所在城市, `{data:IpLocation}` (定位失败时经纬度 0)。
-         *     访客定位逻辑 (信任门控 + CF 头 + 转发头 + 查库) 在 `infra::geoip::resolve_visitor_geo`。
-         */
-        get: operations["get_ip_location"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/profile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** PUT /v1/me/profile — 更新自己的展示名 (需登录)。 */
-        put: operations["update_profile"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/publications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** POST /v1/me/publications — 发布一条内容 (需登录)。 */
-        post: operations["create_publication"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/me/publications/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** DELETE /v1/me/publications/{id} — 删除自己的一条发布 (需登录)。 */
-        delete: operations["delete_publication"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/peers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/peers — 社区发布者列表 (公开, 供 community 浏览订阅)。 */
-        get: operations["list_publishers"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/peers/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/peers/{id} — 某发布者公开档案 (公开)。 */
-        get: operations["get_publisher"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/peers/{id}/publications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/peers/{id}/publications — 某发布者的发布列表 (公开)。CN 受限模式剥离境外关联 url。 */
-        get: operations["list_publications"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/publishers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/publishers — 发布者 `{domain: name}` 映射, `{data:{...}}`。 */
-        get: operations["get_publishers"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/publishers/locations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/publishers/locations — 发布者地理位置, `{data:[PublisherLocation]}`。 */
-        get: operations["get_publisher_locations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/publishers/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/publishers/search — 按域名聚合后的确定性发布者分页列表。 */
-        get: operations["search_publishers"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/scitech/papers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/scitech/papers — 论文/预印本元数据列表, `{data:[SciTechPaper], meta}`。 */
-        get: operations["list_scitech_papers"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/stats/corpus": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/stats/corpus — 语料真实聚合: 总量 + 近 N 小时按小时入库量 (供 admin 仪表盘, 替代样本估算)。 */
-        get: operations["get_corpus_stats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sync/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/sync/{id} — 取回端到端加密的同步块 (服务端不可读内容)。 */
-        get: operations["get_sync_blob"];
-        /**
-         * PUT /v1/sync/{id} — 上传端到端加密的同步块 (乐观并发, `expected` 必填)。
-         * @description `?expected=<base>` 为乐观并发基线: 仅当服务端当前 `updated_at` 与 `expected` 相符 (或尚无数据且
-         *     `expected=0`) 才写, 否则 409 —— 防"另一端在本端 GET 之后、本 PUT 之前新增"被覆盖丢失。
-         */
-        put: operations["put_sync_blob"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/users/email/{email}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** GET /v1/users/email/{email} — 邮箱是否已注册, `{data:{exists}}` (不用 404 表"不存在")。 */
-        get: operations["has_email_exist"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v2/app/auth/handshake/{client_id}": {
         parameters: {
             query?: never;
@@ -871,6 +310,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/data/analytics/corpus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /v2/data/analytics/corpus — 语料真实聚合: 总量 + 近 N 小时按小时入库量
+         *     (与 `/v1/stats/corpus` 同口径, 供 admin 仪表盘)。需 `analytics:read` scope。
+         */
+        get: operations["corpus_analytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/data/analytics/entities/trending": {
         parameters: {
             query?: never;
@@ -1111,6 +570,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/extensions/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /v2/extensions/registry — ideall 官方签名扩展目录页。
+         * @description 路径由 `/v1/extensions/registry` 迁移而来 (随 v1 整体退役); ideall 客户端需同步更新
+         *     拉取地址。挂载方式不变: 经 `public_integration_router()` 直接 merge 到根路由, 与业务
+         *     API 版本切换无关, 始终可用。
+         */
+        get: operations["get_extension_registry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/public/geo/ip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /v2/public/geo/ip[?ip=] — 定位访问者所在城市, 公开端点 (无需 service token)。
+         *     定位口径: 信任门控 + CF 头 + 转发头 + 查库 (`infra::geoip`); 定位失败时经纬度 0。
+         *     挂载于 `data_token_boundary` 之外 (见 `v2::router`), 供 portal/ideall 匿名地图视图直连。
+         */
+        get: operations["get_ip_location"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1133,67 +635,9 @@ export interface components {
             /** Format: double */
             value: number;
         };
-        AltDataObservationListResponse: {
-            data: components["schemas"]["AltDataObservation"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        ArticleListResponse: {
-            data: components["schemas"]["Info"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        ArticleResponse: {
-            data: components["schemas"]["Info"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /** @description 复杂文章检索请求体 (承载多实体过滤 entity_label_name)。 */
-        ArticleSearch: {
-            /** @description 服务端返回的不透明下一页游标；与非零 offset 互斥 */
-            cursor?: string | null;
-            /** @description 实体筛选, 每项 `(label, name)` (多实体取交集) */
-            entity_label_name?: [
-                string,
-                string
-            ][] | null;
-            /** @description 影响地理过滤 (closed set, 见 docs/news-classification.md §3.2); 命中数组中任意一个即匹配。 */
-            geo_scope?: string[] | null;
-            /**
-             * @description 文章语言主码 (如 `zh`/`en`/`ja`); 匹配 `info.language` 等于该码或以 `{码}-` 开头。
-             *     在 SKIP/LIMIT **之前**过滤, 避免高产外文源占满时间序首页。
-             */
-            language?: string | null;
-            /** Format: int32 */
-            limit?: number | null;
-            /** Format: int32 */
-            offset?: number | null;
-            /** @description 来源平台类型，如 website / youtube / bluesky */
-            platform_type?: string | null;
-            /**
-             * @description 发布者国家过滤 (在 SKIP/LIMIT **之前**):
-             *     - `中国` → **仅大陆** (`中国` / `中国大陆` / `中国内地` 等, **不含**港澳台);
-             *     - `港澳台` → `中国香港` / `中国台湾` / `中国澳门` (三地一并);
-             *     - `中国香港` / `中国台湾` / `中国澳门` → 该地区 (STARTS WITH);
-             *     - 其它值 → `publisher.country STARTS WITH` 前缀匹配。
-             */
-            publisher_country_prefix?: string | null;
-            publisher_domain?: string | null;
-            /** @description 全局模糊搜索：标题、发布者域名/名称、实体名（最多 200 字符） */
-            q?: string | null;
-            source_category?: string | null;
-            /** @description `[from, to]` 采集时间戳毫秒闭区间 */
-            timestamp_from_to?: [
-                number,
-                number
-            ] | null;
-            /** @description 主题议题过滤 (closed set, 见 docs/news-classification.md §3.1); 命中数组中任意一个即匹配。 */
-            topics?: string[] | null;
-        };
         AuthBody: {
             token: string;
             token_type: string;
-        };
-        AuthBodyResponse: {
-            data: components["schemas"]["AuthBody"];
-            meta?: null | components["schemas"]["Meta"];
         };
         /**
          * @description 注册 / 登录请求体。密码经客户端公钥与服务端临时密钥协商出的共享密钥
@@ -1223,12 +667,12 @@ export interface components {
             longitude: number;
             /**
              * Format: int32
-             * @description 登录成员数 (按 user_id 去重)
+             * @description 登录成员数 (按 account_id 去重)
              */
             members: number;
         };
         /**
-         * @description `GET /v1/stats/corpus` 响应: 语料总量 + 近 N 小时按小时入库量分桶。
+         * @description 语料总量 + 近 N 小时按小时入库量分桶。
          *     total_articles 为 ClickHouse info FINAL 去重后的当前总量 (含全部历史)。
          */
         CorpusStats: {
@@ -1238,7 +682,7 @@ export interface components {
             /** Format: int32 */
             window_hours: number;
         };
-        /** @description `GET /v1/stats/corpus` 的单桶入库量 (按小时)。 */
+        /** @description 语料统计的单桶入库量 (按小时)。 */
         CorpusStatsBucket: {
             /**
              * Format: int64
@@ -1251,120 +695,6 @@ export interface components {
              */
             count: number;
         };
-        CorpusStatsResponse: {
-            data: components["schemas"]["CorpusStats"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /** @description `GET /v1/users/email/{email}` 响应: 邮箱是否已注册 (替代旧的 200/404 语义)。 */
-        EmailExists: {
-            exists: boolean;
-        };
-        EmailExistsResponse: {
-            data: components["schemas"]["EmailExists"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /**
-         * @description 媒体附件 (图片 / 视频 / 音频 / 文件) —— 由 form 抽取/采集得到, 以 JSON 存 Neo4j `Info.enclosures`,
-         *     apiserver 读出反序列化为结构化列表; 与派生的 `Info.content_form` 配合供消费端 (portal) 渲染。
-         */
-        Enclosure: {
-            /** @description 附件类型 (中文枚举值: 图片 / 视频 / 音频 / 文件) */
-            type: string;
-            url: string;
-        };
-        /**
-         * @description 实体摘要 (实体搜索结果项 / 实体详情的共现实体项)。
-         *     聚合口径: 按 **Wikidata QID** (无 QID 回退 `(name, label)`) 跨语言/跨周合并全部分桶节点;
-         *     `name` 为代表性表面串, `wikidata_id` 为归一锚点 (见 NameEntity 的周分桶说明)。
-         */
-        EntityBrief: {
-            /**
-             * Format: int32
-             * @description 提及该实体的信息条数 (共现项 = 与目标实体共同出现的信息条数)
-             */
-            count: number;
-            /** @description 按访客 `Accept-Language` 从 Wikidata QID 解析的展示名; 与 `name` 相同时省略。 */
-            display_name?: string | null;
-            /** @description 任一分桶节点有百科词条即为 true */
-            has_entry: boolean;
-            label: string;
-            name: string;
-            /** @description Wikidata QID (语言无关规范实体 ID); 跨语言同实体已按此归一, 无 QID 时为 null */
-            wikidata_id?: string | null;
-        };
-        EntityBriefListResponse: {
-            data: components["schemas"]["EntityBrief"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /**
-         * @description 实体详情聚合 (`GET /v1/entities/{label}/{name}`): 按 Wikidata QID (回退 `(name,label)`) 跨语言与跨周
-         *     合并全部分桶节点。实体不存在时返回 `mention_count = 0` 的空详情 (与 `/v1/articles` 系列「查无返回空默认」口径一致)。
-         */
-        EntityDetail: {
-            /** @description 共现实体 top N (按共同出现的信息条数倒序) */
-            co_entities: components["schemas"]["EntityBrief"][];
-            /** @description 按访客 `Accept-Language` 从 Wikidata QID 解析的展示名; 与 `name` 相同时省略。 */
-            display_name?: string | null;
-            /**
-             * Format: int64
-             * @description 最早/最晚提及的采集时间 (epoch 毫秒; 无提及时为 0)
-             */
-            first_seen: number;
-            /** @description 是否有百科词条 (任一分桶节点为 true 即 true) */
-            has_entry: boolean;
-            label: string;
-            /** Format: int64 */
-            last_seen: number;
-            /**
-             * Format: int32
-             * @description 提及该实体的信息总条数
-             */
-            mention_count: number;
-            name: string;
-            /** @description 按周 period 的提及分布 (升序), 供趋势展示 */
-            weekly: components["schemas"]["EntityPeriodCount"][];
-            /** @description Wikidata QID (语言无关规范实体 ID); 本详情已按此跨语言归一全部分桶/各语言表面串, 无 QID 时为 null */
-            wikidata_id?: string | null;
-            wikipedia_url?: string | null;
-        };
-        EntityDetailResponse: {
-            data: components["schemas"]["EntityDetail"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /** @description 实体的单周提及量 (`period` = 周一零点 epoch 毫秒, 与 NameEntity.period 同口径)。 */
-        EntityPeriodCount: {
-            /** Format: int32 */
-            count: number;
-            /** Format: int64 */
-            period: number;
-        };
-        /**
-         * @description `/v1/entities/stats` 的稳定 wire DTO。
-         *
-         *     `EntityStats` 在服务内部保留 QID 与本地化展示名，供跨语言归并使用；v1 已发布契约的五个
-         *     map value 一直是整数。单独投影响应可避免内部富化条目改变旧客户端的 JSON 形状。
-         */
-        EntityStats: {
-            event: {
-                [key: string]: number;
-            };
-            loc: {
-                [key: string]: number;
-            };
-            org: {
-                [key: string]: number;
-            };
-            per: {
-                [key: string]: number;
-            };
-            product: {
-                [key: string]: number;
-            };
-        };
-        EntityStatsResponse: {
-            data: components["schemas"]["EntityStats"];
-            meta?: null | components["schemas"]["Meta"];
-        };
         ErrorDetail: {
             code: string;
             message: string;
@@ -1372,43 +702,6 @@ export interface components {
         /** @description 所有 HTTP 错误（含 JWT 401/429）的统一机器可读包络。 */
         ErrorEnvelope: {
             error: components["schemas"]["ErrorDetail"];
-        };
-        EventListResponse: {
-            data: components["schemas"]["InfoEvent"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /**
-         * @description 事件分页模式。省略时保留旧的文章 limit/offset 窗口；显式 event_cursor 时先完整聚类再分页。
-         * @enum {string}
-         */
-        EventPaginationMode: "event_cursor";
-        /** @description 同事件复杂检索；默认兼容旧文章 offset，显式 event_cursor 时返回完整事件分页。 */
-        EventSearch: {
-            /** @description 服务端返回的不透明事件游标；仅与 pagination_mode=event_cursor 组合使用。 */
-            cursor?: string | null;
-            entity_label_name?: [
-                string,
-                string
-            ][] | null;
-            /** @description 影响地理过滤 (closed set, 见 docs/news-classification.md §3.2); 命中数组中任意一个即匹配。 */
-            geo_scope?: string[] | null;
-            language?: string | null;
-            /** Format: int32 */
-            limit?: number | null;
-            /** Format: int32 */
-            offset?: number | null;
-            pagination_mode?: null | components["schemas"]["EventPaginationMode"];
-            /** @description 来源平台类型，如 website / youtube / bluesky */
-            platform_type?: string | null;
-            publisher_country_prefix?: string | null;
-            publisher_domain?: string | null;
-            source_category?: string | null;
-            timestamp_from_to?: [
-                number,
-                number
-            ] | null;
-            /** @description 主题议题过滤 (closed set, 见 docs/news-classification.md §3.1); 命中数组中任意一个即匹配。 */
-            topics?: string[] | null;
         };
         ExtensionRegistryEnvelope: {
             /** @description 由官方 Minisign 根签名的精确 JSON UTF-8 字符串。 */
@@ -1418,60 +711,10 @@ export interface components {
             /** @description Tauri/minisign 的 Base64 签名文件文本。 */
             signature: string;
         };
-        /** @description `GET /v1/auth/handshake/{client_id}` 响应: 服务端临时 X25519 公钥 (hex)。 */
+        /** @description 握手响应: 服务端临时 X25519 公钥 (hex)。 */
         Handshake: {
             /** @description 服务端临时公钥 (hex 明文串), 供客户端 AEAD 加密密码。 */
             public_key: string;
-        };
-        HandshakeResponse: {
-            data: components["schemas"]["Handshake"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        Info: {
-            /** Format: int64 */
-            collect_time: number;
-            /** @description 表现形式 (富文本 / 视频 / 音频 / 图文 / 纯文本): 读取时由 enclosures + data + is_rich_html 派生。 */
-            content_form?: string;
-            data: string;
-            /** @description 媒体附件 (视频/音频/图片 URL): 供消费端取媒体播放/展示。 */
-            enclosures?: components["schemas"]["Enclosure"][];
-            /** @description 影响地理 (closed set, 0..3 个); 未分类为空数组。 */
-            geo_scope?: string[];
-            /** @description 文章稳定 ID = base64url(url); 服务端填充 (`/v1/articles/{id}` 标识用)。 */
-            id?: string;
-            /** @description Feed 等路径正文已去 HTML 时, 标记原为富文本 (供派生 content_form)。 */
-            is_rich_html?: boolean;
-            labels: components["schemas"]["NameEntity"][];
-            language: string;
-            /** @description NER 实际后端 (`gliner` | `qwen` | `deepseek`); 历史/未知为空串。 */
-            ner_backend?: string;
-            /** @description 来源平台类型（如 `website` / `youtube` / `reddit`）；旧节点为空串。 */
-            platform_type?: string;
-            /** Format: int64 */
-            publish_time: number;
-            publisher: components["schemas"]["Publisher"];
-            /** @description 内容类目 (`news` / `scitech` / `threat-intel` / `altdata`)；旧节点为空串。 */
-            source_category?: string;
-            /** @description 采集源稳定标识；历史信息或未标注来源为空串。 */
-            source_id?: string;
-            title: string;
-            /** @description 文章主题 (closed set, 1..3 个; 见 docs/news-classification.md); 未分类为空数组。 */
-            topics?: string[];
-            url: string;
-        };
-        /** @description 同一事件的多来源报道聚类 (`POST /v1/events/search`)。 */
-        InfoEvent: {
-            /** @description 事件快照内的稳定 ID；旧 offset 响应可为空，保证旧序列化数据可继续反序列化。 */
-            event_id?: string;
-            /** @description 代表稿: 聚类内最新采集的一篇 */
-            lead: components["schemas"]["Info"];
-            /** @description 同事件其它来源 (不含 lead, 按采集时间倒序) */
-            related: components["schemas"]["Info"][];
-            /**
-             * Format: int32
-             * @description 独立信息源数 = 簇内 publisher.domain 去重计数 (一个发布者发多篇算一票, 含 lead)
-             */
-            source_count: number;
         };
         /**
          * @description 访问者 IP 地理定位结果 (供社区地图默认聚焦访问者所在城市)。
@@ -1484,10 +727,6 @@ export interface components {
             latitude: number;
             /** Format: double */
             longitude: number;
-        };
-        IpLocationResponse: {
-            data: components["schemas"]["IpLocation"];
-            meta?: null | components["schemas"]["Meta"];
         };
         MarketSignalPoint: {
             /** @description 市场信号标识。 */
@@ -1502,243 +741,6 @@ export interface components {
              * @description 信号值。
              */
             value: number;
-        };
-        /** @description 列表/受限元信息。单资源端点可不带 (meta=None)。 */
-        Meta: {
-            /**
-             * Format: int32
-             * @description 本次实际返回的条目数。
-             */
-            count: number;
-            /** @description 是否还有下一页。仅支持 look-ahead/cursor 的端点返回；旧端点保持省略。 */
-            has_more?: boolean | null;
-            /**
-             * Format: int32
-             * @description 本次返回的页大小上限 (回显请求的 limit, 已 clamp)。
-             */
-            limit: number;
-            /** @description 下一页不透明游标。仅在 `has_more=true` 时返回；客户端不得解析或拼装。 */
-            next_cursor?: string | null;
-            /**
-             * Format: int32
-             * @description 偏移量 (回显请求的 offset)。
-             */
-            offset: number;
-            /** @description 是否对该响应应用了 CN 受限模式 (境外链接字段已被剥离)。前端据此提示「?full=1 看完整」。 */
-            restricted: boolean;
-        };
-        /**
-         * @description 命名实体 (NER 结果)。`label` 取值:
-         *     `PER` / `ORG` / `LOC` / `TIME` / `PRODUCT` / `EVENT`。`period` 为所属周 (周一 0 点) 的 epoch 毫秒。
-         *
-         *     词条富化字段 (服务端富化后写入): `has_entry` 标记该实体是否有百科词条,
-         *     `wikipedia_url` 为对应词条链接 (缺省兼容无这些字段的旧数据)。
-         *     `wikidata_id` 为 Wikidata QID (如 `Q22686`): 语言无关的规范实体 ID, 是跨语言"同一实体归一"的
-         *     连接键 ("Trump"/"特朗普"/"ドナルド・トランプ" 共享同一 QID); 无 QID 的实体回退按 `(name,label)` 匹配。
-         */
-        NameEntity: {
-            /** @description 按访客 `Accept-Language` 从 Wikidata QID 解析的展示名; 与 `name` 相同时省略。 */
-            display_name?: string | null;
-            has_entry?: boolean;
-            label: string;
-            name: string;
-            /** Format: int64 */
-            period: number;
-            wikidata_id?: string | null;
-            wikipedia_url?: string | null;
-        };
-        /** @description 发布请求体 (POST /v1/me/publications)。 */
-        NewPublication: {
-            body?: string;
-            title: string;
-            url?: string;
-        };
-        /** @description 一个在线的登录成员 (供地图按人点选 → 查看其发布)。按 user_id 去重 (多标签页算一人)。 */
-        OnlineMember: {
-            city: string;
-            country: string;
-            /** Format: double */
-            latitude: number;
-            /** Format: double */
-            longitude: number;
-            name: string;
-            /**
-             * Format: int64
-             * @description apiserver 用户 id (= /v1/peers/{id} 的 id, 点选后查其发布)
-             */
-            user_id: number;
-        };
-        /** @description 社区发布者 (用户) 公开档案 + 发布数。`id` 即订阅键 (ideall `type:"peer"` 的 key)。 */
-        PeerPublisher: {
-            /**
-             * Format: int64
-             * @description 用户节点 id (= JWT claims.id)
-             */
-            id: number;
-            name: string;
-            /** Format: int64 */
-            publication_count: number;
-        };
-        PeerPublisherListResponse: {
-            data: components["schemas"]["PeerPublisher"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        PeerPublisherResponse: {
-            data: components["schemas"]["PeerPublisher"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /** @description 心跳请求体 (POST /v1/community/presence/beat)。 */
-        PresenceBeat: {
-            /** @description 登录提示 (嵌入态由宿主 MCP `identity.me` 得到; 非权威, 仅用于分类)。 */
-            member: boolean;
-            /** @description 客户端随机临时会话 id (per-tab, 非账号关联; 服务端视作不透明字符串)。 */
-            sid: string;
-            /**
-             * Format: int64
-             * @description 登录用户 id (嵌入态由客户端给出, 用于地图点选其人; 独立态服务端从 token 取、覆盖此值)。
-             */
-            user_id?: number | null;
-            /** @description 登录用户展示名 (同上, 嵌入态客户端给出)。 */
-            user_name?: string | null;
-        };
-        /** @description 实时在线快照: 城市级聚合 (访客/成员计数) + 在线成员明细 + 总计。 */
-        PresenceSnapshot: {
-            /** @description 城市聚合 (访客匿名计数 + 成员去重计数), 供热力/选择器/连线端点 */
-            cities: components["schemas"]["CityPresence"][];
-            /** @description 在线登录成员明细 (按 user_id 去重), 供地图按人点选 */
-            members: components["schemas"]["OnlineMember"][];
-            /** Format: int32 */
-            total_guests: number;
-            /**
-             * Format: int32
-             * @description 在线成员数 (按 user_id 去重)
-             */
-            total_members: number;
-        };
-        PresenceSnapshotResponse: {
-            data: components["schemas"]["PresenceSnapshot"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /** @description 档案更新请求体 (PUT /v1/me/profile)。MVP 仅改展示名。 */
-        ProfileUpdate: {
-            name: string;
-        };
-        /** @description 一条发布内容。 */
-        Publication: {
-            /** @description 正文/笔记 (可空) */
-            body: string;
-            /**
-             * Format: int64
-             * @description 发布时间 (epoch 毫秒)
-             */
-            created_at: number;
-            /**
-             * Format: int64
-             * @description 发布物 (publication) id
-             */
-            id: number;
-            title: string;
-            /** @description 关联链接 (可空) */
-            url: string;
-        };
-        PublicationListResponse: {
-            data: components["schemas"]["Publication"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        PublicationResponse: {
-            data: components["schemas"]["Publication"];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        Publisher: {
-            /** @description 信息源人工标注城市 (空串 = 未标注)。 */
-            city?: string;
-            /** @description 信息源人工标注国家 (采集侧 Source 同步; 空串 = 未标注)。 */
-            country?: string;
-            domain: string;
-            name: string;
-            /** Format: int64 */
-            period: number;
-        };
-        /** @description 发布者管理列表中的稳定轻量投影；与历史 `/v1/publishers` 的 map 形状并存。 */
-        PublisherListItem: {
-            domain: string;
-            name: string;
-        };
-        /** @description `/v1/publishers/search` 的分页元信息。total/summary 均按过滤后的域名集合计算。 */
-        PublisherListMeta: {
-            /** Format: int32 */
-            count: number;
-            /** Format: int32 */
-            limit: number;
-            /** Format: int32 */
-            offset: number;
-            summary: components["schemas"]["PublisherListSummary"];
-            /** Format: int64 */
-            total: number;
-        };
-        /** @description 发布者分页搜索响应；旧 `/v1/publishers` 仍使用 `PublisherMapResponse`。 */
-        PublisherListResponse: {
-            data: components["schemas"]["PublisherListItem"][];
-            meta: components["schemas"]["PublisherListMeta"];
-        };
-        /** @description 发布者分页检索的全局汇总（基于过滤后的域名集合，而非当前页）。 */
-        PublisherListSummary: {
-            /** Format: int64 */
-            named: number;
-            /** Format: int64 */
-            total: number;
-            /** Format: int64 */
-            unnamed: number;
-        };
-        /**
-         * @description 发布者地理位置 (供社区发布者地图展示)。
-         *     经纬度由服务端对发布者域名做 IP 地理定位得到。
-         */
-        PublisherLocation: {
-            city: string;
-            /**
-             * Format: int32
-             * @description 该发布者的信息条数 (地图点大小依据)
-             */
-            count: number;
-            country: string;
-            domain: string;
-            /** Format: double */
-            latitude: number;
-            /** Format: double */
-            longitude: number;
-            name: string;
-        };
-        PublisherLocationListResponse: {
-            data: components["schemas"]["PublisherLocation"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        PublisherMapResponse: {
-            data: {
-                [key: string]: string;
-            };
-            meta?: null | components["schemas"]["Meta"];
-        };
-        /**
-         * @description `GET /v1/articles/{id}/related` 响应项: Info + 关联强度分数。
-         *     JSON 形状 = Info 字段平铺 + 两个分数字段:
-         *     旧消费方仍可按 Info 读 (向后兼容), 新消费方据分数解释「为什么相关」并展示共享强度。
-         */
-        RelatedInfo: components["schemas"]["Info"] & {
-            /**
-             * Format: int32
-             * @description 与目标共享的实体数 (全实体口径, 兜底阈值 min_shared)
-             */
-            shared: number;
-            /**
-             * Format: int32
-             * @description 与目标共享且两侧都有百科词条的实体数 (更可信, 低阈值 min_shared_entry 即连边)
-             */
-            shared_entry: number;
-        };
-        RelatedListResponse: {
-            data: components["schemas"]["RelatedInfo"][];
-            meta?: null | components["schemas"]["Meta"];
         };
         SciTechPaper: {
             abstract: string;
@@ -1758,14 +760,6 @@ export interface components {
             /** @description 论文摘要页。 */
             url: string;
         };
-        SciTechPaperListResponse: {
-            data: components["schemas"]["SciTechPaper"][];
-            meta?: null | components["schemas"]["Meta"];
-        };
-        SessionResponse: {
-            data: components["schemas"]["UserClaimsData"];
-            meta?: null | components["schemas"]["Meta"];
-        };
         /** @description v2 online member identity uses the stable PostgreSQL account ID. */
         StableOnlineMember: {
             account_id: string;
@@ -1784,21 +778,6 @@ export interface components {
             total_guests: number;
             /** Format: int32 */
             total_members: number;
-        };
-        SyncBlob: {
-            /** @description 密文 (base64); 明文为客户端订阅列表 JSON, 服务端不可读 */
-            ciphertext: string;
-            /** @description AES-GCM 初始向量 (base64) */
-            iv: string;
-            /**
-             * Format: int64
-             * @description 客户端写入时间戳 (毫秒), 由客户端提供
-             */
-            updated_at: number;
-        };
-        SyncBlobResponse: {
-            data: components["schemas"]["SyncBlob"];
-            meta?: null | components["schemas"]["Meta"];
         };
         ThreatFeedResponse: {
             indicators: components["schemas"]["ThreatIndicator"][];
@@ -1822,109 +801,6 @@ export interface components {
             tags?: string[] | null;
             type: string;
             value: string;
-        };
-        /**
-         * @description 关键事件榜项 (`GET /v1/events/top`): 一个「实体社区」= 一个事件。
-         *
-         *     口径与 InfoEvent (POST /events/search, IDF 质心聚类、按新鲜度；事件游标模式冻结完整候选快照) **不同**:
-         *     本榜由 form leader job 从 ClickHouse 窗口全局预计算 —— 以「两个非地点实体共现」为边、
-         *     「一个 publisher.domain 一票」计权, 把边合并成实体社区 (一条大新闻的多对实体归一个事件),
-         *     按独立来源时间衰减热度分排序 (同分再看 source_count / 新鲜度)。apiserver 只读 form 写入的 Neo4j 单例 :EventBoard 节点直出,
-         *     自身无 ClickHouse 依赖。展示以实体社区 + 代表标题为主 (多源标题不一致, 故 lead 取确定性选出的一篇)。
-         */
-        TopEvent: {
-            debug?: null | components["schemas"]["TopEventDebug"];
-            /** @description 事件展示标题: form 预计算, 优先簇内最佳 EVENT 实体名; 空串时退回 lead.title */
-            display_title?: string;
-            /** @description 事件的实体社区 top-k (按社区内提及频次倒序), 已按 Wikidata QID 跨语言归一 */
-            entities: components["schemas"]["EntityBrief"][];
-            /** @description 稳定事件指纹: form 基于展示标题 + 实体锚点生成, 用于跨刷新轮次 diff / 追踪 */
-            event_id?: string;
-            /** @description 代表稿: 社区内确定性选出的一篇 (驱动右栏「全面报道」+ 无 display_title 时的标题兜底) */
-            lead: components["schemas"]["Info"];
-            /** @description 同事件其它来源报道 (不含 lead, 按采集时间倒序) */
-            related: components["schemas"]["Info"][];
-            /**
-             * Format: int32
-             * @description 独立信息源数 = 覆盖该事件的 publisher.domain 去重计数 (用于解释覆盖度; 排序由热度分决定)
-             */
-            source_count: number;
-        };
-        /** @description 关键事件榜调试信息: 仅解释排序/过滤, 不参与客户端主展示。 */
-        TopEventDebug: {
-            /**
-             * Format: int32
-             * @description lead 过滤后的成员文章数。
-             */
-            filtered_count: number;
-            /**
-             * Format: double
-             * @description 最终热度分 = recency_score × 趋势 boost。
-             */
-            heat_score: number;
-            /**
-             * Format: int64
-             * @description 事件内最新有效时间 (publish_time 优先, collect_time 兜底), epoch ms。
-             */
-            latest_ms: number;
-            /**
-             * Format: int32
-             * @description lead 过滤前的成员文章数。
-             */
-            members_before: number;
-            /**
-             * Format: int32
-             * @description 因共享实体不足被过滤的成员数。
-             */
-            pair_dropped: number;
-            /**
-             * Format: double
-             * @description 来源质量加权、同稿 cap 后的时间衰减分。
-             */
-            recency_score: number;
-            /**
-             * Format: int32
-             * @description 因语义门不匹配被过滤的成员数。
-             */
-            semantic_dropped: number;
-            /**
-             * Format: double
-             * @description 入榜来源的平均质量权重。
-             */
-            source_weight_avg: number;
-            /** @description 拆分说明: none / event_seed_split / oversized_no_split。 */
-            split_reason: string;
-            /** @description 本事件内被停用的高频实体展示名。 */
-            stopped_entities: string[];
-            /**
-             * Format: int32
-             * @description 被同稿标题 cap 截断的标题签名组数。
-             */
-            syndication_groups_capped: number;
-            /**
-             * Format: int32
-             * @description 最近 long 窗口内的独立来源数。
-             */
-            trend_long_sources: number;
-            /**
-             * Format: double
-             * @description 最近 short 窗口来源数 / 最近 long 窗口来源数。
-             */
-            trend_ratio: number;
-            /**
-             * Format: int32
-             * @description 最近 short 窗口内的独立来源数。
-             */
-            trend_short_sources: number;
-            /**
-             * Format: double
-             * @description 同稿 cap 前的加权来源分。
-             */
-            weighted_sources: number;
-        };
-        TopEventListResponse: {
-            data: components["schemas"]["TopEvent"][];
-            meta?: null | components["schemas"]["Meta"];
         };
         UserClaimsData: {
             /** @description v1 已发布的 session 字段；当前无头像写入源时保持 null。 */
@@ -2147,6 +1023,7 @@ export interface components {
             language?: string | null;
             /** Format: int32 */
             limit?: number | null;
+            publisher_country_prefix?: string | null;
             source_category?: string | null;
             /** Format: int64 */
             to_ms?: number | null;
@@ -2342,1372 +1219,6 @@ export interface operations {
             };
         };
     };
-    list_altdata_series: {
-        parameters: {
-            query?: {
-                /** @description 结构化源过滤, 多个用逗号分隔, 如 worldbank-pop。 */
-                source?: string;
-                /** @description 指标/序列标识, 如 SP.POP.TOTL。 */
-                series_id?: string;
-                /** @description 地理维, 如 WLD/CHN。 */
-                geo?: string;
-                /** @description 观测日期下界 (ISO 日期, 含), 如 2024-01-01。 */
-                obs_from?: string;
-                /** @description 观测日期上界 (ISO 日期, 含)。 */
-                obs_to?: string;
-                /** @description 可知时刻过滤: 仅返回 collect_time <= 此值 (epoch 毫秒) 的观测 (回测防未来函数)。 */
-                asof_ms?: number;
-                /** @description 页大小 (默认 200, 上限 500)。 */
-                limit?: number;
-                /** @description 偏移 (默认 0)。 */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 另类数据时间序列观测 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AltDataObservationListResponse"];
-                };
-            };
-            /** @description 非法过滤参数 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_articles: {
-        parameters: {
-            query?: {
-                /** @description 发布者域名筛选 */
-                publisher_domain?: string;
-                /** @description 信息源类目: news / scitech / threat-intel / altdata */
-                source_category?: string;
-                /** @description 来源平台类型，如 website / youtube / bluesky */
-                platform_type?: string;
-                /** @description 采集时间下界 (epoch 毫秒, 含) */
-                since?: number;
-                /** @description 采集时间上界 (epoch 毫秒, 含) */
-                until?: number;
-                /** @description 单实体筛选名 (须与 entity_label 同时给出) */
-                entity_name?: string;
-                /** @description 单实体筛选类别 (PER/ORG/LOC/PRODUCT/EVENT) */
-                entity_label?: string;
-                /** @description 文章语言主码 (如 `zh`/`en`/`ja`); 语义同 POST /v1/articles/search */
-                language?: string;
-                /** @description 发布者国家前缀 (如 `中国`/`港澳台`); 语义同 POST /v1/articles/search */
-                publisher_country_prefix?: string;
-                /** @description 主题议题过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
-                topics?: string;
-                /** @description 影响地理过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
-                geo_scope?: string;
-                /** @description 页大小 (默认 200, 上限 200) */
-                limit?: number;
-                /** @description 偏移 (默认 0) */
-                offset?: number;
-                /** @description 全局模糊搜索：标题、发布者域名/名称、实体名（最多 200 字符） */
-                q?: string;
-                /** @description 服务端返回的不透明下一页游标；与非零 offset 互斥 */
-                cursor?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 文章列表 (含分页/受限 meta) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleListResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    search_articles: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArticleSearch"];
-            };
-        };
-        responses: {
-            /** @description 命中的文章列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleListResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_article: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 文章 id = base64url(url) */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 文章 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArticleResponse"];
-                };
-            };
-            /** @description 非法文章 id */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 该文章不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_article_related: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 文章 id = base64url(url) */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 关联文章列表 (按相关度倒序) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RelatedListResponse"];
-                };
-            };
-            /** @description 非法文章 id */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_server_public_key: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 客户端(浏览器)指纹, 用作 SessionID */
-                client_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 服务端临时公钥 (hex) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HandshakeResponse"];
-                };
-            };
-            /** @description 非法 client_id */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 获取密钥失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    login: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthPayload"];
-            };
-        };
-        responses: {
-            /** @description 登录成功, 返回 JWT */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthBodyResponse"];
-                };
-            };
-            /** @description 密码或密钥 hex 格式非法 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 登录失败 (邮箱/密码错误, 不区分原因) */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 签发凭证失败 (服务端内部错误) */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 认证请求或 Argon2 计算容量已满，请稍后重试 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    register: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AuthPayload"];
-            };
-        };
-        responses: {
-            /** @description 注册成功, 返回 JWT */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthBodyResponse"];
-                };
-            };
-            /** @description 密码或密钥 hex 格式非法 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 邮箱已被注册 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 创建失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 认证请求或 Argon2 计算容量已满，请稍后重试 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_session: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 当前用户 claims 数据 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionResponse"];
-                };
-            };
-            /** @description 缺失或非法的 JWT */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 无效 JWT 全局 admission 已满 */
-            429: {
-                headers: {
-                    /** @description 重试等待秒数 */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-        };
-    };
-    get_presence: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 当前实时在线的城市级聚合快照 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresenceSnapshotResponse"];
-                };
-            };
-            /** @description 在线状态查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    presence_beat: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PresenceBeat"];
-            };
-        };
-        responses: {
-            /** @description 记录本次在线心跳后的城市级聚合快照 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresenceSnapshotResponse"];
-                };
-            };
-            /** @description 显式 JWT 无效 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 无效 JWT 全局 admission 已满 */
-            429: {
-                headers: {
-                    /** @description 重试等待秒数 */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 在线状态写入/查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    search_entities: {
-        parameters: {
-            query: {
-                /** @description 实体名子串 (CONTAINS 匹配) */
-                q: string;
-                /** @description 返回条数上限 (默认 20) */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 命中的实体摘要列表; q 为空返回空列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EntityBriefListResponse"];
-                };
-            };
-            /** @description 搜索词过长 (>200 字符) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_entity_stats: {
-        parameters: {
-            query?: {
-                /** @description 回溯小时数 (默认 24) */
-                window?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 近 N 小时五类实体频次 (每类 top 20) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EntityStatsResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_entity_detail: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 实体类别 (PER/ORG/LOC/PRODUCT/EVENT) */
-                label: string;
-                /** @description 实体名 (百分号编码) */
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 实体详情; 不存在时 mention_count=0 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EntityDetailResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_events: {
-        parameters: {
-            query?: {
-                publisher_domain?: string;
-                source_category?: string;
-                since?: number;
-                until?: number;
-                entity_name?: string;
-                entity_label?: string;
-                /** @description 文章语言主码 (如 `zh`/`en`/`ja`); 语义同 POST /v1/events/search */
-                language?: string;
-                /** @description 发布者国家前缀 (如 `中国`/`港澳台`); 语义同 POST /v1/events/search */
-                publisher_country_prefix?: string;
-                /** @description 主题议题过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
-                topics?: string;
-                /** @description 影响地理过滤 (closed set, 逗号分隔多个值, 命中任一即匹配) */
-                geo_scope?: string;
-                limit?: number;
-                offset?: number;
-                /** @description `event_cursor`：在完整聚类快照上按事件分页；省略则沿用旧文章 offset 语义。 */
-                pagination_mode?: components["schemas"]["EventPaginationMode"];
-                /** @description 服务端返回的不透明事件游标；仅与 pagination_mode=event_cursor 组合使用。 */
-                cursor?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 同事件聚类列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventListResponse"];
-                };
-            };
-            /** @description 事件游标非法或与 offset 冲突 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 事件游标快照已过期 */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 候选文章超限，须缩短查询范围 */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    search_events: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EventSearch"];
-            };
-        };
-        responses: {
-            /** @description 同事件聚类列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventListResponse"];
-                };
-            };
-            /** @description 事件游标非法、筛选不匹配或与 offset 冲突 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 事件游标快照已过期 */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 候选文章超限，须缩短查询范围 */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_top_events: {
-        parameters: {
-            query?: {
-                /** @description 榜单窗口标识 (默认 24h); 取值须为 form 侧已生成的窗口, 否则返回空榜。 */
-                window?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 关键事件榜 (实体社区 + 代表标题, 按时间衰减热度排序) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TopEventListResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_extension_registry: {
-        parameters: {
-            query: {
-                /** @description 固定页大小；当前协议只接受 64。 */
-                limit: number;
-                /** @description 前一签名页给出的不透明游标。 */
-                cursor?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 官方 Minisign 签名的扩展目录信封 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExtensionRegistryEnvelope"];
-                };
-            };
-            /** @description limit 或 cursor 无效 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 签名目录发布通道暂不可用 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_ip_location: {
-        parameters: {
-            query?: {
-                /** @description 访问者 IP (可选)。省略时按请求来源推断。 */
-                ip?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description IP 地理定位; 失败时经纬度 0 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IpLocationResponse"];
-                };
-            };
-        };
-    };
-    update_profile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProfileUpdate"];
-            };
-        };
-        responses: {
-            /** @description 已更新 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 名称为空或超长 (>200 字符) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 缺失或非法的 JWT */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 用户不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 无效 JWT 全局 admission 已满 */
-            429: {
-                headers: {
-                    /** @description 重试等待秒数 */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 更新失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    create_publication: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NewPublication"];
-            };
-        };
-        responses: {
-            /** @description 已发布 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationResponse"];
-                };
-            };
-            /** @description 标题为空, 或标题/正文超长 (title >500, body >50000 字符) */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 缺失或非法的 JWT */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 无效 JWT 全局 admission 已满 */
-            429: {
-                headers: {
-                    /** @description 重试等待秒数 */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 发布失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    delete_publication: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 发布 id */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 已删除 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 缺失或非法的 JWT */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 发布不存在或不属于当前用户 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 无效 JWT 全局 admission 已满 */
-            429: {
-                headers: {
-                    /** @description 重试等待秒数 */
-                    "Retry-After"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description 删除失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_publishers: {
-        parameters: {
-            query?: {
-                /** @description 返回条数上限 (默认 100, 上限 200) */
-                limit?: number;
-                /** @description 跳过条数 (分页偏移, 默认 0) */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 发布者列表 (按最近发布倒序, 默认前 100) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PeerPublisherListResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_publisher: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 发布者(用户) id */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 发布者档案 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PeerPublisherResponse"];
-                };
-            };
-            /** @description 不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_publications: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 发布者(用户) id */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 发布列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationListResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_publishers: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 发布者 domain→name 映射 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublisherMapResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_publisher_locations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 有坐标的发布者位置列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublisherLocationListResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    search_publishers: {
-        parameters: {
-            query?: {
-                /** @description 域名或最新非空名称的大小写不敏感模糊搜索（最多 200 字符） */
-                q?: string;
-                /** @description 页大小（默认 20，上限 200） */
-                limit?: number;
-                /** @description 偏移（默认 0） */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 发布者分页列表及过滤后汇总 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublisherListResponse"];
-                };
-            };
-            /** @description 搜索参数非法 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_scitech_papers: {
-        parameters: {
-            query?: {
-                /** @description 结构化源过滤, 多个用逗号分隔, 如 arxiv-cs-cr。 */
-                source?: string;
-                /** @description 论文分类过滤, 多个用逗号分隔, 如 cs.CR,cs.AI。 */
-                category?: string;
-                /** @description 标题大小写不敏感检索 (最多 200 字符)。 */
-                q?: string;
-                /** @description 发表时间下界 (ISO 字符串, 含), 如 2024-01-01。 */
-                published_from?: string;
-                /** @description 发表时间上界 (ISO 字符串, 含)。 */
-                published_to?: string;
-                /** @description 页大小 (默认 100, 上限 200)。 */
-                limit?: number;
-                /** @description 偏移 (默认 0)。 */
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 论文/预印本元数据 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SciTechPaperListResponse"];
-                };
-            };
-            /** @description 非法过滤参数 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_corpus_stats: {
-        parameters: {
-            query?: {
-                /** @description 入库量分桶窗口 (小时, 默认 12, 上限 168) */
-                window_hours?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 语料总量与按小时入库分桶 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CorpusStatsResponse"];
-                };
-            };
-            /** @description 数据查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_sync_blob: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 同步码派生的存储 id */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 加密同步块 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SyncBlobResponse"];
-                };
-            };
-            /** @description id 非法 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 该 id 尚无同步数据 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    put_sync_blob: {
-        parameters: {
-            query: {
-                /** @description 乐观并发基线版本 (本端最近读到的 updated_at; 尚无数据传 0) */
-                expected: number;
-            };
-            header?: never;
-            path: {
-                /** @description 同步码派生的存储 id */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SyncBlob"];
-            };
-        };
-        responses: {
-            /** @description 已保存 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description id 非法 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 冲突: 乐观并发版本不符; 客户端应重新 GET→合并→重试 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 保存失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    has_email_exist: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 待校验的邮箱 */
-                email: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 邮箱注册状态 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EmailExistsResponse"];
-                };
-            };
-            /** @description 查询失败 */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     v2_app_handshake: {
         parameters: {
             query?: never;
@@ -3726,7 +1237,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        /** @description `GET /v1/auth/handshake/{client_id}` 响应: 服务端临时 X25519 公钥 (hex)。 */
+                        /** @description 握手响应: 服务端临时 X25519 公钥 (hex)。 */
                         data: {
                             /** @description 服务端临时公钥 (hex 明文串), 供客户端 AEAD 加密密码。 */
                             public_key: string;
@@ -4692,6 +2203,49 @@ export interface operations {
             };
         };
     };
+    corpus_analytics: {
+        parameters: {
+            query?: {
+                /** @description 入库量分桶窗口 (小时, 默认 12, 上限 168) */
+                window_hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description corpus total + hourly ingest buckets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description 语料总量 + 近 N 小时按小时入库量分桶。
+                         *     total_articles 为 ClickHouse info FINAL 去重后的当前总量 (含全部历史)。
+                         */
+                        data: {
+                            buckets: components["schemas"]["CorpusStatsBucket"][];
+                            /** Format: int64 */
+                            total_articles: number;
+                            /** Format: int32 */
+                            window_hours: number;
+                        };
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+            /** @description missing analytics scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     trending_entities: {
         parameters: {
             query?: {
@@ -4773,6 +2327,7 @@ export interface operations {
                 cursor?: string | null;
                 source_category?: string | null;
                 language?: string | null;
+                publisher_country_prefix?: string | null;
                 topics?: string[] | null;
                 geo_scope?: string[] | null;
                 from_ms?: number | null;
@@ -5322,6 +2877,82 @@ export interface operations {
                             /** Format: double */
                             value: number;
                         }[];
+                        meta: components["schemas"]["V2Meta"];
+                    };
+                };
+            };
+        };
+    };
+    get_extension_registry: {
+        parameters: {
+            query: {
+                /** @description 固定页大小；当前协议只接受 64。 */
+                limit: number;
+                /** @description 前一签名页给出的不透明游标。 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 官方 Minisign 签名的扩展目录信封 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionRegistryEnvelope"];
+                };
+            };
+            /** @description limit 或 cursor 无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 签名目录发布通道暂不可用 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_ip_location: {
+        parameters: {
+            query?: {
+                /** @description 访问者 IP (可选)。省略时按请求来源推断。 */
+                ip?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description visitor city-level geolocation; zero coordinates on failure */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description 访问者 IP 地理定位结果 (供社区地图默认聚焦访问者所在城市)。
+                         *     经纬度由服务端对访问者 IP 做地理定位得到; 定位失败时经纬度为 0。
+                         */
+                        data: {
+                            city: string;
+                            country: string;
+                            /** Format: double */
+                            latitude: number;
+                            /** Format: double */
+                            longitude: number;
+                        };
                         meta: components["schemas"]["V2Meta"];
                     };
                 };
