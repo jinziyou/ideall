@@ -1,6 +1,6 @@
 [package]
 name = "ideall"
-version = "0.1.0"
+version = "0.2.0"
 description = "ideall — 本地优先的个人信息终端 (Tauri 外壳)"
 authors = ["ideall contributors"]
 edition = "2021"

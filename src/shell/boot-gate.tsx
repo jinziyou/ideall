@@ -4,30 +4,47 @@ import { useEffect, useState, type ReactNode } from "react"
 import { registerAll, bootClientEffects } from "./boot"
 import { describeBootFailure, type BootFailureDiagnostic } from "./boot-contract"
 import { installTauriExternalLinks } from "@/lib/safe-url"
+import { prepareCurrentDataEpoch } from "@/lib/data-epoch"
 
 /**
- * 客户端启动前置步骤 —— 在任何终端/插件 UI 渲染前, 把 app/plugin 能力注册进 protocol registry。
- * useState 初始化器在本组件渲染时同步执行一次 (父组件先于子树渲染),
- * 故关注流 / 智能体等使用 registry 时, 注册必已完成。registerAll 幂等。
+ * 客户端启动前置步骤 —— 先建立数据 epoch，再把 app/plugin 能力注册进 protocol registry，
+ * 完成前不渲染终端或插件 UI。registerAll 幂等。
  *
  * 另在 App (Tauri) 形态装一个全局外链点击委托 (浏览器 / SSR 为 no-op), 把 `<a target="_blank">`
  * 外链改交「浏览器」模块打开。挂在根 layout, 故全站锚点一处覆盖。
  */
 export default function BootGate({ children }: { children: ReactNode }) {
-  const [failure] = useState<BootFailureDiagnostic | null>(() => {
-    try {
-      registerAll()
-      return null
-    } catch (error) {
-      return describeBootFailure(error)
-    }
-  })
+  const [state, setState] = useState<
+    | { status: "preparing" }
+    | { status: "ready" }
+    | { status: "failed"; failure: BootFailureDiagnostic }
+  >({ status: "preparing" })
+
   useEffect(() => {
-    if (failure) return
-    bootClientEffects()
-    return installTauriExternalLinks()
-  }, [failure])
-  if (failure) {
+    let disposed = false
+    let disposeExternalLinks: (() => void) | undefined
+    void prepareCurrentDataEpoch()
+      .then(() => {
+        if (disposed) return
+        registerAll()
+        bootClientEffects()
+        disposeExternalLinks = installTauriExternalLinks()
+        setState({ status: "ready" })
+      })
+      .catch((error) => {
+        if (!disposed) setState({ status: "failed", failure: describeBootFailure(error) })
+      })
+    return () => {
+      disposed = true
+      disposeExternalLinks?.()
+    }
+  }, [])
+
+  if (state.status === "preparing") {
+    return <main className="min-h-screen animate-pulse bg-muted/25" aria-label="正在准备本地数据" />
+  }
+  if (state.status === "failed") {
+    const { failure } = state
     return (
       <main className="grid min-h-screen place-items-center bg-background p-6">
         <section role="alert" className="w-full max-w-lg rounded-lg border bg-card p-6">

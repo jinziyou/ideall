@@ -3,24 +3,20 @@
 
 import type { CurrentUser } from "./auth-api"
 import {
-  LEGACY_PUBLIC_STORAGE_KEYS,
   SECURE_STORE_KEYS,
-  publicStorageGetWithLegacy,
+  publicStorageGet,
   publicStorageRemove,
-  publicStorageRemoveWithLegacy,
   publicStorageSet,
   secureDelete,
   secureFallbackGet,
   secureFallbackStorageKey,
-  secureGetWithLegacy,
+  secureGet,
   secureSet,
 } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
 
-export const AUTH_TOKEN_STORAGE_KEY = LEGACY_PUBLIC_STORAGE_KEYS.AUTH_TOKEN
 export const AUTH_TOKEN_SECURE_KEY = SECURE_STORE_KEYS.AUTH_TOKEN
 export const AUTH_USER_STORAGE_KEY = "ideall:auth:user"
-export const LEGACY_AUTH_USER_STORAGE_KEY = "wonita:auth:user"
 const listeners = new Set<() => void>()
 
 export type Session = { token: string; user: CurrentUser } | null
@@ -53,7 +49,7 @@ function isCurrentUser(value: unknown): value is CurrentUser {
 
 export async function hydrateSessionTokenSecure(): Promise<string | null> {
   if (tokenHydrating) return tokenHydrating
-  tokenHydrating = secureGetWithLegacy(AUTH_TOKEN_SECURE_KEY, AUTH_TOKEN_STORAGE_KEY)
+  tokenHydrating = secureGet(AUTH_TOKEN_SECURE_KEY)
     .then((value) => {
       cachedTokenRaw = value
       tokenHydrated = true
@@ -71,7 +67,7 @@ export function getSession(): Session {
   const tokenRaw = readTokenSync()
   let userRaw: string | null = null
   try {
-    userRaw = publicStorageGetWithLegacy(AUTH_USER_STORAGE_KEY, LEGACY_AUTH_USER_STORAGE_KEY)
+    userRaw = publicStorageGet(AUTH_USER_STORAGE_KEY)
   } catch {
     return null
   }
@@ -102,8 +98,6 @@ export async function setSession(token: string, user: CurrentUser): Promise<void
   tokenHydrated = true
   cache = null
   publicStorageSet(AUTH_USER_STORAGE_KEY, JSON.stringify(user))
-  publicStorageRemove(LEGACY_AUTH_USER_STORAGE_KEY)
-  publicStorageRemove(AUTH_TOKEN_STORAGE_KEY)
   notify()
 }
 
@@ -112,8 +106,7 @@ export async function clearSession(): Promise<void> {
   cachedTokenRaw = null
   tokenHydrated = true
   cache = null
-  publicStorageRemoveWithLegacy(AUTH_USER_STORAGE_KEY, LEGACY_AUTH_USER_STORAGE_KEY)
-  publicStorageRemove(AUTH_TOKEN_STORAGE_KEY)
+  publicStorageRemove(AUTH_USER_STORAGE_KEY)
   notify()
 }
 
@@ -125,18 +118,12 @@ if (typeof window !== "undefined") {
     // e.key 为 null = localStorage.clear(); 命中本模块 key 时失效快照缓存并通知。
     if (
       e.key === null ||
-      e.key === AUTH_TOKEN_STORAGE_KEY ||
       e.key === secureFallbackStorageKey(AUTH_TOKEN_SECURE_KEY) ||
-      e.key === AUTH_USER_STORAGE_KEY ||
-      e.key === LEGACY_AUTH_USER_STORAGE_KEY
+      e.key === AUTH_USER_STORAGE_KEY
     ) {
-      if (e.key === AUTH_USER_STORAGE_KEY || e.key === LEGACY_AUTH_USER_STORAGE_KEY) {
+      if (e.key === AUTH_USER_STORAGE_KEY) {
         cache = null
         notify()
-        return
-      }
-      if (e.key === AUTH_TOKEN_STORAGE_KEY) {
-        void hydrateSessionTokenSecure()
         return
       }
       if (e.key === null) {

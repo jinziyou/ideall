@@ -5,6 +5,8 @@ import { isBrowserResourceTab } from "../resource-tab"
 import { coreFileRootForModule, normalizeNavigationRootId } from "../file-roots"
 import { WORKSPACE_STORAGE_KEY } from "../workspace-persist"
 import { migrateWorkspaceTabs, validWorkspaceModule } from "../workspace-compat"
+import { FILE_ENGINE_TAB_KIND, parseFileEngineTabParams } from "../file-tab"
+import { WORKSPACE_PERSIST_VERSION } from "../workspace-persist"
 import { browserRelease, isTauri } from "@/lib/tauri"
 import { hydrateWorkspaceState, workspaceState } from "./runtime"
 
@@ -34,6 +36,7 @@ function readPersistedWorkspace(): PersistedWorkspace | null {
       sessionStorage.getItem(WORKSPACE_STORAGE_KEY) ?? localStorage.getItem(WORKSPACE_STORAGE_KEY)
     if (!raw) return null
     const value = JSON.parse(raw) as {
+      version?: number
       tabs?: Tab[]
       activeId?: string | null
       transientId?: string | null
@@ -44,7 +47,16 @@ function readPersistedWorkspace(): PersistedWorkspace | null {
       sidebarCollapsed?: boolean
       rightPanelOpen?: boolean
     }
-    if (!Array.isArray(value.tabs)) return null
+    if (
+      value.version !== WORKSPACE_PERSIST_VERSION ||
+      !Array.isArray(value.tabs) ||
+      !value.tabs.every(
+        (tab) =>
+          tab?.kind === FILE_ENGINE_TAB_KIND && Boolean(parseFileEngineTabParams(tab.params)),
+      )
+    ) {
+      return null
+    }
     return {
       tabs: value.tabs,
       activeId: value.activeId ?? null,
@@ -64,7 +76,7 @@ function readPersistedWorkspace(): PersistedWorkspace | null {
 
 /**
  * 客户端挂载后恢复工作区。sessionStorage 优先，localStorage 作为跨重启快照；
- * 恢复结果与路由已打开的标签合并，旧标签只在这里经过兼容迁移。
+ * 恢复结果与路由已打开的标签合并；持久化协议只接受当前规范 File+Engine 标签。
  */
 export function hydrateWorkspace(): void {
   if (workspaceState().hydrated || typeof window === "undefined") return

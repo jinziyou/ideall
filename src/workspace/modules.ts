@@ -1,4 +1,4 @@
-// 旧模块目录保留给 toggleModule、路由→标签解析与插件兼容，不再驱动可见导航。
+// 模块目录服务 toggleModule、路由→标签解析与插件入口，不再驱动可见导航。
 // 桌面活动栏/侧栏和移动抽屉统一由 navigation-sections.ts 驱动；shell/nav-config.ts
 // 只服务仍采用 href 的底栏与命令面板。
 // 「搜索」是跳转外部搜索引擎的聚合工具；顶栏搜索框/⌘K 搜索本机内容，职责不同。
@@ -230,16 +230,13 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
   if (exact) return exact.descriptor
   // /home/agent 是「打开右侧 AI 栏」的虚拟命令路由, 不对应任何标签 → 显式 null。
   if (pathname.startsWith("/home/agent")) return null
-  // 前缀回退仅解析旧 URL；新入口直接使用上方规范 file/path descriptor。
-  if (pathname.startsWith("/home/subscriptions")) return tabDescriptor("subscriptions")
-  if (pathname.startsWith("/home/settings")) return tabDescriptor("home-settings")
+  // 规范子路径回退；入口优先使用上方精确 File+Engine descriptor。
   if (pathname.startsWith("/home")) return homeEntries[0].descriptor
   if (pathname.startsWith("/info")) return tabDescriptor("info")
   if (pathname.startsWith("/community")) return tabDescriptor("community")
   if (pathname.startsWith("/browser")) {
     return resourceFileTab({ scheme: "browser", kind: "page", id: "default" }, "浏览器")
   }
-  if (pathname.startsWith("/apps")) return tabDescriptor("apps")
   if (pathname.startsWith("/shell")) return tabDescriptor("shell")
   for (const id of ["git", "database", "audio"] as const) {
     if (pathname.startsWith(`/${id}`)) {
@@ -247,13 +244,12 @@ export function descriptorForPath(pathname: string): TabDescriptor | null {
     }
   }
   if (pathname.startsWith("/code")) return tabDescriptor("code")
-  if (pathname.startsWith("/trash")) return tabDescriptor("trash")
   if (pathname.startsWith("/tool")) return tabDescriptor("tool-search")
   return null
 }
 
 /**
- * 由 ?resource=node:kind:id 或旧 ?node=kind:id 查询串解析出节点标签描述符。
+ * 由 ?resource=<ResourceKey> 查询串解析出资源标签描述符。
  * 无资源参数或非法 → null (调用侧回退 descriptorForPath)。与 descriptorForPath 分离
  * (后者只收 pathname): 节点标签共享 /home/notes 壳, 仅 query 区分。
  */

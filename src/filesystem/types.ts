@@ -150,8 +150,6 @@ export type FileActionUiHints = {
 type FileActionBase = {
   id: string
   label: string
-  /** @deprecated 新代码使用 risk:"destructive"；保留以兼容已安装的一方扩展。 */
-  destructive?: boolean
   requires?: readonly FileCapability[]
   risk?: FileActionRisk
   /** true 表示在相同 FileRef、版本和输入下重复调用没有额外副作用。 */

@@ -1,19 +1,13 @@
 /**
  * 轻量深浅色控制 (不依赖 next-themes)。
- * - 选择存 localStorage("ideall:theme"), 首次读取会迁移旧 "wonita-theme"。
+ * - 选择存 localStorage("ideall:theme")。
  * - 实际是否 dark = 选择, 或 system 时跟随 prefers-color-scheme。
  * - 无闪烁: layout 内联脚本在 body 解析时同步打上 .dark 类 (见 THEME_INIT)。
  */
 import { BRAND_INK, WONITA_PATH } from "./brand"
-import {
-  LEGACY_THEME_KEY,
-  THEME_KEY,
-  readPublicConfig,
-  removePublicConfig,
-  writePublicConfig,
-} from "./public-config"
+import { THEME_KEY, readPublicConfig, writePublicConfig } from "./public-config"
 
-export { LEGACY_THEME_KEY, THEME_KEY } from "./public-config"
+export { THEME_KEY } from "./public-config"
 
 export type ThemeChoice = "light" | "dark" | "system"
 
@@ -55,22 +49,13 @@ function updateFavicon(dark: boolean) {
   link.href = href
 }
 
-/** 内联到 <body> 顶部的无闪烁脚本 (首帧前同步设 .dark, 并把旧主题键迁到 ideall 命名空间)。 */
-export const THEME_INIT = `(function(){try{var k='${THEME_KEY}',l='${LEGACY_THEME_KEY}',t=localStorage.getItem(k),o=localStorage.getItem(l);if(!t&&o){t=o;localStorage.setItem(k,o);localStorage.removeItem(l);}t=t||'system';var m=window.matchMedia('(prefers-color-scheme:dark)').matches;document.documentElement.classList.toggle('dark',t==='dark'||(t==='system'&&m));}catch(e){}})();`
+/** 内联到 <body> 顶部的无闪烁脚本（首帧前同步设置 .dark）。 */
+export const THEME_INIT = `(function(){try{var t=localStorage.getItem('${THEME_KEY}')||'system';var m=window.matchMedia('(prefers-color-scheme:dark)').matches;document.documentElement.classList.toggle('dark',t==='dark'||(t==='system'&&m));}catch(e){}})();`
 
 export function getThemeChoice(): ThemeChoice {
   try {
     const next = readPublicConfig(THEME_KEY)
-    const legacy = readPublicConfig(LEGACY_THEME_KEY)
-    if (next) {
-      if (legacy) removePublicConfig(LEGACY_THEME_KEY)
-      if (next === "light" || next === "dark" || next === "system") return next
-    }
-    if (legacy === "light" || legacy === "dark" || legacy === "system") {
-      writePublicConfig(THEME_KEY, legacy)
-      removePublicConfig(LEGACY_THEME_KEY)
-      return legacy
-    }
+    if (next === "light" || next === "dark" || next === "system") return next
   } catch {
     /* localStorage 不可用时退化为 system */
   }
@@ -93,7 +78,6 @@ export function applyTheme(choice: ThemeChoice) {
 export function setThemeChoice(choice: ThemeChoice) {
   try {
     writePublicConfig(THEME_KEY, choice)
-    removePublicConfig(LEGACY_THEME_KEY)
   } catch {
     /* 忽略持久化失败 */
   }

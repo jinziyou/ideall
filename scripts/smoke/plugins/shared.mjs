@@ -133,7 +133,8 @@ export async function seedLegacySecurityData(page) {
       authUserKey: LEGACY_AUTH_USER_KEY,
       syncCode: LEGACY_SYNC_CODE,
       syncCodeKey: LEGACY_SYNC_CODE_KEY,
-      agentSettingsKey: AGENT_SETTINGS_KEY,
+      // 0.2 起 Agent 设置只读 ideall 规范键；wonita:agent:settings 不再参与水合/迁移。
+      agentSettingsKey: AGENT_SETTINGS_CANONICAL_KEY,
       agentKey: LEGACY_AGENT_KEY,
       agentSecretsKey: AGENT_SECRETS_KEY,
       mcpSecret: LEGACY_MCP_SECRET,

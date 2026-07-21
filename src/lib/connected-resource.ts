@@ -73,8 +73,8 @@ export function routeForConnectedResource(ref: ResourceRef): string | null {
     case "browser":
       return "/browser"
     case "app":
-      // 旧 Resource app 投影的输入别名；新“本地应用”入口直接打开 /apps/local-apps。
-      return "/apps"
+      // Resource app 投影与“本地应用”入口共享当前规范路径。
+      return "/apps/local-apps"
   }
 }
 

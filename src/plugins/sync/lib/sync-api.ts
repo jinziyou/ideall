@@ -1,18 +1,12 @@
 // V2 账号绑定的分区同步数据访问。服务端只保存 AES-GCM 密文：客户端先上传
 // 不可变 generation parts，全部成功后再 CAS 提交 manifest，读取方因此永远只看到完整快照。
 
-import { API_V1, API_V2_APP } from "@/lib/env"
+import { API_V2_APP } from "@/lib/env"
 import { apiFetch, type ApiResult } from "@/lib/api"
 import { getSession } from "@/lib/auth/auth-store"
-import {
-  SYNC_MAX_RESPONSE_BYTES,
-  type SyncBlob,
-  type SyncGenerationPart,
-  type SyncManifest,
-} from "@protocol/sync"
+import { SYNC_MAX_RESPONSE_BYTES, type SyncGenerationPart, type SyncManifest } from "@protocol/sync"
 
 type V2Envelope<T> = { data: T; meta?: unknown }
-type V2SingleBlob = { iv: string; ciphertext: string; version: number; updated_at_ms: number }
 type SyncPartWrite = { iv: string; ciphertext: string }
 
 function authHeaders(): Record<string, string> {
@@ -108,41 +102,4 @@ export async function discardSyncGeneration(
     defaultErrorMessage: "清理未提交同步分片失败",
   })
   return !result.ok && result.status === 404 ? { ok: true, data: null } : result
-}
-
-/**
- * 首次升级时的只读迁移桥：先读账号绑定的 V2 单 blob，再读历史 V1 能力 blob。
- * 一旦分区 manifest 提交成功，后续同步不再访问旧存储。
- */
-export async function getLegacySyncBlob(id: string): Promise<ApiResult<SyncBlob | null>> {
-  const v2 = await apiFetch<V2Envelope<V2SingleBlob>>(
-    `${API_V2_APP}/sync/${encodeURIComponent(id)}`,
-    {
-      headers: authHeaders(),
-      cache: "no-store",
-      defaultErrorMessage: "拉取 V2 历史同步数据失败",
-      maxResponseBytes: SYNC_MAX_RESPONSE_BYTES,
-    },
-  )
-  if (v2.ok) {
-    if (!v2.data) return { ok: false, message: "服务端返回了无效的 V2 同步响应" }
-    return {
-      ok: true,
-      data: {
-        iv: v2.data.data.iv,
-        ciphertext: v2.data.data.ciphertext,
-        updated_at: v2.data.data.version,
-      },
-    }
-  }
-  // 401/403 必须原样返回：账号绑定的 V2 同步不得退化成匿名持续写。
-  if (v2.status !== 404) return v2
-
-  const legacy = await apiFetch<{ data: SyncBlob }>(`${API_V1}/sync/${encodeURIComponent(id)}`, {
-    cache: "no-store",
-    defaultErrorMessage: "拉取 V1 历史同步数据失败",
-    maxResponseBytes: SYNC_MAX_RESPONSE_BYTES,
-  })
-  if (!legacy.ok) return legacy.status === 404 ? { ok: true, data: null } : legacy
-  return { ok: true, data: legacy.data?.data ?? null }
 }

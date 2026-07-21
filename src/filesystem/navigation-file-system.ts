@@ -255,19 +255,6 @@ export const NAVIGATION_SECTIONS: readonly NavigationSectionDefinition[] = [
   },
 ] as const
 
-const LEGACY_ROOT_SECTIONS: Readonly<Record<string, NavigationSectionId>> = {
-  subscriptions: "home",
-  bookmarks: "home",
-  files: "home",
-  notes: "home",
-  workspace: "activity",
-  info: "browse",
-  community: "browse",
-  browser: "browse",
-  tool: "apps",
-  system: "settings",
-}
-
 export function navigationPath(sectionId: NavigationSectionId, itemId?: string): IdeallPath {
   const section = NAVIGATION_SECTIONS.find((candidate) => candidate.id === sectionId)
   if (!section) throw new NavigationContractError(`Unknown navigation section: ${sectionId}`)
@@ -280,14 +267,12 @@ export function navigationPath(sectionId: NavigationSectionId, itemId?: string):
   return joinIdeallPath(sectionPath, item.pathName)
 }
 
-export function navigationSectionIdForLegacyRoot(
-  rootId: string | null | undefined,
-): NavigationSectionId {
+export function navigationSectionIdForRoot(rootId: string | null | undefined): NavigationSectionId {
   if (!rootId) return "home"
   if (NAVIGATION_SECTION_IDS.includes(rootId as NavigationSectionId)) {
     return rootId as NavigationSectionId
   }
-  return LEGACY_ROOT_SECTIONS[rootId] ?? (rootId.startsWith("mount:") ? "apps" : "home")
+  return rootId.startsWith("mount:") ? "apps" : "home"
 }
 
 export function assertNavigationContract(

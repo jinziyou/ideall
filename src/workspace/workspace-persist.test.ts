@@ -1,7 +1,11 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import type { WorkspacePersistSnapshot } from "./workspace-persist"
-import { WORKSPACE_STORAGE_KEY, scheduleWorkspaceSnapshotPersistence } from "./workspace-persist"
+import {
+  WORKSPACE_PERSIST_VERSION,
+  WORKSPACE_STORAGE_KEY,
+  scheduleWorkspaceSnapshotPersistence,
+} from "./workspace-persist"
 
 function snapshot(activeRootId: string): WorkspacePersistSnapshot {
   return {
@@ -64,6 +68,7 @@ test("workspace persistence: click bursts are deferred and coalesced to the newe
       ],
     )
     assert.equal(JSON.parse(writes[0]!.value).activeRootId, "activity")
+    assert.equal(JSON.parse(writes[0]!.value).version, WORKSPACE_PERSIST_VERSION)
   } finally {
     if (previousWindow) Object.defineProperty(globalThis, "window", previousWindow)
     else delete (globalThis as { window?: unknown }).window

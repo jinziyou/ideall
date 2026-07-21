@@ -46,7 +46,6 @@ import {
   createTaskThread,
   deleteTaskThread,
   listThreadTasks,
-  migrateLegacyThreadTasks,
   readThreadTaskIndexHead,
   replaceThreadTasks,
   saveThreadAndTouchTaskAtomic,
@@ -987,7 +986,6 @@ test("state compatibility: a v15 row without count is repaired once without an e
     key: "state",
     type: "state",
     revision: 7,
-    legacyMigrated: true,
   })
   await idbPut(STORE_AGENT_TASKS, {
     key: "task:legacy",
@@ -1003,34 +1001,10 @@ test("state compatibility: a v15 row without count is repaired once without an e
     type: "state",
     revision: 7,
     count: 1,
-    legacyMigrated: true,
   })
 
   assert.deepEqual(await readThreadTaskIndexHead(), { revision: 7, count: 1 })
   assert.equal(getAllCalls.get(STORE_AGENT_TASKS), scansBefore + 1)
-})
-
-test("legacy migration: marker makes import once-only and only live threads survive", async () => {
-  await idbPut(STORE_NODES, threadNode("live"))
-  await idbPut(STORE_NODES, threadNode("deleted", 100))
-  const legacy = [task("live", 30), task("live", 40), task("deleted"), task("missing")]
-
-  const first = await migrateLegacyThreadTasks(legacy)
-  assert.equal(first.migrated, true)
-  assert.equal(first.imported, 1)
-  assert.equal(first.skipped, 3)
-  assert.equal(first.revision, 1)
-  assert.deepEqual(first.tasks, [task("live", 40)])
-  assert.deepEqual(await readThreadTaskIndexHead(), { revision: 1, count: 1 })
-
-  const second = await migrateLegacyThreadTasks([task("deleted"), task("missing")])
-  assert.deepEqual(second, {
-    revision: 1,
-    tasks: [task("live", 40)],
-    migrated: false,
-    imported: 0,
-    skipped: 0,
-  })
 })
 
 test("create/attach/update: task and thread share one revisioned store", async () => {
@@ -2718,7 +2692,6 @@ test("capacity: durable count rejects create and attach without scanning or drif
     type: "state",
     revision: 9,
     count: MAX_THREAD_TASK_ITEMS,
-    legacyMigrated: true,
   })
   await idbPut(STORE_NODES, threadNode("attach-overflow"))
   const scansBefore = getAllCalls.get(STORE_AGENT_TASKS) ?? 0

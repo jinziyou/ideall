@@ -6,13 +6,12 @@ import { pathToFileURL } from "node:url"
 import { gzipSync } from "node:zlib"
 
 export const DEFAULT_BUNDLE_BUDGET = Object.freeze({
-  // R2/R3 常驻 provider 与 2026-07 minor deps 将总 raw 顶到约 5.66MB；Wonita V2
-  // adapter、字符串 ID 映射和分片同步恢复将当前产物推进到约 5.71MB raw / 1.79MB
-  // gzip。只小幅更新总量基线，继续保留更严格的单 chunk 闸，阻止无界增长。
-  totalBytes: 5_750_000,
-  largestChunkBytes: 1_150_000,
-  totalGzipBytes: 1_810_000,
-  largestChunkGzipBytes: 390_000,
+  // 0.2 以 0.1 的 5.65MB raw / 1.76MB gzip / 1.04MB 最大 chunk 为基线，
+  // 四项预算至少收紧约 20%，阻止重新引入整套编辑器或大语言包。
+  totalBytes: 4_520_000,
+  largestChunkBytes: 835_000,
+  totalGzipBytes: 1_410_000,
+  largestChunkGzipBytes: 285_000,
 })
 
 async function listJavaScriptFiles(directory) {

@@ -58,7 +58,6 @@ import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
   SETTINGS_DATA_EXPORT_ACTION,
   SETTINGS_DATA_IMPORT_ACTION,
-  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
   SETTINGS_DATA_PERSIST_ACTION,
   SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
   SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
@@ -93,7 +92,6 @@ import {
   type SettingsDataImportPreview,
   type SettingsDataImportResult,
   type SettingsDataPersistenceResult,
-  type SettingsDataSecureStoreMigrationResult,
   type SettingsDataSecureStoreSelfTestResult,
   type SettingsRuntimeAction,
   type RuntimeExtensionPublisherCandidate,
@@ -109,7 +107,6 @@ export {
   SETTINGS_CONNECTION_REVOKE_ACTION,
   SETTINGS_DATA_EXPORT_ACTION,
   SETTINGS_DATA_IMPORT_ACTION,
-  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
   SETTINGS_DATA_PERSIST_ACTION,
   SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
   SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
@@ -197,7 +194,6 @@ export type SettingsFileSystemDeps = Readonly<{
   ): MaybePromise<SettingsDataImportResult>
   requestPersistentStorage(): MaybePromise<SettingsDataPersistenceResult>
   selfTestSecureStore(): MaybePromise<SettingsDataSecureStoreSelfTestResult>
-  migrateSecureStore(): MaybePromise<SettingsDataSecureStoreMigrationResult>
   revokeConnection(id: string): MaybePromise<boolean>
   manageRuntimeExtension(action: SettingsRuntimeAction, id: string): MaybePromise<boolean>
   inspectRuntimeExtensionPublisher?(): MaybePromise<RuntimeExtensionPublisherCandidate | null>
@@ -677,10 +673,6 @@ const defaultDeps: SettingsFileSystemDeps = {
   async selfTestSecureStore() {
     const { runSecureStoreSelfTest } = await import("@/lib/secure-store")
     return runSecureStoreSelfTest()
-  },
-  async migrateSecureStore() {
-    const { migrateLegacySecureValues } = await import("@/lib/secure-store")
-    return migrateLegacySecureValues()
   },
   revokeConnection(id) {
     const connected = getConnectionsSnapshot().some((connection) => connection.id === id)
@@ -1233,14 +1225,6 @@ const DATA_SETTINGS_ACTIONS: readonly FileAction[] = [
     risk: "caution",
     requires: [SETTINGS_WRITE_PERMISSION],
   },
-  {
-    id: SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
-    label: "迁移遗留明文凭据",
-    kind: "specialized",
-    reason: "写入系统凭据库并读回验证后，清理旧 fallback 与公开凭据副本。",
-    risk: "caution",
-    requires: [SETTINGS_WRITE_PERMISSION],
-  },
 ]
 
 function settingsArchiveActionInput(
@@ -1625,25 +1609,6 @@ export function createSettingsFileSystem(
           throw new FileSystemError(
             "unavailable",
             `Secure store self-test failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
-            ref,
-          )
-        }
-      }
-
-      if (section === "data" && action === SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION) {
-        assertSettingsMutationAccess(ref, ctx)
-        if (input !== undefined) {
-          throw new FileSystemError("invalid-input", "Secure store migration takes no input", ref)
-        }
-        try {
-          const result = await deps.migrateSecureStore()
-          scheduleNotification(section)
-          return result
-        } catch (error) {
-          if (error instanceof FileSystemError) throw error
-          throw new FileSystemError(
-            "unavailable",
-            `Secure store migration failed: ${settingsDiagnosticMessage(error) ?? "unknown error"}`,
             ref,
           )
         }

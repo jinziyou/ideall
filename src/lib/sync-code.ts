@@ -2,18 +2,15 @@
 // 同步码即「跨端同步」的能力凭证; core (设备标签 / 同步面板) 与 sync 插件共用。
 
 import {
-  LEGACY_PUBLIC_STORAGE_KEYS,
   SECURE_STORE_KEYS,
-  publicStorageRemove,
   secureDelete,
   secureFallbackGet,
   secureFallbackStorageKey,
-  secureGetWithLegacy,
+  secureGet,
   secureSet,
 } from "@/lib/secure-store"
 import { isTauri } from "@/lib/tauri"
 
-export const SYNC_CODE_STORAGE_KEY = LEGACY_PUBLIC_STORAGE_KEYS.SYNC_CODE
 export const SYNC_CODE_SECURE_KEY = SECURE_STORE_KEYS.SYNC_CODE
 const codeListeners = new Set<() => void>()
 let cachedCode: string | null = null
@@ -30,7 +27,7 @@ function readSyncCodeSync(): string | null {
 
 export async function hydrateSyncCodeSecure(): Promise<string | null> {
   if (hydrating) return hydrating
-  hydrating = secureGetWithLegacy(SYNC_CODE_SECURE_KEY, SYNC_CODE_STORAGE_KEY)
+  hydrating = secureGet(SYNC_CODE_SECURE_KEY)
     .then((value) => {
       cachedCode = value
       hydrated = true
@@ -59,7 +56,6 @@ export async function setSyncCode(code: string): Promise<void> {
   await secureSet(SYNC_CODE_SECURE_KEY, code)
   cachedCode = code
   hydrated = true
-  publicStorageRemove(SYNC_CODE_STORAGE_KEY)
   notify()
 }
 
@@ -67,7 +63,6 @@ export async function clearSyncCode(): Promise<void> {
   await secureDelete(SYNC_CODE_SECURE_KEY)
   cachedCode = null
   hydrated = true
-  publicStorageRemove(SYNC_CODE_STORAGE_KEY)
   notify()
 }
 
@@ -75,12 +70,8 @@ export async function clearSyncCode(): Promise<void> {
 // storage 事件只在其它标签页触发 (本页 set/clear 已手动 notify)。SSR 期无 window, 跳过。
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (e) => {
-    if (
-      e.key === null ||
-      e.key === SYNC_CODE_STORAGE_KEY ||
-      e.key === secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)
-    ) {
-      if (e.key === SYNC_CODE_STORAGE_KEY || e.key === null) {
+    if (e.key === null || e.key === secureFallbackStorageKey(SYNC_CODE_SECURE_KEY)) {
+      if (e.key === null) {
         cachedCode = null
         hydrated = false
         void hydrateSyncCodeSecure()

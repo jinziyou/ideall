@@ -6,7 +6,6 @@ import {
   SETTINGS_CONNECTION_REVOKE_ACTION,
   SETTINGS_DATA_EXPORT_ACTION,
   SETTINGS_DATA_IMPORT_ACTION,
-  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
   SETTINGS_DATA_PERSIST_ACTION,
   SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
   SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
@@ -159,9 +158,6 @@ function createFixture(
     },
     selfTestSecureStore() {
       return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
-    },
-    migrateSecureStore() {
-      return { available: true, migrated: 1, removedPlaintext: 1, failed: 0, remaining: 0 }
     },
     revokeConnection(id) {
       connectionRevocations.push(id)
@@ -857,11 +853,6 @@ test("settings filesystem: local data archive actions separate preview/export fr
         risk: "caution",
         requires: [SETTINGS_WRITE_PERMISSION],
       },
-      {
-        id: SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
-        risk: "caution",
-        requires: [SETTINGS_WRITE_PERMISSION],
-      },
     ],
   )
   assert.deepEqual(
@@ -909,11 +900,6 @@ test("settings filesystem: local data archive actions separate preview/export fr
     ),
     { backend: "system-keychain", roundTrip: true, cleanedUp: true },
   )
-  assert.deepEqual(
-    await fixture.fs.invoke(data, SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION, undefined, UI_ACTION),
-    { available: true, migrated: 1, removedPlaintext: 1, failed: 0, remaining: 0 },
-  )
-
   await assert.rejects(
     fixture.fs.invoke(
       data,

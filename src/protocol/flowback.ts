@@ -3,9 +3,8 @@
 // BroadcastChannel 发送脱敏失效信号，接收方仍须从 Storage 重读真值。
 
 export const FILES_UPDATED = "ideall:files-updated"
-/** 跨端同步完成事件 (sync 插件在合并写本地后广播); 同时监听旧 wonita 事件名以兼容已加载旧窗口。 */
+/** 跨端同步完成事件（sync 插件在合并写本地后广播）。 */
 export const SUBSCRIPTIONS_SYNCED = "ideall:subscriptions-synced"
-const LEGACY_SUBSCRIPTIONS_SYNCED = "wonita:subscriptions-synced"
 const FILES_UPDATED_CHANNEL = "ideall:files-updated:v1"
 const FILES_UPDATED_SENDER = createSenderId()
 
@@ -106,14 +105,13 @@ export function notifyFilesUpdated(detail?: FilesUpdate) {
   }
 }
 
-/** 「我的」写入 + 同步完成事件; cb 收到 {kind,id} payload (旧 cb 忽略入参即可)。返回取消监听函数。SSR 安全。 */
+/** 「我的」写入 + 同步完成事件；cb 收到 {kind,id} payload。返回取消监听函数。SSR 安全。 */
 export function onFilesUpdated(cb: (detail?: FilesUpdate) => void): () => void {
   if (typeof window === "undefined") return () => {}
   const target = window
   const h = (e: Event) => cb((e as CustomEvent<FilesUpdate>).detail)
   target.addEventListener(FILES_UPDATED, h)
   target.addEventListener(SUBSCRIPTIONS_SYNCED, h)
-  target.addEventListener(LEGACY_SUBSCRIPTIONS_SYNCED, h)
   let channel = openFilesUpdatedChannel()
   const onMessage = (event: MessageEvent<unknown>) => {
     const message = readBroadcast(event.data)
@@ -137,7 +135,6 @@ export function onFilesUpdated(cb: (detail?: FilesUpdate) => void): () => void {
     disposed = true
     target.removeEventListener(FILES_UPDATED, h)
     target.removeEventListener(SUBSCRIPTIONS_SYNCED, h)
-    target.removeEventListener(LEGACY_SUBSCRIPTIONS_SYNCED, h)
     if (!channel) return
     try {
       channel.removeEventListener("message", onMessage)

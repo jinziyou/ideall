@@ -6,6 +6,8 @@
 
 **设计风格：现代 · 面板 · 留白**
 
+> 0.2 会在首次启动时自动清理旧版本地状态；升级前请先阅读 [0.2 数据与扩展基线](docs/release-0.2.md)。
+
 **设计思想：借鉴 Linux“一切皆文件”的思想，将能力统一抽象为 Storage、FileSystem、IdeallFile、Engine 与 Display。不同存储来源（本地、远端、内置 App、第三方 App）经文件系统汇聚为 ideall 文件；同一文件可在音频、开发等场景中由不同 Engine 渲染为不同视图。左侧导航栏和活动栏相当于符号链接，例如“我的”链接到 `/home`，“关注”和“书签”分别对应 `/home` 下的目录文件。**
 
 核心能力：AI Agent、Shell、浏览器、本地文件与远程文件，汇聚数据、链接与 AI。
@@ -37,10 +39,10 @@ Storage → FileSystem → IdeallFile → Engine → Display
 - 文件使用稳定 `FileRef` 寻址，路径和目录项只是投影。同一书签可同时出现在“书签”和“浏览器”中而不复制数据。
 - 普通打开由默认引擎在当前标签页显示；“打开方式”选择其他引擎时创建同一文件的独立 Engine 标签。只有文件 capability 与 Engine 策略同时允许时，才可另开独立 App 窗口。
 - 默认引擎支持按工作区、单文件或内容类型配置；任意“文件 + 引擎”都可设为首次启动界面。正常启动优先恢复上次关闭的工作现场。
-- 音频和 Code 是针对同一文件的场景化引擎；Git、数据库与 Shell 是保持挂载的工作区工具。精确 legacy 路由 `/audio`、`/git`、`/database`、`/shell` 只切换对应 Workspace Dock，不创建标签；完整 App surface 通过 `FileRef + Engine` 深链打开。旧 Resource/Node 标签及其深链仍只在解析或水合边界迁移，运行期不保留第二套标签身份。
+- 音频和 Code 是针对同一文件的场景化引擎；Git、数据库与 Shell 是保持挂载的工作区工具。精确命令路由 `/audio`、`/git`、`/database`、`/shell` 只切换对应 Workspace Dock，不创建标签；完整 App surface 通过 `FileRef + Engine` 深链打开。0.2 工作区持久化只接受当前 `FileRef + Engine` 标签身份。
 - 普通领域 CRUD 即使经兼容 `FilesPort` 调用，也会进入 FileSystem registry；只有需要墓碑全量快照与原子批处理的同步流程使用独立的窄 `StorageSyncPort`。可信运行时扩展可把 FileSystem 与 Engine/renderer 作为组合贡献原子安装、卸载；package 重放记录绑定版本、内容/权限摘要与宿主恢复的 consent receipt，不从存储执行代码。桌面端支持官方内置及用户核对指纹后导入的第三方 Minisign publisher 根、单调累积签名撤销清单、当前/下一密钥双签名计划轮换，以及签名 envelope 的安装、更新、回滚和物理卸载；轮换后的旧指纹永久退役，旧签名包不会继续运行。固定官方联网 Registry 的分页页逐页验签并缓存原始信封；生产发布链复用 updater 根在 Actions 中签名并经 staging Release 原子切换，API 服务只代理公开信封而不持有私钥。已安装扩展的更高版本可由用户触发安全下载，经过 DNS/IP 钉连、包 SHA、publisher、manifest 与权限差异复验后再确认安装，旧授权不会继承。包在发现、授权和每次启动都会复验根、撤销状态、manifest 与 MCP stdio connector 摘要，不向 webview 加载包代码。完整 receipt 进入系统凭据库，公开快照只有不可自证的 receipt id；未注入 verifier 或非桌面环境均 fail closed。详见[签名运行时扩展包](docs/runtime-extension-packages.md)。
 
-完整契约、权限和迁移说明见 [文件系统与引擎架构](docs/file-system-engine-architecture.md)以及 [architecture.md](docs/architecture.md)。
+完整契约、权限和 0.2 数据基线说明见 [文件系统与引擎架构](docs/file-system-engine-architecture.md)、[architecture.md](docs/architecture.md)以及 [0.2 数据与扩展基线](docs/release-0.2.md)。
 
 ## 开源客户端与后端服务
 

@@ -128,11 +128,6 @@ function hydratePanelFileTab(
 
 type SemanticSurface = DirectorySurface | CapabilitySurface
 
-function surfaceNavigationPath(surface: SemanticSurface, value: unknown): string {
-  const path = validNavigationPath(value)
-  return path && !surface.legacyPaths.includes(path as `/${string}`) ? path : surface.navigationPath
-}
-
 function hydrateSemanticSurfaceTab(
   surface: SemanticSurface,
   tab: Tab,
@@ -145,7 +140,7 @@ function hydrateSemanticSurfaceTab(
       module: surface.module,
       rootId: surface.rootId,
       ...(engineId === surface.engineId ? { path: surface.navigationPath } : {}),
-      navigationPath: surfaceNavigationPath(surface, tab.navigationPath),
+      navigationPath: surface.navigationPath,
     },
   )
   return { ...descriptor, id: tabKey(descriptor) }

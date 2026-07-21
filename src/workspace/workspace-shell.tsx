@@ -49,7 +49,6 @@ import { workspaceCommandForPath } from "./workspace-route"
 function routeProvidesInitialView(pathname: string | null, search: string): boolean {
   if (parseFileEngineSearch(search) || descriptorForResource(search)) return true
   const path = pathname || "/"
-  if (path.startsWith("/ai")) return true
   if (workspaceCommandForPath(path)) return false
   if (path === "/" || path === "/home" || path.startsWith("/home/agent")) return false
   return Boolean(defaultFileForPath(path) || descriptorForPath(path))
@@ -65,7 +64,7 @@ const RightAiPanel = React.lazy(() => import("./right-ai-panel"))
 //     而非组件渲染闭包里的旧值 —— 路由标记 OpenWorkspaceTab 的 openTab effect 已把 activeId
 //     对齐当前 URL, 这里读实时值即可立即收敛, 不与 marker 互相用对方旧值覆盖。
 //  2. 节点标签共享 /home/notes 壳、仅 query 区分; usePathname 不含 query, 故按 pathname+search
-//     比对并「优先 descriptorForResource(search)」解析 (?resource= 优先, 旧 ?node= 兼容)。
+//     比对并优先用 descriptorForResource(search) 解析当前 ?resource= 深链。
 //     收敛靠 tabKey(cur)===t.id 命中 (而非 URL 串
 //     比对, 避开 ":" vs "%3A" 编码不一致导致永不相等 → 每次都 replace 的狂切)。
 function UrlSync() {
@@ -96,7 +95,7 @@ function UrlSync() {
     }
     if (liveTabs.length === 0) {
       // 深链 / 刷新挂载期: hydrate 可能先于路由标记 openTab (tabs 仍空)。
-      // 若当前路径 / ?resource= 或旧 ?node= 能解析成标签 → 不抢, 保住深链;
+      // 若当前路径 / ?resource= 能解析成标签 → 不抢，保住深链；
       // 仅真正孤儿路由或已是 /home 才落 /home。
       const p = pathname || "/"
       if (

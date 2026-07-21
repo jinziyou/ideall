@@ -1,12 +1,12 @@
 // 回收站端到端冒烟 (Playwright) —— 真浏览器驱动:
-//   预置已删除 file/note/thread 节点 → 通过 /trash UI 恢复 → 通过 /trash UI 清空。
+//   预置已删除 file/note/thread 节点 → 通过 /activity/deleted UI 恢复 → 通过 UI 清空。
 //
 // 用法: pnpm smoke:trash
 // 可选: BASE=http://localhost:<端口> pnpm smoke:trash
 // 截图: /tmp/trash-smoke/*.png
 import { BASE, createSmokeRun, escapeRegex, recordNoPageErrors, sleep } from "./lib.mjs"
 
-const TRASH_URL = `${BASE}/trash`
+const TRASH_URL = `${BASE}/activity/deleted`
 const SHOT_DIR = "/tmp/trash-smoke"
 const RUN_ID = Date.now()
 const WORKSPACE_KEY = "ideall:workspace:v1"

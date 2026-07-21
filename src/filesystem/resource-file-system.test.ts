@@ -1239,7 +1239,7 @@ test("resource filesystem: engine access is scoped to its active file", async ()
       }
     },
     async actions() {
-      return [{ id: "delete", label: "Delete", destructive: true }]
+      return [{ id: "delete", label: "Delete", risk: "destructive" }]
     },
     async invoke(_ref, _action, _input, access) {
       actors.push(access.actor)

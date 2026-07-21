@@ -22,6 +22,7 @@
 | --- | --- |
 | [app.md](app.md) | Tauri 开发、构建、平台矩阵、签名与发布 |
 | [app-data-safety-acceptance.md](app-data-safety-acceptance.md) | 真实 Tauri/keychain、加密归档与重启恢复验收 |
+| [release-0.2.md](release-0.2.md) | 0.2 破坏性数据基线、升级清理和当前兼容边界 |
 | [mobile-share-acceptance.md](mobile-share-acceptance.md) | Android/iOS 系统分享宿主接入、安全契约与平台验收 |
 | [scripts.md](scripts.md) | 验证、冒烟、API codegen 与维护脚本 |
 | [ideall-embed-bridge.md](ideall-embed-bridge.md) | iframe + MCP 嵌入桥协议及宿主安全边界 |

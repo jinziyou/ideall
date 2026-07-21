@@ -31,12 +31,11 @@ const TAB_DEFINITIONS = {
     path: "/home/notes",
     layout: "padded",
   },
-  // subscriptions/home-resources/home-bookmarks/apps/trash 只用于读取旧 static tab / URL；
-  // 新入口使用真实 root + Engine。
+  // 下列描述符只供内部面板 renderer 使用；持久化标签统一使用 File+Engine。
   subscriptions: {
     module: "subscriptions",
     title: "关注",
-    path: "/home/subscriptions",
+    path: "/home/following",
     layout: "padded",
   },
   "home-publications": {
@@ -60,7 +59,7 @@ const TAB_DEFINITIONS = {
   "home-settings": {
     module: "home",
     title: "设置",
-    path: "/home/settings",
+    path: "/settings/basic",
     layout: "padded",
     viewType: "config",
   },
@@ -84,15 +83,14 @@ const TAB_DEFINITIONS = {
     path: "/tool/navigation",
     layout: "padded",
   },
-  apps: { module: "apps", title: "应用", path: "/apps", layout: "padded" },
+  apps: { module: "apps", title: "应用", path: "/apps/local-apps", layout: "padded" },
   shell: { module: "shell", title: "终端", path: "/shell", layout: "fill" },
-  // 以下三项仅用于识别并迁移旧 static tab 快照；新导航直接创建真实 App root 的
-  // file-engine descriptor，不再把它们作为可渲染的静态 surface。
+  // 以下三项用于 Dock 命令路由；新导航直接创建真实 App root 的 file-engine descriptor。
   git: { module: "git", title: "Git", path: "/git", layout: "padded" },
   database: { module: "database", title: "数据库", path: "/database", layout: "padded" },
   audio: { module: "audio", title: "音频播放器", path: "/audio", layout: "padded" },
   code: { module: "code", title: "Code", path: "/code", layout: "padded" },
-  trash: { module: "trash", title: "回收站", path: "/trash", layout: "padded" },
+  trash: { module: "trash", title: "回收站", path: "/activity/deleted", layout: "padded" },
   "browser-view": {
     module: "browser",
     title: "浏览器",
@@ -103,7 +101,7 @@ const TAB_DEFINITIONS = {
   "ai-settings": {
     module: "agent",
     title: "AI 设置",
-    path: "/ai",
+    path: "/settings/ai",
     layout: "fill",
     viewType: "config",
   },

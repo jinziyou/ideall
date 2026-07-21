@@ -24,7 +24,7 @@ import {
 import { joinIdeallPath, type IdeallPath } from "@/filesystem/path"
 import {
   NAVIGATION_SECTIONS as FILE_SYSTEM_NAVIGATION_SECTIONS,
-  navigationSectionIdForLegacyRoot,
+  navigationSectionIdForRoot as normalizeFileSystemRoot,
   type NavigationSectionId as FileSystemNavigationSectionId,
 } from "@/filesystem/navigation-file-system"
 
@@ -116,7 +116,7 @@ export function isNavigationSectionId(value: string): value is NavigationSection
   return NAVIGATION_SECTIONS.some((section) => section.id === value)
 }
 
-/** 旧根目录迁到五分区；动态挂载归“应用”，无效值安全回退“我的”。 */
+/** 动态挂载归“应用”，无效值安全回退“我的”。 */
 export function navigationSectionIdForRoot(rootId: string | null | undefined): NavigationSectionId {
-  return navigationSectionIdForLegacyRoot(rootId)
+  return normalizeFileSystemRoot(rootId)
 }

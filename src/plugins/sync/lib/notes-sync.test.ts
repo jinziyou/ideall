@@ -230,7 +230,7 @@ test("syncNotes: 本地有远端没有的笔记 → 照常上传", async () => {
   const res = await syncNotes(CODE)
   assert.equal(server.putCount, 1, "有增量 → 应 PUT 一次")
   assert.equal(server.partPutCount, 1, "单片快照 → 应上传一个 generation part")
-  assert.deepEqual(server.fallbackGetOrder, ["manifest", "v2-single", "v1-legacy"])
+  assert.equal(server.manifestGetCount, 1)
   assert.ok(server.blob, "服务端应已写入密文")
   assert.equal(res.total, 1)
 })

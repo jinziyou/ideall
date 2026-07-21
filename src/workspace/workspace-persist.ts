@@ -3,6 +3,8 @@ import { WORKSPACE_STORAGE_KEY } from "@/lib/workspace-storage"
 
 export { WORKSPACE_STORAGE_KEY }
 
+export const WORKSPACE_PERSIST_VERSION = 2
+
 export type WorkspacePersistSnapshot = {
   tabs: Tab[]
   activeId: string | null
@@ -24,6 +26,7 @@ export function persistWorkspaceSnapshot(state: WorkspacePersistSnapshot, hydrat
   if (typeof window === "undefined" || !hydrated) return
   try {
     const snapshot = JSON.stringify({
+      version: WORKSPACE_PERSIST_VERSION,
       tabs: state.tabs,
       activeId: state.activeId,
       transientId: state.transientId,

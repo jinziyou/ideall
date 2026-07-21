@@ -27,7 +27,6 @@ export const SETTINGS_DATA_PREVIEW_IMPORT_ACTION = "preview-workspace-archive-im
 export const SETTINGS_DATA_IMPORT_ACTION = "import-workspace-archive"
 export const SETTINGS_DATA_PERSIST_ACTION = "request-persistent-storage"
 export const SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION = "self-test-secure-store"
-export const SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION = "migrate-legacy-secure-values"
 export const SETTINGS_RUNTIME_AUTHORIZE_ACTION = "authorize-extension"
 export const SETTINGS_RUNTIME_RETRY_ACTION = "retry-extension"
 export const SETTINGS_RUNTIME_REVOKE_ACTION = "revoke-extension"
@@ -169,14 +168,6 @@ export type SettingsDataSecureStoreSelfTestResult = Readonly<{
   backend: "system-keychain"
   roundTrip: true
   cleanedUp: true
-}>
-
-export type SettingsDataSecureStoreMigrationResult = Readonly<{
-  available: boolean
-  migrated: number
-  removedPlaintext: number
-  failed: number
-  remaining: number
 }>
 
 export type SettingsConnectionDocument = Readonly<{
@@ -625,22 +616,6 @@ export function decodeSettingsDataSecureStoreSelfTestResult(
     throw new TypeError("Secure store self-test result is invalid")
   }
   return { backend: "system-keychain", roundTrip: true, cleanedUp: true }
-}
-
-export function decodeSettingsDataSecureStoreMigrationResult(
-  value: unknown,
-): SettingsDataSecureStoreMigrationResult {
-  const candidate = record(value, "Secure store migration result")
-  if (typeof candidate.available !== "boolean") {
-    throw new TypeError("Secure store migration availability is invalid")
-  }
-  return {
-    available: candidate.available,
-    migrated: integer(candidate.migrated, "Secure store migrated count"),
-    removedPlaintext: integer(candidate.removedPlaintext, "Secure store removed plaintext count"),
-    failed: integer(candidate.failed, "Secure store migration failure count"),
-    remaining: integer(candidate.remaining, "Secure store remaining plaintext count"),
-  }
 }
 
 export function decodeConnectionSettings(value: unknown): readonly SettingsConnectionDocument[] {

@@ -23,7 +23,6 @@ import {
 import { defaultFileForPath } from "./file-roots"
 import { workspaceCommandForPath } from "./workspace-route"
 import { resourceFileRef } from "@/filesystem/resource-file-system"
-import { capabilitySurface } from "./capability-surfaces"
 import { activeTabMatchesRouteDescriptor, activeTabMatchesRouteFile } from "./route-open-guard"
 
 function OpenWorkspaceTabInner() {
@@ -39,19 +38,6 @@ function OpenWorkspaceTabInner() {
       const p = pathname || "/"
       const stateTabs = getTabs()
       const activeTab = stateTabs.find((tab) => tab.id === getActiveId())
-      // /ai: AI 全局设置标签。常驻打开 (区别于下方其余路由统一用的 transient 预览)。
-      if (p === "/ai" || p.startsWith("/ai/")) {
-        const surface = capabilitySurface("agent-settings")
-        if (activeTabMatchesRouteFile(activeTab, surface)) return
-        void openRouteFileTarget({
-          type: "file",
-          ref: surface.ref,
-          engineId: surface.engineId,
-          rootId: surface.rootId,
-          navigationPath: surface.navigationPath,
-        })
-        return
-      }
       // /home/agent: AI 是右侧常驻对话栏, 不开标签 —— 呼出右栏即可。
       if (p.startsWith("/home/agent")) {
         setRightPanel(true)
@@ -69,7 +55,7 @@ function OpenWorkspaceTabInner() {
       // 在分区/底栏间穿梭只复用单一预览槽, 不再为每个落地路由静默堆一个常驻标签 (双击标签即固定)。
       // 命中已存在标签时 transient 分支不改其常驻性, 故已固定的标签不会被回写降级。
       //
-      // 有 ?resource=node:* 或旧 ?node= → 只开节点标签并返回, 不再 fall through 到列表页 descriptor
+      // 有当前 ?resource= 深链时只打开目标标签，不再回落到列表 descriptor。
       // (否则会把刚激活的节点标签 activeId 覆盖回列表页)。
       const rawSearch = search.toString()
       const fileTarget = parseFileEngineSearch(rawSearch)

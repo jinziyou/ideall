@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import { unionMerge, type SyncRecord } from "@protocol/sync"
 import { SYNC_PART_MAX_CIPHERTEXT_CHARS } from "@protocol/sync"
-import { decryptBytes, deriveKeys, encryptJson } from "@/lib/sync-crypto"
+import { decryptBytes, deriveKeys } from "@/lib/sync-crypto"
 import { bytesToHex } from "@/lib/hex"
 import { runDomainSync } from "./sync-domain-machine"
 import { SYNC_MAX_ATTEMPTS, type DomainSyncConfig } from "./sync-domain-runner"
@@ -53,10 +53,7 @@ function response(status: number, data?: unknown): Response {
   })
 }
 
-function installPartitionServer(
-  legacyBlob?: { iv: string; ciphertext: string },
-  options: PartitionServerOptions = {},
-) {
+function installPartitionServer(options: PartitionServerOptions = {}) {
   const generations = new Map<string, Map<number, StoredPart>>()
   let manifest: {
     generation: string
@@ -182,13 +179,6 @@ function installPartitionServer(
       return response(204)
     }
 
-    // 分区 manifest 不存在时，客户会依次探测 V2 单 blob 和 V1 迁移源。
-    if (method === "GET" && url.pathname.startsWith("/v1/sync/") && legacyBlob) {
-      return response(200, { data: { ...legacyBlob, updated_at: 1 } })
-    }
-    if (method === "GET" && /\/sync\/[^/]+$/.test(url.pathname)) {
-      return response(404, { error: { code: "not_found", message: "missing" } })
-    }
     throw new Error(`unexpected sync request: ${method} ${url}`)
   }) as typeof fetch
 
@@ -318,39 +308,6 @@ test("partitioned sync: splits raw UTF-8, commits last, and reads only the commi
   assert.equal(server.commitCount, 1, "equivalent committed snapshot should not be republished")
 })
 
-test("partitioned sync: reads a legacy V1 blob once and republishes it as a V2 manifest", async () => {
-  const record: LargeRecord = { id: "legacy", createdAt: 1, updatedAt: 1, payload: "old" }
-  const { key } = await deriveKeys(CODE, "notes")
-  const server = installPartitionServer(await encryptJson(key, [record]))
-  let local: LargeRecord[] = []
-  const config: DomainSyncConfig<LargeRecord> = {
-    keyScope: "notes",
-    budget: { maxRecords: 10, maxPlaintextBytes: 10_000, maxCiphertextBase64Chars: 20_000 },
-    listLocal: async () => structuredClone(local),
-    merge: unionMerge,
-    gc: (records) => records,
-    async bulkPut(records) {
-      local = structuredClone(records)
-      return structuredClone(local)
-    },
-    isValidRemote(value): value is LargeRecord {
-      const candidate = value as Partial<LargeRecord>
-      return (
-        !!candidate &&
-        typeof candidate.id === "string" &&
-        typeof candidate.createdAt === "number" &&
-        typeof candidate.updatedAt === "number" &&
-        typeof candidate.payload === "string"
-      )
-    },
-  }
-
-  assert.deepEqual(await runDomainSync(CODE, config), { total: 1, added: 1 })
-  assert.deepEqual(local, [record])
-  assert.equal(server.commitCount, 1)
-  assert.ok(server.manifest, "legacy data must be promoted to an atomic V2 snapshot")
-})
-
 test("partitioned sync: maps V2 AES-GCM authentication failure to a stable sync-code error", async () => {
   const server = installPartitionServer()
   const record: LargeRecord = { id: "secret", createdAt: 1, updatedAt: 1, payload: "ciphertext" }
@@ -367,7 +324,7 @@ test("partitioned sync: maps V2 AES-GCM authentication failure to a stable sync-
 })
 
 test("partitioned sync: a replaced generation part 404 restarts from the latest manifest", async () => {
-  const server = installPartitionServer(undefined, { replaceGenerationOnPartGetOnce: true })
+  const server = installPartitionServer({ replaceGenerationOnPartGetOnce: true })
   const record: LargeRecord = { id: "moving", createdAt: 1, updatedAt: 1, payload: "snapshot" }
   const state = makeLargeConfig([record])
   await runDomainSync(CODE, state.config)
@@ -382,7 +339,7 @@ test("partitioned sync: a replaced generation part 404 restarts from the latest 
 })
 
 test("partitioned sync: repeated stale-generation 404 stops at the shared retry limit", async () => {
-  const server = installPartitionServer(undefined, { alwaysPart404: true })
+  const server = installPartitionServer({ alwaysPart404: true })
   const state = makeLargeConfig([
     { id: "moving", createdAt: 1, updatedAt: 1, payload: "never stable" },
   ])
@@ -421,7 +378,7 @@ test("partitioned sync: rejects a manifest whose parts_sha256 does not bind the 
 })
 
 test("partitioned sync: recovers when manifest commit succeeds but its response is unusable", async () => {
-  const server = installPartitionServer(undefined, { ambiguousCommitResponseOnce: true })
+  const server = installPartitionServer({ ambiguousCommitResponseOnce: true })
   const record: LargeRecord = { id: "commit", createdAt: 1, updatedAt: 1, payload: "atomic" }
   const state = makeLargeConfig([record])
 
@@ -442,7 +399,7 @@ for (const scenario of [
   { status: 429, message: /同步请求过于频繁，请稍后重试/ },
 ]) {
   test(`partitioned sync: maps manifest commit ${scenario.status} to a stable user error`, async () => {
-    const server = installPartitionServer(undefined, { rejectCommitStatus: scenario.status })
+    const server = installPartitionServer({ rejectCommitStatus: scenario.status })
     const state = makeLargeConfig([
       { id: `status-${scenario.status}`, createdAt: 1, updatedAt: 1, payload: "rejected" },
     ])

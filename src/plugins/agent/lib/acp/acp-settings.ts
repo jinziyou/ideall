@@ -1,7 +1,6 @@
 // ACP 接入设置 —— 本地优先, 仅存本机 localStorage。
 // 暴露方向 (编辑器经 ACP 连入 ideall): 是否允许 + 监听端口。仅 App 桌面生效 (web/dev 无监听器)。
 export const ACP_SETTINGS_STORAGE_KEY = "ideall:acp:settings"
-export const LEGACY_ACP_SETTINGS_STORAGE_KEY = "wonita:acp:settings"
 
 export type AgentExecutionBackend = "model" | "external-acp"
 
@@ -74,18 +73,7 @@ let lastParsed: AcpSettings = DEFAULT_ACP_SETTINGS
 const listeners = new Set<() => void>()
 
 function readSettingsRaw(): string | null {
-  const raw = localStorage.getItem(ACP_SETTINGS_STORAGE_KEY)
-  const legacy = localStorage.getItem(LEGACY_ACP_SETTINGS_STORAGE_KEY)
-  if (raw !== null) {
-    if (legacy !== null) localStorage.removeItem(LEGACY_ACP_SETTINGS_STORAGE_KEY)
-    return raw
-  }
-  if (legacy !== null) {
-    localStorage.setItem(ACP_SETTINGS_STORAGE_KEY, legacy)
-    localStorage.removeItem(LEGACY_ACP_SETTINGS_STORAGE_KEY)
-    return legacy
-  }
-  return null
+  return localStorage.getItem(ACP_SETTINGS_STORAGE_KEY)
 }
 
 export function getAcpSettings(): AcpSettings {
@@ -112,7 +100,6 @@ export function setAcpSettings(next: AcpSettings): void {
   const normalized = parseAcpSettings(JSON.stringify(next))
   try {
     localStorage.setItem(ACP_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
-    localStorage.removeItem(LEGACY_ACP_SETTINGS_STORAGE_KEY)
   } catch {
     /* 隐私模式 / 存储受限时忽略 */
   }

@@ -16,13 +16,10 @@ export type DirectorySurface = Readonly<{
   module: ModuleId
   rootId: "home" | "activity" | "apps"
   navigationPath: IdeallPath
-  /** 仍可接收外部旧链接，但不再作为新入口生成。 */
-  legacyPaths: readonly IdeallPath[]
 }>
 
 /**
- * 旧管理 panel 到真实目录 Display 的唯一兼容表。旧 FileRef/路由只在打开与水合边界
- * 解引用；运行态标签一律使用真实目录 FileRef + 语义 Engine。
+ * 目录 Display 的唯一规范表；运行态标签使用真实目录 FileRef + 语义 Engine。
  */
 export const DIRECTORY_SURFACES: readonly DirectorySurface[] = [
   {
@@ -33,7 +30,6 @@ export const DIRECTORY_SURFACES: readonly DirectorySurface[] = [
     module: "subscriptions",
     rootId: "home",
     navigationPath: "/home/following",
-    legacyPaths: ["/home/subscriptions"],
   },
   {
     id: "bookmarks",
@@ -43,7 +39,6 @@ export const DIRECTORY_SURFACES: readonly DirectorySurface[] = [
     module: "home",
     rootId: "home",
     navigationPath: "/home/bookmarks",
-    legacyPaths: [],
   },
   {
     id: "resources",
@@ -53,7 +48,6 @@ export const DIRECTORY_SURFACES: readonly DirectorySurface[] = [
     module: "home",
     rootId: "home",
     navigationPath: "/home/resources",
-    legacyPaths: [],
   },
   {
     id: "trash",
@@ -63,7 +57,6 @@ export const DIRECTORY_SURFACES: readonly DirectorySurface[] = [
     module: "trash",
     rootId: "activity",
     navigationPath: "/activity/deleted",
-    legacyPaths: ["/trash"],
   },
   {
     id: "installed-apps",
@@ -73,7 +66,6 @@ export const DIRECTORY_SURFACES: readonly DirectorySurface[] = [
     module: "apps",
     rootId: "apps",
     navigationPath: "/apps/local-apps",
-    legacyPaths: ["/apps"],
   },
 ] as const
 
@@ -99,8 +91,6 @@ function isPathAtOrBelow(pathname: string, path: IdeallPath): boolean {
 
 export function directorySurfaceForPath(pathname: string): DirectorySurface | null {
   return (
-    DIRECTORY_SURFACES.find((surface) => isPathAtOrBelow(pathname, surface.navigationPath)) ??
-    DIRECTORY_SURFACES.find((surface) => surface.legacyPaths.includes(pathname as IdeallPath)) ??
-    null
+    DIRECTORY_SURFACES.find((surface) => isPathAtOrBelow(pathname, surface.navigationPath)) ?? null
   )
 }

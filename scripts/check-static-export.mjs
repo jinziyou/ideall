@@ -34,7 +34,6 @@ const requiredFiles = [
   "settings/basic.html",
   "settings/ai.html",
   "code.html",
-  "trash.html",
 ]
 
 async function isFile(file) {

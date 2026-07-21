@@ -156,13 +156,6 @@ export type ThreadTaskDeleteExpectation = Readonly<{
   updatedAt: number
 }>
 
-export interface ThreadTaskMigration extends ThreadTaskSnapshot {
-  /** 本次调用是否执行了旧 localStorage 快照迁移；false 表示其它窗口已完成。 */
-  migrated: boolean
-  imported: number
-  skipped: number
-}
-
 export type ThreadTaskPatch = {
   status?: ThreadTaskStatus
   starred?: boolean
@@ -183,10 +176,9 @@ export class ThreadTaskConflictError extends Error {
  * 插件和 Display 不得直接依赖具体 IndexedDB store。
  */
 export interface ThreadTaskStoragePort {
-  /** O(1) 读取持久化 revision/count；旧 state 行会由 Storage 层惰性修复。 */
+  /** O(1) 读取持久化 revision/count。 */
   readThreadTaskIndexHead(): Promise<ThreadTaskIndexHead>
   listThreadTasks(): Promise<ThreadTaskSnapshot>
-  migrateLegacyThreadTasks(tasks: readonly ThreadTask[]): Promise<ThreadTaskMigration>
   createTaskThread(workspaceId: string): Promise<{
     thread: Thread
     task: ThreadTask

@@ -43,7 +43,7 @@ export type ResourceActionId =
 export type ResourceAction = {
   id: ResourceActionId
   label: string
-  destructive?: boolean
+  risk?: "safe" | "caution" | "destructive"
   requires?: ResourceCapability[]
   invocation?: "display" | "parameterless"
 }

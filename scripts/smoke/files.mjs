@@ -12,6 +12,7 @@ import {
   createSmokeRun,
   escapeRegex,
   recordNoPageErrors,
+  sleep,
   waitForLiveFileById,
   waitForLiveFileByName,
   waitForNoLiveFileByName,
@@ -28,6 +29,17 @@ const EDITED_TEXT = `# Smoke file\n\nEdited by files smoke.\n\n- persisted: yes\
 const TAGS_TEXT = "smoke, e2e"
 const TEXT_PREVIEW_LIMIT = 512 * 1024
 const WORKSPACE_KEY = "ideall:workspace:v1"
+
+/** highlight.js 会拆分 DOM 文本节点，冒烟改为读 textarea value。 */
+async function waitForEditorValue(editor, expected, timeout = 15000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const value = await editor.inputValue().catch(() => "")
+    if (value.includes(expected)) return value
+    await sleep(200)
+  }
+  throw new Error(`editor value missing: ${expected}`)
+}
 
 function createSmokePdfBuffer() {
   const stream = "BT /F1 24 Tf 48 120 Td (Smoke PDF) Tj ET"
@@ -215,11 +227,9 @@ try {
   // 普通工作区默认使用只读预览；本场景需要显式切到可写的“开发”引擎。
   await page.getByRole("button", { name: "通用预览", exact: true }).click()
   await page.getByRole("menuitem", { name: "开发", exact: true }).first().click()
-  const editor = activePanel.locator(".cm-content")
+  const editor = activePanel.getByRole("textbox", { name: /代码编辑器$/ })
   await editor.waitFor({ state: "visible", timeout: 30000 })
-  await activePanel
-    .getByText("Created by ideall files smoke.", { exact: true })
-    .waitFor({ state: "visible", timeout: 15000 })
+  await waitForEditorValue(editor, "Created by ideall files smoke.")
   record("从资源列表打开文件标签", true)
 
   markStage("edit and save")
@@ -231,20 +241,17 @@ try {
     .getByText("已保存", { exact: true })
     .first()
     .waitFor({ state: "visible", timeout: 15000 })
-  record("编辑 CodeMirror 内容并保存", true)
+  record("编辑代码内容并保存", true)
   await page.screenshot({ path: `${SHOT_DIR}/2-edited.png` })
 
   markStage("reload saved content")
   // 默认开发引擎直接在主标签中编辑；预览是另一个引擎，手动选择时由桌面壳打开独立窗口。
   // 此处刷新当前 FileRef + engine 标签，验证 write-blob 真正持久化，而非只检查成功 toast。
   await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 })
-  await activePanel.locator(".cm-content").waitFor({ state: "visible", timeout: 30000 })
-  await activePanel
-    .getByText("Edited by files smoke.", { exact: true })
-    .waitFor({ state: "visible", timeout: 15000 })
-  await activePanel
-    .getByText(FAST_SAVE_TOKEN, { exact: false })
-    .waitFor({ state: "visible", timeout: 15000 })
+  const reloadedEditor = activePanel.getByRole("textbox", { name: /代码编辑器$/ })
+  await reloadedEditor.waitFor({ state: "visible", timeout: 30000 })
+  await waitForEditorValue(reloadedEditor, "Edited by files smoke.")
+  await waitForEditorValue(reloadedEditor, FAST_SAVE_TOKEN)
   record("刷新后开发引擎回显保存内容", true)
   record("快速输入后立即保存保留尾部 token", true)
 
@@ -302,34 +309,51 @@ try {
   await page.screenshot({ path: `${SHOT_DIR}/4-cleaned.png` })
 
   markStage("missing file preview")
+  // openRouteFileTarget 对缺失文件 fail-closed（不建标签）；改用水合规范 file-engine 快照展示兜底。
   const missingFileId = `f_missing_${RUN_ID}`
-  const missingNodeQuery = `file:${missingFileId}`
-  const missingTabId = `node:id=${missingFileId}&kind=file`
+  const missingResourceKey = `node:file:${encodeURIComponent(missingFileId)}`
+  const missingFileIdPart = `resource:${encodeURIComponent(missingResourceKey)}`
+  const missingFileKey = `ideall.core:${encodeURIComponent(missingFileIdPart)}`
+  const missingPath = `/home?${new URLSearchParams({
+    file: missingFileKey,
+    engine: "ideall.preview",
+  }).toString()}`
+  const missingTabId = `file-engine:engine=ideall.preview&file=${missingFileKey}`
   await page.evaluate(
-    ({ nodeQuery, tabId, fileId, key }) => {
+    ({ key, tabId, path, fileKey }) => {
       const snapshot = {
+        version: 2,
         tabs: [
           {
             id: tabId,
-            kind: "node",
+            kind: "file-engine",
             module: "home",
-            title: fileId,
-            path: `/home/notes?node=${encodeURIComponent(nodeQuery)}`,
-            params: { kind: "file", id: fileId },
+            title: "missing-file",
+            path,
+            params: { file: fileKey, engine: "ideall.preview" },
           },
         ],
         activeId: tabId,
         transientId: tabId,
         activeModule: "home",
+        activeRootId: "home",
+        workspaceKind: "files",
+        developmentTool: "git",
         sidebarCollapsed: false,
         rightPanelOpen: false,
       }
-      sessionStorage.setItem(key, JSON.stringify(snapshot))
-      localStorage.setItem(key, JSON.stringify(snapshot))
+      const raw = JSON.stringify(snapshot)
+      sessionStorage.setItem(key, raw)
+      localStorage.setItem(key, raw)
     },
-    { nodeQuery: missingNodeQuery, tabId: missingTabId, fileId: missingFileId, key: WORKSPACE_KEY },
+    {
+      key: WORKSPACE_KEY,
+      tabId: missingTabId,
+      path: missingPath,
+      fileKey: missingFileKey,
+    },
   )
-  await page.goto(`${BASE}/home/notes?node=${encodeURIComponent(missingNodeQuery)}`, {
+  await page.goto(`${BASE}/home`, {
     waitUntil: "domcontentloaded",
     timeout: 30000,
   })

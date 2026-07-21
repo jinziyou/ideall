@@ -33,7 +33,6 @@ import { loadLocalSemanticRuntime } from "@/workspace/local-semantic-runtime-cli
 import {
   SETTINGS_DATA_EXPORT_ACTION,
   SETTINGS_DATA_IMPORT_ACTION,
-  SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION,
   SETTINGS_DATA_PERSIST_ACTION,
   SETTINGS_DATA_PREVIEW_IMPORT_ACTION,
   SETTINGS_DATA_SECURE_STORE_SELF_TEST_ACTION,
@@ -41,7 +40,6 @@ import {
   decodeSettingsDataImportPreview,
   decodeSettingsDataImportResult,
   decodeSettingsDataPersistenceResult,
-  decodeSettingsDataSecureStoreMigrationResult,
   decodeSettingsDataSecureStoreSelfTestResult,
   type DataSettingsDocument,
   type SettingsDataImportPreview,
@@ -242,30 +240,6 @@ export function LocalDataPanel({
       toast.success("系统凭据库写入、读回与清理自检通过")
     } catch (error) {
       toast.error("系统凭据库自检失败", {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }, [document])
-
-  const migrateSecureStore = React.useCallback(async () => {
-    try {
-      const result = decodeSettingsDataSecureStoreMigrationResult(
-        await document.invoke(SETTINGS_DATA_MIGRATE_SECURE_STORE_ACTION),
-      )
-      await document.refresh()
-      if (!result.available) {
-        toast.error("遗留凭据迁移仅可在桌面 App 中运行")
-      } else if (result.failed > 0 || result.remaining > 0) {
-        toast.error("部分遗留凭据未能迁移", {
-          description: `已迁移 ${result.migrated} 项、清理 ${result.removedPlaintext} 个明文副本；失败 ${result.failed} 项，剩余 ${result.remaining} 项。`,
-        })
-      } else {
-        toast.success(
-          `遗留凭据迁移完成：迁移 ${result.migrated} 项，清理 ${result.removedPlaintext} 个明文副本`,
-        )
-      }
-    } catch (error) {
-      toast.error("遗留凭据迁移失败", {
         description: error instanceof Error ? error.message : String(error),
       })
     }
@@ -591,16 +565,6 @@ export function LocalDataPanel({
                     {document.acting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     运行系统凭据库自检
                   </Button>
-                  {fallbackCount + legacyCount > 0 ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={document.acting || !secureHealthy}
-                      onClick={() => void migrateSecureStore()}
-                    >
-                      迁移遗留明文凭据
-                    </Button>
-                  ) : null}
                 </div>
               ) : null}
             </div>

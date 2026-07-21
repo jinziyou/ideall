@@ -377,7 +377,12 @@ function nodeActions(kind: NodeKind): ResourceAction[] {
   if (kind === "bookmark" || kind === "feed") {
     actions.push({ id: "navigate", label: "访问", requires: ["navigate"] })
   }
-  actions.push({ id: "delete", label: "删除", destructive: true, requires: ["delete"] })
+  actions.push({
+    id: "delete",
+    label: "删除",
+    risk: "destructive",
+    requires: ["delete"],
+  })
   return actions
 }
 

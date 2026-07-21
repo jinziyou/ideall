@@ -106,10 +106,6 @@ function credential(target: string | null, apiKey = "", revision: number | strin
   return JSON.stringify({ version: 2, target, apiKey, revision: String(revision) })
 }
 
-function legacyCredential(target: string | null, apiKey = ""): string {
-  return JSON.stringify({ version: 1, target, apiKey })
-}
-
 function decodedCredential(raw: string | undefined): {
   version: number
   target: string | null
@@ -702,7 +698,7 @@ test("agent workspace store: committed older credential remains valid after publ
   assert.equal(storage.getItem(AGENT_WORKSPACES_STORAGE_KEY), original)
 })
 
-test("agent workspace store: revisioned plaintext and bare secure values migrate atomically", async () => {
+test("agent workspace store: current mutation input moves plaintext into a revisioned credential", async () => {
   const endpoint = "https://api.example.test/v1"
   const key = "ideall:agent:workspace:ws-1:apiKey"
 
@@ -734,54 +730,6 @@ test("agent workspace store: revisioned plaintext and bare secure values migrate
     target: endpoint,
     apiKey: "plaintext-secret",
     revision: "8",
-  })
-
-  const bareStorage = new MemoryStorage()
-  const bareSecure = new Map<string, string>([[key, "bare-secret"]])
-  const bareWorkspace = workspace("ws-1", {
-    model: { useGlobal: false, baseURL: endpoint, model: "m", apiKey: "" },
-  })
-  bareStorage.seed(
-    AGENT_WORKSPACES_STORAGE_KEY,
-    envelope({ workspaces: [bareWorkspace], activeId: "ws-1" }, 4),
-  )
-  const bareStore = createAgentWorkspaceStore(
-    createDeps(bareStorage, {
-      secureGet: async (secureKey) => bareSecure.get(secureKey) ?? null,
-      secureSet: async (secureKey, value) => void bareSecure.set(secureKey, value),
-      secureFallbackGet: () => null,
-    }),
-  )
-  await bareStore.refreshRaw()
-  assert.equal(bareStore.revisionSnapshot(), "5")
-  assert.deepEqual(decodedCredential(bareSecure.get(key)), {
-    version: 2,
-    target: endpoint,
-    apiKey: "bare-secret",
-    revision: "5",
-  })
-
-  const v1Storage = new MemoryStorage()
-  const v1Secure = new Map<string, string>([[key, legacyCredential(endpoint, "v1-secret")]])
-  v1Storage.seed(
-    AGENT_WORKSPACES_STORAGE_KEY,
-    envelope({ workspaces: [bareWorkspace], activeId: "ws-1" }, 6),
-  )
-  const v1Store = createAgentWorkspaceStore(
-    createDeps(v1Storage, {
-      secureGet: async (secureKey) => v1Secure.get(secureKey) ?? null,
-      secureSet: async (secureKey, value) => void v1Secure.set(secureKey, value),
-      secureFallbackGet: () => null,
-    }),
-  )
-  await v1Store.refreshRaw()
-  assert.equal(v1Store.revisionSnapshot(), "7")
-  assert.equal(v1Store.resolveModel(v1Store.get("ws-1")!).apiKey, "v1-secret")
-  assert.deepEqual(decodedCredential(v1Secure.get(key)), {
-    version: 2,
-    target: endpoint,
-    apiKey: "v1-secret",
-    revision: "7",
   })
 })
 

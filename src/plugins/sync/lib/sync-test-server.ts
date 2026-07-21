@@ -15,8 +15,7 @@ export type SyncTestServer = {
   partPutCount: number
   discardCount: number
   expectedValues: number[]
-  /** 不含 generation part GET，只记录无 manifest 时的兼容读取链。 */
-  fallbackGetOrder: Array<"manifest" | "v2-single" | "v1-legacy">
+  manifestGetCount: number
 }
 
 const SHA256_PLACEHOLDER = "0".repeat(64)
@@ -63,7 +62,7 @@ function parseBody<T>(init: RequestInit): T {
 
 /**
  * 安装 V2 manifest + immutable generation parts + CAS 的内存服务端。
- * 小测试快照均为单片；无 manifest 时，V2 single 与 V1 legacy 默认都返回 404。
+ * 小测试快照均为单片；无 manifest 时客户端直接创建当前分区快照。
  */
 export function makeSyncTestServer(initial: SyncBlob | null = null): SyncTestServer {
   const pending = new Map<string, Map<number, SyncPartWrite>>()
@@ -80,7 +79,7 @@ export function makeSyncTestServer(initial: SyncBlob | null = null): SyncTestSer
     partPutCount: 0,
     discardCount: 0,
     expectedValues: [],
-    fallbackGetOrder: [],
+    manifestGetCount: 0,
   }
 
   const nextGeneration = () => {
@@ -119,7 +118,7 @@ export function makeSyncTestServer(initial: SyncBlob | null = null): SyncTestSer
     const manifestMatch = path.match(/^\/v2\/app\/sync\/[^/]+\/manifest$/)
     if (manifestMatch) {
       if (method === "GET") {
-        state.fallbackGetOrder.push("manifest")
+        state.manifestGetCount += 1
         if (!state.manifest) return testResponse(404)
         state.manifest = await hydrateManifest(state.manifest, activeParts)
         return envelope(state.manifest)
@@ -205,15 +204,6 @@ export function makeSyncTestServer(initial: SyncBlob | null = null): SyncTestSer
       state.discardCount += 1
       pending.delete(generationMatch[1]!)
       return testResponse(204)
-    }
-
-    if (/^\/v2\/app\/sync\/[^/]+$/.test(path) && method === "GET") {
-      state.fallbackGetOrder.push("v2-single")
-      return testResponse(404)
-    }
-    if (/^\/v1\/sync\/[^/]+$/.test(path) && method === "GET") {
-      state.fallbackGetOrder.push("v1-legacy")
-      return testResponse(404)
     }
 
     throw new Error(`unexpected request: ${method} ${url}`)
