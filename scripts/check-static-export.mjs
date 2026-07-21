@@ -33,6 +33,7 @@ const requiredFiles = [
   "apps/local-apps.html",
   "settings/basic.html",
   "settings/ai.html",
+  "community/publication.html",
   "code.html",
 ]
 

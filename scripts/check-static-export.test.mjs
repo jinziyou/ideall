@@ -20,6 +20,7 @@ const REQUIRED_FILES = [
   "apps/local-apps.html",
   "settings/basic.html",
   "settings/ai.html",
+  "community/publication.html",
   "code.html",
 ]
 const tempRoots = []
@@ -87,6 +88,7 @@ test("check-static-export requires canonical navigation pages", async () => {
     "apps/local-apps.html",
     "settings/basic.html",
     "settings/ai.html",
+    "community/publication.html",
     "home/resources.html",
   ]) {
     const root = await createFixture()

@@ -126,7 +126,7 @@ home（即「我的」）是本机数据区，apps（应用）是本机已安装
 
 > info/community 的发现 UI 默认以 wonita 应用 iframe 嵌入（经 `ideall-embed-bridge` 协议可换源）；其 ServerPort 取数仍是关注流「汇入我的」的真实路径。home 的**发布（publications）**是本机数据区里的例外：发布为账号身份、依赖后端，与 home 其余本地优先数据（笔记/书签/资源/关注）不同。
 
-> 路由分布：app 路由层只是「打开目标或执行工作区命令」的薄标记（`page.tsx` re-export `@/workspace/open-workspace-tab`），其中四条精确命令路由只切换 Workspace Dock。实现各归其层——「我的」的本地数据层在 `src/files/*`、功能 UI 在 `src/modules/home/*`；info/community/tool 的实现在 `src/modules/<name>/*`，由路由薄 re-export。
+> 路由分布：app 路由层只是「打开目标或执行工作区命令」的薄标记；根路径与所有静态深链共用一个可选 catch-all 页面及 `@/workspace/open-workspace-tab`，构建路径由 `src/workspace/static-routes.ts` 单点声明，其中四条精确命令路径只切换 Workspace Dock。实现各归其层——「我的」的本地数据层在 `src/files/*`、功能 UI 在 `src/modules/home/*`；info/community/tool 的实现在 `src/modules/<name>/*`，不进入路由目录。
 >
 > **浏览器**位于“浏览 > 浏览器”，打开 `browser:page:default` Resource。**AI** 的管理入口位于“设置 > AI”，打开 `app.agent-config / config:settings`；Agent 对话仍是三种工作区共享的右侧环境能力。
 
@@ -143,7 +143,7 @@ home（即「我的」）是本机数据区，apps（应用）是本机已安装
 
 | 层 | 别名 | 内容 |
 | --- | --- | --- |
-| **app** | `@/app/*` | Next 路由层——仅分发打开目标或工作区命令的薄标记：`page.tsx` 几乎全是 re-export `@/workspace/open-workspace-tab`（唯一例外 `app/auth/page.tsx`：独立登录页，直接渲染 `@/shell/auth-form`），外加根 `layout`/`error`/`loading`/`not-found` + `globals.css`（`@/app/globals.css`）。 |
+| **app** | `@/app/*` | Next 薄路由层——`(workspace)/[[...path]]/page.tsx` 统一分发工作区目标，`(standalone)/auth/page.tsx` 渲染独立登录页；其余仅保留根 `layout`/`error`/`global-error`/`loading`/`not-found`、图标和全局样式。静态深链清单位于 `src/workspace/static-routes.ts`。 |
 | **shell** | `@/shell/*` | 终端外壳——命令台 / header / bottom-tab-bar / 主题（theme/theme-applier）/ account / mobile-nav / nav-config，加 `boot`（组合根，**唯一**允许 import 各 manifest 处）/ `boot-gate`（启动闸）/ `runtime-extensions`（宿主 verify/consent、严格 receipt 恢复、一次性 activation permit、原子安装、撤销与 quarantine 生命周期）。 |
 | **workspace** | `@/workspace/*` | Display 编排——`workspace-shell` / `workspace-dock` 组合三种工作区，全局命令面板调用 store 切换工作区；活动栏、二级侧栏与移动抽屉读取同一导航 FileSystem；`tab-host` 保持挂载多标签并只休眠已有安全快照的 dirty Engine，`registry` 与 `file-engine-renderer` 渲染 File + Engine，`tree/file-system-sidebar-tree` 展示目录；`store` 是状态/副作用 facade。 |
 | **filesystem** | `@/filesystem/*` | 多实例文件系统 registry、隐藏合成根、只读 `ideall.navigation` 路径命名空间、动态 App 挂载，以及 `resource-file-system` 对 `resource-sources/` 中 Node/连接数据 Resource source/provider 的 `ideall.core` 兼容投影。统一 `stat/statMany/readDirectory/read/readMany/write/actions/watch`；`path.ts` 逐级解析目录项且最终仍返回 target `FileRef`。批量 metadata/正文读取按 provider 分组并有限并发回退，provider generation 变化会拒绝迟到结果。 |

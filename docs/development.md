@@ -69,7 +69,7 @@ Settings section 与 Agent config 的文件版本分别固定为 `settings-v2:<s
 
 | 目录 | 别名 | 内容 |
 | --- | --- | --- |
-| **app** | `@/app/*` | Next 路由层——仅打开目标或执行工作区命令的薄标记（`page.tsx` 几乎全是 re-export `@/workspace/open-workspace-tab`；唯一例外 `app/auth/page.tsx` 是独立登录页，渲染 `@/shell/auth-form`）+ 根 layout/error/loading/not-found + `globals.css` |
+| **app** | `@/app/*` | Next 薄路由层——`(workspace)/[[...path]]/page.tsx` 统一分发工作区目标，`(standalone)/auth/page.tsx` 渲染独立登录页；其余仅保留根 layout/error/global-error/loading/not-found、图标和全局样式。静态深链由 `src/workspace/static-routes.ts` 声明 |
 | **shell** | `@/shell/*` | 终端外壳 —— 五分区导航 / 命令台 / header / bottom-tab-bar / 主题 / account / mobile-nav，以及唯一组合根 `boot`、启动闸 `boot-gate` 和可信扩展生命周期 `runtime-extensions` |
 | **workspace** | `@/workspace/*` | Display 编排 —— File + Engine 标签、三种工作区、目录树、标签生命周期、脏 Engine 休眠，以及仅位于深链解析/工作区水合边界的旧 Resource/Node 标签迁移 |
 | **filesystem** | `@/filesystem/*` | FileSystem registry、隐藏合成根、`ideall.navigation` 路径链接、provider 挂载、`statMany/readMany` 批量读取与 watch 生命周期；`resource-file-system` 将 `resource-sources/` 下的 Node/连接数据 Resource source/provider 适配到 `ideall.core`，`app.settings` 提供基本设置根与四个 section 快照 |

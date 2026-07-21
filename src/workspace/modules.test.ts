@@ -96,8 +96,7 @@ test("descriptorForPath: 前缀回退", () => {
   assert.equal(descriptorForPath("/tool/whatever")?.kind, "tool-search")
 })
 
-test("descriptorForPath: /home/agent 是虚拟命令路由 → 显式 null; 未知路径 → null; 空串兜底概览", () => {
-  assert.equal(descriptorForPath("/home/agent"), null)
+test("descriptorForPath: 未知路径 → null; 空串兜底概览", () => {
   assert.equal(descriptorForPath("/nonexistent"), null)
   assert.equal(descriptorForPath("")?.kind, "home-overview", "空 pathname 兜底到概览")
 })
