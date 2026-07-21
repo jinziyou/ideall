@@ -118,7 +118,7 @@ pnpm app:dev --config '{"build":{"devUrl":"http://localhost:5026"}}'
 
 CI 分三层：
 
-- `.github/workflows/ci.yml`：单一 quality job 运行 `verify:checks`，build job 独立复用 Next 缓存并运行 `app:export`，避免每项检查重复安装依赖，同时锁住静态入口和 bundle 预算。
+- `.github/workflows/ci.yml`：单一 quality job 运行 `verify:checks`，build job 通过共享 `setup-next-cache` action 复用 Next 缓存并运行 `app:export`，避免每项检查重复安装依赖，同时锁住静态入口和 bundle 预算。
 - `.github/workflows/rust.yml`：`src-tauri/**` 改动时跑 rustfmt、cargo check、clippy 零警告和 cargo test。
 - `.github/workflows/smoke.yml`：应用面改动时跑静态导出生产形态的浏览器冒烟；本地等价入口是 `pnpm verify:smoke:static`。
 

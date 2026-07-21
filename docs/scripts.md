@@ -7,7 +7,7 @@
 | 类型 | 入口 | 用途 |
 | --- | --- | --- |
 | 日常开发 | `pnpm dev` / `pnpm app:dev` | Next 开发服与 Tauri 桌面开发壳 |
-| 质量门禁 | `pnpm verify:checks` | format、代码/工作流/依赖/文档 lint、版本一致性、typecheck、test、API drift |
+| 质量门禁 | `pnpm verify:checks` | format、代码/工作流/依赖/孤立文件/文档 lint、版本一致性、typecheck、test、API drift |
 | 完整门禁 | `pnpm verify` / `pnpm verify:base` | `verify:checks` 后复用 `app:export` 检查构建、静态入口与 bundle 预算 |
 | 覆盖率门禁 | `pnpm test:coverage` | 为选定核心源码生成 c8 text/lcov 报告，并检查覆盖率基线 |
 | 生产冒烟 | `pnpm verify:smoke:static` | 静态导出后启动 `out/` 预览服并跑浏览器冒烟 |
@@ -47,18 +47,19 @@ pnpm verify:base
 3. `pnpm lint:actions`
 4. `pnpm lint:storage`
 5. `pnpm lint:deps`
-6. `pnpm lint:docs`
-7. `pnpm version:check`
-8. `pnpm clean:next`
-9. `pnpm typecheck`
-10. `pnpm test:coverage`
-11. `pnpm test:scripts`
-12. `pnpm gen:api:check`
-13. `pnpm build`
-14. `pnpm verify:static-export`
-15. `pnpm verify:bundle`
+6. `pnpm lint:dead-code`
+7. `pnpm lint:docs`
+8. `pnpm version:check`
+9. `pnpm clean:next`
+10. `pnpm typecheck`
+11. `pnpm test:coverage`
+12. `pnpm test:scripts`
+13. `pnpm gen:api:check`
+14. `pnpm build`
+15. `pnpm verify:static-export`
+16. `pnpm verify:bundle`
 
-前 12 步也可单独运行 `pnpm verify:checks`，供 CI 质量 job 和发布 preflight 复用；其中 `lint:storage` 禁止在冻结的领域适配器之外直接调用 `localStorage/sessionStorage`，新增配置应使用 `public-config`、`secure-store` 或既有领域 store；`lint:deps` 使用 Knip 检查未使用、多余和未声明依赖。`pnpm clean:next` 只删除 `.next/`，用于清掉 Next 生成类型与缓存，避免脏产物影响 `tsc --noEmit`。后 3 步由 `pnpm app:export` 统一承载：先构建静态导出，再确认关键路由和 `_next` chunk 已生成，最后检查 JavaScript raw/gzip 总量与最大单 chunk 预算。Tauri 打包与 CI build job 都复用同一入口。
+前 13 步也可单独运行 `pnpm verify:checks`，供 CI 质量 job 和发布 preflight 复用；其中 `lint:storage` 禁止在冻结的领域适配器之外直接调用 `localStorage/sessionStorage`，新增配置应使用 `public-config`、`secure-store` 或既有领域 store；`lint:deps` 使用 Knip 检查未使用、多余和未声明依赖，`lint:dead-code` 使用同一入口图检查未被产品、测试、Worker 或 fixture 引用的孤立文件。`pnpm clean:next` 只删除 `.next/`，用于清掉 Next 生成类型与缓存，避免脏产物影响 `tsc --noEmit`。后 3 步由 `pnpm app:export` 统一承载：先构建静态导出，再确认关键路由和 `_next` chunk 已生成，最后检查 JavaScript raw/gzip 总量与最大单 chunk 预算。Tauri 打包与 CI build job 都复用同一入口。
 
 已有生产构建时可单独运行：
 
@@ -92,7 +93,7 @@ pnpm test:coverage
 
 `scripts/run-tests.mjs` 运行 `src/**/*.test.ts`。传入子串时只运行路径包含该子串的测试；少数会启动真实 SDK server 或子进程的 MCP 测试会在并发批次后串行运行。
 
-`pnpm test:coverage` 运行同一组业务测试，并为 protocol、filesystem、engines、shell 启动/运行时扩展、workspace store 和 plugins/shared 等选定核心路径生成 c8 text/lcov 报告。门禁要求 statements/lines ≥ 80%、branches ≥ 75%、functions ≥ 78%，并作为 `verify:checks` 的业务测试步骤；普通开发仍可用 `pnpm test [过滤串]` 快速运行聚焦测试。
+`pnpm test:coverage` 运行同一组业务测试，并为 protocol、filesystem、engines、shell 启动/运行时扩展、workspace store 和 plugins/shared 等选定核心路径中的可执行代码生成 c8 text/lcov 报告；纯类型契约不参与分母。门禁要求 statements/lines ≥ 80%、branches ≥ 75%、functions ≥ 78%，并作为 `verify:checks` 的业务测试步骤；普通开发仍可用 `pnpm test [过滤串]` 快速运行聚焦测试。
 
 `pnpm test:scripts` 自动发现 `scripts/*.test.mjs`，并使用隔离子进程运行原生 `node:test` 维护脚本测试；可像 `pnpm test:scripts -- release-artifacts` 一样用路径子串聚焦。它与业务测试分开，便于脚本保持纯 Node、跨平台且不依赖应用别名。runner 复用业务测试的超时、进程树回收和有限日志能力，并避免依赖 `node --test` CLI 的 glob 实现。
 

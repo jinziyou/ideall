@@ -16,9 +16,10 @@ test("app build change classification keeps documentation-only pushes cheap", ()
   assert.deepEqual(decision, { build: false, rust: false, applicationPaths: [] })
 })
 
-test("the release workflow and shared setup action always exercise the app build", () => {
+test("the release workflow and shared CI actions always exercise the app build", () => {
   assert.equal(isBuildNeutralPath(".github/workflows/app-build.yml"), false)
   assert.equal(isBuildNeutralPath(".github/actions/setup-js/action.yml"), false)
+  assert.equal(isBuildNeutralPath(".github/actions/setup-next-cache/action.yml"), false)
   assert.equal(isBuildNeutralPath(".github/workflows/smoke.yml"), true)
 
   const decision = classifyChangedPaths([".github/workflows/app-build.yml"])
