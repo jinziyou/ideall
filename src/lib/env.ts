@@ -15,9 +15,3 @@ export const API_V2_APP: string = `${SERVER_ADDR}/v2/app`
 
 /** wonita V2 Data API：可匿名直连的 corpus / graph / catalog 公共读端点。 */
 export const API_V2_DATA: string = `${SERVER_ADDR}/v2/data`
-
-/**
- * wonita V1 base URL。仅供尚未迁移的兼容边界使用；新 ServerPort 业务不得再从这里增加
- * auth/community/data 调用。
- */
-export const API_V1: string = `${SERVER_ADDR}/v1`
