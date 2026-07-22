@@ -114,7 +114,8 @@ pnpm test:coverage
 ```bash
 pnpm gen:api
 pnpm gen:api:check
-SERVER_LOCAL=/abs/path/to/wonita/apiserver/openapi.json \
+SERVER_LOCAL=/abs/path/to/wonita/apps/apiserver/openapi.json \
+SERVER_SOURCE_PATH=apps/apiserver/openapi.json \
 SERVER_SOURCE_COMMIT=<wonita-commit> pnpm sync:api
 ```
 

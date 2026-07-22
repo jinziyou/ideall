@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 
 export const SERVER_OPENAPI_PROVENANCE_VERSION = 1
 export const DEFAULT_SERVER_SOURCE_REPOSITORY = "jinziyou/wonita"
-export const DEFAULT_SERVER_SOURCE_PATH = "apiserver/openapi.json"
+export const DEFAULT_SERVER_SOURCE_PATH = "apps/apiserver/openapi.json"
 export const DEFAULT_SERVER_ARTIFACT_PATH = "openapi/server.json"
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/
