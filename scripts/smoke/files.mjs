@@ -69,8 +69,10 @@ const PREVIEW_SAMPLES = [
     name: `ideall-preview-${RUN_ID}.json`,
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ name: "Preview JSON", count: 2 })),
-    assert: async (dialog) => {
-      await dialog.getByText("Preview JSON", { exact: false }).waitFor({ state: "visible" })
+    assert: async (panel) => {
+      const editor = panel.getByRole("textbox", { name: /代码预览$/ })
+      await editor.waitFor({ state: "visible" })
+      await waitForEditorValue(editor, '"Preview JSON"')
     },
   },
   {
@@ -79,8 +81,10 @@ const PREVIEW_SAMPLES = [
     mimeType: "text/csv",
     buffer: Buffer.from("name,score\nalpha,42\n"),
     assert: async (panel) => {
-      await panel.getByText("name,score", { exact: true }).waitFor({ state: "visible" })
-      await panel.getByText("alpha,42", { exact: true }).waitFor({ state: "visible" })
+      const editor = panel.getByRole("textbox", { name: /代码预览$/ })
+      await editor.waitFor({ state: "visible" })
+      await waitForEditorValue(editor, "name,score")
+      await waitForEditorValue(editor, "alpha,42")
     },
   },
   {
