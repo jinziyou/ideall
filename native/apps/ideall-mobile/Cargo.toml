@@ -32,6 +32,9 @@ gpui-mobile = { git = "https://github.com/itsbalamurali/gpui-mobile", rev = "1d3
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.15"
 jni = "0.22"
+# GPUI's font-kit dependency is compiled but not used by the Android platform
+# text system. Avoid cross-linking the Linux host's Fontconfig library.
+yeslogic-fontconfig-sys = { version = "6.0", features = ["dlopen"] }
 
 [lints]
 workspace = true

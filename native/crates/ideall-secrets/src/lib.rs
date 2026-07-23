@@ -96,7 +96,18 @@ pub fn initialize_platform() -> Result<(), SecretError> {
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
+/// Registers iOS Protected Data (Keychain) as the process-wide credential
+/// store. The compatibility `keyring` v1 feature only installs defaults for
+/// desktop platforms.
+#[cfg(target_os = "ios")]
+pub fn initialize_platform() -> Result<(), SecretError> {
+    let store = apple_native_keyring_store::protected::Store::new()
+        .map_err(|error| SecretError::Platform(error.to_string()))?;
+    keyring_core::set_default_store(store);
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub const fn initialize_platform() -> Result<(), SecretError> {
     Ok(())
 }
