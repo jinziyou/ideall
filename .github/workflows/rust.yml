@@ -247,7 +247,9 @@ jobs:
         run: brew install xcodegen
       - name: Build simulator application
         run: |
-          bash apps/ideall-mobile/build-mobile.sh ios-simulator release
+          CARGO_PROFILE_RELEASE_DEBUG=1 \
+            CARGO_PROFILE_RELEASE_STRIP=false \
+            bash apps/ideall-mobile/build-mobile.sh ios-simulator release
           bash scripts/verify-artifact.sh ios-app apps/ideall-mobile/platforms/ios/build/Build/Products/Release-iphonesimulator/ideall.app
         working-directory: native
       - name: Install and launch the real app on iOS Simulator
@@ -266,7 +268,7 @@ jobs:
           app_stdout="${RUNNER_TEMP}/ideall-ios.stdout.log"
           app_stderr="${RUNNER_TEMP}/ideall-ios.stderr.log"
           xcrun simctl install "$device" "$app"
-          launch_output="$(xcrun simctl launch \
+          launch_output="$(SIMCTL_CHILD_IDEALL_CRASH_DIAGNOSTICS=1 xcrun simctl launch \
             --stdout="$app_stdout" \
             --stderr="$app_stderr" \
             "$device" \
@@ -279,6 +281,7 @@ jobs:
           sleep 15
           if ! kill -0 "$app_pid" 2>/dev/null; then
             cat "$app_stdout" "$app_stderr" 2>/dev/null || true
+            sleep 5
             xcrun simctl spawn "$device" log show \
               --last 5m \
               --style compact \
@@ -286,10 +289,9 @@ jobs:
               || true
             find \
               "$HOME/Library/Logs/DiagnosticReports" \
-              "$HOME/Library/Developer/CoreSimulator/Devices/$device/data/Library/Logs/DiagnosticReports" \
-              "$HOME/Library/Developer/CoreSimulator/Devices/$device/data/Library/Logs/CrashReporter" \
+              "$HOME/Library/Developer/CoreSimulator/Devices/$device" \
               -type f \
-              -name 'ideall*' \
+              \( -name 'ideall*' -o -name '*.ips' \) \
               -mmin -10 \
               -exec cat {} + \
               2>/dev/null \

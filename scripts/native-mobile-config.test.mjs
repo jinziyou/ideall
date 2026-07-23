@@ -54,6 +54,8 @@ test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => 
   )
   assert.doesNotMatch(didFinish, /gpui_ios_run_demo/)
   assert.match(main, /startGpuiIfNeeded[\s\S]*?gpui_ios_run_demo\(\)/)
+  assert.match(main, /IdeallInstallCrashDiagnosticsIfRequested/)
+  assert.match(main, /getenv\("IDEALL_CRASH_DIAGNOSTICS"\)/)
   assert.match(main, /gpuiActiveNotificationInProgress/)
   assert.match(main, /gpuiActiveNotificationPending/)
   assert.match(main, /dispatch_async\(dispatch_get_main_queue\(\)/)

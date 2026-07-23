@@ -2,8 +2,11 @@
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <dispatch/dispatch.h>
+#include <execinfo.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #import "gpui_ios.h"
 
 @interface IdeallAppDelegate : UIResponder <UIApplicationDelegate, UITextViewDelegate>
@@ -44,6 +47,30 @@
 @end
 
 static __weak IdeallAppDelegate *IdeallSharedDelegate = nil;
+
+static void IdeallCrashSignalHandler(int signalNumber) {
+    static const char heading[] = "ideall iOS fatal signal backtrace:\n";
+    write(STDERR_FILENO, heading, sizeof(heading) - 1);
+    void *frames[128];
+    int frameCount = backtrace(frames, 128);
+    backtrace_symbols_fd(frames, frameCount, STDERR_FILENO);
+    signal(signalNumber, SIG_DFL);
+    raise(signalNumber);
+}
+
+static void IdeallInstallCrashDiagnosticsIfRequested(void) {
+    if (getenv("IDEALL_CRASH_DIAGNOSTICS") == NULL) return;
+
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = IdeallCrashSignalHandler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESETHAND;
+    sigaction(SIGABRT, &action, NULL);
+    sigaction(SIGBUS, &action, NULL);
+    sigaction(SIGILL, &action, NULL);
+    sigaction(SIGSEGV, &action, NULL);
+}
 
 static UIWindow *IdeallKeyWindow(void) {
     UIWindow *fallback = nil;
@@ -89,6 +116,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
     IdeallSharedDelegate = self;
+    IdeallInstallCrashDiagnosticsIfRequested();
     ideall_ios_register_host_callbacks(
         ideall_ios_show_text_input,
         ideall_ios_update_text_selection,
