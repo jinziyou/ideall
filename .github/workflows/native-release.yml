@@ -240,8 +240,23 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
-      - name: Install Android NDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;$ANDROID_NDK_VERSION"
+      - name: Resolve Android NDK path
+        id: android-ndk
+        shell: bash
+        run: echo "path=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Restore Android NDK
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.android-ndk.outputs.path }}
+          key: ${{ runner.os }}-android-ndk-${{ env.ANDROID_NDK_VERSION }}
+      - name: Install Android SDK and NDK
+        env:
+          NDK_HOME: ${{ steps.android-ndk.outputs.path }}
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          if [[ ! -d "$NDK_HOME" ]]; then
+            sdkmanager "ndk;$ANDROID_NDK_VERSION"
+          fi
       - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
         with:
           gradle-version: "8.9"
@@ -252,8 +267,7 @@ jobs:
       - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ./native -> target
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --version 4.1.2 --locked
+      - uses: ./.github/actions/setup-cargo-ndk
       - name: Build, sign and verify AAB
         run: |
           : "${IDEALL_ANDROID_KEYSTORE_BASE64:?missing Android keystore}"
@@ -301,8 +315,7 @@ jobs:
       - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ./native -> target
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - uses: ./.github/actions/setup-xcodegen
       - name: Import distribution identity and provisioning profile
         run: |
           : "${IDEALL_DEVELOPMENT_TEAM:?missing iOS development team}"

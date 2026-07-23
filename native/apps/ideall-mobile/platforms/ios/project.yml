@@ -49,3 +49,25 @@ targets:
           - -ObjC
         "IDEALL_STATIC_LIB[sdk=iphonesimulator*]": "$(PROJECT_DIR)/../../../../target/aarch64-apple-ios-sim/$(IDEALL_RUST_PROFILE)/libideall_mobile.a"
         "IDEALL_STATIC_LIB[sdk=iphoneos*]": "$(PROJECT_DIR)/../../../../target/aarch64-apple-ios/$(IDEALL_RUST_PROFILE)/libideall_mobile.a"
+  IdeallUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: IdeallUITests
+    dependencies:
+      - target: Ideall
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jinziyou.ideall.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Ideall:
+    build:
+      targets:
+        Ideall: all
+        IdeallUITests:
+          - test
+    test:
+      targets:
+        - IdeallUITests

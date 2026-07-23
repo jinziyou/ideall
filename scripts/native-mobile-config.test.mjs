@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import test from "node:test"
 
 const IOS_PROJECT = new URL(
@@ -22,6 +23,23 @@ const ANDROID_PLATFORM_VIEW = new URL(
 const MOBILE_BUILD_SCRIPT = new URL("../native/apps/ideall-mobile/build-mobile.sh", import.meta.url)
 const MOBILE_MANIFEST = new URL("../native/apps/ideall-mobile/Cargo.toml", import.meta.url)
 const VENDORED_GPUI_README = new URL("../native/vendor/gpui-mobile/README.md", import.meta.url)
+const VENDORED_GPUI_SOURCE = new URL("../native/vendor/gpui-mobile/upstream.env", import.meta.url)
+const VENDORED_GPUI_CHECKSUMS = new URL(
+  "../native/vendor/gpui-mobile/PATCHED_FILES.sha256",
+  import.meta.url,
+)
+const VENDORED_GPUI_VERIFY = new URL(
+  "../native/scripts/verify-gpui-mobile-vendor.sh",
+  import.meta.url,
+)
+const NATIVE_CARGO_LOCK = new URL("../native/Cargo.lock", import.meta.url)
+const IOS_UI_SMOKE = new URL(
+  "../native/apps/ideall-mobile/platforms/ios/IdeallUITests/IdeallSmokeTests.swift",
+  import.meta.url,
+)
+const ANDROID_SMOKE = new URL("../native/scripts/smoke-android-emulator.sh", import.meta.url)
+const IOS_SMOKE = new URL("../native/scripts/smoke-ios-simulator.sh", import.meta.url)
+const RUST_WORKFLOW = new URL("../.github/workflows/rust.yml", import.meta.url)
 const VENDORED_GPUI_IOS_FFI = new URL(
   "../native/vendor/gpui-mobile/src/ios/ffi.rs",
   import.meta.url,
@@ -34,7 +52,11 @@ const VENDORED_GPUI_IOS_WINDOW = new URL(
 test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", () => {
   const project = readFileSync(IOS_PROJECT, "utf8")
   const buildScript = readFileSync(MOBILE_BUILD_SCRIPT, "utf8")
-  const settingsBlocks = project.match(/^    settings:$/gm) ?? []
+  const appTarget = project.slice(
+    project.indexOf("  Ideall:\n"),
+    project.indexOf("  IdeallUITests:\n"),
+  )
+  const settingsBlocks = appTarget.match(/^    settings:$/gm) ?? []
   const deploymentTarget = project.match(/^\s*iOS:\s*"([^"]+)"\s*$/m)?.[1]
 
   assert.equal(settingsBlocks.length, 1, "target must have exactly one settings block")
@@ -53,6 +75,9 @@ test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", (
   assert.match(project, /^          - -framework CoreMedia$/m)
   assert.match(project, /^          - -framework AVFoundation$/m)
   assert.doesNotMatch(project, /^      settings:$/m, "build settings must not be nested")
+  assert.match(project, /^  IdeallUITests:$/m)
+  assert.match(project, /^    type: bundle\.ui-testing$/m)
+  assert.match(project, /^        - IdeallUITests$/m)
 })
 
 test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => {
@@ -86,15 +111,31 @@ test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => 
 test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () => {
   const manifest = readFileSync(MOBILE_MANIFEST, "utf8")
   const provenance = readFileSync(VENDORED_GPUI_README, "utf8")
+  const source = readFileSync(VENDORED_GPUI_SOURCE, "utf8")
+  const checksums = readFileSync(VENDORED_GPUI_CHECKSUMS, "utf8")
   const ffi = readFileSync(VENDORED_GPUI_IOS_FFI, "utf8")
   const window = readFileSync(VENDORED_GPUI_IOS_WINDOW, "utf8")
 
   assert.match(manifest, /gpui-mobile = \{ path = "\.\.\/\.\.\/vendor\/gpui-mobile"/)
   assert.match(provenance, /1d3ec2a1d14a63b74d1f4269340441d4eeada27a/)
+  assert.match(source, /GPUI_MOBILE_UPSTREAM_REVISION=1d3ec2a1d14a63b74d1f4269340441d4eeada27a/)
+  assert.match(source, /GPUI_MOBILE_WGPU_REVISION=357a0c56e0070480ad9daea5d2eaa83150b79e88/)
+  assert.match(checksums, /native\/vendor\/gpui-mobile\/src\/ios\/ffi\.rs/)
+  assert.doesNotMatch(readFileSync(NATIVE_CARGO_LOCK, "utf8"), /wgpu\.git\?rev=/)
+  assert.match(
+    readFileSync(NATIVE_CARGO_LOCK, "utf8"),
+    /wgpu\.git\?branch=v29#357a0c56e0070480ad9daea5d2eaa83150b79e88/,
+  )
   assert.match(ffi, /window\.begin_frame\(\)/)
   assert.match(ffi, /request_frame_callback\.try_borrow_mut\(\)/)
   assert.match(window, /frame_in_progress: AtomicBool/)
   assert.match(window, /momentum_scroller\.try_borrow_mut\(\)/)
+
+  const result = spawnSync("bash", [VENDORED_GPUI_VERIFY.pathname], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  })
+  assert.equal(result.status, 0, result.stderr || result.stdout)
 })
 
 test("Android Rust NDK API 与应用 minSdk 保持一致", () => {
@@ -137,4 +178,28 @@ test("Android 壳完整承接 GPUI 生命周期与 WebView 平台桥", () => {
   assert.match(platformView, /public static void disposeAll\(\)/)
   assert.match(platformView, /settings\.setAllowFileAccess\(false\)/)
   assert.match(platformView, /settings\.setAllowContentAccess\(false\)/)
+})
+
+test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
+  const iosTest = readFileSync(IOS_UI_SMOKE, "utf8")
+  const androidSmoke = readFileSync(ANDROID_SMOKE, "utf8")
+  const iosSmoke = readFileSync(IOS_SMOKE, "utf8")
+  const workflow = readFileSync(RUST_WORKFLOW, "utf8")
+
+  assert.match(iosTest, /app\.textViews\["标题"\]/)
+  assert.match(iosTest, /app\.textViews\["正文"\]/)
+  assert.match(iosTest, /XCUIDevice\.shared\.orientation = \.landscapeLeft/)
+  assert.match(iosTest, /XCUIDevice\.shared\.press\(\.home\)/)
+  assert.match(iosTest, /app\.activate\(\)/)
+  assert.match(androidSmoke, /wait_for_accessible_input "标题"/)
+  assert.match(androidSmoke, /wait_for_accessible_input "正文"/)
+  assert.match(androidSmoke, /settings put system user_rotation 1/)
+  assert.match(androidSmoke, /KEYCODE_HOME/)
+  assert.match(iosSmoke, /xcodebuild[\s\S]*?-resultBundlePath[\s\S]*?test/)
+  assert.match(workflow, /uses: \.\/\.github\/actions\/setup-cargo-ndk/)
+  assert.match(workflow, /uses: \.\/\.github\/actions\/setup-xcodegen/)
+  assert.match(workflow, /bash native\/scripts\/smoke-android-emulator\.sh/)
+  assert.match(workflow, /bash scripts\/smoke-ios-simulator\.sh/)
+  assert.match(workflow, /CARGO_PROFILE_RELEASE_DEBUG=0/)
+  assert.match(workflow, /CARGO_PROFILE_RELEASE_DEBUG=1/)
 })
