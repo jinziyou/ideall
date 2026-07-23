@@ -10,6 +10,14 @@ const ANDROID_APP_BUILD = new URL(
   "../native/apps/ideall-mobile/platforms/android/app/build.gradle.kts",
   import.meta.url,
 )
+const ANDROID_MANIFEST = new URL(
+  "../native/apps/ideall-mobile/platforms/android/app/src/main/AndroidManifest.xml",
+  import.meta.url,
+)
+const ANDROID_PLATFORM_VIEW = new URL(
+  "../native/apps/ideall-mobile/platforms/android/app/src/main/java/dev/gpui/mobile/GpuiPlatformView.java",
+  import.meta.url,
+)
 const MOBILE_BUILD_SCRIPT = new URL("../native/apps/ideall-mobile/build-mobile.sh", import.meta.url)
 
 test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", () => {
@@ -43,4 +51,37 @@ test("Android Rust NDK API 与应用 minSdk 保持一致", () => {
 
   assert.ok(minSdk, "Android minSdk must be declared")
   assert.match(buildScript, new RegExp(`--platform\\s+${minSdk}\\b`))
+})
+
+test("Android 壳完整承接 GPUI 生命周期与 WebView 平台桥", () => {
+  const manifest = readFileSync(ANDROID_MANIFEST, "utf8")
+  const platformView = readFileSync(ANDROID_PLATFORM_VIEW, "utf8")
+  const configChanges = manifest.match(/android:configChanges="([^"]+)"/)?.[1]?.split("|")
+
+  assert.deepEqual(configChanges, [
+    "colorMode",
+    "density",
+    "fontScale",
+    "fontWeightAdjustment",
+    "grammaticalGender",
+    "keyboard",
+    "keyboardHidden",
+    "layoutDirection",
+    "locale",
+    "mcc",
+    "mnc",
+    "navigation",
+    "orientation",
+    "screenLayout",
+    "screenSize",
+    "smallestScreenSize",
+    "touchscreen",
+    "uiMode",
+  ])
+  assert.match(platformView, /public static boolean createView\(/)
+  assert.match(platformView, /public static void pauseAll\(\)/)
+  assert.match(platformView, /public static void resumeAll\(\)/)
+  assert.match(platformView, /public static void disposeAll\(\)/)
+  assert.match(platformView, /settings\.setAllowFileAccess\(false\)/)
+  assert.match(platformView, /settings\.setAllowContentAccess\(false\)/)
 })

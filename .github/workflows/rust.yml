@@ -211,10 +211,11 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             test "$(find native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 1
+            sleep 10
             adb install -r "$(find native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
             adb shell am start -W -n com.jinziyou.ideall/com.jinziyou.ideall.IdeallNativeActivity
             sleep 10
-            adb shell pidof com.jinziyou.ideall | grep -E '[0-9]+' || { adb logcat -d | grep -E -C 40 'com\.jinziyou\.ideall|ideall_mobile' || true; exit 1; }
+            adb shell pidof com.jinziyou.ideall | grep -E '[0-9]+' || { adb logcat -d -b all | grep -E -C 80 'com\.jinziyou\.ideall|ideall_mobile|must construct App' || true; exit 1; }
             adb shell dumpsys activity activities | grep -E '(mResumedActivity|topResumedActivity).*com\.jinziyou\.ideall' >/dev/null
             ! adb logcat -d -b crash | grep -E 'com\.jinziyou\.ideall|ideall_mobile' >/dev/null
       - name: Upload Android preview APK and AAB

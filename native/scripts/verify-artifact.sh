@@ -21,7 +21,8 @@ case "${kind}" in
         ;;
       *.zip)
         unzip -Z1 "${artifact}" | \
-          grep -E '(/ideall\.exe|ideall\.app/Contents/MacOS/ideall)$' >/dev/null
+          grep -E '(^|[/\\])(ideall\.exe|ideall\.app[/\\]Contents[/\\]MacOS[/\\]ideall)$' \
+          >/dev/null
         ;;
       *.deb)
         command -v dpkg-deb >/dev/null || {
