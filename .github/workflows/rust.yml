@@ -246,10 +246,7 @@ jobs:
         run: brew install xcodegen
       - name: Build simulator application
         run: |
-          CARGO_PROFILE_RELEASE_DEBUG=1 \
-            CARGO_PROFILE_RELEASE_STRIP=false \
-            IPHONEOS_DEPLOYMENT_TARGET=16.0 \
-            bash apps/ideall-mobile/build-mobile.sh ios-simulator release
+          bash apps/ideall-mobile/build-mobile.sh ios-simulator release
           bash scripts/verify-artifact.sh ios-app apps/ideall-mobile/platforms/ios/build/Build/Products/Release-iphonesimulator/ideall.app
         working-directory: native
       - name: Install and launch the real app on iOS Simulator
@@ -267,10 +264,8 @@ jobs:
           app="native/apps/ideall-mobile/platforms/ios/build/Build/Products/Release-iphonesimulator/ideall.app"
           app_stdout="${RUNNER_TEMP}/ideall-ios.stdout.log"
           app_stderr="${RUNNER_TEMP}/ideall-ios.stderr.log"
-          debugger_log="${RUNNER_TEMP}/ideall-ios.lldb.log"
           xcrun simctl install "$device" "$app"
           launch_output="$(xcrun simctl launch \
-            --wait-for-debugger \
             --stdout="$app_stdout" \
             --stderr="$app_stderr" \
             "$device" \
@@ -280,23 +275,9 @@ jobs:
           case "$app_pid" in
             ''|*[!0-9]*) echo "invalid iOS process id: $app_pid" >&2; exit 1 ;;
           esac
-          lldb \
-            --batch \
-            --attach-pid "$app_pid" \
-            --one-line 'process continue' \
-            --one-line 'thread backtrace all' \
-            --one-line 'quit' \
-            >"$debugger_log" 2>&1 &
-          debugger_pid="$!"
           sleep 15
-          app_survived=false
-          if kill -0 "$debugger_pid" 2>/dev/null; then
-            app_survived=true
-            xcrun simctl terminate "$device" com.jinziyou.ideall || true
-          fi
-          wait "$debugger_pid" || true
-          cat "$app_stdout" "$app_stderr" "$debugger_log" 2>/dev/null || true
-          if [[ "$app_survived" != true ]]; then
+          if ! kill -0 "$app_pid" 2>/dev/null; then
+            cat "$app_stdout" "$app_stderr" 2>/dev/null || true
             xcrun simctl spawn "$device" log show \
               --last 5m \
               --style compact \
@@ -313,6 +294,7 @@ jobs:
               || true
             exit 1
           fi
+          xcrun simctl terminate "$device" com.jinziyou.ideall
       - name: Upload iOS simulator preview
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

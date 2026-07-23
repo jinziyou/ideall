@@ -14,9 +14,18 @@ const MOBILE_BUILD_SCRIPT = new URL("../native/apps/ideall-mobile/build-mobile.s
 
 test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", () => {
   const project = readFileSync(IOS_PROJECT, "utf8")
+  const buildScript = readFileSync(MOBILE_BUILD_SCRIPT, "utf8")
   const settingsBlocks = project.match(/^    settings:$/gm) ?? []
+  const deploymentTarget = project.match(/^\s*iOS:\s*"([^"]+)"\s*$/m)?.[1]
 
   assert.equal(settingsBlocks.length, 1, "target must have exactly one settings block")
+  assert.ok(deploymentTarget, "iOS deployment target must be declared")
+  assert.ok(
+    buildScript.includes(
+      `IPHONEOS_DEPLOYMENT_TARGET="\${IPHONEOS_DEPLOYMENT_TARGET:-${deploymentTarget}}"`,
+    ),
+    "Rust and Xcode must use the same iOS deployment target",
+  )
   assert.match(
     project,
     /^        "IDEALL_STATIC_LIB\[sdk=iphonesimulator\*\]": .*aarch64-apple-ios-sim/m,

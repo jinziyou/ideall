@@ -109,6 +109,7 @@ case "${platform}" in
     fi
     rustup target add "${rust_target}"
     cd "${workspace_dir}"
+    export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-16.0}"
     cargo build --locked -p ideall-mobile --target "${rust_target}" "${cargo_profile[@]}"
     cd "${script_dir}/platforms/ios"
     xcodegen generate
