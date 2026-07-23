@@ -213,7 +213,7 @@ jobs:
             apks=(native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug/*.apk)
             test "${#apks[@]}" -eq 1
             adb install -r "${apks[0]}"
-            adb shell am start -W -n com.jinziyou.ideall/android.app.NativeActivity
+            adb shell am start -W -n com.jinziyou.ideall/com.jinziyou.ideall.IdeallNativeActivity
             sleep 10
             test -n "$(adb shell pidof com.jinziyou.ideall | tr -d '\r')"
             adb shell dumpsys activity activities | grep -E 'mResumedActivity.*com\.jinziyou\.ideall' >/dev/null

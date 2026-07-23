@@ -4290,6 +4290,7 @@ dependencies = [
  "ideall-secrets",
  "ideall-sync",
  "ideall-sync-http",
+ "jni 0.22.4",
  "log",
  "serde_json",
  "unicode-segmentation",

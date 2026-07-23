@@ -6,9 +6,12 @@
 #include <string.h>
 #import "gpui_ios.h"
 
-@interface IdeallAppDelegate : UIResponder <UIApplicationDelegate>
+@interface IdeallAppDelegate : UIResponder <UIApplicationDelegate, UITextViewDelegate>
 @property(nonatomic, strong) CADisplayLink *displayLink;
 @property(nonatomic, assign) void *gpuiWindow;
+@property(nonatomic, strong) UITextView *textInputBridge;
+@property(nonatomic, assign) BOOL updatingTextInputBridge;
+@property(nonatomic, assign) BOOL textInputBridgeMultiline;
 @end
 
 @interface IdeallDocumentPickerDelegate : NSObject <UIDocumentPickerDelegate>
@@ -33,15 +36,163 @@
 
 @end
 
+static __weak IdeallAppDelegate *IdeallSharedDelegate = nil;
+
+static NSUInteger IdeallUTF16OffsetForUTF8(const char *value, NSUInteger byteOffset) {
+    if (value == NULL) return 0;
+    NSUInteger length = strlen(value);
+    byteOffset = MIN(byteOffset, length);
+    NSString *prefix = nil;
+    while (prefix == nil && byteOffset > 0) {
+        prefix = [[NSString alloc] initWithBytes:value
+                                         length:byteOffset
+                                       encoding:NSUTF8StringEncoding];
+        if (prefix == nil) byteOffset -= 1;
+    }
+    return prefix.length;
+}
+
+static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offset) {
+    utf16Offset = MIN(utf16Offset, value.length);
+    NSString *prefix = nil;
+    while (prefix == nil && utf16Offset > 0) {
+        NSRange range = NSMakeRange(0, utf16Offset);
+        prefix = [value substringWithRange:range];
+        if ([prefix dataUsingEncoding:NSUTF8StringEncoding] == nil) {
+            prefix = nil;
+            utf16Offset -= 1;
+        }
+    }
+    return [prefix ?: @"" lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+}
+
 @implementation IdeallAppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
+    IdeallSharedDelegate = self;
     gpui_ios_register_app();
     gpui_ios_run_demo();
     self.gpuiWindow = gpui_ios_get_window();
     if (self.gpuiWindow != NULL) {
         self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(renderFrame)];
         [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    }
+    return YES;
+}
+
+- (void)installTextInputBridgeIfNeeded {
+    if (self.textInputBridge != nil) return;
+    UIWindow *window = UIApplication.sharedApplication.keyWindow;
+    UIViewController *controller = window.rootViewController;
+    if (controller == nil) return;
+
+    UITextView *input = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, 2, 2)];
+    input.delegate = self;
+    input.backgroundColor = UIColor.clearColor;
+    input.textColor = UIColor.clearColor;
+    input.tintColor = UIColor.clearColor;
+    input.alpha = 0.02;
+    input.autocorrectionType = UITextAutocorrectionTypeDefault;
+    input.autocapitalizationType = UITextAutocapitalizationTypeSentences;
+    input.spellCheckingType = UITextSpellCheckingTypeDefault;
+    input.accessibilityHint = @"编辑后内容会自动保存在本机";
+    input.accessibilityTraits = UIAccessibilityTraitUpdatesFrequently;
+    input.accessibilityFrameInContainerSpace = CGRectMake(0, 0, 44, 44);
+    [controller.view addSubview:input];
+    self.textInputBridge = input;
+}
+
+- (void)sendTextInputBridgeState {
+    if (self.updatingTextInputBridge || self.textInputBridge == nil) return;
+    NSString *value = self.textInputBridge.text ?: @"";
+    NSRange selection = self.textInputBridge.selectedRange;
+    NSUInteger start = IdeallUTF8OffsetForUTF16(value, selection.location);
+    NSUInteger end = IdeallUTF8OffsetForUTF16(
+        value,
+        NSMaxRange(selection)
+    );
+    ideall_mobile_native_text_state(
+        value.UTF8String ?: "",
+        start,
+        end,
+        self.textInputBridge.markedTextRange != nil
+    );
+}
+
+- (void)showTextInputBridge:(NSString *)value
+             selectionStart:(NSUInteger)selectionStart
+               selectionEnd:(NSUInteger)selectionEnd
+               keyboardType:(NSInteger)keyboardType
+                  multiline:(BOOL)multiline
+                      secure:(BOOL)secure
+                       label:(NSString *)label {
+    [self installTextInputBridgeIfNeeded];
+    UITextView *input = self.textInputBridge;
+    if (input == nil) return;
+
+    self.updatingTextInputBridge = YES;
+    self.textInputBridgeMultiline = multiline;
+    input.accessibilityLabel = label.length > 0 ? label : @"文本输入";
+    input.secureTextEntry = secure;
+    switch (keyboardType) {
+        case 1: input.keyboardType = UIKeyboardTypeEmailAddress; break;
+        case 2: input.keyboardType = UIKeyboardTypePhonePad; break;
+        case 3: input.keyboardType = UIKeyboardTypeNumberPad; break;
+        case 4: input.keyboardType = UIKeyboardTypeURL; break;
+        case 5: input.keyboardType = UIKeyboardTypeDecimalPad; break;
+        default: input.keyboardType = UIKeyboardTypeDefault; break;
+    }
+    input.returnKeyType = multiline ? UIReturnKeyDefault : UIReturnKeyDone;
+    input.autocorrectionType =
+        secure || keyboardType == 4
+            ? UITextAutocorrectionTypeNo
+            : UITextAutocorrectionTypeDefault;
+    input.autocapitalizationType =
+        secure || keyboardType == 4
+            ? UITextAutocapitalizationTypeNone
+            : UITextAutocapitalizationTypeSentences;
+    input.text = value ?: @"";
+    const char *utf8 = input.text.UTF8String ?: "";
+    NSUInteger start = IdeallUTF16OffsetForUTF8(utf8, selectionStart);
+    NSUInteger end = IdeallUTF16OffsetForUTF8(utf8, selectionEnd);
+    start = MIN(start, input.text.length);
+    end = MIN(MAX(end, start), input.text.length);
+    input.selectedRange = NSMakeRange(start, end - start);
+    self.updatingTextInputBridge = NO;
+    [input reloadInputViews];
+    [input becomeFirstResponder];
+    UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, input);
+}
+
+- (void)updateTextInputBridgeSelectionFromByteStart:(NSUInteger)selectionStart
+                                            byteEnd:(NSUInteger)selectionEnd {
+    UITextView *input = self.textInputBridge;
+    if (input == nil) return;
+    self.updatingTextInputBridge = YES;
+    const char *utf8 = input.text.UTF8String ?: "";
+    NSUInteger start = IdeallUTF16OffsetForUTF8(utf8, selectionStart);
+    NSUInteger end = IdeallUTF16OffsetForUTF8(utf8, selectionEnd);
+    start = MIN(start, input.text.length);
+    end = MIN(MAX(end, start), input.text.length);
+    input.selectedRange = NSMakeRange(start, end - start);
+    self.updatingTextInputBridge = NO;
+}
+
+- (void)textViewDidChange:(UITextView *)textView {
+    [self sendTextInputBridgeState];
+}
+
+- (void)textViewDidChangeSelection:(UITextView *)textView {
+    [self sendTextInputBridgeState];
+}
+
+- (BOOL)textView:(UITextView *)textView
+    shouldChangeTextInRange:(NSRange)range
+           replacementText:(NSString *)text {
+    if (!self.textInputBridgeMultiline &&
+        [text rangeOfCharacterFromSet:[NSCharacterSet newlineCharacterSet]].location != NSNotFound) {
+        [textView resignFirstResponder];
+        return NO;
     }
     return YES;
 }
@@ -63,6 +214,8 @@
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application {
+    [self.textInputBridge endEditing:YES];
+    [self sendTextInputBridgeState];
     gpui_ios_will_resign_active(NULL);
 }
 
@@ -83,6 +236,46 @@
 }
 
 @end
+
+void ideall_ios_show_text_input(
+    const char *value,
+    unsigned long selectionStart,
+    unsigned long selectionEnd,
+    int keyboardType,
+    bool multiline,
+    bool secure,
+    const char *label
+) {
+    NSString *text = value == NULL ? @"" : [NSString stringWithUTF8String:value];
+    NSString *accessibilityLabel =
+        label == NULL ? @"文本输入" : [NSString stringWithUTF8String:label];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [IdeallSharedDelegate showTextInputBridge:text ?: @""
+                                  selectionStart:(NSUInteger)selectionStart
+                                    selectionEnd:(NSUInteger)selectionEnd
+                                    keyboardType:(NSInteger)keyboardType
+                                       multiline:multiline
+                                           secure:secure
+                                            label:accessibilityLabel ?: @"文本输入"];
+    });
+}
+
+void ideall_ios_update_text_selection(
+    unsigned long selectionStart,
+    unsigned long selectionEnd
+) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [IdeallSharedDelegate
+            updateTextInputBridgeSelectionFromByteStart:(NSUInteger)selectionStart
+                                                byteEnd:(NSUInteger)selectionEnd];
+    });
+}
+
+void ideall_ios_hide_text_input(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [IdeallSharedDelegate.textInputBridge resignFirstResponder];
+    });
+}
 
 int ideall_copy_security_scoped_file(
     const char *source,

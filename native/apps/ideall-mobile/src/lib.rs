@@ -3,10 +3,9 @@
 #[cfg(any(
     target_os = "ios",
     target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
+    feature = "mobile-ui-host-check"
 ))]
-use unicode_segmentation::UnicodeSegmentation as _;
+mod native_text;
 
 #[cfg(any(
     target_os = "ios",
@@ -14,494 +13,7 @@ use unicode_segmentation::UnicodeSegmentation as _;
     feature = "mobile-ui-host-check",
     test
 ))]
-fn mobile_control_sequence(key: &str) -> Option<&'static str> {
-    match key {
-        "backspace" => Some("\u{8}"),
-        "delete" => Some("\u{1b}[3~"),
-        "left" => Some("\u{1b}[D"),
-        "right" => Some("\u{1b}[C"),
-        "home" => Some("\u{1b}[H"),
-        "end" => Some("\u{1b}[F"),
-        "enter" => Some("\n"),
-        _ => None,
-    }
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn enqueue_mobile_control_key(
-    pending: &mut Vec<String>,
-    observed_pending_chunks: &mut usize,
-    key: &str,
-) -> bool {
-    let Some(sequence) = mobile_control_sequence(key) else {
-        return false;
-    };
-    let delivered_by_platform = pending.len() > *observed_pending_chunks
-        && pending.last().is_some_and(|chunk| chunk == sequence);
-    if !delivered_by_platform {
-        pending.push(sequence.to_owned());
-    }
-    *observed_pending_chunks = pending.len();
-    !delivered_by_platform
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MobileBlockStyle {
-    Paragraph,
-    Heading1,
-    Heading2,
-    Quote,
-    Bullet,
-    Ordered,
-    Todo,
-    Code,
-    Rule,
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MobileBlockMove {
-    Up,
-    Down,
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MobileBlockFormatError {
-    ProtectedBlock,
-    CodeBlock,
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-const MOBILE_SLASH_COMMANDS: &[(&str, &str, &[&str], MobileBlockStyle)] = &[
-    (
-        "paragraph",
-        "正文",
-        &["p", "text", "正文"],
-        MobileBlockStyle::Paragraph,
-    ),
-    (
-        "heading-1",
-        "标题 1",
-        &["h1", "heading1", "标题1"],
-        MobileBlockStyle::Heading1,
-    ),
-    (
-        "heading-2",
-        "标题 2",
-        &["h2", "heading2", "标题2"],
-        MobileBlockStyle::Heading2,
-    ),
-    (
-        "quote",
-        "引用",
-        &["quote", "blockquote", "引用"],
-        MobileBlockStyle::Quote,
-    ),
-    (
-        "bullet",
-        "项目列表",
-        &["ul", "bullet", "list", "项目"],
-        MobileBlockStyle::Bullet,
-    ),
-    (
-        "ordered",
-        "编号列表",
-        &["ol", "ordered", "number", "编号"],
-        MobileBlockStyle::Ordered,
-    ),
-    (
-        "todo",
-        "任务",
-        &["todo", "task", "任务"],
-        MobileBlockStyle::Todo,
-    ),
-    ("code", "代码块", &["code", "代码"], MobileBlockStyle::Code),
-    (
-        "rule",
-        "分隔线",
-        &["hr", "rule", "divider", "分隔线"],
-        MobileBlockStyle::Rule,
-    ),
-];
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn mobile_slash_query(target: &str, cursor: usize) -> Option<&str> {
-    let mut cursor = cursor.min(target.len());
-    while cursor > 0 && !target.is_char_boundary(cursor) {
-        cursor -= 1;
-    }
-    let line_start = target[..cursor].rfind('\n').map_or(0, |index| index + 1);
-    let before_cursor = &target[line_start..cursor];
-    let query = before_cursor.strip_prefix('/')?;
-    (!query.chars().any(char::is_whitespace)).then_some(query)
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn mobile_slash_commands(query: &str) -> Vec<(&'static str, &'static str, MobileBlockStyle)> {
-    let query = query.to_lowercase();
-    MOBILE_SLASH_COMMANDS
-        .iter()
-        .filter(|(_, label, aliases, _)| {
-            query.is_empty()
-                || label.to_lowercase().contains(&query)
-                || aliases.iter().any(|alias| alias.contains(&query))
-        })
-        .map(|(id, label, _, style)| (*id, *label, *style))
-        .collect()
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn apply_mobile_slash_command(
-    target: &mut String,
-    cursor: &mut usize,
-    style: MobileBlockStyle,
-) -> Result<bool, MobileBlockFormatError> {
-    if mobile_slash_query(target, *cursor).is_none() {
-        return Ok(false);
-    }
-    let line_start = target[..*cursor].rfind('\n').map_or(0, |index| index + 1);
-    let line_end = target[*cursor..]
-        .find('\n')
-        .map_or(target.len(), |offset| *cursor + offset);
-    target.replace_range(line_start..line_end, "");
-    *cursor = line_start;
-    apply_mobile_block_style(target, cursor, style)?;
-    Ok(true)
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn move_mobile_block(
-    target: &mut String,
-    cursor: &mut usize,
-    direction: MobileBlockMove,
-) -> Option<bool> {
-    *cursor = (*cursor).min(target.len());
-    while *cursor > 0 && !target.is_char_boundary(*cursor) {
-        *cursor -= 1;
-    }
-    let ranges = mobile_block_ranges(target)?;
-    let current = ranges
-        .iter()
-        .position(|(start, end)| *start <= *cursor && *cursor <= *end)?;
-    let destination = match direction {
-        MobileBlockMove::Up => current.checked_sub(1),
-        MobileBlockMove::Down => (current + 1 < ranges.len()).then_some(current + 1),
-    };
-    let Some(destination) = destination else {
-        return Some(false);
-    };
-
-    let relative_cursor = cursor.saturating_sub(ranges[current].0);
-    let mut blocks = ranges
-        .iter()
-        .map(|(start, end)| target[*start..*end].to_owned())
-        .collect::<Vec<_>>();
-    blocks.swap(current, destination);
-    let new_block_start = blocks
-        .iter()
-        .take(destination)
-        .map(|block| block.len() + 1)
-        .sum::<usize>();
-    *target = blocks.join("\n");
-    *cursor = (new_block_start + relative_cursor).min(target.len());
-    Some(true)
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn mobile_block_ranges(target: &str) -> Option<Vec<(usize, usize)>> {
-    let mut lines = Vec::new();
-    let mut offset = 0;
-    for line in target.split('\n') {
-        lines.push((offset, offset + line.len(), line));
-        offset += line.len() + 1;
-    }
-
-    let mut ranges = Vec::new();
-    let mut index = 0;
-    while index < lines.len() {
-        let (start, mut end, line) = lines[index];
-        if line.starts_with("```") {
-            index += 1;
-            let mut closed = false;
-            while index < lines.len() {
-                end = lines[index].1;
-                if lines[index].2 == "```" {
-                    index += 1;
-                    closed = true;
-                    break;
-                }
-                index += 1;
-            }
-            if !closed {
-                return None;
-            }
-        } else if line.starts_with("> ") {
-            index += 1;
-            while index < lines.len() && lines[index].2.starts_with("> ") {
-                end = lines[index].1;
-                index += 1;
-            }
-        } else {
-            index += 1;
-        }
-        ranges.push((start, end));
-    }
-    Some(ranges)
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn apply_mobile_block_style(
-    target: &mut String,
-    cursor: &mut usize,
-    style: MobileBlockStyle,
-) -> Result<bool, MobileBlockFormatError> {
-    const PROTECTED_PREFIX: &str = "⟦ideall:受保护块:";
-
-    *cursor = (*cursor).min(target.len());
-    while *cursor > 0 && !target.is_char_boundary(*cursor) {
-        *cursor -= 1;
-    }
-    let line_start = target[..*cursor].rfind('\n').map_or(0, |index| index + 1);
-    let line_end = target[*cursor..]
-        .find('\n')
-        .map_or(target.len(), |offset| *cursor + offset);
-    let line = &target[line_start..line_end];
-    if line.trim_start().starts_with(PROTECTED_PREFIX) {
-        return Err(MobileBlockFormatError::ProtectedBlock);
-    }
-
-    let before_line = &target[..line_start];
-    let inside_code_fence = before_line
-        .split('\n')
-        .filter(|line| line.trim_start().starts_with("```"))
-        .count()
-        % 2
-        == 1;
-    if inside_code_fence || line.trim_start().starts_with("```") {
-        return Err(MobileBlockFormatError::CodeBlock);
-    }
-
-    let (indent, content_start) = mobile_block_content_start(line);
-    let content = &line[content_start..];
-    let content_cursor = cursor
-        .saturating_sub(line_start + content_start)
-        .min(content.len());
-    let prefix = match style {
-        MobileBlockStyle::Paragraph => "",
-        MobileBlockStyle::Heading1 => "# ",
-        MobileBlockStyle::Heading2 => "## ",
-        MobileBlockStyle::Quote => "> ",
-        MobileBlockStyle::Bullet => "- ",
-        MobileBlockStyle::Ordered => "1. ",
-        MobileBlockStyle::Todo => "- [ ] ",
-        MobileBlockStyle::Code | MobileBlockStyle::Rule => "",
-    };
-    let keep_indent = matches!(
-        style,
-        MobileBlockStyle::Bullet | MobileBlockStyle::Ordered | MobileBlockStyle::Todo
-    );
-    let indentation = if keep_indent { indent } else { "" };
-    let replacement = match style {
-        MobileBlockStyle::Code => format!("```\n{content}\n```"),
-        MobileBlockStyle::Rule => "---".to_owned(),
-        _ => format!("{indentation}{prefix}{content}"),
-    };
-    if replacement == line {
-        return Ok(false);
-    }
-
-    let new_cursor = match style {
-        MobileBlockStyle::Code => line_start + "```\n".len() + content_cursor,
-        MobileBlockStyle::Rule => line_start + replacement.len(),
-        _ => line_start + indentation.len() + prefix.len() + content_cursor,
-    };
-    target.replace_range(line_start..line_end, &replacement);
-    *cursor = new_cursor.min(target.len());
-    Ok(true)
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn mobile_block_content_start(line: &str) -> (&str, usize) {
-    let indentation_len = line.len() - line.trim_start_matches(' ').len();
-    let indentation = &line[..indentation_len];
-    let value = &line[indentation_len..];
-
-    let heading_len = value.bytes().take_while(|byte| *byte == b'#').count();
-    if (1..=6).contains(&heading_len) && value.as_bytes().get(heading_len) == Some(&b' ') {
-        return (indentation, indentation_len + heading_len + 1);
-    }
-    if let Some(rest) = value.strip_prefix("> ") {
-        return (indentation, line.len() - rest.len());
-    }
-    for prefix in ["- [ ] ", "- [x] ", "- [X] ", "- ", "* "] {
-        if let Some(rest) = value.strip_prefix(prefix) {
-            return (indentation, line.len() - rest.len());
-        }
-    }
-    if let Some((number, rest)) = value.split_once(". ")
-        && !number.is_empty()
-        && number.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return (indentation, line.len() - rest.len());
-    }
-    if value == "---" {
-        return (indentation, line.len());
-    }
-    (indentation, indentation_len)
-}
-
-#[cfg(test)]
-fn apply_mobile_input(target: &mut String, chunk: &str, multiline: bool) -> bool {
-    let mut cursor = target.len();
-    apply_mobile_input_at_cursor(target, &mut cursor, chunk, multiline)
-}
-
-#[cfg(any(
-    target_os = "ios",
-    target_os = "android",
-    feature = "mobile-ui-host-check",
-    test
-))]
-fn apply_mobile_input_at_cursor(
-    target: &mut String,
-    cursor: &mut usize,
-    chunk: &str,
-    multiline: bool,
-) -> bool {
-    if chunk.is_empty() {
-        return false;
-    }
-    *cursor = (*cursor).min(target.len());
-    while *cursor > 0 && !target.is_char_boundary(*cursor) {
-        *cursor -= 1;
-    }
-    match chunk {
-        "\u{1b}[D" => {
-            if let Some((start, _)) = target[..*cursor].grapheme_indices(true).next_back() {
-                *cursor = start;
-            }
-            return false;
-        }
-        "\u{1b}[C" => {
-            *cursor = target[*cursor..]
-                .grapheme_indices(true)
-                .nth(1)
-                .map(|(offset, _)| *cursor + offset)
-                .unwrap_or(target.len());
-            return false;
-        }
-        "\u{1b}[H" => {
-            *cursor = 0;
-            return false;
-        }
-        "\u{1b}[F" => {
-            *cursor = target.len();
-            return false;
-        }
-        "\u{7f}" | "\u{1b}[3~" => {
-            if let Some((next, _)) = target[*cursor..].grapheme_indices(true).nth(1) {
-                target.replace_range(*cursor..*cursor + next, "");
-                return true;
-            }
-            if *cursor < target.len() {
-                target.truncate(*cursor);
-                return true;
-            }
-            return false;
-        }
-        _ => {}
-    }
-    if chunk.chars().all(|character| character == '\u{8}') {
-        let mut changed = false;
-        for _ in chunk.chars() {
-            let Some((start, _)) = target[..*cursor].grapheme_indices(true).next_back() else {
-                break;
-            };
-            target.replace_range(start..*cursor, "");
-            *cursor = start;
-            changed = true;
-        }
-        return changed;
-    }
-
-    let insertion = if multiline {
-        chunk.replace("\r\n", "\n").replace('\r', "\n")
-    } else {
-        chunk
-            .chars()
-            .filter(|character| !matches!(character, '\r' | '\n'))
-            .collect()
-    };
-    if insertion.is_empty() {
-        false
-    } else {
-        target.insert_str(*cursor, &insertion);
-        *cursor += insertion.len();
-        true
-    }
-}
+mod editor;
 
 #[cfg(any(
     target_os = "ios",
@@ -509,16 +21,27 @@ fn apply_mobile_input_at_cursor(
     feature = "mobile-ui-host-check"
 ))]
 mod mobile {
-    use std::{cell::RefCell, path::PathBuf};
+    use std::{cell::RefCell, path::PathBuf, time::Duration};
 
     use crate::{
-        MobileBlockFormatError, MobileBlockMove, MobileBlockStyle, apply_mobile_block_style,
-        apply_mobile_input_at_cursor, apply_mobile_slash_command, enqueue_mobile_control_key,
-        mobile_slash_commands, mobile_slash_query, move_mobile_block,
+        editor::{
+            BlockFormatError as MobileBlockFormatError, BlockMove as MobileBlockMove,
+            BlockStyle as MobileBlockStyle, apply_block_style as apply_mobile_block_style,
+            apply_input_at_cursor as apply_mobile_input_at_cursor,
+            apply_slash_command as apply_mobile_slash_command,
+            cursor_line_index as mobile_cursor_line_index,
+            enqueue_control_key as enqueue_mobile_control_key,
+            line_with_cursor as mobile_line_with_cursor, move_block as move_mobile_block,
+            native_edit_committed as mobile_native_edit_committed,
+            slash_commands as mobile_slash_commands, slash_query as mobile_slash_query,
+            text_line_ranges as mobile_text_line_ranges,
+        },
+        native_text,
     };
     use gpui_mobile::gpui::{
-        App, Context, FocusHandle, IntoElement, KeyDownEvent, MouseButton, Render, Window,
-        WindowOptions, div, prelude::*, px, rgb,
+        App, Context, FocusHandle, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, Render,
+        ScrollHandle, SharedString, Subscription, Task, Window, WindowOptions, div, point,
+        prelude::*, px, rgb,
     };
     use gpui_mobile::{
         KeyboardType,
@@ -529,8 +52,8 @@ mod mobile {
         packages::webview::{WebViewHandle, WebViewSettings},
     };
     use ideall_application::{
-        AgentModelSettings, AgentTranscriptMessage, AuditStatus, HOME_ROOT_ID, LocalWorkspace,
-        ModelRole, NodeSummary, OpenAiCompatibleClient, SyncSettings,
+        AgentAuditRecord, AgentModelSettings, AgentTranscriptMessage, AuditStatus, HOME_ROOT_ID,
+        LocalWorkspace, ModelRole, NodeSummary, OpenAiCompatibleClient, SyncSettings,
     };
     use ideall_domain::{
         EnginePlatform, TabDescriptor, WorkspaceState, engine_runtime_capabilities, tab_key,
@@ -542,6 +65,7 @@ mod mobile {
 
     const INFO_PORTAL_URL: &str = "https://www.wonita.link/info";
     const COMMUNITY_PORTAL_URL: &str = "https://www.wonita.link/community";
+    const DRAFT_AUTOSAVE_DELAY: Duration = Duration::from_millis(700);
 
     thread_local! {
         static PENDING_TEXT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
@@ -560,6 +84,58 @@ mod mobile {
         AgentModel,
         AgentKey,
         AgentPrompt,
+    }
+
+    struct MobileStartupFailure {
+        message: String,
+    }
+
+    impl Render for MobileStartupFailure {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            let (safe_top, safe_bottom, safe_left, safe_right) = gpui_mobile::safe_area_insets();
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .pt(px(safe_top))
+                .pb(px(safe_bottom))
+                .pl(px(safe_left))
+                .pr(px(safe_right))
+                .bg(rgb(0xf5f7fa))
+                .child(
+                    div()
+                        .m_6()
+                        .max_w(px(560.))
+                        .p_6()
+                        .rounded_xl()
+                        .border_1()
+                        .border_color(rgb(0xe1b7b3))
+                        .bg(rgb(0xffffff))
+                        .flex()
+                        .flex_col()
+                        .gap_3()
+                        .child(
+                            div()
+                                .text_xl()
+                                .text_color(rgb(0x8f2f28))
+                                .child("ideall 无法启动"),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(0x4b5563))
+                                .whitespace_normal()
+                                .child(self.message.clone()),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(0x6b7280))
+                                .child("请检查设备存储空间与系统安全存储权限，然后重新打开应用。"),
+                        ),
+                )
+        }
     }
 
     struct IdeallMobile {
@@ -590,19 +166,34 @@ mod mobile {
         agent_in_progress: bool,
         agent_thread_id: Option<String>,
         agent_transcript: Vec<AgentTranscriptMessage>,
+        agent_audits: Vec<AgentAuditRecord>,
+        agent_threads: Vec<NodeSummary>,
+        agent_activity_loading: bool,
         embedded_browser: Option<WebViewHandle>,
         body_editable: bool,
         focus_handle: FocusHandle,
+        body_scroll_handle: ScrollHandle,
+        body_last_revealed_cursor: Option<usize>,
         focused_field: Option<FocusedField>,
+        focused_selection_start: usize,
         focused_cursor: usize,
+        native_input_composing: bool,
         observed_pending_chunks: usize,
+        draft_revision: u64,
+        autosave_task: Option<Task<()>>,
         dirty: bool,
         purge_armed: bool,
         status: String,
+        _window_activation: Subscription,
     }
 
     impl IdeallMobile {
-        fn new(database_path: PathBuf, service: LocalWorkspace, cx: &mut Context<Self>) -> Self {
+        fn new(
+            database_path: PathBuf,
+            service: LocalWorkspace,
+            window: &mut Window,
+            cx: &mut Context<Self>,
+        ) -> Self {
             let items = service.list_home().unwrap_or_default();
             let workspace = service.load_workspace_state().unwrap_or_default();
             let restore_id = workspace.active_id.as_deref().and_then(|active_id| {
@@ -632,6 +223,8 @@ mod mobile {
                 .as_deref()
                 .and_then(|id| service.agent_transcript(id).ok())
                 .unwrap_or_default();
+            let window_activation =
+                cx.observe_window_activation(window, Self::window_activation_changed);
             let mut this = Self {
                 database_path,
                 service,
@@ -660,15 +253,25 @@ mod mobile {
                 agent_in_progress: false,
                 agent_thread_id,
                 agent_transcript,
+                agent_audits: Vec::new(),
+                agent_threads: Vec::new(),
+                agent_activity_loading: false,
                 embedded_browser: None,
                 body_editable: false,
                 focus_handle: cx.focus_handle(),
+                body_scroll_handle: ScrollHandle::new(),
+                body_last_revealed_cursor: None,
                 focused_field: None,
+                focused_selection_start: 0,
                 focused_cursor: 0,
+                native_input_composing: false,
                 observed_pending_chunks: 0,
+                draft_revision: 0,
+                autosave_task: None,
                 dirty: false,
                 purge_armed: false,
                 status: "所有内容保存在本机".into(),
+                _window_activation: window_activation,
             };
             if let Some(id) = restore_id
                 && let Ok(node) = this.service.node(&id)
@@ -868,6 +471,7 @@ mod mobile {
                 }
                 Err(error) => self.status = error.to_string(),
             }
+            self.load_agent_activity(cx);
             cx.notify();
         }
 
@@ -926,6 +530,47 @@ mod mobile {
             self.agent_prompt_draft.clear();
             self.status = "已开始新对话；发送第一条消息后写入本地 SQLite".into();
             cx.notify();
+        }
+
+        fn load_agent_activity(&mut self, cx: &mut Context<Self>) {
+            if self.agent_activity_loading {
+                return;
+            }
+            let database_path = self.database_path.clone();
+            let task = cx.background_executor().spawn(async move {
+                let workspace =
+                    LocalWorkspace::open(database_path).map_err(|error| error.to_string())?;
+                let audits = workspace
+                    .list_agent_audits(50)
+                    .map_err(|error| error.to_string())?;
+                let threads = workspace
+                    .list_agent_threads(12)
+                    .map_err(|error| error.to_string())?;
+                Ok::<_, String>((audits, threads))
+            });
+            self.agent_activity_loading = true;
+            cx.spawn(async move |view, cx| {
+                let result = task.await;
+                cx.update(|cx| {
+                    let Some(view) = view.upgrade() else {
+                        return;
+                    };
+                    view.update(cx, |this, cx| {
+                        this.agent_activity_loading = false;
+                        match result {
+                            Ok((audits, threads)) => {
+                                this.agent_audits = audits;
+                                this.agent_threads = threads;
+                            }
+                            Err(error) => {
+                                this.status = format!("加载 Agent 活动失败：{error}");
+                            }
+                        }
+                        cx.notify();
+                    });
+                })
+            })
+            .detach();
         }
 
         fn select_agent_thread(&mut self, thread_id: String, cx: &mut Context<Self>) {
@@ -1042,6 +687,7 @@ mod mobile {
                                 this.status = error;
                             }
                         }
+                        this.load_agent_activity(cx);
                         cx.notify();
                     });
                 })
@@ -1071,6 +717,12 @@ mod mobile {
         }
 
         fn open_node(&mut self, id: String, cx: &mut Context<Self>) {
+            if self.dirty && self.selected_id.as_deref() == Some(id.as_str()) {
+                return;
+            }
+            if self.selected_id.as_deref() != Some(id.as_str()) {
+                self.detach_pending_autosave(cx);
+            }
             self.stop_editing();
             self.embedded_browser = None;
             match self.service.node(&id) {
@@ -1142,12 +794,13 @@ mod mobile {
             if field == FocusedField::Body && !self.body_editable {
                 return;
             }
-            if self.focused_field != Some(field) {
+            let focus_changed = self.focused_field != Some(field);
+            if focus_changed {
                 PENDING_TEXT.with(|pending| pending.borrow_mut().clear());
                 self.observed_pending_chunks = 0;
             }
             self.focused_field = Some(field);
-            self.focused_cursor = match field {
+            let text_len = match field {
                 FocusedField::Search => self.search_query.len(),
                 FocusedField::FeedKey => self.feed_key_draft.len(),
                 FocusedField::Title => self.draft_title.len(),
@@ -1160,43 +813,169 @@ mod mobile {
                 FocusedField::AgentKey => self.agent_key_draft.len(),
                 FocusedField::AgentPrompt => self.agent_prompt_draft.len(),
             };
+            if focus_changed {
+                self.focused_selection_start = text_len;
+                self.focused_cursor = text_len;
+                self.native_input_composing = false;
+            } else {
+                self.focused_selection_start = self.focused_selection_start.min(text_len);
+                self.focused_cursor = self.focused_cursor.min(text_len);
+            }
+            if field == FocusedField::Body {
+                self.body_last_revealed_cursor = None;
+            }
             gpui_mobile::set_text_input_callback(Some(Box::new(|text: &str| {
                 PENDING_TEXT.with(|pending| pending.borrow_mut().push(text.to_owned()));
             })));
-            gpui_mobile::show_keyboard_with_type(keyboard_type);
+            if !self.show_native_text_input_for_field(field, keyboard_type) {
+                gpui_mobile::show_keyboard_with_type(keyboard_type);
+            }
             gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
         }
 
-        fn drain_keyboard(&mut self) {
+        fn show_native_text_input_for_field(
+            &self,
+            field: FocusedField,
+            keyboard_type: KeyboardType,
+        ) -> bool {
+            let (value, multiline, secure, label) = match field {
+                FocusedField::Search => (self.search_query.as_str(), false, false, "搜索"),
+                FocusedField::FeedKey => (self.feed_key_draft.as_str(), false, false, "发布者域名"),
+                FocusedField::Title => (self.draft_title.as_str(), false, false, "标题"),
+                FocusedField::Body => {
+                    let label = if self.selected_kind == Some(NodeKind::Bookmark) {
+                        "网址"
+                    } else {
+                        "正文"
+                    };
+                    (
+                        self.draft_body.as_str(),
+                        self.selected_kind != Some(NodeKind::Bookmark),
+                        false,
+                        label,
+                    )
+                }
+                FocusedField::SyncServer => (
+                    self.sync_server_draft.as_str(),
+                    false,
+                    false,
+                    "同步服务端基址",
+                ),
+                FocusedField::SyncCode => (self.sync_code_draft.as_str(), false, true, "同步码"),
+                FocusedField::SyncToken => {
+                    (self.sync_token_draft.as_str(), false, true, "登录令牌")
+                }
+                FocusedField::AgentBaseUrl => (
+                    self.agent_base_url_draft.as_str(),
+                    false,
+                    false,
+                    "模型服务地址",
+                ),
+                FocusedField::AgentModel => {
+                    (self.agent_model_draft.as_str(), false, false, "模型名称")
+                }
+                FocusedField::AgentKey => {
+                    (self.agent_key_draft.as_str(), false, true, "模型 API Key")
+                }
+                FocusedField::AgentPrompt => {
+                    (self.agent_prompt_draft.as_str(), true, false, "Agent 消息")
+                }
+            };
+            native_text::show(
+                value,
+                self.focused_selection_start,
+                self.focused_cursor,
+                keyboard_type,
+                multiline,
+                secure,
+                label,
+            )
+        }
+
+        fn sync_native_text_input(&self) {
+            let Some(field) = self.focused_field else {
+                return;
+            };
+            let keyboard_type = match field {
+                FocusedField::FeedKey | FocusedField::SyncServer | FocusedField::AgentBaseUrl => {
+                    KeyboardType::URL
+                }
+                _ => KeyboardType::Default,
+            };
+            let _ = self.show_native_text_input_for_field(field, keyboard_type);
+        }
+
+        fn drain_keyboard(&mut self, cx: &mut Context<Self>) {
             let Some(field) = self.focused_field else {
                 return;
             };
             let mut changed = false;
-            PENDING_TEXT.with(|pending| {
-                for chunk in pending.borrow_mut().drain(..) {
-                    let target = match field {
-                        FocusedField::Search => &mut self.search_query,
-                        FocusedField::FeedKey => &mut self.feed_key_draft,
-                        FocusedField::Title => &mut self.draft_title,
-                        FocusedField::Body => &mut self.draft_body,
-                        FocusedField::SyncServer => &mut self.sync_server_draft,
-                        FocusedField::SyncCode => &mut self.sync_code_draft,
-                        FocusedField::SyncToken => &mut self.sync_token_draft,
-                        FocusedField::AgentBaseUrl => &mut self.agent_base_url_draft,
-                        FocusedField::AgentModel => &mut self.agent_model_draft,
-                        FocusedField::AgentKey => &mut self.agent_key_draft,
-                        FocusedField::AgentPrompt => &mut self.agent_prompt_draft,
-                    };
-                    changed |= apply_mobile_input_at_cursor(
-                        target,
-                        &mut self.focused_cursor,
-                        &chunk,
-                        matches!(field, FocusedField::Body | FocusedField::AgentPrompt),
-                    );
+            let native_state = native_text::take_pending_text();
+            let native_commit = if let Some(state) = native_state {
+                let target = match field {
+                    FocusedField::Search => &mut self.search_query,
+                    FocusedField::FeedKey => &mut self.feed_key_draft,
+                    FocusedField::Title => &mut self.draft_title,
+                    FocusedField::Body => &mut self.draft_body,
+                    FocusedField::SyncServer => &mut self.sync_server_draft,
+                    FocusedField::SyncCode => &mut self.sync_code_draft,
+                    FocusedField::SyncToken => &mut self.sync_token_draft,
+                    FocusedField::AgentBaseUrl => &mut self.agent_base_url_draft,
+                    FocusedField::AgentModel => &mut self.agent_model_draft,
+                    FocusedField::AgentKey => &mut self.agent_key_draft,
+                    FocusedField::AgentPrompt => &mut self.agent_prompt_draft,
+                };
+                changed = *target != state.value;
+                if changed {
+                    *target = state.value;
                 }
-            });
+                self.focused_selection_start = state.selection_start.min(target.len());
+                self.focused_cursor = state.selection_end.min(target.len());
+                while self.focused_selection_start > 0
+                    && !target.is_char_boundary(self.focused_selection_start)
+                {
+                    self.focused_selection_start -= 1;
+                }
+                while self.focused_cursor > 0 && !target.is_char_boundary(self.focused_cursor) {
+                    self.focused_cursor -= 1;
+                }
+                let committed = mobile_native_edit_committed(
+                    changed,
+                    self.native_input_composing,
+                    state.composing,
+                );
+                self.native_input_composing = state.composing;
+                PENDING_TEXT.with(|pending| pending.borrow_mut().clear());
+                committed
+            } else {
+                PENDING_TEXT.with(|pending| {
+                    for chunk in pending.borrow_mut().drain(..) {
+                        let target = match field {
+                            FocusedField::Search => &mut self.search_query,
+                            FocusedField::FeedKey => &mut self.feed_key_draft,
+                            FocusedField::Title => &mut self.draft_title,
+                            FocusedField::Body => &mut self.draft_body,
+                            FocusedField::SyncServer => &mut self.sync_server_draft,
+                            FocusedField::SyncCode => &mut self.sync_code_draft,
+                            FocusedField::SyncToken => &mut self.sync_token_draft,
+                            FocusedField::AgentBaseUrl => &mut self.agent_base_url_draft,
+                            FocusedField::AgentModel => &mut self.agent_model_draft,
+                            FocusedField::AgentKey => &mut self.agent_key_draft,
+                            FocusedField::AgentPrompt => &mut self.agent_prompt_draft,
+                        };
+                        changed |= apply_mobile_input_at_cursor(
+                            target,
+                            &mut self.focused_cursor,
+                            &chunk,
+                            matches!(field, FocusedField::Body | FocusedField::AgentPrompt),
+                        );
+                        self.focused_selection_start = self.focused_cursor;
+                    }
+                });
+                changed
+            };
             self.observed_pending_chunks = 0;
-            if !changed {
+            if !changed && !native_commit {
                 return;
             }
             if field == FocusedField::Search {
@@ -1207,10 +986,92 @@ mod mobile {
                     "搜索"
                 };
                 self.refresh();
-            } else if matches!(field, FocusedField::Title | FocusedField::Body) {
-                self.dirty = true;
-                self.purge_armed = false;
+            } else if native_commit && matches!(field, FocusedField::Title | FocusedField::Body) {
+                self.mark_draft_dirty(cx);
             }
+        }
+
+        fn mark_draft_dirty(&mut self, cx: &mut Context<Self>) {
+            self.dirty = true;
+            self.purge_armed = false;
+            self.draft_revision = self.draft_revision.wrapping_add(1);
+            self.schedule_draft_save(DRAFT_AUTOSAVE_DELAY, cx);
+        }
+
+        fn detach_pending_autosave(&mut self, cx: &mut Context<Self>) {
+            if self.dirty {
+                self.schedule_draft_save(Duration::ZERO, cx);
+            }
+            self.draft_revision = self.draft_revision.wrapping_add(1);
+            if let Some(task) = self.autosave_task.take() {
+                task.detach();
+            }
+        }
+
+        fn schedule_draft_save(&mut self, delay: Duration, cx: &mut Context<Self>) {
+            if !self.dirty {
+                return;
+            }
+            let Some(id) = self.selected_id.clone() else {
+                return;
+            };
+            let revision = self.draft_revision;
+            let title = self.draft_title.clone();
+            let body = self.body_editable.then(|| self.draft_body.clone());
+            let database_path = self.database_path.clone();
+            let timer = cx.background_executor().timer(delay);
+            self.autosave_task = Some(cx.spawn(async move |view, cx| {
+                timer.await;
+                let save_task = cx.background_executor().spawn(async move {
+                    let mut workspace =
+                        LocalWorkspace::open(database_path).map_err(|error| error.to_string())?;
+                    let node = workspace
+                        .save_edits(&id, title, body.as_deref())
+                        .map_err(|error| error.to_string())?;
+                    Ok::<_, String>((id, NodeSummary::from(&node)))
+                });
+                let result = save_task.await;
+                cx.update(|cx| {
+                    let Some(view) = view.upgrade() else {
+                        return;
+                    };
+                    view.update(cx, |this, cx| {
+                        if this.draft_revision != revision {
+                            if let Err(error) = &result {
+                                this.status = format!("上一项草稿自动保存失败：{error}");
+                                cx.notify();
+                            }
+                            return;
+                        }
+                        match result {
+                            Ok((id, summary)) => {
+                                if this.selected_id.as_deref() != Some(id.as_str()) {
+                                    return;
+                                }
+                                if let Some(item) = this.items.iter_mut().find(|item| item.id == id)
+                                {
+                                    item.title = summary.title;
+                                    item.updated_at = summary.updated_at;
+                                }
+                                this.dirty = false;
+                                this.status = "已自动保存到本机".into();
+                            }
+                            Err(error) => {
+                                this.status = format!("自动保存失败：{error}");
+                            }
+                        }
+                        cx.notify();
+                    });
+                })
+            }));
+        }
+
+        fn window_activation_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+            if window.is_window_active() {
+                return;
+            }
+            self.drain_keyboard(cx);
+            self.schedule_draft_save(Duration::ZERO, cx);
         }
 
         fn save(&mut self, cx: &mut Context<Self>) {
@@ -1233,9 +1094,10 @@ mod mobile {
             }
             match apply_mobile_block_style(&mut self.draft_body, &mut self.focused_cursor, style) {
                 Ok(true) => {
-                    self.dirty = true;
-                    self.purge_armed = false;
+                    self.focused_selection_start = self.focused_cursor;
+                    self.mark_draft_dirty(cx);
                     self.status = "已格式化当前块；保存后写回 Plate 富文本".into();
+                    self.sync_native_text_input();
                 }
                 Ok(false) => {
                     self.status = "当前块已经是该格式".into();
@@ -1264,9 +1126,10 @@ mod mobile {
             match apply_mobile_slash_command(&mut self.draft_body, &mut self.focused_cursor, style)
             {
                 Ok(true) => {
-                    self.dirty = true;
-                    self.purge_armed = false;
+                    self.focused_selection_start = self.focused_cursor;
+                    self.mark_draft_dirty(cx);
                     self.status = "已插入富文本块；保存后写回 Plate".into();
+                    self.sync_native_text_input();
                 }
                 Ok(false) => {
                     self.status = "斜杠命令已经失效，请重新输入 /".into();
@@ -1294,9 +1157,10 @@ mod mobile {
             }
             match move_mobile_block(&mut self.draft_body, &mut self.focused_cursor, direction) {
                 Some(true) => {
-                    self.dirty = true;
-                    self.purge_armed = false;
+                    self.focused_selection_start = self.focused_cursor;
+                    self.mark_draft_dirty(cx);
                     self.status = "已移动当前块；保存后同步 Plate 块顺序".into();
+                    self.sync_native_text_input();
                 }
                 Some(false) => {
                     self.status = match direction {
@@ -1575,6 +1439,7 @@ mod mobile {
             if !self.dirty || self.show_trash {
                 return Ok(());
             }
+            self.autosave_task.take();
             let Some(id) = self.selected_id.clone() else {
                 return Ok(());
             };
@@ -1588,6 +1453,11 @@ mod mobile {
         }
 
         fn move_to_trash(&mut self, cx: &mut Context<Self>) {
+            if let Err(error) = self.commit_draft() {
+                self.status = error;
+                cx.notify();
+                return;
+            }
             let Some(id) = self.selected_id.clone() else {
                 return;
             };
@@ -1674,6 +1544,7 @@ mod mobile {
                     Ok(value) => self.agent_key_configured = value.is_some(),
                     Err(error) => self.status = error.to_string(),
                 }
+                self.load_agent_activity(cx);
             }
             self.status = match section {
                 "活动" => "按最近修改排序",
@@ -1716,9 +1587,14 @@ mod mobile {
 
         fn stop_editing(&mut self) {
             self.focused_field = None;
+            self.focused_selection_start = 0;
             self.focused_cursor = 0;
+            self.native_input_composing = false;
+            self.body_last_revealed_cursor = None;
             self.observed_pending_chunks = 0;
             PENDING_TEXT.with(|pending| pending.borrow_mut().clear());
+            native_text::clear_pending_text();
+            native_text::hide();
             gpui_mobile::hide_keyboard();
             gpui_mobile::set_text_input_callback(None);
         }
@@ -1742,7 +1618,7 @@ mod mobile {
 
     impl Render for IdeallMobile {
         fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-            self.drain_keyboard();
+            self.drain_keyboard(cx);
             let (safe_top, safe_bottom, safe_left, safe_right) = gpui_mobile::safe_area_insets();
             let theme = MaterialTheme::light();
             let items = self.items.clone();
@@ -1758,16 +1634,8 @@ mod mobile {
             let show_browse = !has_selection && self.active_section == "浏览";
             let can_create = !self.show_trash && self.active_section == "我的";
             let engine_capabilities = engine_runtime_capabilities(EnginePlatform::current_mobile());
-            let agent_audits = if show_apps {
-                self.service.list_agent_audits(50).unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-            let agent_threads = if show_apps {
-                self.service.list_agent_threads(12).unwrap_or_default()
-            } else {
-                Vec::new()
-            };
+            let agent_audits = self.agent_audits.clone();
+            let agent_threads = self.agent_threads.clone();
             let agent_transcript = self.agent_transcript.clone();
             let can_save = self.dirty && !self.show_trash;
             let show_note_toolbar = has_selection
@@ -1777,6 +1645,14 @@ mod mobile {
             let search_focused = self.focused_field == Some(FocusedField::Search);
             let title_focused = self.focused_field == Some(FocusedField::Title);
             let body_focused = self.focused_field == Some(FocusedField::Body);
+            if body_focused && self.body_last_revealed_cursor != Some(self.focused_cursor) {
+                self.body_scroll_handle
+                    .scroll_to_item(mobile_cursor_line_index(
+                        &self.draft_body,
+                        self.focused_cursor,
+                    ));
+                self.body_last_revealed_cursor = Some(self.focused_cursor);
+            }
             let slash_commands = if show_note_toolbar && body_focused {
                 mobile_slash_query(&self.draft_body, self.focused_cursor)
                     .map(mobile_slash_commands)
@@ -1839,27 +1715,141 @@ mod mobile {
                     this.focus_field(FocusedField::Title, KeyboardType::Default);
                 })
                 .render(cx);
-            let mut body_builder = TextInput::<IdeallMobile>::new("mobile-body", theme)
-                .label(if self.selected_kind == Some(NodeKind::Bookmark) {
-                    "网址"
-                } else {
-                    "正文"
-                })
-                .value(&self.draft_body)
-                .placeholder("从这里开始记录……")
-                .focused(body_focused)
-                .cursor(focused_cursor(FocusedField::Body, self.draft_body.len()));
-            if self.body_editable && !self.show_trash {
-                let keyboard_type = if self.selected_kind == Some(NodeKind::Bookmark) {
-                    KeyboardType::URL
-                } else {
-                    KeyboardType::Default
-                };
-                body_builder = body_builder.on_tap(move |this, _, _, _| {
-                    this.focus_field(FocusedField::Body, keyboard_type);
-                });
-            }
-            let body_input = body_builder.render(cx);
+            let use_multiline_body =
+                matches!(self.selected_kind, Some(NodeKind::Note | NodeKind::File));
+            let body_input = if use_multiline_body {
+                let body_scroll_handle = self.body_scroll_handle.clone();
+                let cursor_line = mobile_cursor_line_index(&self.draft_body, self.focused_cursor);
+                let line_elements = mobile_text_line_ranges(&self.draft_body)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(line_index, range)| {
+                        let line_start = range.start;
+                        let line = self.draft_body[range.clone()].to_owned();
+                        let display = if body_focused && line_index == cursor_line {
+                            mobile_line_with_cursor(
+                                &line,
+                                self.focused_cursor.saturating_sub(line_start),
+                            )
+                        } else if line.is_empty() {
+                            "\u{200b}".to_owned()
+                        } else {
+                            line.clone()
+                        };
+                        let hit_test_line = line;
+                        let hit_test_scroll = body_scroll_handle.clone();
+                        div()
+                            .w_full()
+                            .min_h(px(30.))
+                            .px_3()
+                            .py_1()
+                            .text_sm()
+                            .line_height(px(22.))
+                            .whitespace_normal()
+                            .when(body_focused && line_index == cursor_line, |line| {
+                                line.bg(rgb(0xf4f7fb))
+                            })
+                            .when(self.body_editable && !self.show_trash, |line| {
+                                line.cursor_text().on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                                        this.focus_field(FocusedField::Body, KeyboardType::Default);
+                                        let offset = hit_test_scroll
+                                            .bounds_for_item(line_index)
+                                            .map(|bounds| {
+                                                let text_origin =
+                                                    bounds.origin + point(px(12.), px(4.));
+                                                let local_position = point(
+                                                    event.position.x - text_origin.x,
+                                                    event.position.y - text_origin.y,
+                                                );
+                                                let wrap_width =
+                                                    (bounds.size.width - px(24.)).max(px(1.));
+                                                let text_style = window.text_style();
+                                                window
+                                                    .text_system()
+                                                    .shape_text(
+                                                        SharedString::from(hit_test_line.clone()),
+                                                        px(14.),
+                                                        &[text_style.to_run(hit_test_line.len())],
+                                                        Some(wrap_width),
+                                                        None,
+                                                    )
+                                                    .ok()
+                                                    .and_then(|mut lines| lines.pop())
+                                                    .map(|layout| {
+                                                        layout
+                                                            .closest_index_for_position(
+                                                                local_position,
+                                                                px(22.),
+                                                            )
+                                                            .unwrap_or_else(|index| index)
+                                                    })
+                                                    .unwrap_or_default()
+                                            })
+                                            .unwrap_or(hit_test_line.len())
+                                            .min(hit_test_line.len());
+                                        this.focused_cursor = line_start + offset;
+                                        this.focused_selection_start = this.focused_cursor;
+                                        this.body_last_revealed_cursor = None;
+                                        native_text::update_selection(
+                                            this.focused_cursor,
+                                            this.focused_cursor,
+                                        );
+                                        hit_test_scroll.scroll_to_item(line_index);
+                                        cx.notify();
+                                    }),
+                                )
+                            })
+                            .child(display)
+                    });
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(div().text_xs().text_color(rgb(0x5f6672)).child("正文"))
+                    .child(
+                        div()
+                            .id("mobile-body-scroll")
+                            .h(px(260.))
+                            .min_h(px(180.))
+                            .w_full()
+                            .overflow_y_scroll()
+                            .track_scroll(&body_scroll_handle)
+                            .rounded_lg()
+                            .border_1()
+                            .border_color(rgb(if body_focused { 0x315f9f } else { 0xcbd2dc }))
+                            .bg(rgb(if self.body_editable {
+                                0xffffff
+                            } else {
+                                0xf4f5f7
+                            }))
+                            .children(line_elements),
+                    )
+                    .into_any_element()
+            } else {
+                let mut body_builder = TextInput::<IdeallMobile>::new("mobile-body", theme)
+                    .label(if self.selected_kind == Some(NodeKind::Bookmark) {
+                        "网址"
+                    } else {
+                        "正文"
+                    })
+                    .value(&self.draft_body)
+                    .placeholder("从这里开始记录……")
+                    .focused(body_focused)
+                    .cursor(focused_cursor(FocusedField::Body, self.draft_body.len()));
+                if self.body_editable && !self.show_trash {
+                    let keyboard_type = if self.selected_kind == Some(NodeKind::Bookmark) {
+                        KeyboardType::URL
+                    } else {
+                        KeyboardType::Default
+                    };
+                    body_builder = body_builder.on_tap(move |this, _, _, _| {
+                        this.focus_field(FocusedField::Body, keyboard_type);
+                    });
+                }
+                body_builder.render(cx).into_any_element()
+            };
             let sync_server_input = TextInput::<IdeallMobile>::new("mobile-sync-server", theme)
                 .label("服务端基址")
                 .value(&self.sync_server_draft)
@@ -3081,19 +3071,37 @@ mod mobile {
     }
 
     pub fn open_main_window(cx: &mut App) {
-        let support = gpui_mobile::packages::path_provider::support_directory()
-            .expect("failed to resolve ideall mobile support directory");
-        std::fs::create_dir_all(&support)
-            .expect("failed to create ideall mobile support directory");
-        let database_path = support.join("ideall.db");
-        let service = LocalWorkspace::open(&database_path).expect("failed to open mobile database");
-        cx.open_window(WindowOptions::default(), |window, cx| {
-            let view = cx.new(|cx| IdeallMobile::new(database_path, service, cx));
-            let focus_handle = view.read(cx).focus_handle.clone();
-            window.focus(&focus_handle, cx);
-            view
-        })
-        .expect("failed to open ideall mobile window");
+        let initialized = (|| {
+            ideall_secrets::initialize_platform()
+                .map_err(|error| format!("无法初始化系统安全存储：{error}"))?;
+            let support = gpui_mobile::packages::path_provider::support_directory()
+                .map_err(|error| format!("无法确定应用数据目录：{error}"))?;
+            std::fs::create_dir_all(&support)
+                .map_err(|error| format!("无法创建应用数据目录：{error}"))?;
+            let database_path = support.join("ideall.db");
+            let service = LocalWorkspace::open(&database_path)
+                .map_err(|error| format!("无法打开本地数据库：{error}"))?;
+            Ok::<_, String>((database_path, service))
+        })();
+
+        let window_result = match initialized {
+            Ok((database_path, service)) => cx
+                .open_window(WindowOptions::default(), |window, cx| {
+                    let view = cx.new(|cx| IdeallMobile::new(database_path, service, window, cx));
+                    let focus_handle = view.read(cx).focus_handle.clone();
+                    window.focus(&focus_handle, cx);
+                    view
+                })
+                .map(|_| ()),
+            Err(message) => cx
+                .open_window(WindowOptions::default(), |_window, cx| {
+                    cx.new(|_| MobileStartupFailure { message })
+                })
+                .map(|_| ()),
+        };
+        if let Err(error) = window_result {
+            log::error!("failed to open ideall mobile window: {error}");
+        }
         cx.activate(true);
     }
 }
@@ -3110,10 +3118,6 @@ fn android_main(app: android_activity::AndroidApp) {
     );
     gpui_mobile::android::jni::install_panic_hook();
     let _platform = gpui_mobile::android::jni::init_platform(&app);
-    if let Err(error) = ideall_secrets::initialize_platform() {
-        log::error!("failed to initialize Android secure store: {error}");
-        return;
-    }
     let Some(platform) = gpui_mobile::android::jni::shared_platform() else {
         log::error!("gpui-mobile did not create the Android platform");
         return;
@@ -3144,11 +3148,17 @@ pub fn mobile_targets_only() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        MobileBlockFormatError, MobileBlockMove, MobileBlockStyle, apply_mobile_block_style,
-        apply_mobile_input, apply_mobile_input_at_cursor, apply_mobile_slash_command,
-        enqueue_mobile_control_key, mobile_control_sequence, mobile_slash_commands,
-        mobile_slash_query, move_mobile_block,
+    use super::editor::{
+        BlockFormatError as MobileBlockFormatError, BlockMove as MobileBlockMove,
+        BlockStyle as MobileBlockStyle, apply_block_style as apply_mobile_block_style,
+        apply_input as apply_mobile_input, apply_input_at_cursor as apply_mobile_input_at_cursor,
+        apply_slash_command as apply_mobile_slash_command,
+        control_sequence as mobile_control_sequence, cursor_line_index as mobile_cursor_line_index,
+        enqueue_control_key as enqueue_mobile_control_key,
+        line_with_cursor as mobile_line_with_cursor, move_block as move_mobile_block,
+        native_edit_committed as mobile_native_edit_committed,
+        slash_commands as mobile_slash_commands, slash_query as mobile_slash_query,
+        text_line_ranges as mobile_text_line_ranges,
     };
 
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -3180,6 +3190,45 @@ mod tests {
         let mut text = String::new();
         assert!(apply_mobile_input(&mut text, "模型\r\n名称🙂", false));
         assert_eq!(text, "模型名称🙂");
+    }
+
+    #[test]
+    fn mobile_multiline_layout_keeps_empty_and_trailing_lines() {
+        let empty = mobile_text_line_ranges("");
+        assert_eq!(empty.len(), 1);
+        assert_eq!(empty[0], 0..0);
+        let single = mobile_text_line_ranges("第一行");
+        assert_eq!(single.len(), 1);
+        assert_eq!(single[0], 0.."第一行".len());
+        assert_eq!(
+            mobile_text_line_ranges("甲\n\n乙\n"),
+            [0.."甲".len(), 4..4, 5..8, 9..9]
+        );
+    }
+
+    #[test]
+    fn mobile_multiline_cursor_uses_visual_line_boundaries() {
+        let text = "甲\n🙂\n";
+        assert_eq!(mobile_cursor_line_index(text, 0), 0);
+        assert_eq!(mobile_cursor_line_index(text, "甲".len()), 0);
+        assert_eq!(mobile_cursor_line_index(text, "甲\n".len()), 1);
+        assert_eq!(mobile_cursor_line_index(text, "甲\n🙂\n".len()), 2);
+    }
+
+    #[test]
+    fn mobile_cursor_marker_never_splits_utf8() {
+        assert_eq!(mobile_line_with_cursor("甲🙂乙", 3), "甲▏🙂乙");
+        assert_eq!(mobile_line_with_cursor("甲🙂乙", 5), "甲▏🙂乙");
+        assert_eq!(mobile_line_with_cursor("甲🙂乙", usize::MAX), "甲🙂乙▏");
+    }
+
+    #[test]
+    fn mobile_native_ime_only_persists_committed_composition() {
+        assert!(!mobile_native_edit_committed(true, false, true));
+        assert!(!mobile_native_edit_committed(false, true, true));
+        assert!(mobile_native_edit_committed(false, true, false));
+        assert!(mobile_native_edit_committed(true, false, false));
+        assert!(!mobile_native_edit_committed(false, false, false));
     }
 
     #[test]

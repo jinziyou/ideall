@@ -1,9 +1,9 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use directories::ProjectDirs;
 use gpui::{
     App, Application, Context, Entity, IntoElement, PathPromptOptions, PromptButton, PromptLevel,
-    Render, SharedString, Subscription, Window, WindowOptions, div, prelude::*, px, rgb,
+    Render, SharedString, Subscription, Task, Window, WindowOptions, div, prelude::*, px, rgb,
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_component::webview::WebView;
@@ -16,8 +16,9 @@ use gpui_component::{
 };
 use ideall_acp::{AcpToolStatus, ExternalAcpConfig, command_exists, run_external_acp};
 use ideall_application::{
-    AgentModelSettings, AgentToolRun, AgentTranscriptMessage, AuditStatus, ExternalAcpSettings,
-    HOME_ROOT_ID, LocalWorkspace, ModelRole, NodeSummary, OpenAiCompatibleClient, SyncSettings,
+    AgentAuditRecord, AgentModelSettings, AgentToolRun, AgentTranscriptMessage, AuditStatus,
+    ExternalAcpSettings, HOME_ROOT_ID, LocalWorkspace, ModelRole, NodeSummary,
+    OpenAiCompatibleClient, SyncSettings,
 };
 use ideall_domain::{
     EnginePlatform, EnginePreferences, EngineRuntimeKind, TabDescriptor, WorkspaceState,
@@ -32,6 +33,7 @@ use ideall_updater::{AvailableUpdate, UpdateStatus, updater_from_environment};
 
 const INFO_PORTAL_URL: &str = "https://www.wonita.link/info";
 const COMMUNITY_PORTAL_URL: &str = "https://www.wonita.link/community";
+const DRAFT_AUTOSAVE_DELAY: Duration = Duration::from_millis(700);
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 struct WebView;
@@ -40,6 +42,46 @@ struct WebView;
 impl Render for WebView {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
+    }
+}
+
+struct DesktopStartupFailure {
+    message: String,
+}
+
+impl Render for DesktopStartupFailure {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(rgb(0xf5f7fa))
+            .child(
+                div()
+                    .max_w(px(620.))
+                    .p_8()
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(rgb(0xe1b7b3))
+                    .bg(rgb(0xffffff))
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .child(
+                        div()
+                            .text_2xl()
+                            .text_color(rgb(0x8f2f28))
+                            .child("ideall 无法启动"),
+                    )
+                    .child(div().text_color(rgb(0x4b5563)).child(self.message.clone()))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(0x6b7280))
+                            .child("请检查数据目录权限、磁盘空间与系统安全存储后重新启动。"),
+                    ),
+            )
     }
 }
 
@@ -83,7 +125,13 @@ struct IdeallDesktop {
     agent_in_progress: bool,
     agent_thread_id: Option<String>,
     agent_transcript: Vec<AgentTranscriptMessage>,
+    agent_audits: Vec<AgentAuditRecord>,
+    agent_threads: Vec<NodeSummary>,
+    agent_activity_loading: bool,
     body_editable: bool,
+    suppress_editor_events: bool,
+    draft_revision: u64,
+    autosave_task: Option<Task<()>>,
     dirty: bool,
     status: Option<SharedString>,
     _subscriptions: Vec<Subscription>,
@@ -182,20 +230,17 @@ impl IdeallDesktop {
             .unwrap_or_default();
         let title_subscription = cx.subscribe(&title_input, |this, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
-                this.dirty = true;
-                cx.notify();
+                this.mark_editor_dirty(cx);
             }
         });
         let body_subscription = cx.subscribe(&body_input, |this, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
-                this.dirty = true;
-                cx.notify();
+                this.mark_editor_dirty(cx);
             }
         });
         let code_subscription = cx.subscribe(&code_input, |this, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
-                this.dirty = true;
-                cx.notify();
+                this.mark_editor_dirty(cx);
             }
         });
         let search_subscription =
@@ -215,6 +260,8 @@ impl IdeallDesktop {
         let items = service.list_home().unwrap_or_default();
         let workspace = service.load_workspace_state().unwrap_or_default();
         let engine_preferences = service.load_engine_preferences().unwrap_or_default();
+        let window_activation =
+            cx.observe_window_activation(window, Self::window_activation_changed);
         let mut this = Self {
             database_path,
             service,
@@ -255,7 +302,13 @@ impl IdeallDesktop {
             agent_in_progress: false,
             agent_thread_id,
             agent_transcript,
+            agent_audits: Vec::new(),
+            agent_threads: Vec::new(),
+            agent_activity_loading: false,
             body_editable: false,
+            suppress_editor_events: false,
+            draft_revision: 0,
+            autosave_task: None,
             dirty: false,
             status: None,
             _subscriptions: vec![
@@ -263,6 +316,7 @@ impl IdeallDesktop {
                 body_subscription,
                 code_subscription,
                 search_subscription,
+                window_activation,
             ],
         };
         let active_tab = this.workspace.active_id.as_deref().and_then(|active_id| {
@@ -402,7 +456,7 @@ impl IdeallDesktop {
         });
         cx.spawn(async move |view, cx| {
             let selection = receiver.await;
-            cx.update(|cx| {
+            let _ = cx.update(|cx| {
                 let Some(view) = view.upgrade() else {
                     return;
                 };
@@ -438,7 +492,7 @@ impl IdeallDesktop {
                         cx.notify();
                     }
                 });
-            })
+            });
         })
         .detach();
     }
@@ -457,6 +511,8 @@ impl IdeallDesktop {
     ) -> Option<(NodeKind, String)> {
         match self.service.node(id) {
             Ok(node) => {
+                self.detach_pending_autosave(cx);
+                self.suppress_editor_events = true;
                 let title = node.base().title.clone();
                 let (body, editable, protected_blocks) = self.node_body(&node);
                 self.title_input
@@ -467,6 +523,7 @@ impl IdeallDesktop {
                     input.set_highlighter(code_language_for_node(&self.service, id), cx);
                     input.set_value(body, window, cx);
                 });
+                self.suppress_editor_events = false;
                 self.selected_kind = Some(node.kind());
                 self.selected_id = Some(id.to_owned());
                 self.body_editable = editable;
@@ -493,6 +550,9 @@ impl IdeallDesktop {
     }
 
     fn open_node(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.dirty && self.selected_id.as_deref() == Some(id.as_str()) {
+            return;
+        }
         if let Some((kind, title)) = self.load_node_into_editor(&id, window, cx)
             && !self.show_trash
         {
@@ -579,6 +639,7 @@ impl IdeallDesktop {
         let Some(id) = self.selected_id.clone() else {
             return;
         };
+        self.autosave_task.take();
         let title = self.title_input.read(cx).value().to_string();
         let body = if self.active_engine_id.as_deref() == Some("ideall.code") {
             self.code_input.read(cx).value().to_string()
@@ -598,6 +659,135 @@ impl IdeallDesktop {
             Err(error) => self.status = Some(error.to_string().into()),
         }
         cx.notify();
+    }
+
+    fn mark_editor_dirty(&mut self, cx: &mut Context<Self>) {
+        if self.suppress_editor_events || self.selected_id.is_none() || self.show_trash {
+            return;
+        }
+        self.dirty = true;
+        self.draft_revision = self.draft_revision.wrapping_add(1);
+        self.schedule_draft_save(DRAFT_AUTOSAVE_DELAY, cx);
+        cx.notify();
+    }
+
+    fn schedule_draft_save(&mut self, delay: Duration, cx: &mut Context<Self>) {
+        if !self.dirty {
+            return;
+        }
+        let Some(id) = self.selected_id.clone() else {
+            return;
+        };
+        let revision = self.draft_revision;
+        let title = self.title_input.read(cx).value().to_string();
+        let body = if self.active_engine_id.as_deref() == Some("ideall.code") {
+            self.code_input.read(cx).value().to_string()
+        } else {
+            self.body_input.read(cx).value().to_string()
+        };
+        let body = self.body_editable.then_some(body);
+        let database_path = self.database_path.clone();
+        let timer = cx.background_executor().timer(delay);
+        self.autosave_task = Some(cx.spawn(async move |view, cx| {
+            timer.await;
+            let save_task = cx.background_executor().spawn(async move {
+                let mut workspace =
+                    LocalWorkspace::open(database_path).map_err(|error| error.to_string())?;
+                let node = workspace
+                    .save_edits(&id, title, body.as_deref())
+                    .map_err(|error| error.to_string())?;
+                Ok::<_, String>((id, NodeSummary::from(&node)))
+            });
+            let result = save_task.await;
+            let _ = cx.update(|cx| {
+                let Some(view) = view.upgrade() else {
+                    return;
+                };
+                view.update(cx, |this, cx| {
+                    if this.draft_revision != revision {
+                        if let Err(error) = &result {
+                            this.status = Some(format!("上一项草稿自动保存失败：{error}").into());
+                            cx.notify();
+                        }
+                        return;
+                    }
+                    match result {
+                        Ok((id, summary)) => {
+                            if this.selected_id.as_deref() != Some(id.as_str()) {
+                                return;
+                            }
+                            if let Some(item) = this.items.iter_mut().find(|item| item.id == id) {
+                                item.title = summary.title;
+                                item.updated_at = summary.updated_at;
+                            }
+                            this.dirty = false;
+                            this.status = Some("已自动保存到本地 SQLite".into());
+                        }
+                        Err(error) => {
+                            this.status = Some(format!("自动保存失败：{error}").into());
+                        }
+                    }
+                    cx.notify();
+                });
+            });
+        }));
+    }
+
+    fn detach_pending_autosave(&mut self, cx: &mut Context<Self>) {
+        if self.dirty {
+            self.schedule_draft_save(Duration::ZERO, cx);
+        }
+        self.draft_revision = self.draft_revision.wrapping_add(1);
+        if let Some(task) = self.autosave_task.take() {
+            task.detach();
+        }
+    }
+
+    fn window_activation_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !window.is_window_active() {
+            self.schedule_draft_save(Duration::ZERO, cx);
+        }
+    }
+
+    fn load_agent_activity(&mut self, cx: &mut Context<Self>) {
+        if self.agent_activity_loading {
+            return;
+        }
+        let database_path = self.database_path.clone();
+        let task = cx.background_executor().spawn(async move {
+            let workspace =
+                LocalWorkspace::open(database_path).map_err(|error| error.to_string())?;
+            let audits = workspace
+                .list_agent_audits(50)
+                .map_err(|error| error.to_string())?;
+            let threads = workspace
+                .list_agent_threads(12)
+                .map_err(|error| error.to_string())?;
+            Ok::<_, String>((audits, threads))
+        });
+        self.agent_activity_loading = true;
+        cx.spawn(async move |view, cx| {
+            let result = task.await;
+            cx.update(|cx| {
+                let Some(view) = view.upgrade() else {
+                    return;
+                };
+                view.update(cx, |this, cx| {
+                    this.agent_activity_loading = false;
+                    match result {
+                        Ok((audits, threads)) => {
+                            this.agent_audits = audits;
+                            this.agent_threads = threads;
+                        }
+                        Err(error) => {
+                            this.status = Some(format!("加载 Agent 活动失败：{error}").into());
+                        }
+                    }
+                    cx.notify();
+                });
+            })
+        })
+        .detach();
     }
 
     fn open_bookmark_external(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -695,6 +885,12 @@ impl IdeallDesktop {
     }
 
     fn move_selected_to_trash(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.dirty {
+            self.save(window, cx);
+            if self.dirty {
+                return;
+            }
+        }
         let Some(id) = self.selected_id.clone() else {
             return;
         };
@@ -807,6 +1003,7 @@ impl IdeallDesktop {
                     Ok(value) => self.agent_key_configured = value.is_some(),
                     Err(error) => self.status = Some(error.to_string().into()),
                 }
+                self.load_agent_activity(cx);
                 Some("原生 Agent 可直连 OpenAI-compatible 模型，并通过授权 MCP 使用本地工具".into())
             }
             "设置" => {
@@ -832,6 +1029,7 @@ impl IdeallDesktop {
             }
             Err(error) => self.status = Some(error.to_string().into()),
         }
+        self.load_agent_activity(cx);
         cx.notify();
     }
 
@@ -1007,6 +1205,7 @@ impl IdeallDesktop {
                         this.status = Some(error.into());
                     }
                 }
+                this.load_agent_activity(cx);
                 cx.notify();
             });
         })
@@ -1146,6 +1345,7 @@ impl IdeallDesktop {
                         this.status = Some(error.into());
                     }
                 }
+                this.load_agent_activity(cx);
                 cx.notify();
             });
         })
@@ -1423,6 +1623,8 @@ impl IdeallDesktop {
     }
 
     fn clear_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.detach_pending_autosave(cx);
+        self.suppress_editor_events = true;
         self.selected_id = None;
         self.selected_kind = None;
         self.body_editable = false;
@@ -1433,6 +1635,7 @@ impl IdeallDesktop {
             .update(cx, |input, cx| input.set_value("", window, cx));
         self.code_input
             .update(cx, |input, cx| input.set_value("", window, cx));
+        self.suppress_editor_events = false;
         self.active_engine_id = None;
         self.embedded_browser = None;
     }
@@ -1529,16 +1732,8 @@ impl Render for IdeallDesktop {
         let show_browse = self.active_section.as_ref() == "浏览";
         let can_create = !self.show_trash && self.active_section.as_ref() == "我的";
         let engine_capabilities = engine_runtime_capabilities(EnginePlatform::current_desktop());
-        let agent_audits = if show_apps {
-            self.service.list_agent_audits(50).unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        let agent_threads = if show_apps {
-            self.service.list_agent_threads(12).unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let agent_audits = self.agent_audits.clone();
+        let agent_threads = self.agent_threads.clone();
         let agent_transcript = self.agent_transcript.clone();
         let available_update = self.available_update.clone();
         let empty_message: SharedString = match self.active_section.as_ref() {
@@ -2770,17 +2965,37 @@ fn select_linux_backend() {}
 
 fn main() {
     select_linux_backend();
-    ideall_secrets::initialize_platform().expect("failed to initialize native secure store");
-    Application::new().run(|cx: &mut App| {
+    let secure_store_error = ideall_secrets::initialize_platform()
+        .err()
+        .map(|error| format!("无法初始化系统安全存储：{error}"));
+    Application::new().run(move |cx: &mut App| {
         gpui_component::init(cx);
-        let database_path =
-            native_database_path().expect("failed to resolve ideall data directory");
-        let service = LocalWorkspace::open(&database_path).expect("failed to open ideall database");
-        cx.open_window(WindowOptions::default(), |window, cx| {
-            let workspace = cx.new(|cx| IdeallDesktop::new(database_path, service, window, cx));
-            cx.new(|cx| Root::new(workspace, window, cx))
-        })
-        .expect("failed to open ideall desktop window");
+        let initialized = (|| {
+            if let Some(error) = secure_store_error {
+                return Err(error);
+            }
+            let database_path = native_database_path()?;
+            let service = LocalWorkspace::open(&database_path)
+                .map_err(|error| format!("无法打开本地数据库：{error}"))?;
+            Ok::<_, String>((database_path, service))
+        })();
+        let window_result = match initialized {
+            Ok((database_path, service)) => cx
+                .open_window(WindowOptions::default(), |window, cx| {
+                    let workspace =
+                        cx.new(|cx| IdeallDesktop::new(database_path, service, window, cx));
+                    cx.new(|cx| Root::new(workspace, window, cx))
+                })
+                .map(|_| ()),
+            Err(message) => cx
+                .open_window(WindowOptions::default(), |_window, cx| {
+                    cx.new(|_| DesktopStartupFailure { message })
+                })
+                .map(|_| ()),
+        };
+        if let Err(error) = window_result {
+            eprintln!("failed to open ideall desktop window: {error}");
+        }
         cx.activate(true);
     });
 }

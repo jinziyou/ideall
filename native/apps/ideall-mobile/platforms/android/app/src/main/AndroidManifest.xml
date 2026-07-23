@@ -15,7 +15,7 @@
         android:supportsRtl="true"
         android:theme="@style/IdeallTheme">
         <activity
-            android:name="android.app.NativeActivity"
+            android:name="com.jinziyou.ideall.IdeallNativeActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|density"
             android:exported="true"
             android:launchMode="singleTask"
