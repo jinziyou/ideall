@@ -6,6 +6,7 @@ const IOS_PROJECT = new URL(
   "../native/apps/ideall-mobile/platforms/ios/project.yml",
   import.meta.url,
 )
+const IOS_MAIN = new URL("../native/apps/ideall-mobile/platforms/ios/main.m", import.meta.url)
 const ANDROID_APP_BUILD = new URL(
   "../native/apps/ideall-mobile/platforms/android/app/build.gradle.kts",
   import.meta.url,
@@ -42,6 +43,17 @@ test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", (
   assert.match(project, /^          - -framework CoreMedia$/m)
   assert.match(project, /^          - -framework AVFoundation$/m)
   assert.doesNotMatch(project, /^      settings:$/m, "build settings must not be nested")
+})
+
+test("iOS 宿主串行化 GPUI 激活状态并忽略过早的前台通知", () => {
+  const main = readFileSync(IOS_MAIN, "utf8")
+
+  assert.match(main, /gpuiActiveNotificationInProgress/)
+  assert.match(main, /gpuiActiveNotificationPending/)
+  assert.match(main, /applicationDidBecomeActive:[\s\S]*?\[self notifyGpuiApplicationActive:YES\]/)
+  assert.match(main, /applicationWillResignActive:[\s\S]*?\[self notifyGpuiApplicationActive:NO\]/)
+  assert.doesNotMatch(main, /gpui_ios_will_enter_foreground\(NULL\)/)
+  assert.doesNotMatch(main, /gpui_ios_did_enter_background\(NULL\)/)
 })
 
 test("Android Rust NDK API 与应用 minSdk 保持一致", () => {

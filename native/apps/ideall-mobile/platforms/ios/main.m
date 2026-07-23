@@ -12,6 +12,11 @@
 @property(nonatomic, strong) UITextView *textInputBridge;
 @property(nonatomic, assign) BOOL updatingTextInputBridge;
 @property(nonatomic, assign) BOOL textInputBridgeMultiline;
+@property(nonatomic, assign) BOOL gpuiActiveStatusKnown;
+@property(nonatomic, assign) BOOL gpuiApplicationActive;
+@property(nonatomic, assign) BOOL gpuiActiveNotificationInProgress;
+@property(nonatomic, assign) BOOL gpuiActiveNotificationPending;
+@property(nonatomic, assign) BOOL gpuiPendingActiveStatus;
 @end
 
 @interface IdeallDocumentPickerDelegate : NSObject <UIDocumentPickerDelegate>
@@ -221,8 +226,36 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     if (self.gpuiWindow != NULL) gpui_ios_request_frame(self.gpuiWindow);
 }
 
+- (void)notifyGpuiApplicationActive:(BOOL)isActive {
+    // gpui-mobile currently keeps its active-status RefCell borrowed while it
+    // invokes GPUI. UIKit can synchronously re-enter an application lifecycle
+    // callback from that invocation, so coalesce nested changes until the
+    // current notification has returned.
+    if (self.gpuiActiveNotificationInProgress) {
+        self.gpuiActiveNotificationPending = YES;
+        self.gpuiPendingActiveStatus = isActive;
+        return;
+    }
+    if (self.gpuiActiveStatusKnown && self.gpuiApplicationActive == isActive) return;
+
+    self.gpuiActiveNotificationInProgress = YES;
+    BOOL nextStatus = isActive;
+    while (!self.gpuiActiveStatusKnown || self.gpuiApplicationActive != nextStatus) {
+        self.gpuiActiveNotificationPending = NO;
+        self.gpuiActiveStatusKnown = YES;
+        self.gpuiApplicationActive = nextStatus;
+        if (nextStatus) {
+            gpui_ios_did_become_active(NULL);
+        } else {
+            gpui_ios_will_resign_active(NULL);
+        }
+        if (!self.gpuiActiveNotificationPending) break;
+        nextStatus = self.gpuiPendingActiveStatus;
+    }
+    self.gpuiActiveNotificationInProgress = NO;
+}
+
 - (void)applicationWillEnterForeground:(UIApplication *)application {
-    gpui_ios_will_enter_foreground(NULL);
     if (self.displayLink == nil && self.gpuiWindow != NULL) {
         self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(renderFrame)];
         [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
@@ -230,17 +263,17 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
-    gpui_ios_did_become_active(NULL);
+    [self notifyGpuiApplicationActive:YES];
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application {
     [self.textInputBridge endEditing:YES];
     [self sendTextInputBridgeState];
-    gpui_ios_will_resign_active(NULL);
+    [self notifyGpuiApplicationActive:NO];
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
-    gpui_ios_did_enter_background(NULL);
+    [self notifyGpuiApplicationActive:NO];
     [self.displayLink invalidate];
     self.displayLink = nil;
 }
