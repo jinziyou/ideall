@@ -16,6 +16,7 @@
 @property(nonatomic, assign) BOOL updatingTextInputBridge;
 @property(nonatomic, assign) BOOL textInputBridgeMultiline;
 @property(nonatomic, assign) BOOL gpuiStarting;
+@property(nonatomic, assign) BOOL gpuiFrameInProgress;
 @property(nonatomic, assign) BOOL gpuiActiveStatusKnown;
 @property(nonatomic, assign) BOOL gpuiApplicationActive;
 @property(nonatomic, assign) BOOL gpuiActiveNotificationScheduled;
@@ -247,7 +248,15 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 }
 
 - (void)renderFrame {
-    if (self.gpuiWindow != NULL) gpui_ios_request_frame(self.gpuiWindow);
+    if (self.gpuiWindow == NULL || self.gpuiFrameInProgress) return;
+
+    // Rendering can enter a nested UIKit run loop (for example while Metal
+    // presents its first drawable). CADisplayLink may fire again from that
+    // run loop, while gpui-mobile still owns RefCell borrows for the current
+    // frame. Drop the nested tick instead of re-entering the Rust frame pump.
+    self.gpuiFrameInProgress = YES;
+    gpui_ios_request_frame(self.gpuiWindow);
+    self.gpuiFrameInProgress = NO;
 }
 
 - (void)installDisplayLinkIfNeeded {

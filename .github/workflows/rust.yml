@@ -291,7 +291,7 @@ jobs:
               "$HOME/Library/Logs/DiagnosticReports" \
               "$HOME/Library/Developer/CoreSimulator/Devices/$device" \
               -type f \
-              \( -name 'ideall*' -o -name '*.ips' \) \
+              \( -name 'ideall*.crash' -o -name 'ideall*.ips' \) \
               -mmin -10 \
               -exec cat {} + \
               2>/dev/null \
