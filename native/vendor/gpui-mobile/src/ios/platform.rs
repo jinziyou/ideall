@@ -247,6 +247,10 @@ impl Platform for IosPlatform {
         // iOS handles app reopening through scene lifecycle
     }
 
+    fn on_system_wake(&self, _callback: Box<dyn FnMut()>) {
+        // UIKit exposes foreground/activation through the app delegate instead.
+    }
+
     fn set_menus(&self, _menus: Vec<Menu>, _keymap: &Keymap) {
         // iOS doesn't have a menu bar
         // Could potentially integrate with UIMenuBuilder for context menus
@@ -288,6 +292,14 @@ impl Platform for IosPlatform {
 
     fn set_cursor_style(&self, _style: CursorStyle) {
         // iOS doesn't have visible cursors (except for Apple Pencil hover on iPad)
+    }
+
+    fn hide_cursor_until_mouse_moves(&self) {
+        // Touch-first iOS surfaces do not own a desktop mouse cursor.
+    }
+
+    fn is_cursor_visible(&self) -> bool {
+        false
     }
 
     fn should_auto_hide_scrollbars(&self) -> bool {

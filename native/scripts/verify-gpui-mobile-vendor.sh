@@ -122,8 +122,14 @@ done < <(
 )
 
 expected_changed_files=(
+  "android/dispatcher.rs"
+  "android/display.rs"
+  "android/platform.rs"
   "components/material/progress_indicator.rs"
+  "ios/dispatcher.rs"
+  "ios/display.rs"
   "ios/ffi.rs"
+  "ios/platform.rs"
   "ios/window.rs"
   "momentum.rs"
   "target_platform.rs"
