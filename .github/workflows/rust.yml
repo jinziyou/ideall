@@ -210,13 +210,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            apks=(native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug/*.apk)
-            test "${#apks[@]}" -eq 1
-            adb install -r "${apks[0]}"
+            set -- native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug/*.apk
+            test "$#" -eq 1
+            adb install -r "$1"
             adb shell am start -W -n com.jinziyou.ideall/com.jinziyou.ideall.IdeallNativeActivity
             sleep 10
-            test -n "$(adb shell pidof com.jinziyou.ideall | tr -d '\r')"
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity.*com\.jinziyou\.ideall' >/dev/null
+            app_pid="$(adb shell pidof com.jinziyou.ideall | tr -d '\r')"
+            if [ -z "$app_pid" ]; then
+              adb logcat -d | grep -E -C 40 'com\.jinziyou\.ideall|ideall_mobile' || true
+              exit 1
+            fi
+            adb shell dumpsys activity activities | grep -E '(mResumedActivity|topResumedActivity).*com\.jinziyou\.ideall' >/dev/null
             ! adb logcat -d -b crash | grep -E 'com\.jinziyou\.ideall|ideall_mobile' >/dev/null
       - name: Upload Android preview APK and AAB
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -263,10 +267,31 @@ jobs:
           xcrun simctl boot "$device"
           xcrun simctl bootstatus "$device" -b
           app="native/apps/ideall-mobile/platforms/ios/build/Build/Products/Release-iphonesimulator/ideall.app"
+          app_stdout="${RUNNER_TEMP}/ideall-ios.stdout.log"
+          app_stderr="${RUNNER_TEMP}/ideall-ios.stderr.log"
           xcrun simctl install "$device" "$app"
-          xcrun simctl launch "$device" com.jinziyou.ideall
+          xcrun simctl launch \
+            --stdout="$app_stdout" \
+            --stderr="$app_stderr" \
+            "$device" \
+            com.jinziyou.ideall
           sleep 10
-          xcrun simctl terminate "$device" com.jinziyou.ideall
+          if ! xcrun simctl terminate "$device" com.jinziyou.ideall; then
+            cat "$app_stdout" "$app_stderr" 2>/dev/null || true
+            xcrun simctl spawn "$device" log show \
+              --last 5m \
+              --style compact \
+              --predicate 'process == "ideall" OR eventMessage CONTAINS[c] "com.jinziyou.ideall"' \
+              || true
+            find "$HOME/Library/Logs/DiagnosticReports" \
+              -type f \
+              -name 'ideall*' \
+              -mmin -10 \
+              -exec cat {} + \
+              2>/dev/null \
+              || true
+            exit 1
+          fi
       - name: Upload iOS simulator preview
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
