@@ -26,15 +26,20 @@ ideall-sync-http = { path = "../../crates/ideall-sync-http" }
 log = "0.4"
 serde_json.workspace = true
 unicode-segmentation.workspace = true
-gpui-mobile = { git = "https://github.com/itsbalamurali/gpui-mobile", rev = "1d3ec2a1d14a63b74d1f4269340441d4eeada27a", optional = true, default-features = false, features = ["clipboard", "deeplink", "file_selector", "path_provider", "share", "shared_preferences", "url_launcher", "webview"] }
+# This gpui-mobile revision's iOS platform-view factory references its camera
+# and video modules unconditionally. Keep those package features enabled until
+# the upstream factory applies matching cfg gates; ideall does not register
+# camera/video renderers.
+gpui-mobile = { git = "https://github.com/itsbalamurali/gpui-mobile", rev = "1d3ec2a1d14a63b74d1f4269340441d4eeada27a", optional = true, default-features = false, features = ["camera", "clipboard", "deeplink", "file_selector", "path_provider", "share", "shared_preferences", "url_launcher", "video_player", "webview"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.15"
 jni = "0.22"
 # GPUI's font-kit dependency is compiled but not used by the Android platform
-# text system. Avoid cross-linking the Linux host's Fontconfig library.
-yeslogic-fontconfig-sys = { version = "6.0", features = ["dlopen"] }
+# text system. Select its dynamic Fontconfig backend so Android builds do not
+# cross-link the Linux host's Fontconfig library.
+zed-font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "94b0f28166665e8fd2f53ff6d268a14955c82269", package = "zed-font-kit", version = "0.14.1-zed", default-features = false, features = ["source-fontconfig-dlopen"] }
 
 [lints]
 workspace = true
