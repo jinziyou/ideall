@@ -12,8 +12,10 @@
 @property(nonatomic, strong) UITextView *textInputBridge;
 @property(nonatomic, assign) BOOL updatingTextInputBridge;
 @property(nonatomic, assign) BOOL textInputBridgeMultiline;
+@property(nonatomic, assign) BOOL gpuiStarting;
 @property(nonatomic, assign) BOOL gpuiActiveStatusKnown;
 @property(nonatomic, assign) BOOL gpuiApplicationActive;
+@property(nonatomic, assign) BOOL gpuiActiveNotificationScheduled;
 @property(nonatomic, assign) BOOL gpuiActiveNotificationInProgress;
 @property(nonatomic, assign) BOOL gpuiActiveNotificationPending;
 @property(nonatomic, assign) BOOL gpuiPendingActiveStatus;
@@ -96,12 +98,6 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
         ideall_free_string
     );
     gpui_ios_register_app();
-    gpui_ios_run_demo();
-    self.gpuiWindow = gpui_ios_get_window();
-    if (self.gpuiWindow != NULL) {
-        self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(renderFrame)];
-        [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-    }
     return YES;
 }
 
@@ -226,6 +222,27 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     if (self.gpuiWindow != NULL) gpui_ios_request_frame(self.gpuiWindow);
 }
 
+- (void)installDisplayLinkIfNeeded {
+    if (self.displayLink != nil || self.gpuiWindow == NULL) return;
+    self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(renderFrame)];
+    [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (void)startGpuiIfNeeded {
+    if (self.gpuiWindow != NULL || self.gpuiStarting) return;
+
+    // Build the GPUI window only after UIKit reports the application active.
+    // IosWindow reads UIApplicationState for its initial active value, avoiding
+    // an unsafe window refresh from inside the launch lifecycle callback.
+    self.gpuiStarting = YES;
+    self.gpuiActiveStatusKnown = YES;
+    self.gpuiApplicationActive = YES;
+    gpui_ios_run_demo();
+    self.gpuiWindow = gpui_ios_get_window();
+    self.gpuiStarting = NO;
+    [self installDisplayLinkIfNeeded];
+}
+
 - (void)notifyGpuiApplicationActive:(BOOL)isActive {
     // gpui-mobile currently keeps its active-status RefCell borrowed while it
     // invokes GPUI. UIKit can synchronously re-enter an application lifecycle
@@ -255,25 +272,39 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     self.gpuiActiveNotificationInProgress = NO;
 }
 
+- (void)scheduleGpuiApplicationActive:(BOOL)isActive {
+    if (self.gpuiWindow == NULL) return;
+    self.gpuiPendingActiveStatus = isActive;
+    if (self.gpuiActiveNotificationScheduled) return;
+
+    // Keep GPUI window updates outside UIKit's application lifecycle stack.
+    self.gpuiActiveNotificationScheduled = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.gpuiActiveNotificationScheduled = NO;
+        [self notifyGpuiApplicationActive:self.gpuiPendingActiveStatus];
+    });
+}
+
 - (void)applicationWillEnterForeground:(UIApplication *)application {
-    if (self.displayLink == nil && self.gpuiWindow != NULL) {
-        self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(renderFrame)];
-        [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-    }
+    [self installDisplayLinkIfNeeded];
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
-    [self notifyGpuiApplicationActive:YES];
+    if (self.gpuiWindow == NULL) {
+        [self startGpuiIfNeeded];
+        return;
+    }
+    [self scheduleGpuiApplicationActive:YES];
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application {
     [self.textInputBridge endEditing:YES];
     [self sendTextInputBridgeState];
-    [self notifyGpuiApplicationActive:NO];
+    [self scheduleGpuiApplicationActive:NO];
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
-    [self notifyGpuiApplicationActive:NO];
+    [self scheduleGpuiApplicationActive:NO];
     [self.displayLink invalidate];
     self.displayLink = nil;
 }

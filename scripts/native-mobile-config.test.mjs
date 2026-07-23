@@ -45,13 +45,23 @@ test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", (
   assert.doesNotMatch(project, /^      settings:$/m, "build settings must not be nested")
 })
 
-test("iOS 宿主串行化 GPUI 激活状态并忽略过早的前台通知", () => {
+test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => {
   const main = readFileSync(IOS_MAIN, "utf8")
 
+  const didFinish = main.slice(
+    main.indexOf("didFinishLaunchingWithOptions:"),
+    main.indexOf("- (void)installTextInputBridgeIfNeeded"),
+  )
+  assert.doesNotMatch(didFinish, /gpui_ios_run_demo/)
+  assert.match(main, /startGpuiIfNeeded[\s\S]*?gpui_ios_run_demo\(\)/)
   assert.match(main, /gpuiActiveNotificationInProgress/)
   assert.match(main, /gpuiActiveNotificationPending/)
-  assert.match(main, /applicationDidBecomeActive:[\s\S]*?\[self notifyGpuiApplicationActive:YES\]/)
-  assert.match(main, /applicationWillResignActive:[\s\S]*?\[self notifyGpuiApplicationActive:NO\]/)
+  assert.match(main, /dispatch_async\(dispatch_get_main_queue\(\)/)
+  assert.match(main, /applicationDidBecomeActive:[\s\S]*?\[self startGpuiIfNeeded\]/)
+  assert.match(
+    main,
+    /applicationWillResignActive:[\s\S]*?\[self scheduleGpuiApplicationActive:NO\]/,
+  )
   assert.doesNotMatch(main, /gpui_ios_will_enter_foreground\(NULL\)/)
   assert.doesNotMatch(main, /gpui_ios_did_enter_background\(NULL\)/)
 })

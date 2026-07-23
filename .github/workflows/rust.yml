@@ -286,6 +286,7 @@ jobs:
               || true
             find \
               "$HOME/Library/Logs/DiagnosticReports" \
+              "$HOME/Library/Developer/CoreSimulator/Devices/$device/data/Library/Logs/DiagnosticReports" \
               "$HOME/Library/Developer/CoreSimulator/Devices/$device/data/Library/Logs/CrashReporter" \
               -type f \
               -name 'ideall*' \
