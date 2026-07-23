@@ -20,6 +20,16 @@ const ANDROID_PLATFORM_VIEW = new URL(
   import.meta.url,
 )
 const MOBILE_BUILD_SCRIPT = new URL("../native/apps/ideall-mobile/build-mobile.sh", import.meta.url)
+const MOBILE_MANIFEST = new URL("../native/apps/ideall-mobile/Cargo.toml", import.meta.url)
+const VENDORED_GPUI_README = new URL("../native/vendor/gpui-mobile/README.md", import.meta.url)
+const VENDORED_GPUI_IOS_FFI = new URL(
+  "../native/vendor/gpui-mobile/src/ios/ffi.rs",
+  import.meta.url,
+)
+const VENDORED_GPUI_IOS_WINDOW = new URL(
+  "../native/vendor/gpui-mobile/src/ios/window.rs",
+  import.meta.url,
+)
 
 test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", () => {
   const project = readFileSync(IOS_PROJECT, "utf8")
@@ -71,6 +81,20 @@ test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => 
   )
   assert.doesNotMatch(main, /gpui_ios_will_enter_foreground\(NULL\)/)
   assert.doesNotMatch(main, /gpui_ios_did_enter_background\(NULL\)/)
+})
+
+test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () => {
+  const manifest = readFileSync(MOBILE_MANIFEST, "utf8")
+  const provenance = readFileSync(VENDORED_GPUI_README, "utf8")
+  const ffi = readFileSync(VENDORED_GPUI_IOS_FFI, "utf8")
+  const window = readFileSync(VENDORED_GPUI_IOS_WINDOW, "utf8")
+
+  assert.match(manifest, /gpui-mobile = \{ path = "\.\.\/\.\.\/vendor\/gpui-mobile"/)
+  assert.match(provenance, /1d3ec2a1d14a63b74d1f4269340441d4eeada27a/)
+  assert.match(ffi, /window\.begin_frame\(\)/)
+  assert.match(ffi, /request_frame_callback\.try_borrow_mut\(\)/)
+  assert.match(window, /frame_in_progress: AtomicBool/)
+  assert.match(window, /momentum_scroller\.try_borrow_mut\(\)/)
 })
 
 test("Android Rust NDK API 与应用 minSdk 保持一致", () => {
