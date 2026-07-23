@@ -92,21 +92,6 @@ fn keyboard_type_code(keyboard_type: KeyboardType) -> i32 {
     }
 }
 
-#[cfg(target_os = "ios")]
-unsafe extern "C" {
-    fn ideall_ios_show_text_input(
-        value: *const std::ffi::c_char,
-        selection_start: usize,
-        selection_end: usize,
-        keyboard_type: i32,
-        multiline: bool,
-        secure: bool,
-        label: *const std::ffi::c_char,
-    );
-    fn ideall_ios_update_text_selection(selection_start: usize, selection_end: usize);
-    fn ideall_ios_hide_text_input();
-}
-
 pub(crate) fn show(
     value: &str,
     selection_start: usize,
@@ -121,20 +106,15 @@ pub(crate) fn show(
         let value = std::ffi::CString::new(value.replace('\0', "\u{fffd}"))
             .expect("replacement text cannot contain NUL");
         let label = std::ffi::CString::new(label).expect("field label cannot contain NUL");
-        // SAFETY: both strings remain alive for the duration of the UIKit call
-        // and the native bridge clamps both selection values.
-        unsafe {
-            ideall_ios_show_text_input(
-                value.as_ptr(),
-                selection_start,
-                selection_end,
-                keyboard_type_code(keyboard_type),
-                multiline,
-                secure,
-                label.as_ptr(),
-            );
-        }
-        true
+        crate::ios_host::show_text_input(
+            value.as_ptr(),
+            selection_start,
+            selection_end,
+            keyboard_type_code(keyboard_type),
+            multiline,
+            secure,
+            label.as_ptr(),
+        )
     }
     #[cfg(target_os = "android")]
     {
@@ -184,9 +164,7 @@ pub(crate) fn show(
 
 pub(crate) fn update_selection(selection_start: usize, selection_end: usize) {
     #[cfg(target_os = "ios")]
-    unsafe {
-        ideall_ios_update_text_selection(selection_start, selection_end);
-    }
+    crate::ios_host::update_text_selection(selection_start, selection_end);
     #[cfg(target_os = "android")]
     {
         use jni::objects::JValue;
@@ -216,9 +194,7 @@ pub(crate) fn update_selection(selection_start: usize, selection_end: usize) {
 
 pub(crate) fn hide() {
     #[cfg(target_os = "ios")]
-    unsafe {
-        ideall_ios_hide_text_input();
-    }
+    crate::ios_host::hide_text_input();
     #[cfg(target_os = "android")]
     {
         let _ = gpui_mobile::android::jni::with_env(|env| {

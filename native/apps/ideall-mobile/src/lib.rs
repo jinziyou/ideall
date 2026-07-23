@@ -7,6 +7,9 @@
 ))]
 mod native_text;
 
+#[cfg(target_os = "ios")]
+mod ios_host;
+
 #[cfg(any(
     target_os = "ios",
     target_os = "android",
@@ -2910,14 +2913,10 @@ mod mobile {
     fn select_mobile_documents() -> Result<Vec<SelectedMobileDocument>, String> {
         use std::ffi::CStr;
 
-        unsafe extern "C" {
-            fn ideall_pick_files() -> *mut std::ffi::c_char;
-            fn ideall_free_string(value: *mut std::ffi::c_char);
-        }
-
         // SAFETY: the Objective-C bridge returns either null or a malloc-owned,
         // NUL-terminated JSON string and requires the paired free function.
-        let pointer = unsafe { ideall_pick_files() };
+        let pointer =
+            crate::ios_host::pick_files().ok_or_else(|| "iOS 文件选择桥接尚未初始化".to_owned())?;
         if pointer.is_null() {
             return Ok(Vec::new());
         }
@@ -2927,7 +2926,7 @@ mod mobile {
             .to_string_lossy()
             .into_owned();
         // SAFETY: this is exactly the pointer returned above and is freed once.
-        unsafe { ideall_free_string(pointer) };
+        unsafe { crate::ios_host::free_string(pointer) };
         let values: Vec<serde_json::Value> =
             serde_json::from_str(&raw).map_err(|_| "系统文件选择结果无效".to_owned())?;
         values
@@ -2975,14 +2974,6 @@ mod mobile {
     ) -> Result<String, String> {
         use std::ffi::CString;
 
-        unsafe extern "C" {
-            fn ideall_copy_security_scoped_file(
-                source: *const std::ffi::c_char,
-                destination: *const std::ffi::c_char,
-                max_bytes: u64,
-            ) -> i32;
-        }
-
         let directory = database_path
             .parent()
             .ok_or_else(|| "移动数据目录不可用".to_owned())?;
@@ -2993,15 +2984,12 @@ mod mobile {
             .ok_or_else(|| "导入缓存路径不是 UTF-8".to_owned())?;
         let destination_c =
             CString::new(destination_text).map_err(|_| "导入缓存路径包含无效字符".to_owned())?;
-        // SAFETY: both pointers remain valid for the duration of this call and
-        // the Objective-C implementation copies bytes synchronously.
-        let status = unsafe {
-            ideall_copy_security_scoped_file(
-                source.as_ptr(),
-                destination_c.as_ptr(),
-                256 * 1024 * 1024,
-            )
-        };
+        let status = crate::ios_host::copy_security_scoped_file(
+            source.as_ptr(),
+            destination_c.as_ptr(),
+            256 * 1024 * 1024,
+        )
+        .ok_or_else(|| "iOS 文件访问桥接尚未初始化".to_owned())?;
         if status != 0 {
             return Err(match status {
                 1 => "文件地址无效",

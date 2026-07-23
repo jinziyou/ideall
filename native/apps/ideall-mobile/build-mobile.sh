@@ -52,7 +52,11 @@ case "${platform}" in
           ;;
       esac
     done
-    cargo ndk "${cargo_ndk_targets[@]}" -o "${output_dir}" build --locked -p ideall-mobile "${cargo_profile[@]}"
+    cargo ndk \
+      --platform 26 \
+      "${cargo_ndk_targets[@]}" \
+      -o "${output_dir}" \
+      build --locked -p ideall-mobile "${cargo_profile[@]}"
     cd "${script_dir}/platforms/android"
     if [[ "${platform}" == "android-bundle" ]]; then
       gradle_task=":app:bundle${configuration}"

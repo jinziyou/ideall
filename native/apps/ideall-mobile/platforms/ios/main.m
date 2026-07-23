@@ -70,6 +70,14 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
     IdeallSharedDelegate = self;
+    ideall_ios_register_host_callbacks(
+        ideall_ios_show_text_input,
+        ideall_ios_update_text_selection,
+        ideall_ios_hide_text_input,
+        ideall_copy_security_scoped_file,
+        ideall_pick_files,
+        ideall_free_string
+    );
     gpui_ios_register_app();
     gpui_ios_run_demo();
     self.gpuiWindow = gpui_ios_get_window();

@@ -44,6 +44,32 @@ int ideall_copy_security_scoped_file(
 );
 char *ideall_pick_files(void);
 void ideall_free_string(char *value);
+typedef void (*IdeallShowTextInputCallback)(
+    const char *,
+    unsigned long,
+    unsigned long,
+    int,
+    bool,
+    bool,
+    const char *
+);
+typedef void (*IdeallUpdateTextSelectionCallback)(unsigned long, unsigned long);
+typedef void (*IdeallHideTextInputCallback)(void);
+typedef int (*IdeallCopySecurityScopedFileCallback)(
+    const char *,
+    const char *,
+    unsigned long long
+);
+typedef char *(*IdeallPickFilesCallback)(void);
+typedef void (*IdeallFreeStringCallback)(char *);
+void ideall_ios_register_host_callbacks(
+    IdeallShowTextInputCallback show_text_input,
+    IdeallUpdateTextSelectionCallback update_text_selection,
+    IdeallHideTextInputCallback hide_text_input,
+    IdeallCopySecurityScopedFileCallback copy_security_scoped_file,
+    IdeallPickFilesCallback pick_files,
+    IdeallFreeStringCallback free_string
+);
 
 #ifdef __cplusplus
 }
