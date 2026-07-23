@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="ideall"
+    Manufacturer="ideall contributors"
+    Version="$(var.IdeallVersion)"
+    UpgradeCode="1F66B57C-40A5-4BD6-8B4D-DF28DB243E45"
+    Language="1033"
+    InstallerVersion="500"
+    Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of ideall is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="IdeallIcon" SourceFile="$(var.IdeallIcon)" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="ideall">
+        <Component Id="IdeallFiles" Guid="*">
+          <File Id="IdeallExecutable" Source="$(var.IdeallBinary)" Name="ideall.exe" KeyPath="yes">
+            <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="ideall" Icon="IdeallIcon" WorkingDirectory="INSTALLFOLDER" />
+            <Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="ideall" Icon="IdeallIcon" WorkingDirectory="INSTALLFOLDER" />
+          </File>
+          <File Source="$(var.IdeallLicense)" Name="LICENSE" />
+          <File Source="$(var.IdeallThirdPartyLicenses)" Name="THIRD_PARTY_LICENSES.md" />
+          <File Source="$(var.IdeallReadme)" Name="README.md" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="MainFeature" Title="ideall" Level="1">
+      <ComponentRef Id="IdeallFiles" />
+    </Feature>
+  </Package>
+</Wix>

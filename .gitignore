@@ -42,6 +42,12 @@ next-env.d.ts
 /out/
 /public/generated/
 /registry-ready/
+/native/target/
+/native/apps/ideall-mobile/platforms/android/.gradle/
+/native/apps/ideall-mobile/platforms/android/app/build/
+/native/apps/ideall-mobile/platforms/android/app/src/main/jniLibs/
+/native/apps/ideall-mobile/platforms/ios/Ideall.xcodeproj/
+/native/apps/ideall-mobile/platforms/ios/build/
 
 # redesign 设计探索 / 截图 scratch (本地参考, 不入库)
 /redesign-mockups/

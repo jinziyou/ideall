@@ -1,16 +1,19 @@
 name: rust
 
-# Rust 门 (src-tauri): Linux 跑 rustfmt + clippy + 全量测试；Windows/macOS 低成本编译全部 targets。
-# paths 过滤: 仅 src-tauri 改动才跑 (省 CI 分钟数; 首跑冷缓存 ~7min, rust-cache 后显著缩短)。
+# Rust 门：保留 src-tauri 稳定版门禁，并并行验证 native GPUI workspace。
 on:
   pull_request:
     paths:
       - "src-tauri/**"
+      - "native/**"
+      - "package.json"
       - ".github/workflows/rust.yml"
   push:
     branches: [main, dev]
     paths:
       - "src-tauri/**"
+      - "native/**"
+      - "package.json"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -22,6 +25,256 @@ permissions:
   contents: read
 
 jobs:
+  native:
+    name: native fmt + check + clippy + test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install GPUI Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev libfreetype6-dev libxcb1-dev libxkbcommon-x11-dev libvulkan-dev rpm
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: 1.96.0
+          components: clippy,rustfmt
+      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: ./native -> target
+      - name: Format
+        run: cargo fmt --all -- --check
+        working-directory: native
+      - name: Check workspace
+        run: cargo check --locked --workspace --all-targets
+        working-directory: native
+      - name: Check real gpui-mobile UI on host
+        run: cargo check --locked -p ideall-mobile --features mobile-ui-host-check
+        working-directory: native
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --locked -p ideall-protocol -p ideall-domain -p ideall-storage -p ideall-application -p ideall-sync -p ideall-sync-http -p ideall-agent -p ideall-acp -p ideall-secrets -p ideall-updater -p ideall-cli -p ideall-desktop --all-targets -- -D warnings
+        working-directory: native
+      - name: Clippy gpui-mobile UI (warnings are errors)
+        run: cargo clippy --locked -p ideall-mobile --features mobile-ui-host-check -- -D warnings
+        working-directory: native
+      - name: Test shared core
+        run: cargo test --locked -p ideall-protocol -p ideall-domain -p ideall-storage -p ideall-application -p ideall-sync -p ideall-sync-http -p ideall-agent -p ideall-acp -p ideall-secrets -p ideall-updater -p ideall-cli
+        working-directory: native
+      - name: Build and package native Linux preview
+        run: |
+          cargo build --locked --release -p ideall-desktop
+          bash scripts/verify-linux-binary.sh target/release/ideall-desktop 2.35
+          bash scripts/package-desktop.sh
+          for artifact in target/native-packages/*.tar.gz target/native-packages/*.deb target/native-packages/*.rpm; do
+            bash scripts/verify-artifact.sh desktop "$artifact"
+          done
+          (cd target/native-packages && sha256sum -c SHA256SUMS)
+        working-directory: native
+      - name: Upload native Linux preview
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ideall-native-linux-x86_64
+          path: |
+            native/target/native-packages/*.tar.gz
+            native/target/native-packages/*.deb
+            native/target/native-packages/*.rpm
+            native/target/native-packages/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+  native-desktop-platforms:
+    name: native desktop (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: 1.96.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        if: matrix.name == 'windows'
+        with:
+          dotnet-version: 8.0.x
+      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: ./native -> target
+      - name: Install Windows packaging tools
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          choco install nsis --version=3.12.0 -y --no-progress
+          dotnet tool restore
+        working-directory: native
+      - name: Check native desktop
+        run: cargo check --locked -p ideall-desktop --all-targets
+        working-directory: native
+      - name: Build and package native desktop preview
+        shell: bash
+        run: |
+          cargo build --locked --release -p ideall-desktop
+          bash scripts/package-desktop.sh
+          artifacts=(target/native-packages/*.zip)
+          if [[ "${{ matrix.name }}" == "windows" ]]; then
+            artifacts+=(target/native-packages/*.msi target/native-packages/*-setup.exe)
+          else
+            artifacts+=(target/native-packages/*.dmg)
+          fi
+          for artifact in "${artifacts[@]}"; do
+            bash scripts/verify-artifact.sh desktop "$artifact"
+          done
+        working-directory: native
+      - name: Upload native desktop preview
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ideall-native-${{ matrix.name }}
+          path: |
+            native/target/native-packages/*.zip
+            native/target/native-packages/*.dmg
+            native/target/native-packages/*.msi
+            native/target/native-packages/*-setup.exe
+            native/target/native-packages/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+  native-android:
+    name: native Android APK and emulator smoke
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    env:
+      ANDROID_NDK_VERSION: 26.1.10909125
+      IDEALL_ANDROID_ABIS: arm64-v8a,x86_64
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+      - name: Install Android NDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;$ANDROID_NDK_VERSION"
+      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          gradle-version: "8.9"
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: 1.96.0
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: ./native -> target
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Build Rust library, release APK and AAB
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          bash apps/ideall-mobile/build-mobile.sh android release
+          gradle -p apps/ideall-mobile/platforms/android :app:bundleRelease
+          gradle -p apps/ideall-mobile/platforms/android :app:assembleDebug
+          for artifact in apps/ideall-mobile/platforms/android/app/build/outputs/apk/release/*.apk; do
+            bash scripts/verify-artifact.sh android-apk "$artifact"
+            unzip -Z1 "$artifact" | grep -E '^lib/x86_64/libideall_mobile\.so$' >/dev/null
+          done
+          for artifact in apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug/*.apk; do
+            bash scripts/verify-artifact.sh android-apk "$artifact"
+            unzip -Z1 "$artifact" | grep -E '^lib/x86_64/libideall_mobile\.so$' >/dev/null
+          done
+          for artifact in apps/ideall-mobile/platforms/android/app/build/outputs/bundle/release/*.aab; do
+            bash scripts/verify-artifact.sh android-aab "$artifact"
+          done
+        working-directory: native
+      - name: Enable KVM for the emulator
+        run: |
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod 666 /dev/kvm
+          fi
+      - name: Install and launch the real APK on Android Emulator
+        uses: reactivecircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            apks=(native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug/*.apk)
+            test "${#apks[@]}" -eq 1
+            adb install -r "${apks[0]}"
+            adb shell am start -W -n com.jinziyou.ideall/android.app.NativeActivity
+            sleep 10
+            test -n "$(adb shell pidof com.jinziyou.ideall | tr -d '\r')"
+            adb shell dumpsys activity activities | grep -E 'mResumedActivity.*com\.jinziyou\.ideall' >/dev/null
+            ! adb logcat -d -b crash | grep -E 'com\.jinziyou\.ideall|ideall_mobile' >/dev/null
+      - name: Upload Android preview APK and AAB
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ideall-native-android-arm64
+          path: |
+            native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug/*.apk
+            native/apps/ideall-mobile/platforms/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
+
+  native-ios:
+    name: native iOS simulator
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: 1.96.0
+          targets: aarch64-apple-ios-sim
+      - uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: ./native -> target
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build simulator application
+        run: |
+          bash apps/ideall-mobile/build-mobile.sh ios-simulator release
+          bash scripts/verify-artifact.sh ios-app apps/ideall-mobile/platforms/ios/build/Build/Products/Release-iphonesimulator/ideall.app
+        working-directory: native
+      - name: Install and launch the real app on iOS Simulator
+        run: |
+          runtime="$(xcrun simctl list runtimes available | sed -n 's/.* - \(com\.apple\.CoreSimulator\.SimRuntime\.iOS-[^ ]*\)$/\1/p' | tail -1)"
+          test -n "$runtime"
+          device="$(xcrun simctl create ideall-native-smoke com.apple.CoreSimulator.SimDeviceType.iPhone-16 "$runtime")"
+          cleanup() {
+            xcrun simctl shutdown "$device" >/dev/null 2>&1 || true
+            xcrun simctl delete "$device" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+          app="native/apps/ideall-mobile/platforms/ios/build/Build/Products/Release-iphonesimulator/ideall.app"
+          xcrun simctl install "$device" "$app"
+          xcrun simctl launch "$device" com.jinziyou.ideall
+          sleep 10
+          xcrun simctl terminate "$device" com.jinziyou.ideall
+      - name: Upload iOS simulator preview
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ideall-native-ios-simulator-arm64
+          path: native/apps/ideall-mobile/platforms/ios/build/Build/Products/Release-iphonesimulator/ideall.app
+          if-no-files-found: error
+          retention-days: 14
+
   rust:
     name: cargo fmt + check + clippy + test
     runs-on: ubuntu-latest

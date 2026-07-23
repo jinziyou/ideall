@@ -8,6 +8,8 @@ next-env.d.ts
 # Tauri 工程生成/构建产物 (Rust 不走 prettier; gen/target 的 json 勿格式化)
 src-tauri/gen
 src-tauri/target
+# WiX XML 使用其自有 schema/格式器，Prettier 会把 .wxs 误判为 JavaScript。
+native/scripts/resources/windows/*.wxs
 
 # 本地工具/会话配置
 .claude

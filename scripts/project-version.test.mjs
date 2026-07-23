@@ -19,6 +19,10 @@ async function projectFixture(versions) {
   const root = await mkdtemp(path.join(tmpdir(), "ideall-version-"))
   roots.push(root)
   await mkdir(path.join(root, "src-tauri"), { recursive: true })
+  await mkdir(path.join(root, "native", "scripts"), { recursive: true })
+  await mkdir(path.join(root, "native", "apps", "ideall-mobile", "platforms", "android", "app"), {
+    recursive: true,
+  })
   await Promise.all([
     writeFile(
       path.join(root, "package.json"),
@@ -36,6 +40,35 @@ async function projectFixture(versions) {
       path.join(root, "src-tauri", "Cargo.lock"),
       `[[package]]\nname = "ideall"\nversion = "${versions.lock}"\n`,
     ),
+    writeFile(
+      path.join(root, "native", "Cargo.toml"),
+      `[workspace]\nmembers = []\n\n[workspace.package]\nversion = "${versions.package}"\n`,
+    ),
+    writeFile(
+      path.join(root, "native", "Cargo.lock"),
+      `[[package]]\nname = "ideall-domain"\nversion = "${versions.package}"\n\n[[package]]\nname = "ideall-mobile"\nversion = "${versions.package}"\n`,
+    ),
+    writeFile(
+      path.join(root, "native", "scripts", "package-desktop.sh"),
+      `version="\${IDEALL_VERSION:-${versions.package}}"\n`,
+    ),
+    writeFile(
+      path.join(root, "native", "apps", "ideall-mobile", "build-mobile.sh"),
+      `version="\${IDEALL_VERSION:-${versions.package}}"\n`,
+    ),
+    writeFile(
+      path.join(
+        root,
+        "native",
+        "apps",
+        "ideall-mobile",
+        "platforms",
+        "android",
+        "app",
+        "build.gradle.kts",
+      ),
+      `val ideallVersionName = System.getenv("IDEALL_VERSION") ?: "${versions.package}"\n`,
+    ),
   ])
   return root
 }
@@ -50,7 +83,7 @@ test("project versions are validated together before an in-memory update", async
   const entries = loadProjectVersionState(root)
   assert.equal(assertProjectVersions(entries), "1.2.3")
   const updates = prepareProjectVersionUpdate(entries, "2.0.0-rc.1")
-  assert.equal(updates.length, 4)
+  assert.equal(updates.length, 9)
   assert.ok(updates.every((entry) => entry.nextContents.includes("2.0.0-rc.1")))
 })
 
