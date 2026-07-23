@@ -38,6 +38,18 @@
 
 static __weak IdeallAppDelegate *IdeallSharedDelegate = nil;
 
+static UIWindow *IdeallKeyWindow(void) {
+    UIWindow *fallback = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (fallback == nil) fallback = window;
+            if (window.isKeyWindow) return window;
+        }
+    }
+    return fallback;
+}
+
 static NSUInteger IdeallUTF16OffsetForUTF8(const char *value, NSUInteger byteOffset) {
     if (value == NULL) return 0;
     NSUInteger length = strlen(value);
@@ -90,7 +102,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 
 - (void)installTextInputBridgeIfNeeded {
     if (self.textInputBridge != nil) return;
-    UIWindow *window = UIApplication.sharedApplication.keyWindow;
+    UIWindow *window = IdeallKeyWindow();
     UIViewController *controller = window.rootViewController;
     if (controller == nil) return;
 
@@ -105,7 +117,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     input.spellCheckingType = UITextSpellCheckingTypeDefault;
     input.accessibilityHint = @"编辑后内容会自动保存在本机";
     input.accessibilityTraits = UIAccessibilityTraitUpdatesFrequently;
-    input.accessibilityFrameInContainerSpace = CGRectMake(0, 0, 44, 44);
+    input.accessibilityFrame = CGRectMake(0, 0, 44, 44);
     [controller.view addSubview:input];
     self.textInputBridge = input;
 }
@@ -361,7 +373,7 @@ char *ideall_pick_files(void) {
         delegate.semaphore = dispatch_semaphore_create(0);
         __block BOOL presented = NO;
         dispatch_sync(dispatch_get_main_queue(), ^{
-            UIWindow *window = UIApplication.sharedApplication.keyWindow;
+            UIWindow *window = IdeallKeyWindow();
             UIViewController *controller = window.rootViewController;
             if (controller == nil) return;
             UIDocumentPickerViewController *picker =

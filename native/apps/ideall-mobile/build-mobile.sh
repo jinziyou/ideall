@@ -57,6 +57,19 @@ case "${platform}" in
       "${cargo_ndk_targets[@]}" \
       -o "${output_dir}" \
       build --locked -p ideall-mobile "${cargo_profile[@]}"
+    while IFS= read -r -d '' native_library; do
+      case "${native_library}" in
+        */libideall_mobile.so) ;;
+        *) rm -f -- "${native_library}" ;;
+      esac
+    done < <(find "${output_dir}" -type f -name '*.so' -print0)
+    for android_abi in "${android_abi_values[@]}"; do
+      expected_library="${output_dir}/${android_abi}/libideall_mobile.so"
+      [[ -s "${expected_library}" ]] || {
+        echo "missing Android Rust library: ${expected_library}" >&2
+        exit 1
+      }
+    done
     cd "${script_dir}/platforms/android"
     if [[ "${platform}" == "android-bundle" ]]; then
       gradle_task=":app:bundle${configuration}"
