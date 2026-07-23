@@ -44,6 +44,8 @@ targets:
           - -framework SystemConfiguration
           - -framework WebKit
           - -framework UniformTypeIdentifiers
+          - -framework CoreMedia
+          - -framework AVFoundation
           - -ObjC
         "IDEALL_STATIC_LIB[sdk=iphonesimulator*]": "$(PROJECT_DIR)/../../../../target/aarch64-apple-ios-sim/$(IDEALL_RUST_PROFILE)/libideall_mobile.a"
         "IDEALL_STATIC_LIB[sdk=iphoneos*]": "$(PROJECT_DIR)/../../../../target/aarch64-apple-ios/$(IDEALL_RUST_PROFILE)/libideall_mobile.a"

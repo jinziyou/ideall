@@ -22,6 +22,8 @@ test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", (
     /^        "IDEALL_STATIC_LIB\[sdk=iphonesimulator\*\]": .*aarch64-apple-ios-sim/m,
   )
   assert.match(project, /^        "IDEALL_STATIC_LIB\[sdk=iphoneos\*\]": .*aarch64-apple-ios\//m)
+  assert.match(project, /^          - -framework CoreMedia$/m)
+  assert.match(project, /^          - -framework AVFoundation$/m)
   assert.doesNotMatch(project, /^      settings:$/m, "build settings must not be nested")
 })
 
