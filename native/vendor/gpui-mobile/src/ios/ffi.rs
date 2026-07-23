@@ -12,7 +12,7 @@
 //! gpui_ios_request_frame(ptr)  // called every CADisplayLink tick
 //! ```
 
-use gpui::{App, AppContext, Application, RequestFrameOptions, WindowOptions};
+use gpui::{App, AppContext, Application, ApplicationHandle, RequestFrameOptions, WindowOptions};
 use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::OnceLock;
@@ -21,12 +21,27 @@ use std::sync::OnceLock;
 /// This is set during initialization and used by FFI callbacks.
 static IOS_APP_STATE: OnceLock<IosAppState> = OnceLock::new();
 
+/// Retains the application while UIKit owns and drives the process run loop.
+///
+/// `Application::run` assumes `Platform::run` blocks. UIKit's run loop is
+/// already active when this adapter starts GPUI, so `IosPlatform::run`
+/// registers the launch callback and returns immediately instead.
+struct ApplicationHandleCell(std::cell::UnsafeCell<Option<ApplicationHandle>>);
+
+// Safety: the handle is created, accessed, and eventually dropped only on the
+// iOS main thread. These impls only allow the main-thread value to live in a
+// process-wide OnceLock.
+unsafe impl Send for ApplicationHandleCell {}
+unsafe impl Sync for ApplicationHandleCell {}
+
+static IOS_APPLICATION: OnceLock<ApplicationHandleCell> = OnceLock::new();
+
 /// Holds the state needed for iOS FFI callbacks.
 /// Note: On iOS, all UI code runs on the main thread, so we use a RefCell
 /// instead of Mutex and don't require Send.
 struct IosAppState {
     /// The callback to invoke when the app finishes launching.
-    /// This is the closure passed to Application::run().
+    /// This is the closure passed to Application::run_embedded().
     /// Using std::cell::UnsafeCell since this is only accessed from the main thread.
     finish_launching: std::cell::UnsafeCell<Option<Box<dyn FnOnce()>>>,
 }
@@ -132,7 +147,7 @@ pub(crate) fn set_finish_launching_callback(callback: Box<dyn FnOnce()>) {
 /// This should be called from `application:didFinishLaunchingWithOptions:`
 /// in the iOS app delegate, after `gpui_ios_initialize()` returns.
 ///
-/// This invokes the callback passed to Application::run().
+/// This invokes the callback passed to Application::run_embedded().
 #[unsafe(no_mangle)]
 pub extern "C" fn gpui_ios_did_finish_launching(_app_ptr: *mut c_void) {
     log::info!("GPUI iOS: Did finish launching");
@@ -459,7 +474,7 @@ unsafe impl Sync for AppCallbackCell {}
 
 static APP_CALLBACK: OnceLock<AppCallbackCell> = OnceLock::new();
 
-/// Register a callback that will be invoked inside `Application::run`.
+/// Register a callback that will be invoked inside `Application::run_embedded`.
 ///
 /// This must be called **before** [`run_app`] so that the run-loop
 /// has something to do (open a window, create views, etc.).
@@ -508,8 +523,15 @@ pub fn run_app() {
         let _ = IOS_WINDOW_LIST.set(WindowListWrapper(std::cell::UnsafeCell::new(Vec::new())));
     }
 
+    let application =
+        IOS_APPLICATION.get_or_init(|| ApplicationHandleCell(std::cell::UnsafeCell::new(None)));
+    if unsafe { (*application.0.get()).is_some() } {
+        log::warn!("GPUI iOS: Application already running");
+        return;
+    }
+
     let platform = Rc::new(super::IosPlatform::new());
-    Application::with_platform(platform).run(|cx: &mut App| {
+    let handle = Application::with_platform(platform).run_embedded(|cx: &mut App| {
         if let Some(cb) = take_app_callback() {
             log::info!("GPUI iOS: Invoking user-provided app callback");
             cb(cx);
@@ -526,14 +548,17 @@ pub fn run_app() {
             cx.activate(true);
         }
     });
+    unsafe {
+        *application.0.get() = Some(handle);
+    }
 
-    // On iOS, Application::run() stores the callback and returns immediately.
-    // The finish-launching callback is forwarded to set_finish_launching_callback
-    // and invoked here synchronously (in a real app the app delegate does this).
+    // IosPlatform::run stores the callback and returns immediately. Retain the
+    // ApplicationHandle before invoking it so every window and callback created
+    // during launch remains owned for the lifetime of the UIKit process.
     if let Some(state) = IOS_APP_STATE.get() {
         let callback = unsafe { (*state.finish_launching.get()).take() };
         if let Some(callback) = callback {
-            log::info!("GPUI iOS: Invoking Application::run callback");
+            log::info!("GPUI iOS: Invoking Application::run_embedded callback");
             callback();
         }
     }

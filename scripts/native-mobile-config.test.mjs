@@ -24,6 +24,7 @@ const MOBILE_BUILD_SCRIPT = new URL("../native/apps/ideall-mobile/build-mobile.s
 const MOBILE_MANIFEST = new URL("../native/apps/ideall-mobile/Cargo.toml", import.meta.url)
 const VENDORED_GPUI_README = new URL("../native/vendor/gpui-mobile/README.md", import.meta.url)
 const VENDORED_GPUI_SOURCE = new URL("../native/vendor/gpui-mobile/upstream.env", import.meta.url)
+const VENDORED_GPUI_MANIFEST = new URL("../native/vendor/gpui-mobile/Cargo.toml", import.meta.url)
 const VENDORED_GPUI_CHECKSUMS = new URL(
   "../native/vendor/gpui-mobile/PATCHED_FILES.sha256",
   import.meta.url,
@@ -112,6 +113,7 @@ test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () 
   const manifest = readFileSync(MOBILE_MANIFEST, "utf8")
   const provenance = readFileSync(VENDORED_GPUI_README, "utf8")
   const source = readFileSync(VENDORED_GPUI_SOURCE, "utf8")
+  const vendorManifest = readFileSync(VENDORED_GPUI_MANIFEST, "utf8")
   const checksums = readFileSync(VENDORED_GPUI_CHECKSUMS, "utf8")
   const ffi = readFileSync(VENDORED_GPUI_IOS_FFI, "utf8")
   const window = readFileSync(VENDORED_GPUI_IOS_WINDOW, "utf8")
@@ -119,15 +121,16 @@ test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () 
   assert.match(manifest, /gpui-mobile = \{ path = "\.\.\/\.\.\/vendor\/gpui-mobile"/)
   assert.match(provenance, /1d3ec2a1d14a63b74d1f4269340441d4eeada27a/)
   assert.match(source, /GPUI_MOBILE_UPSTREAM_REVISION=1d3ec2a1d14a63b74d1f4269340441d4eeada27a/)
-  assert.match(source, /GPUI_MOBILE_WGPU_REVISION=357a0c56e0070480ad9daea5d2eaa83150b79e88/)
+  assert.match(source, /GPUI_MOBILE_GPUI_REVISION=74798c68d5c63d31e2ccca5c8f5ec0a02c90679c/)
+  assert.doesNotMatch(vendorManifest, /5688167d224b5eca54875d49afb8bfd73a07915a/)
+  assert.match(vendorManifest, /rev = "74798c68d5c63d31e2ccca5c8f5ec0a02c90679c"/)
   assert.match(checksums, /native\/vendor\/gpui-mobile\/src\/ios\/ffi\.rs/)
-  assert.doesNotMatch(readFileSync(NATIVE_CARGO_LOCK, "utf8"), /wgpu\.git\?rev=/)
-  assert.match(
-    readFileSync(NATIVE_CARGO_LOCK, "utf8"),
-    /wgpu\.git\?branch=v29#357a0c56e0070480ad9daea5d2eaa83150b79e88/,
-  )
+  assert.doesNotMatch(readFileSync(NATIVE_CARGO_LOCK, "utf8"), /zed-industries\/wgpu\.git/)
+  assert.match(readFileSync(NATIVE_CARGO_LOCK, "utf8"), /name = "wgpu"\nversion = "29\.0\.4"/)
   assert.match(ffi, /window\.begin_frame\(\)/)
   assert.match(ffi, /request_frame_callback\.try_borrow_mut\(\)/)
+  assert.match(ffi, /Application::with_platform\(platform\)\.run_embedded/)
+  assert.match(ffi, /\*application\.0\.get\(\) = Some\(handle\)/)
   assert.match(window, /frame_in_progress: AtomicBool/)
   assert.match(window, /momentum_scroller\.try_borrow_mut\(\)/)
 
@@ -198,7 +201,8 @@ test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
   assert.match(iosSmoke, /xcodebuild[\s\S]*?-resultBundlePath[\s\S]*?test/)
   assert.match(workflow, /uses: \.\/\.github\/actions\/setup-cargo-ndk/)
   assert.match(workflow, /uses: \.\/\.github\/actions\/setup-xcodegen/)
-  assert.match(workflow, /bash native\/scripts\/smoke-android-emulator\.sh/)
+  assert.match(workflow, /bash native\/scripts\/smoke-android-emulator\.sh "\$\(find [^\n]+\)"/)
+  assert.doesNotMatch(workflow, /smoke-android-emulator\.sh \\\s*\n/)
   assert.match(workflow, /bash scripts\/smoke-ios-simulator\.sh/)
   assert.match(workflow, /CARGO_PROFILE_RELEASE_DEBUG=0/)
   assert.match(workflow, /CARGO_PROFILE_RELEASE_DEBUG=1/)

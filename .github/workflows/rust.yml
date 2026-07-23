@@ -231,8 +231,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             test "$(find native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 1
-            bash native/scripts/smoke-android-emulator.sh \
-              "$(find native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+            bash native/scripts/smoke-android-emulator.sh "$(find native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
       - name: Upload Android preview APK and AAB
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

@@ -18,7 +18,7 @@ fi
 source "${source_file}"
 : "${GPUI_MOBILE_UPSTREAM_URL:?missing upstream URL}"
 : "${GPUI_MOBILE_UPSTREAM_REVISION:?missing upstream revision}"
-: "${GPUI_MOBILE_WGPU_REVISION:?missing wgpu revision}"
+: "${GPUI_MOBILE_GPUI_REVISION:?missing GPUI revision}"
 
 [[ "${GPUI_MOBILE_UPSTREAM_URL}" == "https://github.com/itsbalamurali/gpui-mobile.git" ]] || {
   echo "unexpected gpui-mobile upstream: ${GPUI_MOBILE_UPSTREAM_URL}" >&2
@@ -28,20 +28,39 @@ source "${source_file}"
   echo "gpui-mobile upstream revision must be a full commit hash" >&2
   exit 1
 }
-[[ "${GPUI_MOBILE_WGPU_REVISION}" =~ ^[0-9a-f]{40}$ ]] || {
-  echo "wgpu revision must be a full commit hash" >&2
+[[ "${GPUI_MOBILE_GPUI_REVISION}" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "GPUI revision must be a full commit hash" >&2
   exit 1
 }
-
 grep -F "${GPUI_MOBILE_UPSTREAM_REVISION}" "${vendor_dir}/README.md" >/dev/null
-wgpu_sources="$(
+grep -F "${GPUI_MOBILE_GPUI_REVISION}" "${vendor_dir}/README.md" >/dev/null
+gpui_manifest_revisions="$(
   sed -n \
-    's|^source = "git+https://github.com/zed-industries/wgpu\.git?branch=v29#\([0-9a-f]*\)"$|\1|p' \
+    's|^.*git = "https://github.com/zed-industries/zed", rev = "\([0-9a-f]*\)".*$|\1|p' \
+    "${vendor_dir}/Cargo.toml" |
+    LC_ALL=C sort -u
+)"
+[[ "${gpui_manifest_revisions}" == "${GPUI_MOBILE_GPUI_REVISION}" ]] || {
+  echo "gpui-mobile Cargo.toml drifted from the approved GPUI revision: ${gpui_manifest_revisions}" >&2
+  exit 1
+}
+gpui_lock_sources="$(
+  sed -n \
+    's|^source = "git+https://github.com/zed-industries/zed?rev=[0-9a-f]*#\([0-9a-f]*\)"$|\1|p' \
     "${native_dir}/Cargo.lock" |
     LC_ALL=C sort -u
 )"
-[[ "${wgpu_sources}" == "${GPUI_MOBILE_WGPU_REVISION}" ]] || {
-  echo "native Cargo.lock drifted from the approved wgpu revision: ${wgpu_sources}" >&2
+[[ "${gpui_lock_sources}" == "${GPUI_MOBILE_GPUI_REVISION}" ]] || {
+  echo "native Cargo.lock drifted from the approved GPUI revision: ${gpui_lock_sources}" >&2
+  exit 1
+}
+if grep -F 'git+https://github.com/zed-industries/wgpu.git' "${native_dir}/Cargo.lock" >/dev/null; then
+  echo "native Cargo.lock must not contain the retired Git wgpu source" >&2
+  exit 1
+fi
+grep -A3 '^name = "wgpu"$' "${native_dir}/Cargo.lock" |
+  grep -F 'version = "29.0.4"' >/dev/null || {
+  echo "native Cargo.lock must contain the approved wgpu 29.0.4 release" >&2
   exit 1
 }
 if command -v sha256sum >/dev/null; then
@@ -103,6 +122,7 @@ done < <(
 )
 
 expected_changed_files=(
+  "components/material/progress_indicator.rs"
   "ios/ffi.rs"
   "ios/window.rs"
   "momentum.rs"

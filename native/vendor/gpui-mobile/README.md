@@ -7,12 +7,15 @@ The snapshot is kept local because ideall needs a small iOS runtime hardening pa
 landed upstream, plus workspace compatibility cleanup:
 
 - serialize FFI frame pumps at the `IosWindow` boundary;
+- retain GPUI through UIKit's externally driven run loop with `Application::run_embedded`;
 - avoid panicking when momentum or frame callback state is already borrowed;
 - release the momentum borrow before dispatching GPUI input.
 - keep vendored code warning-free under ideall's host-target Clippy gate;
 - let the parent workspace own dependency patches and build profiles;
-- pin the single direct/transitive wgpu `v29` source in `native/Cargo.lock` to revision
-  `357a0c56e0070480ad9daea5d2eaa83150b79e88`, with the vendor verifier rejecting drift.
+- pin Zed `gpui` and `gpui_wgpu` to revision
+  `74798c68d5c63d31e2ccca5c8f5ec0a02c90679c`, which provides the embedded application handle.
+- use `gpui_wgpu`'s wgpu re-export so the mobile binaries contain only the locked crates.io
+  wgpu `29.0.4` source.
 
 The machine-readable source is in `upstream.env`; `PATCHED_FILES.sha256` locks every locally
 modified file. The upstream Apache, GPL, and AGPL license files are retained unchanged.

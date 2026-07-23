@@ -1,5 +1,6 @@
-6b06d99c064ba19791d54929878ff3c92b1a2c2db9535eb0b0801d192cf601ae  native/vendor/gpui-mobile/Cargo.toml
-5afb3c627a71a6e44ed3d0b8f5551831544013d7a33d8e35f97bc0495cc61e83  native/vendor/gpui-mobile/src/ios/ffi.rs
-dbf55a31a146e144aff746b317c53deba10f9eacbc2ddf3de51da4bd82ab7026  native/vendor/gpui-mobile/src/ios/window.rs
+71271ca11e59c5077a6a003246ee7f2ff27c1cdbdedbeef3f3dbedb332675408  native/vendor/gpui-mobile/Cargo.toml
+7cb5e089dcacca18a2dda517acfa1acf5bf8eb0910701488ea420859a3f5e9ce  native/vendor/gpui-mobile/src/components/material/progress_indicator.rs
+02bccbe58f2ee2c99d404b1606cdb40d331529603fe3cd31928affbdefc5e06f  native/vendor/gpui-mobile/src/ios/ffi.rs
+9bde00389ade9b8d580a81854d6b4387dc76908c5794624598142687692e2a46  native/vendor/gpui-mobile/src/ios/window.rs
 ade2599a6849ba2fcaa233d0694f560109c3424191438322943e23d6066ae14b  native/vendor/gpui-mobile/src/momentum.rs
 2a56544ffa75afb862aaca5597edd4577d8ccd63b25119012d0f80dc5a2a04b8  native/vendor/gpui-mobile/src/target_platform.rs
