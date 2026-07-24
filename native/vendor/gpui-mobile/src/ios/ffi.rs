@@ -291,6 +291,22 @@ pub extern "C" fn gpui_ios_handle_touch(
     );
 }
 
+/// Return the native Metal-backed UIView owned by a GPUI iOS window.
+///
+/// Hosts use this to attach UIKit overlays to the same window that receives
+/// GPUI input instead of relying on scene-level key-window enumeration.
+#[unsafe(no_mangle)]
+pub extern "C" fn gpui_ios_get_native_view(window_ptr: *mut c_void) -> *mut c_void {
+    if window_ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    // Safety: window_ptr must be a valid pointer returned by
+    // gpui_ios_get_window(), and the native view is retained by IosWindow.
+    let window = unsafe { &*(window_ptr as *const super::window::IosWindow) };
+    window.metal_view_ptr().cast()
+}
+
 /// Request a frame to be rendered.
 ///
 /// This should be called from CADisplayLink callback to trigger GPUI rendering.

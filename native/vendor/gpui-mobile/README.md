@@ -10,6 +10,7 @@ landed upstream, plus workspace compatibility cleanup:
 - retain GPUI through UIKit's externally driven run loop with `Application::run_embedded`;
 - avoid panicking when momentum or frame callback state is already borrowed;
 - release the momentum borrow before dispatching GPUI input;
+- expose the native iOS root view so host overlays attach to GPUI's actual input window;
 - replace the active Android platform registry after `NativeActivity` recreation instead of
   retaining a dispatcher bound to the previous `android_main` thread;
 - bridge Android system-bar and display-cutout `WindowInsets` into GPUI logical safe areas,

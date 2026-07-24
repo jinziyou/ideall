@@ -21,6 +21,7 @@ pub extern "C" fn ideall_mobile_ios_ui_test_action(action: u8) {
     }
     IOS_UI_TEST_ACTION.store(action, std::sync::atomic::Ordering::Release);
     gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+    eprintln!("ideall iOS UI-test action queued: {action}");
 }
 
 #[cfg(target_os = "android")]
@@ -1100,7 +1101,11 @@ mod mobile {
 
         #[cfg(any(target_os = "ios", feature = "mobile-ui-host-check"))]
         fn drain_ui_test_action(&mut self, cx: &mut Context<Self>) {
-            match crate::IOS_UI_TEST_ACTION.swap(0, std::sync::atomic::Ordering::AcqRel) {
+            let action = crate::IOS_UI_TEST_ACTION.swap(0, std::sync::atomic::Ordering::AcqRel);
+            if action != 0 {
+                eprintln!("ideall iOS UI-test action consumed: {action}");
+            }
+            match action {
                 1 => self.create_note(cx),
                 2 => {
                     self.focus_field(FocusedField::Title, KeyboardType::Default);

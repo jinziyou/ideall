@@ -131,16 +131,21 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     return YES;
 }
 
+- (UIView *)gpuiRootView {
+    if (self.gpuiWindow == NULL) return nil;
+    return (__bridge UIView *)gpui_ios_get_native_view(self.gpuiWindow);
+}
+
 - (void)installTextInputBridgeIfNeeded {
     if (self.textInputBridge != nil) return;
-    UIWindow *window = IdeallKeyWindow();
-    if (window == nil) return;
+    UIView *rootView = [self gpuiRootView];
+    if (rootView == nil) return;
 
     BOOL isUITesting =
         getenv("IDEALL_UI_TESTING") != NULL ||
         [NSProcessInfo.processInfo.arguments containsObject:@"-IDEALLUITesting"];
     CGRect inputFrame = isUITesting
-        ? CGRectMake(4, window.safeAreaInsets.top + 4, 44, 44)
+        ? CGRectMake(4, rootView.safeAreaInsets.top + 4, 44, 44)
         : CGRectMake(0, 0, 1, 1);
     UITextView *input = [[UITextView alloc] initWithFrame:inputFrame];
     input.delegate = self;
@@ -155,7 +160,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     input.accessibilityIdentifier = @"文本输入";
     input.accessibilityHint = @"编辑后内容会自动保存在本机";
     input.accessibilityTraits = UIAccessibilityTraitUpdatesFrequently;
-    [window addSubview:input];
+    [rootView addSubview:input];
     self.textInputBridge = input;
 }
 
@@ -166,11 +171,11 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
         [NSProcessInfo.processInfo.arguments containsObject:@"-IDEALLUITesting"];
     if (!isUITesting) return;
 
-    UIWindow *window = IdeallKeyWindow();
-    if (window == nil) return;
-    CGRect safeFrame = window.safeAreaLayoutGuide.layoutFrame;
-    CGFloat width = CGRectGetWidth(window.bounds);
-    CGFloat height = CGRectGetHeight(window.bounds);
+    UIView *rootView = [self gpuiRootView];
+    if (rootView == nil) return;
+    CGRect safeFrame = rootView.safeAreaLayoutGuide.layoutFrame;
+    CGFloat width = CGRectGetWidth(rootView.bounds);
+    CGFloat height = CGRectGetHeight(rootView.bounds);
     NSArray<NSDictionary *> *specifications = @[
         @{
             @"label": @"新建笔记",
@@ -218,7 +223,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
         [proxy addTarget:self
                   action:@selector(activateSmokeTapProxy:)
         forControlEvents:UIControlEventTouchUpInside];
-        [window addSubview:proxy];
+        [rootView addSubview:proxy];
         [proxies addObject:proxy];
     }
     self.smokeTapProxies = proxies;
@@ -226,6 +231,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 
 - (void)activateSmokeTapProxy:(UIButton *)proxy {
     if (proxy.tag < 1 || proxy.tag > 3) return;
+    NSLog(@"ideall iOS UI-test proxy activated: %ld", (long)proxy.tag);
     ideall_mobile_ios_ui_test_action((unsigned char)proxy.tag);
 }
 
@@ -554,7 +560,8 @@ char *ideall_pick_files(void) {
         delegate.semaphore = dispatch_semaphore_create(0);
         __block BOOL presented = NO;
         dispatch_sync(dispatch_get_main_queue(), ^{
-            UIWindow *window = IdeallKeyWindow();
+            UIWindow *window = [IdeallSharedDelegate gpuiRootView].window;
+            if (window == nil) window = IdeallKeyWindow();
             UIViewController *controller = window.rootViewController;
             if (controller == nil) return;
             UIDocumentPickerViewController *picker =
