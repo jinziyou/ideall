@@ -23,13 +23,15 @@ final class IdeallSmokeTests: XCTestCase {
         attachScreenshot(named: "01-launched", from: window)
 
         // GPUI currently paints its own controls, so use stable normalized
-        // app coordinates until gpui-mobile exposes a complete accessibility
-        // tree. The Window accessibility frame can be cropped by simulator
-        // chrome and the software keyboard, so it is not a stable tap origin.
+        // window coordinates until gpui-mobile exposes a complete
+        // accessibility tree. The Application AX node can be assigned the
+        // simulator host display while the real app Window is on the device
+        // display, which sends app-relative taps to SpringBoard.
         let bodyInput = try XCTUnwrap(
             focusInput(
                 "正文",
                 in: app,
+                window: window,
                 points: [
                     CGVector(dx: 0.87, dy: 0.08),
                     CGVector(dx: 0.87, dy: 0.09),
@@ -47,6 +49,7 @@ final class IdeallSmokeTests: XCTestCase {
             focusInput(
                 "标题",
                 in: app,
+                window: window,
                 points: [
                     CGVector(dx: 0.50, dy: 0.12),
                     CGVector(dx: 0.50, dy: 0.14),
@@ -62,6 +65,7 @@ final class IdeallSmokeTests: XCTestCase {
             focusInput(
                 "正文",
                 in: app,
+                window: window,
                 points: [
                     CGVector(dx: 0.50, dy: 0.28),
                     CGVector(dx: 0.50, dy: 0.34),
@@ -102,11 +106,12 @@ final class IdeallSmokeTests: XCTestCase {
     private func focusInput(
         _ label: String,
         in app: XCUIApplication,
+        window: XCUIElement,
         points: [CGVector]
     ) -> XCUIElement? {
         let input = app.textViews[label]
         for point in points {
-            app.coordinate(withNormalizedOffset: point).tap()
+            window.coordinate(withNormalizedOffset: point).tap()
             if input.waitForExistence(timeout: 1) {
                 input.tap()
                 return input
