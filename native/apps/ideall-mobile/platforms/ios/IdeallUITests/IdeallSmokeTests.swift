@@ -14,7 +14,7 @@ final class IdeallSmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["IDEALL_CRASH_DIAGNOSTICS"] = "1"
         app.launchEnvironment["IDEALL_UI_TESTING"] = "1"
-        app.launchArguments.append("-IDEALLUITesting")
+        configureLaunch(app, smokeAction: 1)
         app.launch()
 
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
@@ -22,42 +22,38 @@ final class IdeallSmokeTests: XCTestCase {
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         attachScreenshot(named: "01-launched", from: window)
 
-        // GPUI currently paints its own controls without a complete native
-        // accessibility tree. UI-test-only UIKit proxies receive XCTest
-        // activations and queue the matching action for the next GPUI frame.
-        // The launch-screen declaration must also keep the app out of iOS
-        // legacy letterbox mode so both sides share one viewport.
+        // GPUI paints its controls without a complete native accessibility
+        // tree, and its embedded UIWindow is not a UIScene touch target under
+        // XCTest. UI-test-only launch actions exercise the real GPUI business
+        // paths while Android smoke covers physical touch hit-testing.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deviceWindow = springboard.windows.firstMatch
         XCTAssertTrue(deviceWindow.waitForExistence(timeout: 10))
         let deviceFrame = deviceWindow.frame
         assertFullScreen(window.frame, matches: deviceFrame)
         let bodyInput = try XCTUnwrap(
-            focusInput(
-                "正文",
-                in: app,
-                through: "新建笔记"
-            )
+            waitForInput("正文", in: app)
         )
         bodyInput.typeText("ideall iOS smoke body\nsecond line")
+        waitForAutosave()
 
+        relaunch(app, smokeAction: 2)
         let titleInput = try XCTUnwrap(
-            focusInput(
-                "标题",
-                in: app,
-                through: "聚焦标题"
-            )
+            waitForInput("标题", in: app)
         )
         titleInput.typeText("ideall iOS smoke title\n")
+        waitForAutosave()
 
+        relaunch(app, smokeAction: 3)
         let resumedBodyInput = try XCTUnwrap(
-            focusInput(
-                "正文",
-                in: app,
-                through: "聚焦正文"
-            )
+            waitForInput("正文", in: app)
+        )
+        XCTAssertTrue(
+            (resumedBodyInput.value as? String)?.contains("second line") == true,
+            "正文应在重启并切换焦点后恢复"
         )
         resumedBodyInput.typeText("\nthird line")
+        waitForAutosave()
         attachScreenshot(named: "02-edited-note", from: window)
 
         app.swipeUp()
@@ -74,6 +70,7 @@ final class IdeallSmokeTests: XCTestCase {
         attachScreenshot(named: "04-resumed", from: app.windows.firstMatch)
 
         app.terminate()
+        configureLaunch(app, smokeAction: nil)
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
         attachScreenshot(named: "05-relaunched", from: app.windows.firstMatch)
@@ -86,23 +83,33 @@ final class IdeallSmokeTests: XCTestCase {
         add(attachment)
     }
 
-    private func focusInput(
+    private func waitForInput(
         _ label: String,
-        in app: XCUIApplication,
-        through proxyLabel: String
+        in app: XCUIApplication
     ) -> XCUIElement? {
-        let proxy = app.buttons[proxyLabel]
-        guard proxy.waitForExistence(timeout: 5) else {
-            return nil
-        }
-        proxy.tap()
-
         let input = app.textViews[label]
         guard input.waitForExistence(timeout: 5) else {
             return nil
         }
-        input.tap()
         return input
+    }
+
+    private func configureLaunch(_ app: XCUIApplication, smokeAction: Int?) {
+        app.launchArguments = ["-IDEALLUITesting"]
+        if let smokeAction {
+            app.launchArguments += ["-IDEALLSmokeAction", String(smokeAction)]
+        }
+    }
+
+    private func relaunch(_ app: XCUIApplication, smokeAction: Int) {
+        app.terminate()
+        configureLaunch(app, smokeAction: smokeAction)
+        app.launch()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+    }
+
+    private func waitForAutosave() {
+        Thread.sleep(forTimeInterval: 2)
     }
 
     private func assertFullScreen(_ appFrame: CGRect, matches deviceFrame: CGRect) {

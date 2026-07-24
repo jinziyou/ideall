@@ -13,7 +13,6 @@
 @property(nonatomic, strong) CADisplayLink *displayLink;
 @property(nonatomic, assign) void *gpuiWindow;
 @property(nonatomic, strong) UITextView *textInputBridge;
-@property(nonatomic, strong) NSArray<UIButton *> *smokeTapProxies;
 @property(nonatomic, assign) BOOL updatingTextInputBridge;
 @property(nonatomic, assign) BOOL textInputBridgeMultiline;
 @property(nonatomic, assign) BOOL gpuiStarting;
@@ -164,75 +163,17 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     self.textInputBridge = input;
 }
 
-- (void)installSmokeTapProxiesIfNeeded {
-    if (self.smokeTapProxies != nil || self.gpuiWindow == NULL) return;
+- (unsigned char)requestedSmokeAction {
     BOOL isUITesting =
         getenv("IDEALL_UI_TESTING") != NULL ||
         [NSProcessInfo.processInfo.arguments containsObject:@"-IDEALLUITesting"];
-    if (!isUITesting) return;
+    if (!isUITesting) return 0;
 
-    UIView *rootView = [self gpuiRootView];
-    if (rootView == nil) return;
-    CGRect safeFrame = rootView.safeAreaLayoutGuide.layoutFrame;
-    CGFloat width = CGRectGetWidth(rootView.bounds);
-    CGFloat height = CGRectGetHeight(rootView.bounds);
-    NSArray<NSDictionary *> *specifications = @[
-        @{
-            @"label": @"新建笔记",
-            @"tag": @1,
-            @"frame": [NSValue valueWithCGRect:CGRectMake(
-                CGRectGetMaxX(safeFrame) - 84,
-                CGRectGetMinY(safeFrame),
-                80,
-                52
-            )],
-        },
-        @{
-            @"label": @"聚焦标题",
-            @"tag": @2,
-            @"frame": [NSValue valueWithCGRect:CGRectMake(
-                16,
-                height * 0.18 - 22,
-                width - 32,
-                44
-            )],
-        },
-        @{
-            @"label": @"聚焦正文",
-            @"tag": @3,
-            @"frame": [NSValue valueWithCGRect:CGRectMake(
-                16,
-                height * 0.40 - 22,
-                width - 32,
-                44
-            )],
-        },
-    ];
-    NSMutableArray<UIButton *> *proxies = [NSMutableArray array];
-    for (NSDictionary *specification in specifications) {
-        UIButton *proxy = [UIButton buttonWithType:UIButtonTypeCustom];
-        NSString *label = specification[@"label"];
-        proxy.frame = [specification[@"frame"] CGRectValue];
-        proxy.tag = [specification[@"tag"] integerValue];
-        proxy.backgroundColor = UIColor.clearColor;
-        proxy.alpha = 1.0;
-        proxy.isAccessibilityElement = YES;
-        proxy.accessibilityLabel = label;
-        proxy.accessibilityIdentifier = label;
-        proxy.accessibilityTraits = UIAccessibilityTraitButton;
-        [proxy addTarget:self
-                  action:@selector(activateSmokeTapProxy:)
-        forControlEvents:UIControlEventTouchUpInside];
-        [rootView addSubview:proxy];
-        [proxies addObject:proxy];
-    }
-    self.smokeTapProxies = proxies;
-}
-
-- (void)activateSmokeTapProxy:(UIButton *)proxy {
-    if (proxy.tag < 1 || proxy.tag > 3) return;
-    NSLog(@"ideall iOS UI-test proxy activated: %ld", (long)proxy.tag);
-    ideall_mobile_ios_ui_test_action((unsigned char)proxy.tag);
+    NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+    NSUInteger index = [arguments indexOfObject:@"-IDEALLSmokeAction"];
+    if (index == NSNotFound || index + 1 >= arguments.count) return 0;
+    NSInteger action = arguments[index + 1].integerValue;
+    return action >= 1 && action <= 3 ? (unsigned char)action : 0;
 }
 
 - (void)sendTextInputBridgeState {
@@ -362,7 +303,8 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     gpui_ios_run_demo();
     self.gpuiWindow = gpui_ios_get_window();
     self.gpuiStarting = NO;
-    [self installSmokeTapProxiesIfNeeded];
+    unsigned char smokeAction = [self requestedSmokeAction];
+    if (smokeAction != 0) ideall_mobile_ios_ui_test_action(smokeAction);
     [self installDisplayLinkIfNeeded];
 }
 
