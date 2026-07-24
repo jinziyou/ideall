@@ -163,7 +163,7 @@ jobs:
           TAURI_ARTIFACT_PATHS: ${{ steps.tauri-build.outputs.artifactPaths }}
         run: node scripts/release-artifacts.mjs stage
       - name: Upload staged desktop artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-${{ matrix.label }}
           path: release-stage
@@ -224,7 +224,7 @@ jobs:
           test -d "$NDK_HOME"
           pnpm tauri android init --ci
           pnpm tauri android build --debug --apk
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ideall-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
