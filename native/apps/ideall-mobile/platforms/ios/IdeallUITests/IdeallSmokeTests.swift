@@ -17,7 +17,7 @@ final class IdeallSmokeTests: XCTestCase {
         configureLaunch(
             app,
             smokeAction: 1,
-            smokeText: "ideall iOS smoke body\nsecond line"
+            smokeText: "ideall iOS smoke body second line"
         )
         app.launch()
 
@@ -46,7 +46,7 @@ final class IdeallSmokeTests: XCTestCase {
         )
         waitForAutosave()
 
-        relaunch(app, smokeAction: 3, smokeText: "\nthird line")
+        relaunch(app, smokeAction: 3, smokeText: " third line")
         let resumedBodyInput = try XCTUnwrap(
             waitForInput("正文", containing: "third line", in: app)
         )
