@@ -24,17 +24,19 @@ final class IdeallSmokeTests: XCTestCase {
 
         // GPUI currently paints its own controls, so use stable normalized
         // device-screen coordinates until gpui-mobile exposes a complete
-        // accessibility tree. The app Window AX frame can be cropped by the
-        // simulator host chrome, while SpringBoard's window covers the full
-        // simulated device and remains on the correct display.
+        // accessibility tree. SpringBoard supplies the full device frame,
+        // while the app Window remains the coordinate provider so synthesized
+        // events stay on ideall's display and scene.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deviceWindow = springboard.windows.firstMatch
         XCTAssertTrue(deviceWindow.waitForExistence(timeout: 10))
+        let deviceFrame = deviceWindow.frame
         let bodyInput = try XCTUnwrap(
             focusInput(
                 "正文",
                 in: app,
-                deviceWindow: deviceWindow,
+                window: window,
+                deviceFrame: deviceFrame,
                 points: [
                     CGVector(dx: 0.87, dy: 0.08),
                     CGVector(dx: 0.87, dy: 0.09),
@@ -52,7 +54,8 @@ final class IdeallSmokeTests: XCTestCase {
             focusInput(
                 "标题",
                 in: app,
-                deviceWindow: deviceWindow,
+                window: window,
+                deviceFrame: deviceFrame,
                 points: [
                     CGVector(dx: 0.50, dy: 0.12),
                     CGVector(dx: 0.50, dy: 0.14),
@@ -68,7 +71,8 @@ final class IdeallSmokeTests: XCTestCase {
             focusInput(
                 "正文",
                 in: app,
-                deviceWindow: deviceWindow,
+                window: window,
+                deviceFrame: deviceFrame,
                 points: [
                     CGVector(dx: 0.50, dy: 0.28),
                     CGVector(dx: 0.50, dy: 0.34),
@@ -109,12 +113,22 @@ final class IdeallSmokeTests: XCTestCase {
     private func focusInput(
         _ label: String,
         in app: XCUIApplication,
-        deviceWindow: XCUIElement,
+        window: XCUIElement,
+        deviceFrame: CGRect,
         points: [CGVector]
     ) -> XCUIElement? {
         let input = app.textViews[label]
         for point in points {
-            deviceWindow.coordinate(withNormalizedOffset: point).tap()
+            let windowFrame = window.frame
+            let target = CGPoint(
+                x: deviceFrame.minX + deviceFrame.width * point.dx,
+                y: deviceFrame.minY + deviceFrame.height * point.dy
+            )
+            let windowPoint = CGVector(
+                dx: (target.x - windowFrame.minX) / windowFrame.width,
+                dy: (target.y - windowFrame.minY) / windowFrame.height
+            )
+            window.coordinate(withNormalizedOffset: windowPoint).tap()
             if input.waitForExistence(timeout: 1) {
                 input.tap()
                 return input

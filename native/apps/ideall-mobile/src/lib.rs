@@ -69,7 +69,7 @@ fn register_android_native_bridges(app: &android_activity::AndroidApp) -> Result
             unsafe {
                 NativeMethod::from_raw_parts(
                     jni::jni_str!("nativeOnTextInput"),
-                    jni::jni_sig!("(Ljava/lang/String;IIZ)V"),
+                    jni::jni_str!("(Ljava/lang/String;IIZ)V"),
                     Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput as *const ()
                         as *mut c_void,
                 )
@@ -79,7 +79,7 @@ fn register_android_native_bridges(app: &android_activity::AndroidApp) -> Result
             unsafe {
                 NativeMethod::from_raw_parts(
                     jni::jni_str!("nativeSetSafeAreaInsets"),
-                    jni::jni_sig!("(IIII)V"),
+                    jni::jni_str!("(IIII)V"),
                     Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets
                         as *const () as *mut c_void,
                 )
