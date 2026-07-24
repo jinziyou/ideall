@@ -63,7 +63,7 @@ final class IdeallSmokeTests: XCTestCase {
         attachScreenshot(named: "03-landscape", from: window)
 
         XCUIDevice.shared.press(.home)
-        XCTAssertTrue(waitForBackground(app, timeout: 10))
+        XCTAssertTrue(springboard.wait(for: .runningForeground, timeout: 10))
         app.activate()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15))
 
@@ -142,16 +142,5 @@ final class IdeallSmokeTests: XCTestCase {
         XCTAssertEqual(appFrame.minY, deviceFrame.minY, accuracy: 1)
         XCTAssertEqual(appFrame.width, deviceFrame.width, accuracy: 1)
         XCTAssertEqual(appFrame.height, deviceFrame.height, accuracy: 1)
-    }
-
-    private func waitForBackground(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if app.state == .runningBackground || app.state == .runningBackgroundSuspended {
-                return true
-            }
-            Thread.sleep(forTimeInterval: 0.2)
-        }
-        return false
     }
 }
