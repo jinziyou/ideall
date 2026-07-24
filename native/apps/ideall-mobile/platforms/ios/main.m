@@ -13,6 +13,7 @@
 @property(nonatomic, strong) CADisplayLink *displayLink;
 @property(nonatomic, assign) void *gpuiWindow;
 @property(nonatomic, strong) UITextView *textInputBridge;
+@property(nonatomic, assign) BOOL smokeTextInjected;
 @property(nonatomic, assign) BOOL updatingTextInputBridge;
 @property(nonatomic, assign) BOOL textInputBridgeMultiline;
 @property(nonatomic, assign) BOOL gpuiStarting;
@@ -176,6 +177,18 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     return action >= 1 && action <= 3 ? (unsigned char)action : 0;
 }
 
+- (NSString *)requestedSmokeText {
+    BOOL isUITesting =
+        getenv("IDEALL_UI_TESTING") != NULL ||
+        [NSProcessInfo.processInfo.arguments containsObject:@"-IDEALLUITesting"];
+    if (!isUITesting) return nil;
+
+    NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+    NSUInteger index = [arguments indexOfObject:@"-IDEALLSmokeText"];
+    if (index == NSNotFound || index + 1 >= arguments.count) return nil;
+    return arguments[index + 1];
+}
+
 - (void)sendTextInputBridgeState {
     if (self.updatingTextInputBridge || self.textInputBridge == nil) return;
     NSString *value = self.textInputBridge.text ?: @"";
@@ -234,7 +247,15 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     start = MIN(start, input.text.length);
     end = MIN(MAX(end, start), input.text.length);
     input.selectedRange = NSMakeRange(start, end - start);
+    NSString *smokeText = self.smokeTextInjected ? nil : [self requestedSmokeText];
+    BOOL injectedSmokeText = smokeText != nil;
+    if (injectedSmokeText) {
+        self.smokeTextInjected = YES;
+        input.text = [input.text stringByAppendingString:smokeText];
+        input.selectedRange = NSMakeRange(input.text.length, 0);
+    }
     self.updatingTextInputBridge = NO;
+    if (injectedSmokeText) [self sendTextInputBridgeState];
     [input reloadInputViews];
     [input becomeFirstResponder];
     UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, input);

@@ -14,7 +14,11 @@ final class IdeallSmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["IDEALL_CRASH_DIAGNOSTICS"] = "1"
         app.launchEnvironment["IDEALL_UI_TESTING"] = "1"
-        configureLaunch(app, smokeAction: 1)
+        configureLaunch(
+            app,
+            smokeAction: 1,
+            smokeText: "ideall iOS smoke body\nsecond line"
+        )
         app.launch()
 
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
@@ -31,28 +35,25 @@ final class IdeallSmokeTests: XCTestCase {
         XCTAssertTrue(deviceWindow.waitForExistence(timeout: 10))
         let deviceFrame = deviceWindow.frame
         assertFullScreen(window.frame, matches: deviceFrame)
-        let bodyInput = try XCTUnwrap(
-            waitForInput("正文", in: app)
+        _ = try XCTUnwrap(
+            waitForInput("正文", containing: "second line", in: app)
         )
-        bodyInput.typeText("ideall iOS smoke body\nsecond line")
         waitForAutosave()
 
-        relaunch(app, smokeAction: 2)
-        let titleInput = try XCTUnwrap(
-            waitForInput("标题", in: app)
+        relaunch(app, smokeAction: 2, smokeText: "ideall iOS smoke title")
+        _ = try XCTUnwrap(
+            waitForInput("标题", containing: "ideall iOS smoke title", in: app)
         )
-        titleInput.typeText("ideall iOS smoke title\n")
         waitForAutosave()
 
-        relaunch(app, smokeAction: 3)
+        relaunch(app, smokeAction: 3, smokeText: "\nthird line")
         let resumedBodyInput = try XCTUnwrap(
-            waitForInput("正文", in: app)
+            waitForInput("正文", containing: "third line", in: app)
         )
         XCTAssertTrue(
             (resumedBodyInput.value as? String)?.contains("second line") == true,
             "正文应在重启并切换焦点后恢复"
         )
-        resumedBodyInput.typeText("\nthird line")
         waitForAutosave()
         attachScreenshot(named: "02-edited-note", from: window)
 
@@ -85,25 +86,49 @@ final class IdeallSmokeTests: XCTestCase {
 
     private func waitForInput(
         _ label: String,
+        containing text: String,
         in app: XCUIApplication
     ) -> XCUIElement? {
         let input = app.textViews[label]
         guard input.waitForExistence(timeout: 5) else {
             return nil
         }
+        let valueContainsText = NSPredicate { object, _ in
+            guard let element = object as? XCUIElement,
+                  let value = element.value as? String
+            else {
+                return false
+            }
+            return value.contains(text)
+        }
+        let expectation = XCTNSPredicateExpectation(predicate: valueContainsText, object: input)
+        guard XCTWaiter.wait(for: [expectation], timeout: 5) == .completed else {
+            return nil
+        }
         return input
     }
 
-    private func configureLaunch(_ app: XCUIApplication, smokeAction: Int?) {
+    private func configureLaunch(
+        _ app: XCUIApplication,
+        smokeAction: Int?,
+        smokeText: String? = nil
+    ) {
         app.launchArguments = ["-IDEALLUITesting"]
         if let smokeAction {
             app.launchArguments += ["-IDEALLSmokeAction", String(smokeAction)]
         }
+        if let smokeText {
+            app.launchArguments += ["-IDEALLSmokeText", smokeText]
+        }
     }
 
-    private func relaunch(_ app: XCUIApplication, smokeAction: Int) {
+    private func relaunch(
+        _ app: XCUIApplication,
+        smokeAction: Int,
+        smokeText: String
+    ) {
         app.terminate()
-        configureLaunch(app, smokeAction: smokeAction)
+        configureLaunch(app, smokeAction: smokeAction, smokeText: smokeText)
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
     }
