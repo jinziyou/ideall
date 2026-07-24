@@ -145,6 +145,8 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     input.autocorrectionType = UITextAutocorrectionTypeDefault;
     input.autocapitalizationType = UITextAutocapitalizationTypeSentences;
     input.spellCheckingType = UITextSpellCheckingTypeDefault;
+    input.isAccessibilityElement = YES;
+    input.accessibilityIdentifier = @"文本输入";
     input.accessibilityHint = @"编辑后内容会自动保存在本机";
     input.accessibilityTraits = UIAccessibilityTraitUpdatesFrequently;
     input.accessibilityFrame = CGRectMake(0, 0, 44, 44);
@@ -182,7 +184,9 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 
     self.updatingTextInputBridge = YES;
     self.textInputBridgeMultiline = multiline;
-    input.accessibilityLabel = label.length > 0 ? label : @"文本输入";
+    NSString *fieldLabel = label.length > 0 ? label : @"文本输入";
+    input.accessibilityLabel = fieldLabel;
+    input.accessibilityIdentifier = fieldLabel;
     input.secureTextEntry = secure;
     switch (keyboardType) {
         case 1: input.keyboardType = UIKeyboardTypeEmailAddress; break;

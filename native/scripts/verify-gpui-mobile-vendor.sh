@@ -124,6 +124,7 @@ done < <(
 expected_changed_files=(
   "android/dispatcher.rs"
   "android/display.rs"
+  "android/jni.rs"
   "android/platform.rs"
   "components/material/progress_indicator.rs"
   "ios/dispatcher.rs"

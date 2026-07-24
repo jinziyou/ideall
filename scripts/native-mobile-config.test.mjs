@@ -49,6 +49,10 @@ const VENDORED_GPUI_IOS_WINDOW = new URL(
   "../native/vendor/gpui-mobile/src/ios/window.rs",
   import.meta.url,
 )
+const VENDORED_GPUI_ANDROID_JNI = new URL(
+  "../native/vendor/gpui-mobile/src/android/jni.rs",
+  import.meta.url,
+)
 
 test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", () => {
   const project = readFileSync(IOS_PROJECT, "utf8")
@@ -107,6 +111,8 @@ test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => 
   )
   assert.doesNotMatch(main, /gpui_ios_will_enter_foreground\(NULL\)/)
   assert.doesNotMatch(main, /gpui_ios_did_enter_background\(NULL\)/)
+  assert.match(main, /input\.isAccessibilityElement = YES/)
+  assert.match(main, /input\.accessibilityIdentifier = fieldLabel/)
 })
 
 test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () => {
@@ -117,6 +123,7 @@ test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () 
   const checksums = readFileSync(VENDORED_GPUI_CHECKSUMS, "utf8")
   const ffi = readFileSync(VENDORED_GPUI_IOS_FFI, "utf8")
   const window = readFileSync(VENDORED_GPUI_IOS_WINDOW, "utf8")
+  const androidJni = readFileSync(VENDORED_GPUI_ANDROID_JNI, "utf8")
 
   assert.match(manifest, /gpui-mobile = \{ path = "\.\.\/\.\.\/vendor\/gpui-mobile"/)
   assert.match(provenance, /1d3ec2a1d14a63b74d1f4269340441d4eeada27a/)
@@ -133,6 +140,9 @@ test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () 
   assert.match(ffi, /\*application\.0\.get\(\) = Some\(handle\)/)
   assert.match(window, /frame_in_progress: AtomicBool/)
   assert.match(window, /momentum_scroller\.try_borrow_mut\(\)/)
+  assert.match(androidJni, /Mutex<Option<AndroidApp>>/)
+  assert.match(androidJni, /pub fn clear_platform\(/)
+  assert.doesNotMatch(androidJni, /static PLATFORM: OnceLock/)
 
   const result = spawnSync("bash", [VENDORED_GPUI_VERIFY.pathname], {
     cwd: new URL("..", import.meta.url),
@@ -191,6 +201,7 @@ test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
 
   assert.match(iosTest, /app\.textViews\["标题"\]/)
   assert.match(iosTest, /app\.textViews\["正文"\]/)
+  assert.match(iosTest, /textViews\["正文"\]\.waitForExistence[\s\S]*?dx: 0\.50, dy: 0\.17/)
   assert.match(iosTest, /XCUIDevice\.shared\.orientation = \.landscapeLeft/)
   assert.match(iosTest, /XCUIDevice\.shared\.press\(\.home\)/)
   assert.match(iosTest, /app\.activate\(\)/)

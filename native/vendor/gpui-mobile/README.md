@@ -9,7 +9,9 @@ landed upstream, plus workspace compatibility cleanup:
 - serialize FFI frame pumps at the `IosWindow` boundary;
 - retain GPUI through UIKit's externally driven run loop with `Application::run_embedded`;
 - avoid panicking when momentum or frame callback state is already borrowed;
-- release the momentum borrow before dispatching GPUI input.
+- release the momentum borrow before dispatching GPUI input;
+- replace the active Android platform registry after `NativeActivity` recreation instead of
+  retaining a dispatcher bound to the previous `android_main` thread;
 - keep vendored code warning-free under ideall's host-target Clippy gate;
 - let the parent workspace own dependency patches and build profiles;
 - pin Zed `gpui` and `gpui_wgpu` to revision

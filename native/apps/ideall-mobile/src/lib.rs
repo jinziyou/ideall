@@ -3105,12 +3105,11 @@ fn android_main(app: android_activity::AndroidApp) {
             .with_tag("ideall"),
     );
     gpui_mobile::android::jni::install_panic_hook();
-    let _platform = gpui_mobile::android::jni::init_platform(&app);
-    let Some(platform) = gpui_mobile::android::jni::shared_platform() else {
-        log::error!("gpui-mobile did not create the Android platform");
-        return;
-    };
-    Application::with_platform(platform.into_rc()).run(mobile::open_main_window);
+    let platform = gpui_mobile::android::jni::init_platform(&app);
+    let shared_platform =
+        gpui_mobile::android::platform::SharedPlatform::new(platform.clone()).into_rc();
+    Application::with_platform(shared_platform).run(mobile::open_main_window);
+    gpui_mobile::android::jni::clear_platform(&platform);
 }
 
 #[cfg(target_os = "ios")]

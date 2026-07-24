@@ -23,6 +23,7 @@ final class IdeallSmokeTests: XCTestCase {
         // GPUI currently paints its own controls, so use stable normalized
         // coordinates until gpui-mobile exposes a complete accessibility tree.
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.87, dy: 0.10)).tap()
+        XCTAssertTrue(app.textViews["正文"].waitForExistence(timeout: 10))
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.17)).tap()
 
         let titleInput = app.textViews["标题"]

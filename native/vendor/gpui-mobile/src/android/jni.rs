@@ -221,15 +221,17 @@ pub fn find_app_class<'local>(
 
 // ── global state ─────────────────────────────────────────────────────────────
 
-/// The `AndroidApp` handle from `android-activity`.
+/// The active `AndroidApp` handle from `android-activity`.
 ///
-/// Set once in `android_main`; read-only thereafter.
-static ANDROID_APP: OnceLock<AndroidApp> = OnceLock::new();
+/// Android can destroy and recreate a `NativeActivity` without terminating
+/// the process. The registry therefore has to be replaceable between
+/// sequential `android_main` invocations.
+static ANDROID_APP: std::sync::Mutex<Option<AndroidApp>> = std::sync::Mutex::new(None);
 
-/// Process-global `AndroidPlatform` instance.
+/// Platform for the active `NativeActivity` instance.
 ///
-/// Initialised once during `android_main`; read-only thereafter.
-static PLATFORM: OnceLock<Arc<AndroidPlatform>> = OnceLock::new();
+/// Kept behind a replaceable slot for the same reason as [`ANDROID_APP`].
+static PLATFORM: std::sync::Mutex<Option<Arc<AndroidPlatform>>> = std::sync::Mutex::new(None);
 
 /// Get the unicode character produced by an Android key event via JNI.
 ///
@@ -274,8 +276,8 @@ pub fn unicode_char_for_key_event(key_code: i32, action: i32, meta_state: i32) -
 /// Uses `AndroidApp::vm_as_ptr()` from the stored `AndroidApp`.
 /// Used by `platform.rs` for JNI calls.
 pub fn java_vm() -> *mut c_void {
-    ANDROID_APP
-        .get()
+    android_app()
+        .as_ref()
         .map(|app| app.vm_as_ptr())
         .unwrap_or(std::ptr::null_mut())
 }
@@ -290,22 +292,22 @@ pub fn java_vm() -> *mut c_void {
 /// Code that previously used `(*activity).clazz` should use this directly
 /// as the activity jobject.
 pub fn activity_as_ptr() -> *mut c_void {
-    ANDROID_APP
-        .get()
+    android_app()
+        .as_ref()
         .map(|app| app.activity_as_ptr())
         .unwrap_or(std::ptr::null_mut())
 }
 
 /// Returns a clone of the stored `AndroidApp`, if initialised.
 pub fn android_app() -> Option<AndroidApp> {
-    ANDROID_APP.get().cloned()
+    ANDROID_APP.lock().unwrap().clone()
 }
 
-/// Returns a reference to the global `AndroidPlatform`, if initialised.
+/// Returns a clone of the active `AndroidPlatform`, if initialised.
 ///
 /// Returns `None` before `android_main` has set it up.
-pub fn platform() -> Option<&'static Arc<AndroidPlatform>> {
-    PLATFORM.get()
+pub fn platform() -> Option<Arc<AndroidPlatform>> {
+    PLATFORM.lock().unwrap().clone()
 }
 
 /// Returns a [`SharedPlatform`] wrapping the global `Arc<AndroidPlatform>`.
@@ -319,9 +321,7 @@ pub fn platform() -> Option<&'static Arc<AndroidPlatform>> {
 ///
 /// Returns `None` before `init_platform` has been called.
 pub fn shared_platform() -> Option<SharedPlatform> {
-    PLATFORM
-        .get()
-        .map(|arc| SharedPlatform::new(Arc::clone(arc)))
+    platform().map(SharedPlatform::new)
 }
 
 // ── input event types ─────────────────────────────────────────────────────────
@@ -354,7 +354,7 @@ pub fn query_night_mode_via_jni() -> bool {
 
 /// Process input events from the `AndroidApp` and dispatch them to the window.
 fn process_input_events(app: &AndroidApp) {
-    let platform = match PLATFORM.get() {
+    let platform = match platform() {
         Some(p) => p,
         None => {
             log::trace!("process_input_events: no platform yet");
@@ -564,7 +564,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         }
 
         // Check if quit was requested.
-        if let Some(platform) = PLATFORM.get() {
+        if let Some(platform) = platform() {
             if platform.should_quit() {
                 log::info!("run_event_loop: platform requested quit");
                 dispose_all_platform_views();
@@ -608,7 +608,7 @@ pub fn run_event_loop(app: &AndroidApp) {
             log::info!("deferred: TerminateWindow (iter={})", iteration);
             INIT_WINDOW_DONE.store(false, Ordering::Relaxed);
             *LAST_CHROME_STYLE.lock().unwrap() = None;
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 if let Some(win) = platform.primary_window() {
                     win.term_window();
                 }
@@ -620,7 +620,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         // 2. InitWindow — replace surface on existing renderer, or create new
         if INIT_WINDOW_PENDING.swap(false, Ordering::Relaxed) {
             log::info!("deferred: InitWindow (iter={})", iteration);
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 if let Some(native_window) = app.native_window() {
                     let width = native_window.width();
                     let height = native_window.height();
@@ -681,7 +681,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         // 3. WindowResized
         if WINDOW_RESIZED_PENDING.swap(false, Ordering::Relaxed) {
             log::debug!("deferred: WindowResized");
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 if let Some(win) = platform.primary_window() {
                     win.handle_resize();
                     let cr = app.content_rect();
@@ -693,7 +693,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         // 4. ConfigChanged
         if CONFIG_CHANGED_PENDING.swap(false, Ordering::Relaxed) {
             log::debug!("deferred: ConfigChanged");
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 platform.notify_keyboard_layout_change();
                 let is_dark = query_night_mode_via_jni();
                 if let Some(win) = platform.primary_window() {
@@ -710,7 +710,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         // 5. Pause / background
         if PAUSE_PENDING.swap(false, Ordering::Relaxed) {
             log::info!("deferred: Pause (iter={})", iteration);
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 platform.did_enter_background();
                 if let Some(win) = platform.primary_window() {
                     win.set_active(false);
@@ -723,7 +723,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         // 6. Resume / foreground
         if RESUME_PENDING.swap(false, Ordering::Relaxed) {
             log::info!("deferred: Resume (iter={})", iteration);
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 platform.did_become_active();
                 if let Some(win) = platform.primary_window() {
                     win.set_active(true);
@@ -734,7 +734,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         }
 
         // Track active/focused state.
-        if let Some(platform) = PLATFORM.get() {
+        if let Some(platform) = platform() {
             if let Some(win) = platform.primary_window() {
                 let is_active = win.is_active();
                 if is_active != app_is_active {
@@ -754,7 +754,7 @@ pub fn run_event_loop(app: &AndroidApp) {
 
         // Deferred initialisation callbacks (runs once).
         if !INIT_WINDOW_DONE.load(Ordering::Relaxed) {
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 if platform.primary_window().is_some() {
                     if let Some(finish_cb) = platform.take_finish_launching_callback() {
                         log::info!("invoking finish_launching callback (iter={})", iteration);
@@ -781,7 +781,7 @@ pub fn run_event_loop(app: &AndroidApp) {
         }
 
         // ── Render ──
-        if let Some(platform) = PLATFORM.get() {
+        if let Some(platform) = platform() {
             if INIT_WINDOW_DONE.load(Ordering::Relaxed) && app_is_active {
                 platform.flush_main_thread_tasks();
                 if let Some(win) = platform.primary_window() {
@@ -918,7 +918,7 @@ fn handle_main_event(_app: &AndroidApp, event: MainEvent<'_>) {
         MainEvent::Destroy => {
             log::info!("MainEvent::Destroy");
 
-            if let Some(platform) = PLATFORM.get() {
+            if let Some(platform) = platform() {
                 platform.quit();
             }
         }
@@ -951,14 +951,14 @@ fn handle_main_event(_app: &AndroidApp, event: MainEvent<'_>) {
 ///
 /// Returns `true` if the application should exit.
 pub fn poll_events(timeout_ms: i32) -> bool {
-    if let Some(platform) = PLATFORM.get() {
+    if let Some(platform) = platform() {
         if platform.should_quit() {
             return true;
         }
         platform.tick();
     }
 
-    let app = match ANDROID_APP.get() {
+    let app = match android_app() {
         Some(app) => app,
         None => return false,
     };
@@ -971,16 +971,16 @@ pub fn poll_events(timeout_ms: i32) -> bool {
 
     app.poll_events(timeout, |event| match event {
         PollEvent::Main(main_event) => {
-            handle_main_event(app, main_event);
+            handle_main_event(&app, main_event);
         }
         PollEvent::Wake => {}
         _ => {}
     });
 
-    process_input_events(app);
+    process_input_events(&app);
 
     // Drive the GPUI rendering pipeline (same as run_event_loop).
-    if let Some(platform) = PLATFORM.get() {
+    if let Some(platform) = platform() {
         platform.flush_main_thread_tasks();
         if let Some(win) = platform.primary_window() {
             win.request_frame();
@@ -1020,25 +1020,45 @@ pub fn install_panic_hook() {
     }));
 }
 
-/// Store the `AndroidApp` globally and create the `AndroidPlatform`.
+/// Register the active `AndroidApp` and create its `AndroidPlatform`.
 ///
-/// Must be called exactly once from `android_main` before
-/// `run_event_loop`.  Returns a reference to the platform so the caller
-/// can register callbacks (e.g. `set_on_init_window`) before entering
-/// the event loop.
-pub fn init_platform(app: &AndroidApp) -> &'static Arc<AndroidPlatform> {
-    let _ = ANDROID_APP.set(app.clone());
+/// Call once per `android_main` invocation before `run_event_loop`. Android
+/// may invoke `android_main` again after an activity recreation while keeping
+/// the process alive, so this replaces a platform left by the prior instance.
+pub fn init_platform(app: &AndroidApp) -> Arc<AndroidPlatform> {
+    *ANDROID_APP.lock().unwrap() = Some(app.clone());
     log::info!("init_platform: stored AndroidApp");
 
     let platform = Arc::new(AndroidPlatform::new(false));
     log::info!("init_platform: AndroidPlatform created");
 
-    PLATFORM
-        .set(Arc::clone(&platform))
-        .unwrap_or_else(|_| log::warn!("PLATFORM already set — duplicate init_platform?"));
+    *PLATFORM.lock().unwrap() = Some(Arc::clone(&platform));
+    INIT_WINDOW_DONE.store(false, Ordering::Relaxed);
+    NATIVE_INITIALIZED.store(false, Ordering::Release);
+    PAUSE_PENDING.store(false, Ordering::Relaxed);
+    RESUME_PENDING.store(false, Ordering::Relaxed);
+    TERM_WINDOW_PENDING.store(false, Ordering::Relaxed);
+    INIT_WINDOW_PENDING.store(false, Ordering::Relaxed);
+    WINDOW_RESIZED_PENDING.store(false, Ordering::Relaxed);
+    CONFIG_CHANGED_PENDING.store(false, Ordering::Relaxed);
 
-    // SAFETY: we just set it above.
-    PLATFORM.get().unwrap()
+    platform
+}
+
+/// Remove an activity's registry entries after its event loop exits.
+///
+/// The pointer check prevents an old activity from clearing a newer
+/// registration if Android ever overlaps lifecycle teardown and recreation.
+pub fn clear_platform(active_platform: &Arc<AndroidPlatform>) {
+    let mut platform_slot = PLATFORM.lock().unwrap();
+    let is_active = platform_slot
+        .as_ref()
+        .is_some_and(|platform| Arc::ptr_eq(platform, active_platform));
+    if is_active {
+        *platform_slot = None;
+        *ANDROID_APP.lock().unwrap() = None;
+        log::info!("clear_platform: released inactive Android activity");
+    }
 }
 
 // ── system chrome (status bar / navigation bar) ───────────────────────────────
