@@ -6,9 +6,9 @@ a87318dcfa24cbf6626d7b6ff556abf7fe5186e5b30c40ff157bf53856ae7c8d  native/vendor/
 7cb5e089dcacca18a2dda517acfa1acf5bf8eb0910701488ea420859a3f5e9ce  native/vendor/gpui-mobile/src/components/material/progress_indicator.rs
 c498b0f9e054607a2fc57424c1f4b51d3f593976cf23960ea0d9261cc837dba0  native/vendor/gpui-mobile/src/ios/dispatcher.rs
 63308428b607dbbeeee9f4aa1069c936f722281d8886f149833f752a3e406870  native/vendor/gpui-mobile/src/ios/display.rs
-02bccbe58f2ee2c99d404b1606cdb40d331529603fe3cd31928affbdefc5e06f  native/vendor/gpui-mobile/src/ios/ffi.rs
+90617accad42907c6ee173fd46ca81a95c026a2764511dbefac7e358aaf26525  native/vendor/gpui-mobile/src/ios/ffi.rs
 96095dcff77f8715a6fc726b082e00a8c3641a69e315bdd7ab6b7a7971c4071f  native/vendor/gpui-mobile/src/ios/platform.rs
-9bde00389ade9b8d580a81854d6b4387dc76908c5794624598142687692e2a46  native/vendor/gpui-mobile/src/ios/window.rs
+dbae7db3033b634f2e7d8c7e8b44fb16c15a826b9a032aaf2a0904410f6cf7ed  native/vendor/gpui-mobile/src/ios/window.rs
 92d503f69b1d716d4acdb71bfb22bba9c9f552ce719c4fcb263bd75600edee91  native/vendor/gpui-mobile/src/lib.rs
 ade2599a6849ba2fcaa233d0694f560109c3424191438322943e23d6066ae14b  native/vendor/gpui-mobile/src/momentum.rs
 2a56544ffa75afb862aaca5597edd4577d8ccd63b25119012d0f80dc5a2a04b8  native/vendor/gpui-mobile/src/target_platform.rs

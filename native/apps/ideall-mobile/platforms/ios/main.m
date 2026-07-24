@@ -13,6 +13,7 @@
 @property(nonatomic, strong) CADisplayLink *displayLink;
 @property(nonatomic, assign) void *gpuiWindow;
 @property(nonatomic, strong) UITextView *textInputBridge;
+@property(nonatomic, strong) NSArray<UIButton *> *smokeTapProxies;
 @property(nonatomic, assign) BOOL updatingTextInputBridge;
 @property(nonatomic, assign) BOOL textInputBridgeMultiline;
 @property(nonatomic, assign) BOOL gpuiStarting;
@@ -158,6 +159,97 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     self.textInputBridge = input;
 }
 
+- (void)installSmokeTapProxiesIfNeeded {
+    if (self.smokeTapProxies != nil || self.gpuiWindow == NULL) return;
+    BOOL isUITesting =
+        getenv("IDEALL_UI_TESTING") != NULL ||
+        [NSProcessInfo.processInfo.arguments containsObject:@"-IDEALLUITesting"];
+    if (!isUITesting) return;
+
+    UIWindow *window = IdeallKeyWindow();
+    if (window == nil) return;
+    CGRect safeFrame = window.safeAreaLayoutGuide.layoutFrame;
+    CGFloat width = CGRectGetWidth(window.bounds);
+    CGFloat height = CGRectGetHeight(window.bounds);
+    NSArray<NSDictionary *> *specifications = @[
+        @{
+            @"label": @"新建笔记",
+            @"tag": @1,
+            @"frame": [NSValue valueWithCGRect:CGRectMake(
+                CGRectGetMaxX(safeFrame) - 84,
+                CGRectGetMinY(safeFrame),
+                80,
+                52
+            )],
+        },
+        @{
+            @"label": @"聚焦标题",
+            @"tag": @2,
+            @"frame": [NSValue valueWithCGRect:CGRectMake(
+                16,
+                height * 0.18 - 22,
+                width - 32,
+                44
+            )],
+        },
+        @{
+            @"label": @"聚焦正文",
+            @"tag": @3,
+            @"frame": [NSValue valueWithCGRect:CGRectMake(
+                16,
+                height * 0.40 - 22,
+                width - 32,
+                44
+            )],
+        },
+    ];
+    NSMutableArray<UIButton *> *proxies = [NSMutableArray array];
+    for (NSDictionary *specification in specifications) {
+        UIButton *proxy = [UIButton buttonWithType:UIButtonTypeCustom];
+        NSString *label = specification[@"label"];
+        proxy.frame = [specification[@"frame"] CGRectValue];
+        proxy.tag = [specification[@"tag"] integerValue];
+        proxy.backgroundColor = UIColor.clearColor;
+        proxy.alpha = 0.02;
+        proxy.isAccessibilityElement = YES;
+        proxy.accessibilityLabel = label;
+        proxy.accessibilityIdentifier = label;
+        proxy.accessibilityTraits = UIAccessibilityTraitButton;
+        [proxy addTarget:self
+                  action:@selector(activateSmokeTapProxy:)
+        forControlEvents:UIControlEventTouchUpInside];
+        [window addSubview:proxy];
+        [proxies addObject:proxy];
+    }
+    self.smokeTapProxies = proxies;
+}
+
+- (void)activateSmokeTapProxy:(UIButton *)proxy {
+    if (self.gpuiWindow == NULL) return;
+    UIWindow *window = IdeallKeyWindow();
+    if (window == nil) return;
+
+    CGRect safeFrame = window.safeAreaLayoutGuide.layoutFrame;
+    CGPoint point;
+    switch (proxy.tag) {
+        case 1:
+            point = CGPointMake(
+                CGRectGetMaxX(safeFrame) - 48,
+                CGRectGetMinY(safeFrame) + 26
+            );
+            break;
+        case 2:
+            point = CGPointMake(CGRectGetMidX(window.bounds), CGRectGetHeight(window.bounds) * 0.18);
+            break;
+        case 3:
+            point = CGPointMake(CGRectGetMidX(window.bounds), CGRectGetHeight(window.bounds) * 0.40);
+            break;
+        default:
+            return;
+    }
+    gpui_ios_handle_tap(self.gpuiWindow, (float)point.x, (float)point.y);
+}
+
 - (void)sendTextInputBridgeState {
     if (self.updatingTextInputBridge || self.textInputBridge == nil) return;
     NSString *value = self.textInputBridge.text ?: @"";
@@ -285,6 +377,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     gpui_ios_run_demo();
     self.gpuiWindow = gpui_ios_get_window();
     self.gpuiStarting = NO;
+    [self installSmokeTapProxiesIfNeeded];
     [self installDisplayLinkIfNeeded];
 }
 

@@ -291,6 +291,21 @@ pub extern "C" fn gpui_ios_handle_touch(
     );
 }
 
+/// Dispatch a tap supplied by a native host accessibility control.
+///
+/// Coordinates are logical points in the GPUI Metal view.
+#[unsafe(no_mangle)]
+pub extern "C" fn gpui_ios_handle_tap(window_ptr: *mut c_void, x: f32, y: f32) {
+    if window_ptr.is_null() || !x.is_finite() || !y.is_finite() {
+        return;
+    }
+
+    // Safety: window_ptr must be a valid pointer returned by
+    // gpui_ios_get_window(), and the iOS host invokes this on the main thread.
+    let window = unsafe { &*(window_ptr as *const super::window::IosWindow) };
+    window.handle_tap(x, y);
+}
+
 /// Request a frame to be rendered.
 ///
 /// This should be called from CADisplayLink callback to trigger GPUI rendering.

@@ -22,11 +22,11 @@ final class IdeallSmokeTests: XCTestCase {
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         attachScreenshot(named: "01-launched", from: window)
 
-        // GPUI currently paints its own controls, so use stable normalized
-        // app-window coordinates until gpui-mobile exposes a complete
-        // accessibility tree. The launch-screen declaration must keep the app
-        // out of iOS legacy letterbox mode, otherwise GPUI safe areas and
-        // XCTest device coordinates describe different viewports.
+        // GPUI currently paints its own controls without a complete native
+        // accessibility tree. UI-test-only UIKit proxies receive XCTest
+        // activations and forward them as ordinary GPUI mouse-down/up events.
+        // The launch-screen declaration must also keep the app out of iOS
+        // legacy letterbox mode so both sides share one viewport.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deviceWindow = springboard.windows.firstMatch
         XCTAssertTrue(deviceWindow.waitForExistence(timeout: 10))
@@ -36,16 +36,7 @@ final class IdeallSmokeTests: XCTestCase {
             focusInput(
                 "正文",
                 in: app,
-                window: window,
-                points: [
-                    CGVector(dx: 0.87, dy: 0.08),
-                    CGVector(dx: 0.87, dy: 0.09),
-                    CGVector(dx: 0.87, dy: 0.10),
-                    CGVector(dx: 0.87, dy: 0.11),
-                    CGVector(dx: 0.87, dy: 0.12),
-                    CGVector(dx: 0.82, dy: 0.10),
-                    CGVector(dx: 0.92, dy: 0.10),
-                ]
+                through: "新建笔记"
             )
         )
         bodyInput.typeText("ideall iOS smoke body\nsecond line")
@@ -54,14 +45,7 @@ final class IdeallSmokeTests: XCTestCase {
             focusInput(
                 "标题",
                 in: app,
-                window: window,
-                points: [
-                    CGVector(dx: 0.50, dy: 0.12),
-                    CGVector(dx: 0.50, dy: 0.14),
-                    CGVector(dx: 0.50, dy: 0.16),
-                    CGVector(dx: 0.50, dy: 0.18),
-                    CGVector(dx: 0.50, dy: 0.20),
-                ]
+                through: "聚焦标题"
             )
         )
         titleInput.typeText("ideall iOS smoke title\n")
@@ -70,13 +54,7 @@ final class IdeallSmokeTests: XCTestCase {
             focusInput(
                 "正文",
                 in: app,
-                window: window,
-                points: [
-                    CGVector(dx: 0.50, dy: 0.28),
-                    CGVector(dx: 0.50, dy: 0.34),
-                    CGVector(dx: 0.50, dy: 0.40),
-                    CGVector(dx: 0.50, dy: 0.46),
-                ]
+                through: "聚焦正文"
             )
         )
         resumedBodyInput.typeText("\nthird line")
@@ -111,18 +89,20 @@ final class IdeallSmokeTests: XCTestCase {
     private func focusInput(
         _ label: String,
         in app: XCUIApplication,
-        window: XCUIElement,
-        points: [CGVector]
+        through proxyLabel: String
     ) -> XCUIElement? {
-        let input = app.textViews[label]
-        for point in points {
-            window.coordinate(withNormalizedOffset: point).tap()
-            if input.waitForExistence(timeout: 1) {
-                input.tap()
-                return input
-            }
+        let proxy = app.buttons[proxyLabel]
+        guard proxy.waitForExistence(timeout: 5) else {
+            return nil
         }
-        return nil
+        proxy.tap()
+
+        let input = app.textViews[label]
+        guard input.waitForExistence(timeout: 5) else {
+            return nil
+        }
+        input.tap()
+        return input
     }
 
     private func assertFullScreen(_ appFrame: CGRect, matches deviceFrame: CGRect) {

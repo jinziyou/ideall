@@ -10,6 +10,7 @@ extern "C" {
 void gpui_ios_register_app(void);
 void gpui_ios_run_demo(void);
 void *gpui_ios_get_window(void);
+void gpui_ios_handle_tap(void *window_ptr, float x, float y);
 void gpui_ios_request_frame(void *window_ptr);
 void gpui_ios_will_enter_foreground(void *app_ptr);
 void gpui_ios_did_become_active(void *app_ptr);
