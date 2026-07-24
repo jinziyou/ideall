@@ -74,7 +74,7 @@ wait_for_accessible_input() {
     fi
     case "${label}" in
       "标题")
-        tap_y_percent=$((11 + ((attempt - 1) % 3) * 2))
+        tap_y_percent=$((14 + ((attempt - 1) % 7) * 2))
         adb shell input tap "$((screen_width * 50 / 100))" \
           "$((screen_height * tap_y_percent / 100))"
         ;;
@@ -142,7 +142,7 @@ create_note_and_wait_for_body
 adb shell input text "ideall-android-smoke-body"
 adb shell input keyevent KEYCODE_BACK
 
-adb shell input tap "$((screen_width * 50 / 100))" "$((screen_height * 11 / 100))"
+adb shell input tap "$((screen_width * 50 / 100))" "$((screen_height * 16 / 100))"
 wait_for_accessible_input "标题"
 adb shell input text "ideall-android-smoke-title"
 adb shell input keyevent KEYCODE_BACK

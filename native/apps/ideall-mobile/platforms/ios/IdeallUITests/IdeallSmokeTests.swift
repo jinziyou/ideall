@@ -23,20 +23,20 @@ final class IdeallSmokeTests: XCTestCase {
         attachScreenshot(named: "01-launched", from: window)
 
         // GPUI currently paints its own controls, so use stable normalized
-        // device-screen coordinates until gpui-mobile exposes a complete
-        // accessibility tree. SpringBoard supplies the full device frame,
-        // while the app Window remains the coordinate provider so synthesized
-        // events stay on ideall's display and scene.
+        // app-window coordinates until gpui-mobile exposes a complete
+        // accessibility tree. The launch-screen declaration must keep the app
+        // out of iOS legacy letterbox mode, otherwise GPUI safe areas and
+        // XCTest device coordinates describe different viewports.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deviceWindow = springboard.windows.firstMatch
         XCTAssertTrue(deviceWindow.waitForExistence(timeout: 10))
         let deviceFrame = deviceWindow.frame
+        assertFullScreen(window.frame, matches: deviceFrame)
         let bodyInput = try XCTUnwrap(
             focusInput(
                 "正文",
                 in: app,
                 window: window,
-                deviceFrame: deviceFrame,
                 points: [
                     CGVector(dx: 0.87, dy: 0.08),
                     CGVector(dx: 0.87, dy: 0.09),
@@ -55,7 +55,6 @@ final class IdeallSmokeTests: XCTestCase {
                 "标题",
                 in: app,
                 window: window,
-                deviceFrame: deviceFrame,
                 points: [
                     CGVector(dx: 0.50, dy: 0.12),
                     CGVector(dx: 0.50, dy: 0.14),
@@ -72,7 +71,6 @@ final class IdeallSmokeTests: XCTestCase {
                 "正文",
                 in: app,
                 window: window,
-                deviceFrame: deviceFrame,
                 points: [
                     CGVector(dx: 0.50, dy: 0.28),
                     CGVector(dx: 0.50, dy: 0.34),
@@ -114,27 +112,24 @@ final class IdeallSmokeTests: XCTestCase {
         _ label: String,
         in app: XCUIApplication,
         window: XCUIElement,
-        deviceFrame: CGRect,
         points: [CGVector]
     ) -> XCUIElement? {
         let input = app.textViews[label]
         for point in points {
-            let windowFrame = window.frame
-            let target = CGPoint(
-                x: deviceFrame.minX + deviceFrame.width * point.dx,
-                y: deviceFrame.minY + deviceFrame.height * point.dy
-            )
-            let windowPoint = CGVector(
-                dx: (target.x - windowFrame.minX) / windowFrame.width,
-                dy: (target.y - windowFrame.minY) / windowFrame.height
-            )
-            window.coordinate(withNormalizedOffset: windowPoint).tap()
+            window.coordinate(withNormalizedOffset: point).tap()
             if input.waitForExistence(timeout: 1) {
                 input.tap()
                 return input
             }
         }
         return nil
+    }
+
+    private func assertFullScreen(_ appFrame: CGRect, matches deviceFrame: CGRect) {
+        XCTAssertEqual(appFrame.minX, deviceFrame.minX, accuracy: 1)
+        XCTAssertEqual(appFrame.minY, deviceFrame.minY, accuracy: 1)
+        XCTAssertEqual(appFrame.width, deviceFrame.width, accuracy: 1)
+        XCTAssertEqual(appFrame.height, deviceFrame.height, accuracy: 1)
     }
 
     private func waitForBackground(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {

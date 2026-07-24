@@ -8,6 +8,10 @@ const IOS_PROJECT = new URL(
   import.meta.url,
 )
 const IOS_MAIN = new URL("../native/apps/ideall-mobile/platforms/ios/main.m", import.meta.url)
+const IOS_INFO_PLIST = new URL(
+  "../native/apps/ideall-mobile/platforms/ios/Info.plist",
+  import.meta.url,
+)
 const ANDROID_APP_BUILD = new URL(
   "../native/apps/ideall-mobile/platforms/android/app/build.gradle.kts",
   import.meta.url,
@@ -62,6 +66,7 @@ const VENDORED_GPUI_LIB = new URL("../native/vendor/gpui-mobile/src/lib.rs", imp
 
 test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", () => {
   const project = readFileSync(IOS_PROJECT, "utf8")
+  const infoPlist = readFileSync(IOS_INFO_PLIST, "utf8")
   const buildScript = readFileSync(MOBILE_BUILD_SCRIPT, "utf8")
   const appTarget = project.slice(
     project.indexOf("  Ideall:\n"),
@@ -89,6 +94,7 @@ test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", (
   assert.match(project, /^  IdeallUITests:$/m)
   assert.match(project, /^    type: bundle\.ui-testing$/m)
   assert.match(project, /^        - IdeallUITests$/m)
+  assert.match(infoPlist, /<key>UILaunchScreen<\/key>\s*<dict\/>/)
 })
 
 test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => {
@@ -241,14 +247,17 @@ test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
   assert.match(iosTest, /bodyInput\.typeText\("ideall iOS smoke body/)
   assert.match(iosTest, /titleInput\.typeText\("ideall iOS smoke title/)
   assert.match(iosTest, /let deviceFrame = deviceWindow\.frame/)
-  assert.match(iosTest, /window\.coordinate\(withNormalizedOffset: windowPoint\)/)
+  assert.match(iosTest, /assertFullScreen\(window\.frame, matches: deviceFrame\)/)
+  assert.match(iosTest, /window\.coordinate\(withNormalizedOffset: point\)/)
   assert.match(iosTest, /XCUIApplication\(bundleIdentifier: "com\.apple\.springboard"\)/)
   assert.doesNotMatch(iosTest, /app\.coordinate\(withNormalizedOffset:/)
+  assert.doesNotMatch(iosTest, /let windowPoint =/)
   assert.match(iosTest, /XCUIDevice\.shared\.orientation = \.landscapeLeft/)
   assert.match(iosTest, /XCUIDevice\.shared\.press\(\.home\)/)
   assert.match(iosTest, /app\.activate\(\)/)
   assert.match(androidSmoke, /wait_for_accessible_input "标题"/)
   assert.match(androidSmoke, /create_note_and_wait_for_body/)
+  assert.match(androidSmoke, /tap_y_percent=\$\(\(14 \+ \(\(attempt - 1\) % 7\) \* 2\)\)/)
   assert.match(androidSmoke, /tap_y_percent=\$\(\(4 \+ \(\(attempt - 1\) % 7\)\)\)/)
   assert.match(androidSmoke, /screen_height \* tap_y_percent \/ 100/)
   assert.match(androidSmoke, /android:id\/aerr_wait/)
