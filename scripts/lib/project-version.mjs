@@ -24,6 +24,27 @@ const VERSION_FILES = [
     path: "src-tauri/Cargo.lock",
     pattern: /(name = "ideall"\r?\nversion = ")([^"]+)(")/,
   },
+  {
+    path: "native/Cargo.toml",
+    pattern: /(\[workspace\.package\][\s\S]*?^version\s*=\s*")([^"]+)(")/m,
+  },
+  {
+    path: "native/Cargo.lock",
+    pattern: /(name = "ideall(?:-[^"]+)?"\r?\nversion = ")([^"]+)(")/,
+    multiple: true,
+  },
+  {
+    path: "native/scripts/package-desktop.sh",
+    pattern: /(version="\$\{IDEALL_VERSION:-)([^}]+)(\}")/,
+  },
+  {
+    path: "native/apps/ideall-mobile/build-mobile.sh",
+    pattern: /(version="\$\{IDEALL_VERSION:-)([^}]+)(\}")/,
+  },
+  {
+    path: "native/apps/ideall-mobile/platforms/android/app/build.gradle.kts",
+    pattern: /(val ideallVersionName = System\.getenv\("IDEALL_VERSION"\) \?: ")([^"]+)(")/,
+  },
 ]
 
 export function validateProjectVersion(version, label = "版本号") {
@@ -35,16 +56,21 @@ export function validateProjectVersion(version, label = "版本号") {
   return version
 }
 
-function findSingleVersion(file, contents, pattern) {
+function findVersion(file, contents, pattern, multiple = false) {
   const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`
   const matches = [...contents.matchAll(new RegExp(pattern.source, flags))]
-  if (matches.length !== 1) {
-    throw new Error(`${file}: 期望且只允许一个项目版本字段，实际找到 ${matches.length} 个`)
+  if ((!multiple && matches.length !== 1) || (multiple && matches.length === 0)) {
+    const expected = multiple ? "至少一个" : "且只允许一个"
+    throw new Error(`${file}: 期望${expected}项目版本字段，实际找到 ${matches.length} 个`)
   }
 
-  const version = matches[0][2]
-  validateProjectVersion(version, `${file} 中的版本号`)
-  return version
+  const versions = new Set(
+    matches.map((match) => validateProjectVersion(match[2], `${file} 中的版本号`)),
+  )
+  if (versions.size !== 1) {
+    throw new Error(`${file}: 同一文件内的项目版本不一致: ${[...versions].join(" / ")}`)
+  }
+  return matches[0][2]
 }
 
 /**
@@ -54,12 +80,12 @@ export function loadProjectVersionState(root = PROJECT_ROOT) {
   return VERSION_FILES.map((definition) => {
     const absolutePath = path.join(root, definition.path)
     const contents = readFileSync(absolutePath, "utf8")
-    const version = findSingleVersion(definition.path, contents, definition.pattern)
+    const version = findVersion(definition.path, contents, definition.pattern, definition.multiple)
     return { ...definition, absolutePath, contents, version }
   })
 }
 
-/** 校验四处版本完全一致；传 expected 时同时校验发版 tag 的目标版本。 */
+/** 校验全部旧版与原生发布入口版本完全一致；传 expected 时同时校验发版 tag 的目标版本。 */
 export function assertProjectVersions(entries, expected) {
   if (!entries.length) throw new Error("没有配置项目版本文件")
 
@@ -83,8 +109,14 @@ export function assertProjectVersions(entries, expected) {
 export function prepareProjectVersionUpdate(entries, nextVersion) {
   validateProjectVersion(nextVersion, "目标版本号")
   return entries.map((entry) => {
+    const pattern = entry.multiple
+      ? new RegExp(
+          entry.pattern.source,
+          entry.pattern.flags.includes("g") ? entry.pattern.flags : `${entry.pattern.flags}g`,
+        )
+      : entry.pattern
     const contents = entry.contents.replace(
-      entry.pattern,
+      pattern,
       (_match, prefix, _current, suffix) => `${prefix}${nextVersion}${suffix}`,
     )
     return { ...entry, nextVersion, nextContents: contents }
