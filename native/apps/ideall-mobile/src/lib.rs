@@ -10,6 +10,19 @@ mod native_text;
 #[cfg(target_os = "ios")]
 mod ios_host;
 
+#[cfg(any(target_os = "ios", feature = "mobile-ui-host-check"))]
+static IOS_UI_TEST_ACTION: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+#[cfg(target_os = "ios")]
+#[unsafe(no_mangle)]
+pub extern "C" fn ideall_mobile_ios_ui_test_action(action: u8) {
+    if std::env::var("IDEALL_UI_TESTING").as_deref() != Ok("1") || !(1..=3).contains(&action) {
+        return;
+    }
+    IOS_UI_TEST_ACTION.store(action, std::sync::atomic::Ordering::Release);
+    gpui_mobile::TEXT_INPUT_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+}
+
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput(
@@ -1085,6 +1098,22 @@ mod mobile {
             }
         }
 
+        #[cfg(any(target_os = "ios", feature = "mobile-ui-host-check"))]
+        fn drain_ui_test_action(&mut self, cx: &mut Context<Self>) {
+            match crate::IOS_UI_TEST_ACTION.swap(0, std::sync::atomic::Ordering::AcqRel) {
+                1 => self.create_note(cx),
+                2 => {
+                    self.focus_field(FocusedField::Title, KeyboardType::Default);
+                    cx.notify();
+                }
+                3 => {
+                    self.focus_field(FocusedField::Body, KeyboardType::Default);
+                    cx.notify();
+                }
+                _ => {}
+            }
+        }
+
         fn mark_draft_dirty(&mut self, cx: &mut Context<Self>) {
             self.dirty = true;
             self.purge_armed = false;
@@ -1713,6 +1742,8 @@ mod mobile {
     impl Render for IdeallMobile {
         fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             self.drain_keyboard(cx);
+            #[cfg(any(target_os = "ios", feature = "mobile-ui-host-check"))]
+            self.drain_ui_test_action(cx);
             let (safe_top, safe_bottom, safe_left, safe_right) = gpui_mobile::safe_area_insets();
             let theme = MaterialTheme::light();
             let items = self.items.clone();

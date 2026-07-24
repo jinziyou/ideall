@@ -99,6 +99,7 @@ test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", (
 
 test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => {
   const main = readFileSync(IOS_MAIN, "utf8")
+  const mobileLib = readFileSync(MOBILE_LIB, "utf8")
 
   const didFinish = main.slice(
     main.indexOf("didFinishLaunchingWithOptions:"),
@@ -131,7 +132,13 @@ test("iOS 宿主在 UIKit 激活后启动 GPUI 并串行化状态通知", () => 
   assert.match(main, /window\.safeAreaInsets\.top \+ 4/)
   assert.match(main, /input\.alpha = isUITesting \? 1\.0 : 0\.01/)
   assert.match(main, /installSmokeTapProxiesIfNeeded/)
-  assert.match(main, /gpui_ios_handle_tap\(self\.gpuiWindow/)
+  assert.match(main, /ideall_mobile_ios_ui_test_action\(\(unsigned char\)proxy\.tag\)/)
+  assert.match(main, /proxy\.alpha = 1\.0/)
+  assert.match(mobileLib, /pub extern "C" fn ideall_mobile_ios_ui_test_action\(action: u8\)/)
+  assert.match(mobileLib, /std::env::var\("IDEALL_UI_TESTING"\)/)
+  assert.match(mobileLib, /IOS_UI_TEST_ACTION\.store\(action/)
+  assert.match(mobileLib, /fn drain_ui_test_action\(/)
+  assert.match(mobileLib, /self\.drain_ui_test_action\(cx\)/)
 })
 
 test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () => {
@@ -158,9 +165,7 @@ test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () 
   assert.match(ffi, /request_frame_callback\.try_borrow_mut\(\)/)
   assert.match(ffi, /Application::with_platform\(platform\)\.run_embedded/)
   assert.match(ffi, /\*application\.0\.get\(\) = Some\(handle\)/)
-  assert.match(ffi, /pub extern "C" fn gpui_ios_handle_tap\(/)
   assert.match(window, /frame_in_progress: AtomicBool/)
-  assert.match(window, /pub fn handle_tap\(&self, x: f32, y: f32\)/)
   assert.match(window, /momentum_scroller\.try_borrow_mut\(\)/)
   assert.match(androidJni, /Mutex<Option<AndroidApp>>/)
   assert.match(androidJni, /pub fn clear_platform\(/)

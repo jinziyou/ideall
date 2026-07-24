@@ -210,7 +210,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
         proxy.frame = [specification[@"frame"] CGRectValue];
         proxy.tag = [specification[@"tag"] integerValue];
         proxy.backgroundColor = UIColor.clearColor;
-        proxy.alpha = 0.02;
+        proxy.alpha = 1.0;
         proxy.isAccessibilityElement = YES;
         proxy.accessibilityLabel = label;
         proxy.accessibilityIdentifier = label;
@@ -225,29 +225,8 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 }
 
 - (void)activateSmokeTapProxy:(UIButton *)proxy {
-    if (self.gpuiWindow == NULL) return;
-    UIWindow *window = IdeallKeyWindow();
-    if (window == nil) return;
-
-    CGRect safeFrame = window.safeAreaLayoutGuide.layoutFrame;
-    CGPoint point;
-    switch (proxy.tag) {
-        case 1:
-            point = CGPointMake(
-                CGRectGetMaxX(safeFrame) - 48,
-                CGRectGetMinY(safeFrame) + 26
-            );
-            break;
-        case 2:
-            point = CGPointMake(CGRectGetMidX(window.bounds), CGRectGetHeight(window.bounds) * 0.18);
-            break;
-        case 3:
-            point = CGPointMake(CGRectGetMidX(window.bounds), CGRectGetHeight(window.bounds) * 0.40);
-            break;
-        default:
-            return;
-    }
-    gpui_ios_handle_tap(self.gpuiWindow, (float)point.x, (float)point.y);
+    if (proxy.tag < 1 || proxy.tag > 3) return;
+    ideall_mobile_ios_ui_test_action((unsigned char)proxy.tag);
 }
 
 - (void)sendTextInputBridgeState {

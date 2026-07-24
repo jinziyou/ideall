@@ -965,41 +965,6 @@ impl IosWindow {
         self.touch_state.set(ts);
     }
 
-    /// Dispatch a host-provided tap at a logical view position.
-    ///
-    /// UIKit accessibility proxies use this when their native control receives
-    /// an activation that cannot be represented as a `UITouch`. The generated
-    /// GPUI events follow the same tap path as `handle_touch`.
-    pub fn handle_tap(&self, x: f32, y: f32) {
-        let position = point(px(x), px(y));
-        let modifiers = self.modifiers.get();
-
-        self.mouse_position.set(position);
-        self.touch_pressed.set(false);
-        self.touch_state.set(TouchState::Idle);
-        self.momentum_scroller.borrow_mut().cancel();
-        self.velocity_tracker.borrow_mut().reset();
-
-        let emit = |input: PlatformInput| {
-            if let Some(callback) = self.input_callback.borrow_mut().as_mut() {
-                callback(input);
-            }
-        };
-        emit(PlatformInput::MouseDown(gpui::MouseDownEvent {
-            button: gpui::MouseButton::Left,
-            position,
-            modifiers,
-            click_count: 1,
-            first_mouse: false,
-        }));
-        emit(PlatformInput::MouseUp(gpui::MouseUpEvent {
-            button: gpui::MouseButton::Left,
-            position,
-            modifiers,
-            click_count: 1,
-        }));
-    }
-
     /// Query the safe area insets from the UIView.
     ///
     /// Returns `(top, bottom, left, right)` in logical points.

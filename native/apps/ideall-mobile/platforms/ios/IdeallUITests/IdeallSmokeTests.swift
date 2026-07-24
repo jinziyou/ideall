@@ -24,7 +24,7 @@ final class IdeallSmokeTests: XCTestCase {
 
         // GPUI currently paints its own controls without a complete native
         // accessibility tree. UI-test-only UIKit proxies receive XCTest
-        // activations and forward them as ordinary GPUI mouse-down/up events.
+        // activations and queue the matching action for the next GPUI frame.
         // The launch-screen declaration must also keep the app out of iOS
         // legacy letterbox mode so both sides share one viewport.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
