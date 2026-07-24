@@ -135,7 +135,9 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     UIWindow *window = IdeallKeyWindow();
     if (window == nil) return;
 
-    BOOL isUITesting = getenv("IDEALL_UI_TESTING") != NULL;
+    BOOL isUITesting =
+        getenv("IDEALL_UI_TESTING") != NULL ||
+        [NSProcessInfo.processInfo.arguments containsObject:@"-IDEALLUITesting"];
     CGRect inputFrame = isUITesting
         ? CGRectMake(4, window.safeAreaInsets.top + 4, 44, 44)
         : CGRectMake(0, 0, 1, 1);

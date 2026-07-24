@@ -106,7 +106,7 @@ create_note_and_wait_for_body() {
       grep -F 'focused="true"' >/dev/null; then
       return 0
     fi
-    tap_y_percent=$((5 + ((attempt - 1) % 3)))
+    tap_y_percent=$((2 + ((attempt - 1) % 3)))
     adb shell input tap "$((screen_width * 87 / 100))" \
       "$((screen_height * tap_y_percent / 100))"
     sleep 2

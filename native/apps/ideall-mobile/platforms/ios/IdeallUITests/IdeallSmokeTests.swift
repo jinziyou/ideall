@@ -14,6 +14,7 @@ final class IdeallSmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["IDEALL_CRASH_DIAGNOSTICS"] = "1"
         app.launchEnvironment["IDEALL_UI_TESTING"] = "1"
+        app.launchArguments.append("-IDEALLUITesting")
         app.launch()
 
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
@@ -25,19 +26,50 @@ final class IdeallSmokeTests: XCTestCase {
         // app coordinates until gpui-mobile exposes a complete accessibility
         // tree. The Window accessibility frame can be cropped by simulator
         // chrome and the software keyboard, so it is not a stable tap origin.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.87, dy: 0.10)).tap()
-        let nativeInput = app.textViews.firstMatch
-        XCTAssertTrue(nativeInput.waitForExistence(timeout: 10))
-        nativeInput.tap()
-        nativeInput.typeText("ideall iOS smoke body\nsecond line")
+        let bodyInput = try XCTUnwrap(
+            focusInput(
+                "正文",
+                in: app,
+                points: [
+                    CGVector(dx: 0.87, dy: 0.04),
+                    CGVector(dx: 0.87, dy: 0.05),
+                    CGVector(dx: 0.87, dy: 0.06),
+                    CGVector(dx: 0.87, dy: 0.07),
+                    CGVector(dx: 0.82, dy: 0.05),
+                    CGVector(dx: 0.92, dy: 0.05),
+                ]
+            )
+        )
+        bodyInput.typeText("ideall iOS smoke body\nsecond line")
 
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.17)).tap()
-        nativeInput.tap()
-        nativeInput.typeText("ideall iOS smoke title\n")
+        let titleInput = try XCTUnwrap(
+            focusInput(
+                "标题",
+                in: app,
+                points: [
+                    CGVector(dx: 0.50, dy: 0.12),
+                    CGVector(dx: 0.50, dy: 0.14),
+                    CGVector(dx: 0.50, dy: 0.16),
+                    CGVector(dx: 0.50, dy: 0.18),
+                    CGVector(dx: 0.50, dy: 0.20),
+                ]
+            )
+        )
+        titleInput.typeText("ideall iOS smoke title\n")
 
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.44)).tap()
-        nativeInput.tap()
-        nativeInput.typeText("\nthird line")
+        let resumedBodyInput = try XCTUnwrap(
+            focusInput(
+                "正文",
+                in: app,
+                points: [
+                    CGVector(dx: 0.50, dy: 0.28),
+                    CGVector(dx: 0.50, dy: 0.34),
+                    CGVector(dx: 0.50, dy: 0.40),
+                    CGVector(dx: 0.50, dy: 0.46),
+                ]
+            )
+        )
+        resumedBodyInput.typeText("\nthird line")
         attachScreenshot(named: "02-edited-note", from: window)
 
         app.swipeUp()
@@ -64,6 +96,22 @@ final class IdeallSmokeTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func focusInput(
+        _ label: String,
+        in app: XCUIApplication,
+        points: [CGVector]
+    ) -> XCUIElement? {
+        let input = app.textViews[label]
+        for point in points {
+            app.coordinate(withNormalizedOffset: point).tap()
+            if input.waitForExistence(timeout: 1) {
+                input.tap()
+                return input
+            }
+        }
+        return nil
     }
 
     private func waitForBackground(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
