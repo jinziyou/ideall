@@ -25,17 +25,14 @@ final class IdeallSmokeTests: XCTestCase {
         // tree. The Window accessibility frame can be cropped by simulator
         // chrome and the software keyboard, so it is not a stable tap origin.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.87, dy: 0.10)).tap()
-        XCTAssertTrue(app.textViews["正文"].waitForExistence(timeout: 10))
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.17)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        app.typeText("ideall iOS smoke body\nsecond line")
 
-        let titleInput = app.textViews["标题"]
-        XCTAssertTrue(titleInput.waitForExistence(timeout: 10))
-        titleInput.typeText("ideall iOS smoke title\n")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.17)).tap()
+        app.typeText("ideall iOS smoke title\n")
 
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.44)).tap()
-        let bodyInput = app.textViews["正文"]
-        XCTAssertTrue(bodyInput.waitForExistence(timeout: 10))
-        bodyInput.typeText("ideall iOS smoke body\nsecond line")
+        app.typeText("\nthird line")
         attachScreenshot(named: "02-edited-note", from: window)
 
         app.swipeUp()

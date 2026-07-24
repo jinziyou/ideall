@@ -24,19 +24,49 @@ assert_running() {
   adb shell dumpsys activity activities |
     grep -E "(mResumedActivity|topResumedActivity).*${package_name}" >/dev/null
   ! adb logcat -d -b crash |
-    grep -E "${package_name}|ideall_mobile" >/dev/null
+      grep -E "${package_name}|ideall_mobile" >/dev/null
+}
+
+dismiss_system_anr_dialogs() {
+  local attempt
+  local window_xml
+  for attempt in {1..3}; do
+    adb shell uiautomator dump /sdcard/ideall-window.xml >/dev/null 2>&1 || true
+    window_xml="$(adb shell cat /sdcard/ideall-window.xml 2>/dev/null || true)"
+    if ! grep -F 'resource-id="android:id/aerr_wait"' <<<"${window_xml}" >/dev/null; then
+      return 0
+    fi
+    echo "dismissing system ANR dialog before checking ideall input" >&2
+    adb shell input tap "$((screen_width * 50 / 100))" "$((screen_height * 55 / 100))"
+    sleep 2
+  done
+  echo "system ANR dialog remained visible" >&2
+  return 1
 }
 
 wait_for_accessible_input() {
   local label="$1"
   local attempt
+  local window_xml
   for attempt in {1..20}; do
     adb shell uiautomator dump /sdcard/ideall-window.xml >/dev/null 2>&1 || true
-    if adb shell cat /sdcard/ideall-window.xml 2>/dev/null |
-      grep -F "content-desc=\"${label}\"" |
+    window_xml="$(adb shell cat /sdcard/ideall-window.xml 2>/dev/null || true)"
+    if grep -F 'resource-id="android:id/aerr_wait"' <<<"${window_xml}" >/dev/null; then
+      dismiss_system_anr_dialogs
+      continue
+    fi
+    if grep -F "content-desc=\"${label}\"" <<<"${window_xml}" |
       grep -F 'focused="true"' >/dev/null; then
       return 0
     fi
+    case "${label}" in
+      "标题")
+        adb shell input tap "$((screen_width * 50 / 100))" "$((screen_height * 11 / 100))"
+        ;;
+      "正文")
+        adb shell input tap "$((screen_width * 50 / 100))" "$((screen_height * 44 / 100))"
+        ;;
+    esac
     sleep 1
   done
   echo "timed out waiting for focused Android input: ${label}" >&2
@@ -60,6 +90,7 @@ adb logcat -c
 adb install -r "${apk_path}"
 adb shell am start -W -n "${activity_name}"
 sleep 5
+dismiss_system_anr_dialogs
 assert_running
 
 # Create a note, then prove that GPUI focus reaches the real Android EditText

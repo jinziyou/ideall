@@ -133,15 +133,14 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
 - (void)installTextInputBridgeIfNeeded {
     if (self.textInputBridge != nil) return;
     UIWindow *window = IdeallKeyWindow();
-    UIViewController *controller = window.rootViewController;
-    if (controller == nil) return;
+    if (window == nil) return;
 
-    UITextView *input = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, 2, 2)];
+    UITextView *input = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
     input.delegate = self;
     input.backgroundColor = UIColor.clearColor;
     input.textColor = UIColor.clearColor;
     input.tintColor = UIColor.clearColor;
-    input.alpha = 0.02;
+    input.alpha = 1.0;
     input.autocorrectionType = UITextAutocorrectionTypeDefault;
     input.autocapitalizationType = UITextAutocapitalizationTypeSentences;
     input.spellCheckingType = UITextSpellCheckingTypeDefault;
@@ -150,7 +149,7 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     input.accessibilityHint = @"编辑后内容会自动保存在本机";
     input.accessibilityTraits = UIAccessibilityTraitUpdatesFrequently;
     input.accessibilityFrame = CGRectMake(0, 0, 44, 44);
-    [controller.view addSubview:input];
+    [window addSubview:input];
     self.textInputBridge = input;
 }
 
