@@ -234,6 +234,7 @@ jobs:
             test "$(find native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 1
             bash native/scripts/smoke-android-emulator.sh "$(find native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
       - name: Upload Android preview APK and AAB
+        if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ideall-native-android-arm64
@@ -241,6 +242,7 @@ jobs:
             native/apps/ideall-mobile/platforms/android/app/build/outputs/apk/debug/*.apk
             native/apps/ideall-mobile/platforms/android/app/build/outputs/bundle/release/*.aab
             ${{ runner.temp }}/ideall-android-smoke.png
+            ${{ runner.temp }}/ideall-android-window.xml
           if-no-files-found: error
           retention-days: 14
 

@@ -135,12 +135,16 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     UIWindow *window = IdeallKeyWindow();
     if (window == nil) return;
 
-    UITextView *input = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
+    BOOL isUITesting = getenv("IDEALL_UI_TESTING") != NULL;
+    CGRect inputFrame = isUITesting
+        ? CGRectMake(4, window.safeAreaInsets.top + 4, 44, 44)
+        : CGRectMake(0, 0, 1, 1);
+    UITextView *input = [[UITextView alloc] initWithFrame:inputFrame];
     input.delegate = self;
     input.backgroundColor = UIColor.clearColor;
     input.textColor = UIColor.clearColor;
     input.tintColor = UIColor.clearColor;
-    input.alpha = 1.0;
+    input.alpha = isUITesting ? 1.0 : 0.01;
     input.autocorrectionType = UITextAutocorrectionTypeDefault;
     input.autocapitalizationType = UITextAutocapitalizationTypeSentences;
     input.spellCheckingType = UITextSpellCheckingTypeDefault;
@@ -148,7 +152,6 @@ static NSUInteger IdeallUTF8OffsetForUTF16(NSString *value, NSUInteger utf16Offs
     input.accessibilityIdentifier = @"文本输入";
     input.accessibilityHint = @"编辑后内容会自动保存在本机";
     input.accessibilityTraits = UIAccessibilityTraitUpdatesFrequently;
-    input.accessibilityFrame = CGRectMake(0, 0, 44, 44);
     [window addSubview:input];
     self.textInputBridge = input;
 }

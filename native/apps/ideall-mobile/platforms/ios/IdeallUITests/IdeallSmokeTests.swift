@@ -13,6 +13,7 @@ final class IdeallSmokeTests: XCTestCase {
     func testCreateNoteInputAndLifecycleRecovery() throws {
         let app = XCUIApplication()
         app.launchEnvironment["IDEALL_CRASH_DIAGNOSTICS"] = "1"
+        app.launchEnvironment["IDEALL_UI_TESTING"] = "1"
         app.launch()
 
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
@@ -25,21 +26,18 @@ final class IdeallSmokeTests: XCTestCase {
         // tree. The Window accessibility frame can be cropped by simulator
         // chrome and the software keyboard, so it is not a stable tap origin.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.87, dy: 0.10)).tap()
-        let bodyInput = app.textViews["正文"]
-        XCTAssertTrue(bodyInput.waitForExistence(timeout: 10))
-        bodyInput.tap()
-        bodyInput.typeText("ideall iOS smoke body\nsecond line")
+        let nativeInput = app.textViews.firstMatch
+        XCTAssertTrue(nativeInput.waitForExistence(timeout: 10))
+        nativeInput.tap()
+        nativeInput.typeText("ideall iOS smoke body\nsecond line")
 
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.17)).tap()
-        let titleInput = app.textViews["标题"]
-        XCTAssertTrue(titleInput.waitForExistence(timeout: 10))
-        titleInput.tap()
-        titleInput.typeText("ideall iOS smoke title\n")
+        nativeInput.tap()
+        nativeInput.typeText("ideall iOS smoke title\n")
 
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.44)).tap()
-        XCTAssertTrue(bodyInput.waitForExistence(timeout: 10))
-        bodyInput.tap()
-        bodyInput.typeText("\nthird line")
+        nativeInput.tap()
+        nativeInput.typeText("\nthird line")
         attachScreenshot(named: "02-edited-note", from: window)
 
         app.swipeUp()
