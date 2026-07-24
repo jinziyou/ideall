@@ -10,6 +10,43 @@ mod native_text;
 #[cfg(target_os = "ios")]
 mod ios_host;
 
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput(
+    env: *mut std::ffi::c_void,
+    activity: *mut std::ffi::c_void,
+    value: *mut std::ffi::c_void,
+    selection_start: i32,
+    selection_end: i32,
+    composing: u8,
+) {
+    // SAFETY: Android invokes this root-level JNI entry with references valid
+    // for the duration of the call; `android_on_text_input` copies the string.
+    unsafe {
+        native_text::android_on_text_input(
+            env,
+            activity,
+            value,
+            selection_start,
+            selection_end,
+            composing,
+        );
+    }
+}
+
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets(
+    _env: *mut std::ffi::c_void,
+    _activity: *mut std::ffi::c_void,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+) {
+    native_text::set_android_safe_area_insets(left, top, right, bottom);
+}
+
 #[cfg(any(
     target_os = "ios",
     target_os = "android",

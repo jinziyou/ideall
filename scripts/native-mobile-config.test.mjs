@@ -172,6 +172,9 @@ test("Android Rust NDK API 与应用 minSdk 保持一致", () => {
 
   assert.ok(minSdk, "Android minSdk must be declared")
   assert.match(buildScript, new RegExp(`--platform\\s+${minSdk}\\b`))
+  assert.match(buildScript, /llvm-nm/)
+  assert.match(buildScript, /Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets/)
+  assert.match(buildScript, /Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput/)
 })
 
 test("Android 壳完整承接 GPUI 生命周期与 WebView 平台桥", () => {

@@ -70,6 +70,29 @@ case "${platform}" in
         exit 1
       }
     done
+    : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME is required for Android builds}"
+    llvm_nm="$(
+      find "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt" \
+        -type f -path '*/bin/llvm-nm' -print -quit
+    )"
+    [[ -x "${llvm_nm}" ]] || {
+      echo "unable to locate NDK llvm-nm under ${ANDROID_NDK_HOME}" >&2
+      exit 1
+    }
+    required_jni_symbols=(
+      "Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput"
+      "Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets"
+    )
+    for android_abi in "${android_abi_values[@]}"; do
+      expected_library="${output_dir}/${android_abi}/libideall_mobile.so"
+      exported_symbols="$("${llvm_nm}" -D --defined-only "${expected_library}")"
+      for required_jni_symbol in "${required_jni_symbols[@]}"; do
+        grep -F " ${required_jni_symbol}" <<<"${exported_symbols}" >/dev/null || {
+          echo "missing Android JNI export ${required_jni_symbol} in ${expected_library}" >&2
+          exit 1
+        }
+      done
+    done
     cd "${script_dir}/platforms/android"
     if [[ "${platform}" == "android-bundle" ]]; then
       gradle_task=":app:bundle${configuration}"

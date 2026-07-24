@@ -58,8 +58,7 @@ pub unsafe extern "C" fn ideall_mobile_native_text_state(
 }
 
 #[cfg(target_os = "android")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput(
+pub(crate) unsafe fn android_on_text_input(
     _env: *mut std::ffi::c_void,
     _activity: *mut std::ffi::c_void,
     value: *mut std::ffi::c_void,
@@ -81,15 +80,7 @@ pub unsafe extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnT
 }
 
 #[cfg(target_os = "android")]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets(
-    _env: *mut std::ffi::c_void,
-    _activity: *mut std::ffi::c_void,
-    left: i32,
-    top: i32,
-    right: i32,
-    bottom: i32,
-) {
+pub(crate) fn set_android_safe_area_insets(left: i32, top: i32, right: i32, bottom: i32) {
     gpui_mobile::android::jni::update_safe_area_insets(left, top, right, bottom);
 }
 
