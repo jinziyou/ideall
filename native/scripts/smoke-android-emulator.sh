@@ -66,7 +66,7 @@ assert_running
 # bridge and accepts text for both single-line and multiline fields.
 adb shell input tap "$((screen_width * 87 / 100))" "$((screen_height * 7 / 100))"
 sleep 2
-adb shell input tap "$((screen_width * 50 / 100))" "$((screen_height * 17 / 100))"
+adb shell input tap "$((screen_width * 50 / 100))" "$((screen_height * 11 / 100))"
 wait_for_accessible_input "标题"
 adb shell input text "ideall-android-smoke-title"
 adb shell input keyevent KEYCODE_BACK

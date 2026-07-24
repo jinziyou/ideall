@@ -21,22 +21,24 @@ final class IdeallSmokeTests: XCTestCase {
         attachScreenshot(named: "01-launched", from: window)
 
         // GPUI currently paints its own controls, so use stable normalized
-        // coordinates until gpui-mobile exposes a complete accessibility tree.
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.87, dy: 0.10)).tap()
+        // app coordinates until gpui-mobile exposes a complete accessibility
+        // tree. The Window accessibility frame can be cropped by simulator
+        // chrome and the software keyboard, so it is not a stable tap origin.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.87, dy: 0.10)).tap()
         XCTAssertTrue(app.textViews["正文"].waitForExistence(timeout: 10))
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.17)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.17)).tap()
 
         let titleInput = app.textViews["标题"]
         XCTAssertTrue(titleInput.waitForExistence(timeout: 10))
         titleInput.typeText("ideall iOS smoke title\n")
 
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.44)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.44)).tap()
         let bodyInput = app.textViews["正文"]
         XCTAssertTrue(bodyInput.waitForExistence(timeout: 10))
         bodyInput.typeText("ideall iOS smoke body\nsecond line")
         attachScreenshot(named: "02-edited-note", from: window)
 
-        window.swipeUp()
+        app.swipeUp()
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         attachScreenshot(named: "03-landscape", from: window)
