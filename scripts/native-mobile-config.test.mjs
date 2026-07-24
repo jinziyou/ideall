@@ -26,6 +26,7 @@ const ANDROID_ACTIVITY = new URL(
 )
 const MOBILE_BUILD_SCRIPT = new URL("../native/apps/ideall-mobile/build-mobile.sh", import.meta.url)
 const MOBILE_MANIFEST = new URL("../native/apps/ideall-mobile/Cargo.toml", import.meta.url)
+const MOBILE_LIB = new URL("../native/apps/ideall-mobile/src/lib.rs", import.meta.url)
 const VENDORED_GPUI_README = new URL("../native/vendor/gpui-mobile/README.md", import.meta.url)
 const VENDORED_GPUI_SOURCE = new URL("../native/vendor/gpui-mobile/upstream.env", import.meta.url)
 const VENDORED_GPUI_MANIFEST = new URL("../native/vendor/gpui-mobile/Cargo.toml", import.meta.url)
@@ -173,11 +174,13 @@ test("Android Rust NDK API 与应用 minSdk 保持一致", () => {
   assert.ok(minSdk, "Android minSdk must be declared")
   assert.match(buildScript, new RegExp(`--platform\\s+${minSdk}\\b`))
   assert.match(buildScript, /llvm-nm/)
+  assert.match(buildScript, /grep -Fx "\$\{required_jni_symbol\}"/)
   assert.match(buildScript, /Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets/)
   assert.match(buildScript, /Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput/)
 })
 
 test("Android 壳完整承接 GPUI 生命周期与 WebView 平台桥", () => {
+  const mobileLib = readFileSync(MOBILE_LIB, "utf8")
   const manifest = readFileSync(ANDROID_MANIFEST, "utf8")
   const platformView = readFileSync(ANDROID_PLATFORM_VIEW, "utf8")
   const activity = readFileSync(ANDROID_ACTIVITY, "utf8")
@@ -213,6 +216,15 @@ test("Android 壳完整承接 GPUI 生命周期与 WebView 平台桥", () => {
   assert.match(activity, /WindowInsets\.Type\.systemBars\(\)/)
   assert.match(activity, /WindowInsets\.Type\.displayCutout\(\)/)
   assert.match(activity, /nativeSetSafeAreaInsets/)
+  assert.match(activity, /public void onIdeallNativeReady\(\)/)
+  assert.match(mobileLib, /fn register_android_native_bridges\(/)
+  assert.match(mobileLib, /env\.register_native_methods\(&activity_class, &methods\)/)
+  assert.match(mobileLib, /jni::jni_str!\("onIdeallNativeReady"\)/)
+  assert.ok(
+    mobileLib.indexOf("register_android_native_bridges(&app)") <
+      mobileLib.indexOf("gpui_mobile::android::jni::init_platform(&app)"),
+    "native methods must be registered before GPUI initializes the Android platform",
+  )
 })
 
 test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
@@ -228,7 +240,8 @@ test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
   assert.match(iosTest, /launchArguments\.append\("-IDEALLUITesting"\)/)
   assert.match(iosTest, /bodyInput\.typeText\("ideall iOS smoke body/)
   assert.match(iosTest, /titleInput\.typeText\("ideall iOS smoke title/)
-  assert.match(iosTest, /window\.coordinate\(withNormalizedOffset:/)
+  assert.match(iosTest, /deviceWindow\.coordinate\(withNormalizedOffset:/)
+  assert.match(iosTest, /XCUIApplication\(bundleIdentifier: "com\.apple\.springboard"\)/)
   assert.doesNotMatch(iosTest, /app\.coordinate\(withNormalizedOffset:/)
   assert.match(iosTest, /XCUIDevice\.shared\.orientation = \.landscapeLeft/)
   assert.match(iosTest, /XCUIDevice\.shared\.press\(\.home\)/)

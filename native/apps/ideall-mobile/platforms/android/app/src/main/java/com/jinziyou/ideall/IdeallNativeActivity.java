@@ -41,6 +41,9 @@ public final class IdeallNativeActivity extends NativeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+    }
+
+    public void onIdeallNativeReady() {
         runOnUiThread(() -> {
             installWindowInsetsBridge();
             installTextInputBridgeIfNeeded();

@@ -87,7 +87,8 @@ case "${platform}" in
       expected_library="${output_dir}/${android_abi}/libideall_mobile.so"
       exported_symbols="$("${llvm_nm}" -D --defined-only "${expected_library}")"
       for required_jni_symbol in "${required_jni_symbols[@]}"; do
-        grep -F " ${required_jni_symbol}" <<<"${exported_symbols}" >/dev/null || {
+        awk '{ print $NF }' <<<"${exported_symbols}" |
+          grep -Fx "${required_jni_symbol}" >/dev/null || {
           echo "missing Android JNI export ${required_jni_symbol} in ${expected_library}" >&2
           exit 1
         }

@@ -12,7 +12,7 @@ mod ios_host;
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput(
+pub unsafe extern "system" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput(
     env: *mut std::ffi::c_void,
     activity: *mut std::ffi::c_void,
     value: *mut std::ffi::c_void,
@@ -36,7 +36,7 @@ pub unsafe extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnT
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
-pub extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets(
+pub extern "system" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets(
     _env: *mut std::ffi::c_void,
     _activity: *mut std::ffi::c_void,
     left: i32,
@@ -45,6 +45,60 @@ pub extern "C" fn Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAre
     bottom: i32,
 ) {
     native_text::set_android_safe_area_insets(left, top, right, bottom);
+}
+
+#[cfg(target_os = "android")]
+fn register_android_native_bridges(app: &android_activity::AndroidApp) -> Result<(), String> {
+    use std::ffi::c_void;
+
+    use jni::{JavaVM, NativeMethod, objects::JObject};
+
+    // SAFETY: AndroidApp owns these VM and Activity references for the whole
+    // android_main invocation. Treat the Activity pointer as a borrowed global
+    // reference so jni-rs never attempts to delete it.
+    let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr().cast()) };
+    let raw_activity = app.activity_as_ptr() as jni::sys::jobject;
+    vm.attach_current_thread(|env| -> Result<(), jni::errors::Error> {
+        // SAFETY: android-activity guarantees that activity_as_ptr remains
+        // valid until android_main returns.
+        let activity = unsafe { env.as_cast_raw::<JObject>(&raw_activity)? };
+        let activity_class = env.get_object_class(&activity)?;
+        let methods = [
+            // SAFETY: The function has the JNI instance-method ABI described
+            // by (Ljava/lang/String;IIZ)V.
+            unsafe {
+                NativeMethod::from_raw_parts(
+                    jni::jni_str!("nativeOnTextInput"),
+                    jni::jni_sig!("(Ljava/lang/String;IIZ)V"),
+                    Java_com_jinziyou_ideall_IdeallNativeActivity_nativeOnTextInput as *const ()
+                        as *mut c_void,
+                )
+            },
+            // SAFETY: The function has the JNI instance-method ABI described
+            // by (IIII)V.
+            unsafe {
+                NativeMethod::from_raw_parts(
+                    jni::jni_str!("nativeSetSafeAreaInsets"),
+                    jni::jni_sig!("(IIII)V"),
+                    Java_com_jinziyou_ideall_IdeallNativeActivity_nativeSetSafeAreaInsets
+                        as *const () as *mut c_void,
+                )
+            },
+        ];
+        // SAFETY: Both descriptors point to functions with matching instance
+        // method signatures on the concrete Activity class.
+        unsafe {
+            env.register_native_methods(&activity_class, &methods)?;
+        }
+        env.call_method(
+            &activity,
+            jni::jni_str!("onIdeallNativeReady"),
+            jni::jni_sig!("()V"),
+            &[],
+        )?;
+        Ok(())
+    })
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(any(
@@ -3141,6 +3195,9 @@ fn android_main(app: android_activity::AndroidApp) {
             .with_max_level(log::LevelFilter::Info)
             .with_tag("ideall"),
     );
+    if let Err(error) = register_android_native_bridges(&app) {
+        log::error!("failed to register Android native bridges: {error}");
+    }
     gpui_mobile::android::jni::install_panic_hook();
     let platform = gpui_mobile::android::jni::init_platform(&app);
     let shared_platform =
