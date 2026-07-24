@@ -2,6 +2,8 @@ package com.jinziyou.ideall;
 
 import android.app.NativeActivity;
 import android.graphics.Color;
+import android.graphics.Insets;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
@@ -9,6 +11,7 @@ import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -33,10 +36,36 @@ public final class IdeallNativeActivity extends NativeActivity {
         boolean composing
     );
 
+    private native void nativeSetSafeAreaInsets(int left, int top, int right, int bottom);
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        runOnUiThread(this::installTextInputBridgeIfNeeded);
+        runOnUiThread(() -> {
+            installWindowInsetsBridge();
+            installTextInputBridgeIfNeeded();
+        });
+    }
+
+    private void installWindowInsetsBridge() {
+        View decorView = getWindow().getDecorView();
+        decorView.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets insets = windowInsets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
+                );
+                nativeSetSafeAreaInsets(insets.left, insets.top, insets.right, insets.bottom);
+            } else {
+                nativeSetSafeAreaInsets(
+                    windowInsets.getSystemWindowInsetLeft(),
+                    windowInsets.getSystemWindowInsetTop(),
+                    windowInsets.getSystemWindowInsetRight(),
+                    windowInsets.getSystemWindowInsetBottom()
+                );
+            }
+            return windowInsets;
+        });
+        decorView.post(decorView::requestApplyInsets);
     }
 
     private void installTextInputBridgeIfNeeded() {

@@ -12,6 +12,8 @@ landed upstream, plus workspace compatibility cleanup:
 - release the momentum borrow before dispatching GPUI input;
 - replace the active Android platform registry after `NativeActivity` recreation instead of
   retaining a dispatcher bound to the previous `android_main` thread;
+- bridge Android system-bar and display-cutout `WindowInsets` into GPUI logical safe areas,
+  including Android 15 edge-to-edge windows whose NDK content rect remains empty;
 - keep vendored code warning-free under ideall's host-target Clippy gate;
 - let the parent workspace own dependency patches and build profiles;
 - pin Zed `gpui` and `gpui_wgpu` to revision

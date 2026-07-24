@@ -95,7 +95,7 @@ create_note_and_wait_for_body() {
   local attempt
   local tap_y_percent
   local window_xml
-  for attempt in {1..12}; do
+  for attempt in {1..14}; do
     adb shell uiautomator dump /sdcard/ideall-window.xml >/dev/null 2>&1 || true
     window_xml="$(adb shell cat /sdcard/ideall-window.xml 2>/dev/null || true)"
     if grep -F 'resource-id="android:id/aerr_wait"' <<<"${window_xml}" >/dev/null; then
@@ -106,7 +106,7 @@ create_note_and_wait_for_body() {
       grep -F 'focused="true"' >/dev/null; then
       return 0
     fi
-    tap_y_percent=$((2 + ((attempt - 1) % 3)))
+    tap_y_percent=$((4 + ((attempt - 1) % 7)))
     adb shell input tap "$((screen_width * 87 / 100))" \
       "$((screen_height * tap_y_percent / 100))"
     sleep 2

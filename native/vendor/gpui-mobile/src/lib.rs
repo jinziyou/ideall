@@ -301,23 +301,28 @@ pub fn set_keyboard_height(height: f32) {
 ///
 /// Returns `(top, bottom, left, right)` in logical points.
 /// On iOS this queries `safeAreaInsets` from the UIView.
-/// On Android use the `AndroidWindow::safe_area_insets_logical()` method instead.
+/// On Android this uses the latest system-bar and display-cutout `WindowInsets`.
 /// On unsupported platforms returns zeros.
 pub fn safe_area_insets() -> (f32, f32, f32, f32) {
-    #[cfg(target_os = "ios")]
+    #[cfg(target_os = "android")]
     {
-        if let Some(wrapper) = ios::ffi::IOS_WINDOW_LIST.get() {
-            unsafe {
-                let windows = &*wrapper.0.get();
-                if let Some(&window) = windows.last() {
-                    return (*window).safe_area_insets();
+        android::jni::safe_area_insets_logical()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        #[cfg(target_os = "ios")]
+        {
+            if let Some(wrapper) = ios::ffi::IOS_WINDOW_LIST.get() {
+                unsafe {
+                    let windows = &*wrapper.0.get();
+                    if let Some(&window) = windows.last() {
+                        return (*window).safe_area_insets();
+                    }
                 }
             }
         }
+        (0.0, 0.0, 0.0, 0.0)
     }
-    #[cfg(not(target_os = "ios"))]
-    {}
-    (0.0, 0.0, 0.0, 0.0)
 }
 
 // ── platform modules ─────────────────────────────────────────────────────────

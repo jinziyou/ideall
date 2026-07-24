@@ -324,6 +324,86 @@ pub fn shared_platform() -> Option<SharedPlatform> {
     platform().map(SharedPlatform::new)
 }
 
+// ── safe-area insets ─────────────────────────────────────────────────────────
+
+/// Insets reported by Android's `WindowInsets` API in physical pixels.
+///
+/// `AndroidApp::content_rect()` is empty on Android 15 edge-to-edge windows,
+/// so the Java host forwards system-bar and display-cutout insets explicitly.
+/// Keep the latest value across surface recreation and configuration changes.
+static SYSTEM_SAFE_AREA_INSETS: std::sync::Mutex<Option<[i32; 4]>> = std::sync::Mutex::new(None);
+
+fn apply_system_safe_area_insets(window: &crate::android::AndroidWindow, insets: [i32; 4]) {
+    let [left, top, right, bottom] = insets.map(|value| value.max(0));
+    let bounds = window.bounds();
+    let width = bounds.size.width.0;
+    let height = bounds.size.height.0;
+    let content_left = left.min(width);
+    let content_top = top.min(height);
+    let content_right = (width - right).clamp(content_left, width);
+    let content_bottom = (height - bottom).clamp(content_top, height);
+    window.update_safe_area_from_content_rect(
+        content_left,
+        content_top,
+        content_right,
+        content_bottom,
+    );
+}
+
+fn apply_cached_system_safe_area_insets(window: &crate::android::AndroidWindow) {
+    let insets = *SYSTEM_SAFE_AREA_INSETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(insets) = insets {
+        apply_system_safe_area_insets(window, insets);
+    }
+}
+
+/// Store physical safe-area insets received from the Activity.
+///
+/// This may run on Android's UI thread before GPUI has opened its native
+/// window. The cached value is applied again during `InitWindow`.
+pub fn update_safe_area_insets(left: i32, top: i32, right: i32, bottom: i32) {
+    let insets = [left.max(0), top.max(0), right.max(0), bottom.max(0)];
+    *SYSTEM_SAFE_AREA_INSETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(insets);
+
+    if let Some(window) = platform().and_then(|platform| platform.primary_window()) {
+        apply_system_safe_area_insets(&window, insets);
+    }
+}
+
+/// Return Android safe-area insets as `(top, bottom, left, right)` in logical
+/// pixels, matching the cross-platform `gpui_mobile::safe_area_insets()` API.
+pub fn safe_area_insets_logical() -> (f32, f32, f32, f32) {
+    let window = platform().and_then(|platform| platform.primary_window());
+    let explicit = *SYSTEM_SAFE_AREA_INSETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    if let Some([left, top, right, bottom]) = explicit {
+        let scale = window
+            .as_ref()
+            .map(|window| window.scale_factor())
+            .unwrap_or(1.0)
+            .max(f32::EPSILON);
+        return (
+            top as f32 / scale,
+            bottom as f32 / scale,
+            left as f32 / scale,
+            right as f32 / scale,
+        );
+    }
+
+    if let Some(window) = window {
+        let insets = window.safe_area_insets_logical();
+        return (insets.top, insets.bottom, insets.left, insets.right);
+    }
+
+    (0.0, 0.0, 0.0, 0.0)
+}
+
 // ── input event types ─────────────────────────────────────────────────────────
 
 /// Motion event action constants from the NDK.
@@ -651,6 +731,7 @@ pub fn run_event_loop(app: &AndroidApp) {
                         existing.update_safe_area_from_content_rect(
                             cr.left, cr.top, cr.right, cr.bottom,
                         );
+                        apply_cached_system_safe_area_insets(&existing);
 
                         INIT_WINDOW_DONE.store(true, Ordering::Relaxed);
                     } else {
@@ -666,6 +747,7 @@ pub fn run_event_loop(app: &AndroidApp) {
                                 win.update_safe_area_from_content_rect(
                                     cr.left, cr.top, cr.right, cr.bottom,
                                 );
+                                apply_cached_system_safe_area_insets(&win);
                             }
                             Err(e) => {
                                 log::error!("failed to open window: {e:#}");
@@ -686,6 +768,7 @@ pub fn run_event_loop(app: &AndroidApp) {
                     win.handle_resize();
                     let cr = app.content_rect();
                     win.update_safe_area_from_content_rect(cr.left, cr.top, cr.right, cr.bottom);
+                    apply_cached_system_safe_area_insets(&win);
                 }
             }
         }

@@ -132,6 +132,7 @@ expected_changed_files=(
   "ios/ffi.rs"
   "ios/platform.rs"
   "ios/window.rs"
+  "lib.rs"
   "momentum.rs"
   "target_platform.rs"
 )

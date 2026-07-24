@@ -31,12 +31,13 @@ final class IdeallSmokeTests: XCTestCase {
                 "正文",
                 in: app,
                 points: [
-                    CGVector(dx: 0.87, dy: 0.04),
-                    CGVector(dx: 0.87, dy: 0.05),
-                    CGVector(dx: 0.87, dy: 0.06),
-                    CGVector(dx: 0.87, dy: 0.07),
-                    CGVector(dx: 0.82, dy: 0.05),
-                    CGVector(dx: 0.92, dy: 0.05),
+                    CGVector(dx: 0.87, dy: 0.08),
+                    CGVector(dx: 0.87, dy: 0.09),
+                    CGVector(dx: 0.87, dy: 0.10),
+                    CGVector(dx: 0.87, dy: 0.11),
+                    CGVector(dx: 0.87, dy: 0.12),
+                    CGVector(dx: 0.82, dy: 0.10),
+                    CGVector(dx: 0.92, dy: 0.10),
                 ]
             )
         )

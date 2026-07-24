@@ -20,6 +20,10 @@ const ANDROID_PLATFORM_VIEW = new URL(
   "../native/apps/ideall-mobile/platforms/android/app/src/main/java/dev/gpui/mobile/GpuiPlatformView.java",
   import.meta.url,
 )
+const ANDROID_ACTIVITY = new URL(
+  "../native/apps/ideall-mobile/platforms/android/app/src/main/java/com/jinziyou/ideall/IdeallNativeActivity.java",
+  import.meta.url,
+)
 const MOBILE_BUILD_SCRIPT = new URL("../native/apps/ideall-mobile/build-mobile.sh", import.meta.url)
 const MOBILE_MANIFEST = new URL("../native/apps/ideall-mobile/Cargo.toml", import.meta.url)
 const VENDORED_GPUI_README = new URL("../native/vendor/gpui-mobile/README.md", import.meta.url)
@@ -53,6 +57,7 @@ const VENDORED_GPUI_ANDROID_JNI = new URL(
   "../native/vendor/gpui-mobile/src/android/jni.rs",
   import.meta.url,
 )
+const VENDORED_GPUI_LIB = new URL("../native/vendor/gpui-mobile/src/lib.rs", import.meta.url)
 
 test("iOS XcodeGen 工程为模拟器和真机选择对应的 Rust 静态库", () => {
   const project = readFileSync(IOS_PROJECT, "utf8")
@@ -129,6 +134,7 @@ test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () 
   const ffi = readFileSync(VENDORED_GPUI_IOS_FFI, "utf8")
   const window = readFileSync(VENDORED_GPUI_IOS_WINDOW, "utf8")
   const androidJni = readFileSync(VENDORED_GPUI_ANDROID_JNI, "utf8")
+  const gpuiMobileLib = readFileSync(VENDORED_GPUI_LIB, "utf8")
 
   assert.match(manifest, /gpui-mobile = \{ path = "\.\.\/\.\.\/vendor\/gpui-mobile"/)
   assert.match(provenance, /1d3ec2a1d14a63b74d1f4269340441d4eeada27a/)
@@ -147,7 +153,10 @@ test("gpui-mobile 快照固定来源并在 Rust 边界串行化 iOS 帧泵", () 
   assert.match(window, /momentum_scroller\.try_borrow_mut\(\)/)
   assert.match(androidJni, /Mutex<Option<AndroidApp>>/)
   assert.match(androidJni, /pub fn clear_platform\(/)
+  assert.match(androidJni, /pub fn update_safe_area_insets\(/)
+  assert.match(androidJni, /pub fn safe_area_insets_logical\(/)
   assert.doesNotMatch(androidJni, /static PLATFORM: OnceLock/)
+  assert.match(gpuiMobileLib, /android::jni::safe_area_insets_logical\(\)/)
 
   const result = spawnSync("bash", [VENDORED_GPUI_VERIFY.pathname], {
     cwd: new URL("..", import.meta.url),
@@ -168,6 +177,7 @@ test("Android Rust NDK API 与应用 minSdk 保持一致", () => {
 test("Android 壳完整承接 GPUI 生命周期与 WebView 平台桥", () => {
   const manifest = readFileSync(ANDROID_MANIFEST, "utf8")
   const platformView = readFileSync(ANDROID_PLATFORM_VIEW, "utf8")
+  const activity = readFileSync(ANDROID_ACTIVITY, "utf8")
   const configChanges = manifest.match(/android:configChanges="([^"]+)"/)?.[1]?.split("|")
 
   assert.deepEqual(configChanges, [
@@ -196,6 +206,10 @@ test("Android 壳完整承接 GPUI 生命周期与 WebView 平台桥", () => {
   assert.match(platformView, /public static void disposeAll\(\)/)
   assert.match(platformView, /settings\.setAllowFileAccess\(false\)/)
   assert.match(platformView, /settings\.setAllowContentAccess\(false\)/)
+  assert.match(activity, /setOnApplyWindowInsetsListener/)
+  assert.match(activity, /WindowInsets\.Type\.systemBars\(\)/)
+  assert.match(activity, /WindowInsets\.Type\.displayCutout\(\)/)
+  assert.match(activity, /nativeSetSafeAreaInsets/)
 })
 
 test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
@@ -218,7 +232,7 @@ test("移动 CI 驱动真实输入、旋转和前后台恢复", () => {
   assert.match(iosTest, /app\.activate\(\)/)
   assert.match(androidSmoke, /wait_for_accessible_input "标题"/)
   assert.match(androidSmoke, /create_note_and_wait_for_body/)
-  assert.match(androidSmoke, /tap_y_percent=\$\(\(2 \+ \(\(attempt - 1\) % 3\)\)\)/)
+  assert.match(androidSmoke, /tap_y_percent=\$\(\(4 \+ \(\(attempt - 1\) % 7\)\)\)/)
   assert.match(androidSmoke, /screen_height \* tap_y_percent \/ 100/)
   assert.match(androidSmoke, /android:id\/aerr_wait/)
   assert.match(androidSmoke, /dismissing system ANR dialog/)
